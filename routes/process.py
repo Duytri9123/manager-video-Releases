@@ -1,0 +1,522 @@
+"""Process Blueprint — /api/process_video, /api/upload_anti_fp_image, /api/make_vertical_video."""
+import asyncio
+import tempfile
+import time
+import json as _j
+from pathlib import Path
+from flask import Blueprint, jsonify, request, Response
+from flask import stream_with_context
+from core_app import load_cfg, CONFIG_FILE, ROOT, get_cookies_with_fallback, _resolve_naming_title
+
+bp = Blueprint("process", __name__)
+
+# ── Pause/Resume state ────────────────────────────────────────────────────────
+import threading as _threading
+
+_proc_pause_event = _threading.Event()
+_proc_pause_event.set()  # not paused by default
+_proc_review_event = _threading.Event()
+_proc_review_event.set()  # not waiting for review by default
+
+
+@bp.route("/api/proc_resume", methods=["POST"])
+def proc_resume():
+    """Signal the processing pipeline to pause, resume, or continue after review."""
+    data = request.json or {}
+    action = str(data.get("action") or "").strip().lower()
+    if action == "pause":
+        _proc_pause_event.clear()
+        return jsonify({"ok": True, "state": "paused"})
+    elif action == "resume":
+        _proc_pause_event.set()
+        return jsonify({"ok": True, "state": "running"})
+    elif action == "continue":
+        _proc_review_event.set()
+        _proc_pause_event.set()
+        return jsonify({"ok": True, "state": "continued"})
+    return jsonify({"ok": False, "error": "Unknown action"}), 400
+
+
+@bp.route("/api/proc_read_ass", methods=["POST"])
+def proc_read_ass():
+    """Read an ASS subtitle file for review."""
+    data = request.json or {}
+    path_str = str(data.get("path") or "").strip()
+    if not path_str:
+        return jsonify({"ok": False, "error": "Missing path"}), 400
+    p = Path(path_str)
+    if not p.exists():
+        return jsonify({"ok": False, "error": "File not found"}), 404
+    try:
+        content = p.read_text(encoding="utf-8", errors="replace")
+        return jsonify({"ok": True, "content": content})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/proc_save_ass", methods=["POST"])
+def proc_save_ass():
+    """Save edited ASS subtitle file after review."""
+    data = request.json or {}
+    path_str = str(data.get("path") or "").strip()
+    content  = str(data.get("content") or "")
+    if not path_str:
+        return jsonify({"ok": False, "error": "Missing path"}), 400
+    p = Path(path_str)
+    try:
+        p.write_text(content, encoding="utf-8")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/video_frame", methods=["POST"])
+def video_frame():
+    """Extract a frame from a video at a given timestamp and return as base64 JPEG."""
+    import base64
+    import subprocess
+    import shutil
+    from core.video_processor import find_ffmpeg
+
+    data = request.json or {}
+    video_path_str = str(data.get("video_path") or "").strip()
+    timestamp = float(data.get("timestamp") or 0.0)
+
+    if not video_path_str:
+        return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
+
+    vp = Path(video_path_str).expanduser()
+    if not vp.is_absolute():
+        vp = ROOT / vp
+    if not vp.exists():
+        return jsonify({"ok": False, "error": f"Video không tồn tại: {vp}"}), 404
+
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        result = subprocess.run([
+            ffmpeg, "-ss", str(timestamp),
+            "-i", str(vp),
+            "-vframes", "1",
+            "-q:v", "3",
+            "-vf", "scale=640:-1",
+            tmp_path, "-y", "-loglevel", "error"
+        ], capture_output=True, timeout=15)
+
+        if not Path(tmp_path).exists() or Path(tmp_path).stat().st_size == 0:
+            return jsonify({"ok": False, "error": "Không thể extract frame"}), 500
+
+        with open(tmp_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+
+        Path(tmp_path).unlink(missing_ok=True)
+        return jsonify({"ok": True, "image": f"data:image/jpeg;base64,{img_b64}"})
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/video_frame_from_url", methods=["POST"])
+def video_frame_from_url():
+    """Find the most recently downloaded mp4 in Downloaded folder and extract a frame."""
+    import base64
+    import subprocess
+    from core.video_processor import find_ffmpeg
+
+    data = request.json or {}
+    timestamp = float(data.get("timestamp") or 0.0)
+
+    cfg = load_cfg()
+    dl_dir = Path(cfg.get("path") or "./Downloaded").expanduser()
+    if not dl_dir.is_absolute():
+        dl_dir = ROOT / dl_dir
+
+    if not dl_dir.exists():
+        return jsonify({"ok": False, "error": "Thư mục Downloaded không tồn tại"}), 404
+
+    # Find the most recently modified mp4 file
+    mp4_files = sorted(
+        [f for f in dl_dir.iterdir() if f.is_file() and f.suffix.lower() == ".mp4"],
+        key=lambda f: f.stat().st_mtime,
+        reverse=True
+    )
+
+    if not mp4_files:
+        return jsonify({"ok": False, "error": "Chưa có file video nào trong thư mục Downloaded"}), 404
+
+    vp = mp4_files[0]
+
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        subprocess.run([
+            ffmpeg, "-ss", str(timestamp),
+            "-i", str(vp),
+            "-vframes", "1",
+            "-q:v", "3",
+            "-vf", "scale=640:-1",
+            tmp_path, "-y", "-loglevel", "error"
+        ], capture_output=True, timeout=15)
+
+        if not Path(tmp_path).exists() or Path(tmp_path).stat().st_size == 0:
+            return jsonify({"ok": False, "error": f"Không thể extract frame từ {vp.name}"}), 500
+
+        with open(tmp_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+
+        Path(tmp_path).unlink(missing_ok=True)
+        return jsonify({
+            "ok": True,
+            "image": f"data:image/jpeg;base64,{img_b64}",
+            "video_name": vp.name,
+        })
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/upload_anti_fp_image", methods=["POST"])
+def upload_anti_fp_image():
+    """Upload an overlay / logo image for anti-fingerprint processing."""
+    from utils.validators import sanitize_filename
+
+    upload_file = request.files.get("file") if request.files else None
+    if not upload_file or not upload_file.filename:
+        return jsonify({"ok": False, "error": "No file provided"}), 400
+
+    img_type = str(request.form.get("type") or "overlay")
+    safe_name = sanitize_filename(upload_file.filename)
+    upload_dir = ROOT / "temp_uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    save_path = upload_dir / f"anti-fp-{img_type}-{safe_name}"
+    upload_file.save(str(save_path))
+
+    return jsonify({"ok": True, "path": str(save_path)})
+
+
+@bp.route("/api/read_subtitle", methods=["POST"])
+def read_subtitle():
+    """Read a subtitle file (.srt, .ass) from local path."""
+    data = request.json or {}
+    path_str = data.get("path", "").strip()
+    if not path_str:
+        return jsonify({"ok": False, "error": "Thiếu đường dẫn file"}), 400
+
+    p = Path(path_str).expanduser()
+    if not p.exists():
+        return jsonify({"ok": False, "error": f"File không tồn tại: {path_str}"}), 404
+
+    if p.suffix.lower() not in (".srt", ".ass"):
+        return jsonify({"ok": False, "error": "Chỉ hỗ trợ file .srt hoặc .ass"}), 400
+
+    try:
+        content = p.read_text(encoding="utf-8", errors="replace")
+        return jsonify({"ok": True, "content": content, "filename": p.name})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/detect_subtitles", methods=["POST"])
+def detect_subtitles():
+    """Find matching subtitle files in the same directory as the video."""
+    data = request.json or {}
+    video_path_str = data.get("video_path", "").strip()
+    if not video_path_str:
+        return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
+
+    vp = Path(video_path_str).expanduser()
+    if not vp.exists():
+        return jsonify({"ok": False, "error": "Video không tồn tại"}), 404
+
+    folder = vp.parent
+    stem = vp.stem
+    
+    # Try to find subs
+    # Patterns: stem.srt, stem.ass, stem_vi.ass, 
+    # or if stem has a timestamp suffix like _1778256302, try removing it
+    import re
+    clean_stem = re.sub(r'_\d{10,}$', '', stem) # Remove timestamp suffix if exists
+    
+    candidates = []
+    video_mtime = vp.stat().st_mtime
+    
+    try:
+        for f in folder.iterdir():
+            if f.suffix.lower() in (".srt", ".ass"):
+                f_mtime = f.stat().st_mtime
+                time_diff = abs(f_mtime - video_mtime)
+                
+                priority = 10
+                # Exact match or prefix match
+                if f.stem == stem or f.stem == clean_stem or f.stem.startswith(clean_stem):
+                    priority -= 5
+                
+                # Proximity match (created around the same time, e.g. within 60s)
+                if time_diff < 60:
+                    priority -= 3
+                
+                # Language match
+                if "_vi" in f.name.lower():
+                    priority -= 4
+                
+                # Only include if there's some reasonable connection
+                if priority < 10:
+                    candidates.append({
+                        "path": str(f.resolve()),
+                        "name": f.name,
+                        "priority": priority,
+                        "time_diff": time_diff
+                    })
+    except Exception:
+        pass
+
+    # Sort by priority (lower is better)
+    candidates.sort(key=lambda x: (x["priority"], x["time_diff"]))
+    
+    return jsonify({
+        "ok": True, 
+        "subtitles": candidates,
+        "best_match": candidates[0]["path"] if candidates else None
+    })
+
+
+@bp.route("/api/process_video", methods=["POST"])
+def process_video():
+    data = {}
+    if request.form:
+        data.update(request.form.to_dict(flat=True))
+    if request.is_json:
+        data.update(request.get_json(silent=True) or {})
+
+    uploaded_file = request.files.get("video_file") if request.files else None
+    if uploaded_file and uploaded_file.filename:
+        from utils.validators import sanitize_filename
+        upload_dir = Path(tempfile.mkdtemp(prefix="proc_upload_"))
+        original_name = Path(uploaded_file.filename).name
+        safe_name = sanitize_filename(Path(original_name).stem) + Path(original_name).suffix
+        saved_path = upload_dir / safe_name
+        uploaded_file.save(saved_path)
+        data["video_path"] = str(saved_path)
+        data["video_file_name"] = original_name
+
+    def generate():
+        from config import ConfigLoader
+        from auth import CookieManager
+        from core import DouyinAPIClient, URLParser
+        from core.video_downloader import VideoDownloader
+        from control import QueueManager, RateLimiter, RetryHandler
+        from storage import FileManager
+        from core.video_processor import process_video_full
+
+        async def _download_video_from_url(video_url: str, out_dir: str) -> tuple:
+            import re
+            from urllib.parse import urlparse, parse_qs
+
+            def _pick_url(raw: str) -> str:
+                text = str(raw or "").strip()
+                if not text:
+                    return ""
+                m = re.search(r"https?://[^\s]+", text)
+                if m:
+                    return m.group(0).rstrip("\"'.,;)")
+                if text.startswith("v.douyin.com/") or text.startswith("www.douyin.com/"):
+                    return "https://" + text
+                return text
+
+            def _extract_aweme_id(url: str, parsed_url: dict | None) -> str:
+                if parsed_url:
+                    aid = str(parsed_url.get("aweme_id") or "").strip()
+                    if aid:
+                        return aid
+                qs = parse_qs(urlparse(url).query or "")
+                for key in ("modal_id", "item_id", "group_id", "aweme_id"):
+                    val = str((qs.get(key) or [""])[0]).strip()
+                    if val.isdigit():
+                        return val
+                m = re.search(r"/(?:video|note|gallery|slides|share/video)/(\d{15,20})", url)
+                if m:
+                    return m.group(1)
+                return ""
+
+            cfg = ConfigLoader(str(CONFIG_FILE))
+            cm = CookieManager()
+            cm.set_cookies(get_cookies_with_fallback())
+            if not cm.validate_cookies():
+                raise RuntimeError("Cookies may be invalid")
+
+            async with DouyinAPIClient(cm.get_cookies(), proxy=cfg.get("proxy")) as api:
+                normalized_url = _pick_url(video_url)
+                if not normalized_url:
+                    raise RuntimeError("URL is empty")
+
+                resolved_url = normalized_url
+                if "v.douyin.com" in resolved_url:
+                    redirected = await api.resolve_short_url(resolved_url)
+                    if redirected:
+                        resolved_url = redirected
+
+                parsed = URLParser.parse(resolved_url)
+                aweme_id = _extract_aweme_id(resolved_url, parsed)
+                if not aweme_id:
+                    aweme_id = _extract_aweme_id(normalized_url, URLParser.parse(normalized_url))
+                if not aweme_id:
+                    raise RuntimeError("Invalid video URL. Please use a specific Douyin post link.")
+
+                if parsed and parsed.get("type") not in ("video", "gallery") and not aweme_id:
+                    raise RuntimeError("URL is not a video post")
+
+                aweme_data = await api.get_video_detail(aweme_id)
+                if not aweme_data:
+                    raise RuntimeError("Failed to fetch video detail")
+
+                raw_title = str(aweme_data.get("desc") or "video").strip() or "video"
+                resolved_title = _resolve_naming_title(raw_title)
+
+                out_path = Path(out_dir).expanduser() if out_dir else Path(cfg.get("path") or "./Downloaded")
+                file_manager = FileManager(str(out_path))
+                downloader = VideoDownloader(
+                    config=cfg,
+                    api_client=api,
+                    file_manager=file_manager,
+                    cookie_manager=cm,
+                    database=None,
+                    rate_limiter=RateLimiter(max_per_second=float(cfg.get("rate_limit", 5) or 5)),
+                    retry_handler=RetryHandler(max_retries=int(cfg.get("retry_times", 3) or 3)),
+                    queue_manager=QueueManager(max_workers=1),
+                    progress_reporter=None,
+                )
+
+                if downloader._detect_media_type(aweme_data) != "video":
+                    raise RuntimeError("URL is not a video post")
+
+                play_info = downloader._build_no_watermark_url(aweme_data)
+                if not play_info:
+                    raise RuntimeError("No playable video URL found")
+
+                play_url, headers = play_info
+                from utils.validators import sanitize_filename
+
+                base_name = sanitize_filename(f"{resolved_title}_{aweme_id}")
+                save_dir = out_path
+                save_dir.mkdir(parents=True, exist_ok=True)
+                save_path = save_dir / f"{base_name}.mp4"
+
+                if save_path.exists():
+                    save_path = save_dir / f"{base_name}_{int(time.time())}.mp4"
+
+                session = await api.get_session()
+                ok = await file_manager.download_file(
+                    play_url, save_path, session,
+                    headers=headers, proxy=api.proxy,
+                )
+                if not ok or not save_path.exists():
+                    raise RuntimeError("Download failed")
+
+                return save_path.resolve(), resolved_title
+
+        try:
+            req = dict(data or {})
+            video_path = str(req.get("video_path") or "").strip()
+            video_url = str(req.get("video_url") or "").strip()
+            req.setdefault("cleanup_outputs", True)
+            req.setdefault("delete_source_after_process", False)
+
+            if not video_path and video_url:
+                yield _j.dumps({"log": f"Resolving URL: {video_url}", "level": "info"}, ensure_ascii=False) + "\n"
+                yield _j.dumps({"overall": 2, "overall_lbl": "Resolving URL..."}, ensure_ascii=False) + "\n"
+                try:
+                    downloaded_path, downloaded_title = asyncio.run(
+                        _download_video_from_url(video_url, str(req.get("out_dir") or "").strip())
+                    )
+                    req["video_path"] = str(downloaded_path)
+                    req["video_title"] = downloaded_title
+                    req["delete_source_after_process"] = True
+                    yield _j.dumps({"log": f"Downloaded video: {downloaded_path}", "level": "success"}, ensure_ascii=False) + "\n"
+                    yield _j.dumps({"overall": 4, "overall_lbl": "Download done, start processing..."}, ensure_ascii=False) + "\n"
+                except Exception as e:
+                    yield _j.dumps({"log": f"URL download failed: {e}", "level": "error"}, ensure_ascii=False) + "\n"
+                    yield _j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=False) + "\n"
+                    return
+            elif not video_path:
+                yield _j.dumps({"log": "Please provide video_path or video_url", "level": "error"}, ensure_ascii=False) + "\n"
+                yield _j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=False) + "\n"
+                return
+
+            for line in process_video_full(req):
+                yield line
+        except Exception as e:
+            yield _j.dumps({"log": f"Fatal error: {e}", "level": "error"}, ensure_ascii=False) + "\n"
+            yield _j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=False) + "\n"
+
+    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+
+
+@bp.route("/api/make_vertical_video", methods=["POST"])
+def make_vertical_video_route():
+    """Convert landscape video to 9:16 vertical with blurred gradient layers."""
+    from core.video_processor import make_vertical_video, find_ffmpeg
+
+    data = request.json or {}
+    video_path = data.get("video_path", "").strip()
+    if not video_path:
+        return jsonify({"ok": False, "error": "Thiếu video_path"}), 400
+
+    vp = Path(video_path).expanduser()
+    if not vp.exists():
+        return jsonify({"ok": False, "error": f"File không tồn tại: {vp}"}), 404
+
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({"ok": False, "error": "ffmpeg không tìm thấy"}), 500
+
+    out_dir = Path(data.get("out_dir", "")).expanduser() if data.get("out_dir") else vp.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / f"{vp.stem}_vertical.mp4"
+
+    ok, err = make_vertical_video(
+        video_path=vp,
+        output_path=output_path,
+        ffmpeg=ffmpeg,
+        title=str(data.get("title") or ""),
+        title_size_pct=float(data.get("title_size_pct") or 5.0),
+        title_color=str(data.get("title_color") or "#ff0000"),
+        blur_w_pct=float(data.get("blur_w_pct") or 15.0),
+        blur_opacity=float(data.get("blur_opacity") or 0.6),
+        blur_mode=str(data.get("blur_mode") or "overlay"),
+        logo_path=str(data.get("logo_path") or "") or None,
+        logo_size_pct=float(data.get("logo_size_pct") or 12.0),
+        logo_top_pct=float(data.get("logo_top_pct") or 3.0),
+        logo_left_pct=float(data.get("logo_left_pct") or 3.0),
+        logo_radius_pct=float(data.get("logo_radius_pct") or 50.0),        target_w=int(data.get("target_w") or 1080),
+        target_h=int(data.get("target_h") or 1920),
+    )
+
+    if ok:
+        return jsonify({"ok": True, "output_path": str(output_path.resolve())})
+    return jsonify({"ok": False, "error": err}), 500
+
+
+def _preload_whisper_model():
+    """Preload faster-whisper model in background so first video processes faster."""
+    try:
+        import os
+        os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+        cfg = load_cfg()
+        model_name = (cfg.get("video_process") or {}).get("model", "base")
+        from core.video_processor import _whisper_model_cache
+        if model_name not in _whisper_model_cache:
+            from faster_whisper import WhisperModel
+            _whisper_model_cache[model_name] = WhisperModel(model_name, device="cpu", compute_type="int8")
+    except Exception:
+        pass

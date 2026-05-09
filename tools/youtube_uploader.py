@@ -5,7 +5,7 @@ import pickle
 import json
 from pathlib import Path
 from typing import Optional, Dict, Any
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 import googleapiclient.discovery
@@ -116,14 +116,24 @@ class YouTubeUploader:
             if not self.client_secrets_file.exists():
                 self.last_error = f"client_secrets.json not found at {self.client_secrets_file}"
                 return None
-            
-            flow = InstalledAppFlow.from_client_secrets_file(
+
+            # Detect actual server port from environment or default to 5000
+            _port = int(os.environ.get("FLASK_PORT", 5000))
+            _redirect_uri = f'http://localhost:{_port}/oauth2callback'
+
+            # Use Flow (web server flow) instead of InstalledAppFlow to ensure
+            # redirect_uri is respected and not overridden with port 8080.
+            flow = Flow.from_client_secrets_file(
                 str(self.client_secrets_file),
-                SCOPES,
-                redirect_uri='http://localhost:8080/oauth2callback'
+                scopes=SCOPES,
+                redirect_uri=_redirect_uri,
             )
-            
-            auth_url, state = flow.authorization_url(access_type='offline', prompt='consent')
+
+            auth_url, state = flow.authorization_url(
+                access_type='offline',
+                prompt='consent',
+                include_granted_scopes='true',
+            )
             self._pending_flow = flow
             self._pending_state = str(state or "")
             self._pending_auth_url = str(auth_url or "")
@@ -172,6 +182,7 @@ class YouTubeUploader:
         category_id: str = "22",  # 22 = People & Blogs
         privacy_status: str = "private",  # private, unlisted, public
         is_short: bool = False,
+        publish_at: str = None,  # ISO 8601 string: YYYY-MM-DDThh:mm:ss.sZ
         on_progress: callable = None,
     ) -> Optional[Dict[str, Any]]:
         """
@@ -185,6 +196,8 @@ class YouTubeUploader:
             category_id: YouTube category ID
             privacy_status: 'private', 'unlisted', or 'public'
             is_short: Whether to upload as a YouTube Short
+            publish_at: ISO 8601 formatted datetime string for scheduling.
+                        Requires privacy_status='private'.
             on_progress: Callback function(status, pct) for progress tracking
         
         Returns:
@@ -197,8 +210,6 @@ class YouTubeUploader:
             video_path = Path(video_path)
             if not video_path.exists():
                 raise FileNotFoundError(f"Video file not found: {video_path}")
-            
-            file_size = video_path.stat().st_size
             
             # Build request body
             body = {
@@ -216,8 +227,27 @@ class YouTubeUploader:
                 },
             }
             
-            if is_short:
-                body['status']['short'] = True
+            if publish_at and privacy_status == 'private':
+                # Validate and normalize to RFC 3339 with .000Z suffix
+                # YouTube requires: YYYY-MM-DDThh:mm:ss.000Z (UTC, at least 5 min future)
+                from datetime import datetime, timezone, timedelta
+                try:
+                    # Parse ISO string (handles both with/without milliseconds)
+                    dt_str = publish_at.replace('Z', '+00:00')
+                    dt = datetime.fromisoformat(dt_str)
+                    # Ensure UTC
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    else:
+                        dt = dt.astimezone(timezone.utc)
+                    # Must be at least 5 minutes in the future
+                    min_time = datetime.now(timezone.utc) + timedelta(minutes=5)
+                    if dt > min_time:
+                        # Format exactly as YouTube expects: 2026-05-09T10:30:00.000Z
+                        body['status']['publishAt'] = dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                    # If not far enough in future, skip scheduling (upload as private)
+                except Exception:
+                    pass  # Invalid date — skip scheduling, upload as private
             
             # Create resumable upload
             request = self.youtube.videos().insert(
@@ -310,12 +340,20 @@ class YouTubeUploader:
             response = request.execute()
             if response['items']:
                 ch = response['items'][0]
+                # Pick the best thumbnail available
+                thumbs = ch['snippet'].get('thumbnails', {})
+                thumbnail = (
+                    thumbs.get('medium', {}).get('url') or
+                    thumbs.get('default', {}).get('url') or
+                    ''
+                )
                 return {
                     'id': ch['id'],
                     'title': ch['snippet']['title'],
                     'description': ch['snippet']['description'],
                     'subscribers': ch['statistics'].get('subscriberCount', 'hidden'),
                     'video_count': ch['statistics'].get('videoCount', '0'),
+                    'thumbnail': thumbnail,
                 }
         except Exception as e:
             print(f"Error getting channel info: {e}")

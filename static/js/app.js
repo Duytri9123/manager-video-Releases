@@ -58,31 +58,73 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
 
 function switchPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(n => n.classList.remove('active'));
   const page = document.getElementById('page-' + name);
-  const nav  = document.querySelector('.nav-item[data-page="' + name + '"]');
+  const navs = document.querySelectorAll('[data-page="' + name + '"]');
   if (page) page.classList.add('active');
-  if (nav)  nav.classList.add('active');
+  navs.forEach(n => n.classList.add('active'));
   const el = document.getElementById('topbar-title');
-  if (el) el.textContent = t('title_' + name);
+  const titles = {
+    user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm',
+    publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies'
+  };
+  if (el) el.textContent = titles[name] || t('title_' + name) || name;
   if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
   if (name === 'cookies' && !window._cookiesLoaded) { loadCookieMode(); loadCookieFields(); window._cookiesLoaded = true; }
-  if (name === 'history') loadHistory();
+  if (name === 'history') { loadHistory(); if (typeof loadFiles === 'function') loadFiles(''); }
+  if (name === 'content') cptSwitch('files');
   if (name === 'process') loadQueue();
 }
 
+/* ── Content platform sub-tabs (defined here so inline onclick always works) ── */
+const _CPT_PANELS = ['files', 'facebook', 'youtube', 'tiktok'];
+
+function cptSwitch(tab) {
+  _CPT_PANELS.forEach(p => {
+    const btn   = document.getElementById('cpt-tab-' + p);
+    const panel = document.getElementById('cpt-panel-' + p);
+    if (btn)   btn.classList.toggle('active', p === tab);
+    if (panel) panel.style.display = (p === tab) ? 'block' : 'none';
+  });
+  if (tab === 'files')    { if (typeof loadContentList === 'function') loadContentList(); }
+  if (tab === 'facebook') { if (typeof fbMgrInit === 'function') fbMgrInit(); }
+  if (tab === 'youtube')  { if (typeof ytMgrInit === 'function') ytMgrInit(); }
+}
+
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('collapsed');
+  const sb = document.getElementById('sidebar');
+  if (!sb) return;
+  sb.classList.toggle('collapsed');
+  const btn = document.getElementById('sidebar-toggle-btn');
+  if (btn) btn.textContent = sb.classList.contains('collapsed') ? '▶' : '◀';
+}
+
+function toggleMobileMenu() {
+  const existing = document.getElementById('mobile-menu-overlay');
+  if (existing) { existing.remove(); return; }
+  const ov = document.createElement('div');
+  ov.id = 'mobile-menu-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;display:flex;align-items:flex-start';
+  const pages = [
+    ['user','🔍','Tìm người dùng'],['process','🎬','Xử lý Video'],
+    ['transcribe','🎙','Phiên âm'],['publish','📤','Đăng video'],
+    ['content','🗄','Quản lý nội dung'],
+    ['history','🗃','Lịch sử'],['config','⚙️','Cấu hình'],['cookies','🍪','Cookies']
+  ];
+  ov.innerHTML = `<div style="background:var(--bg2);width:240px;height:100%;padding:20px 12px;box-shadow:4px 0 20px rgba(0,0,0,.2);overflow-y:auto">
+    <div style="font-weight:700;font-size:16px;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">📱 Menu</div>
+    ${pages.map(([p,i,l]) => `<div onclick="switchPage('${p}');document.getElementById('mobile-menu-overlay')?.remove()" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:8px;cursor:pointer;color:var(--text2);font-weight:500;margin-bottom:4px;transition:background .15s" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background=''">${i} ${l}</div>`).join('')}
+  </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
 }
 
 function toggleCard(header) {
-  const card = header.closest('.card');
-  if (card && card.classList.contains('card-collapsible')) {
-    card.classList.toggle('collapsed');
-  }
+  const card = header.closest('.card-collapsible');
+  if (card) card.classList.toggle('collapsed');
 }
 
-/* ── Video Processing ────────────────────────────────────────────────────── */
+/* ── Video Processing ── */
 window._procMode = localStorage.getItem('proc_mode') || 'ai';
 window._procSelectedFile = null;
 
@@ -147,9 +189,23 @@ function startProcessVideo() {
     tts_rate:         _sanitizeVoiceParam(document.getElementById('proc-tts-rate')?.value || '+0%'),
     tts_emotion:      document.getElementById('proc-tts-emotion')?.value || 'default',
     keep_bg_music:    document.getElementById('proc-keep-bg')?.checked ?? false,
-    font_size:        parseInt(document.getElementById('proc-font-size')?.value || '32', 10),
+    font_size:        (() => {
+      // UI value is % of video height. Convert to px for FFmpeg (reference: 720px height).
+      const pct = parseFloat(document.getElementById('proc-font-size')?.value || '4.5');
+      return Math.max(8, Math.round(720 * pct / 100));
+    })(),
+    font_color:       (() => {
+      const sel = document.getElementById('proc-font-color');
+      const picker = document.getElementById('proc-font-color-picker');
+      if (sel?.value === 'custom' && picker) return picker.value;
+      return sel?.value || 'white';
+    })(),
     subtitle_position: document.getElementById('proc-sub-pos')?.value || 'bottom',
-    margin_v:         parseInt(document.getElementById('proc-margin-v')?.value || '20', 10),
+    margin_v:         (() => {
+      // UI value is % of video height. Convert to px for FFmpeg (reference: 720px height).
+      const pct = parseFloat(document.getElementById('proc-margin-v')?.value || '3');
+      return Math.max(0, Math.round(720 * pct / 100));
+    })(),
     tts_engine:       document.getElementById('proc-tts-engine')?.value || 'fpt-ai',
     tts_voice:        document.getElementById('proc-tts-voice')?.value || 'banmai',
     tts_speed:        parseFloat(document.getElementById('proc-tts-speed')?.value || '1.0'),
@@ -164,20 +220,36 @@ function startProcessVideo() {
     fx_treble:        parseInt(document.getElementById('proc-fx-treble')?.value || '3'),
     fx_comp:          document.getElementById('proc-fx-comp')?.value || 'light',
     fx_reverb:        parseInt(document.getElementById('proc-fx-reverb')?.value || '5'),
-    // Anti-Fingerprint
-    afp_enabled:      document.getElementById('proc-afp-enabled')?.checked ?? false,
-    afp_flip:         document.getElementById('proc-afp-flip')?.checked ?? false,
-    afp_vignette:     document.getElementById('proc-afp-vignette')?.checked ?? false,
-    afp_vertical:     document.getElementById('proc-afp-vertical')?.checked ?? false,
-    afp_scale_w:      parseInt(document.getElementById('proc-afp-scale-w')?.value || '0'),
-    afp_scale_h:      parseInt(document.getElementById('proc-afp-scale-h')?.value || '0'),
-    afp_brightness:   parseFloat(document.getElementById('proc-afp-brightness')?.value || '0.02'),
-    afp_contrast:     parseFloat(document.getElementById('proc-afp-contrast')?.value || '1.03'),
-    afp_speed:        parseFloat(document.getElementById('proc-afp-speed')?.value || '1.0'),
-    afp_overlay_img:  document.getElementById('proc-afp-overlay-img')?.value || '',
+    // Anti-Fingerprint (removed - fields no longer in UI)
+    afp_enabled:      false,
+    afp_flip:         false,
+    afp_vignette:     false,
+    afp_vertical:     false,
+    afp_scale_w:      0,
+    afp_scale_h:      0,
+    afp_brightness:   0.02,
+    afp_contrast:     1.03,
+    afp_speed:        1.0,
+    afp_overlay_img:  '',
     // CapCut settings
     capcut_enabled:   document.getElementById('proc-capcut-enabled')?.checked ?? false,
     capcut_auto_open: document.getElementById('proc-capcut-auto-open')?.checked ?? false,
+    // Frame video (step 6)
+    frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
+    frame_title:          document.getElementById('frame-title')?.value || '',
+    frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
+    frame_title_color:    document.getElementById('frame-title-color')?.value || '#ff0000',
+    frame_blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
+    frame_blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
+    frame_blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
+    frame_logo_path:      (() => {
+      // Logo uploaded via /api/upload_anti_fp_image — path stored in input
+      return document.getElementById('frame-logo-path')?.dataset?.serverPath || '';
+    })(),
+    frame_logo_size_pct:  parseFloat(document.getElementById('frame-logo-size')?.value || 12),
+    frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
+    frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
+    frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
   };
 
   const doRequest = (body, isFormData) => fetch('/api/process_video', {
@@ -186,12 +258,23 @@ function startProcessVideo() {
     body,
   }).then(res => {
     const reader = res.body.getReader();
+    window._procReader = reader;
     const decoder = new TextDecoder();
+
+    // Show pause button
+    if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(true);
+
     function read() {
       reader.read().then(({ done, value }) => {
         if (done) {
           if (btn) { btn.disabled = false; btn.textContent = 'Xử lý Video'; }
-          // Auto-publish after processing - no confirm
+          if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(false);
+          const doneActions = document.getElementById('proc-done-actions');
+          if (doneActions) doneActions.style.display = 'block';
+
+          // Frame video now runs inside the pipeline (step 6) — no need to trigger separately
+          _setProcProgress(100, 'Hoàn thành!');
+
           if (window._publishLastOutputPath && document.getElementById('publish-auto-upload')?.checked) {
             publishSelectedPlatform();
           }
@@ -203,7 +286,6 @@ function startProcessVideo() {
             const d = JSON.parse(line);
             if (d.log) {
               _appendProcLog(d.log, d.level || 'info');
-              // Capture final output file path
               if (d.log.includes('File cuối cùng:') || d.log.includes('final_output_path')) {
                 const match = d.log.match(/[:\s]([^\s]+\.mp4)/);
                 if (match) {
@@ -216,7 +298,38 @@ function startProcessVideo() {
               window._publishLastOutputPath = d.file_path;
               window._ytLastOutputPath = d.file_path;
             }
+            if (d.subtitle_path) {
+              window._publishLastSubtitlePath = d.subtitle_path;
+            }
             if (d.overall !== undefined) _setProcProgress(d.overall, d.overall_lbl || '');
+
+            // ── ASS Review event ──
+            if (d.review_ass && d.ass_path) {
+              const skipReview = window._procSkipReview ||
+                localStorage.getItem('proc_skip_review') === '1';
+              if (!skipReview) {
+                // Load ASS content and show review panel
+                fetch('/api/proc_read_ass', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path: d.ass_path })
+                }).then(r => r.json()).then(rd => {
+                  if (typeof _showAssReview === 'function') {
+                    _showAssReview(d.ass_path, rd.content || '');
+                  }
+                }).catch(() => {
+                  if (typeof _showAssReview === 'function') {
+                    _showAssReview(d.ass_path, '');
+                  }
+                });
+              } else {
+                // Auto-continue without review — frame video runs after pipeline done
+                fetch('/api/proc_resume', { method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'continue' })
+                }).catch(() => {});
+              }
+            }
           } catch {}
         });
         read();
@@ -226,6 +339,7 @@ function startProcessVideo() {
   }).catch(err => {
     _appendProcLog('Lỗi kết nối: ' + err, 'error');
     if (btn) { btn.disabled = false; btn.textContent = 'Xử lý Video'; }
+    if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(false);
   });
 
   if (selectedFile) {
@@ -237,6 +351,69 @@ function startProcessVideo() {
   }
 
   doRequest(JSON.stringify(baseFields), false);
+}
+
+function sendLastProcessedToPublish() {
+  if (!window._publishLastOutputPath) {
+    toast('Không tìm thấy đường dẫn video vừa xử lý', 'warning');
+    return;
+  }
+  sendToPublish(window._publishLastOutputPath);
+}
+
+function sendToPublish(videoPath) {
+  if (!videoPath) return;
+  const pathInput = document.getElementById('pub-video-path');
+  const subInput = document.getElementById('pub-sub-path');
+  if (pathInput) {
+    pathInput.value = videoPath;
+    window._pubVideoFile = null; // Clear local file if sending a path
+
+    if (subInput) {
+      if (window._publishLastSubtitlePath) {
+        subInput.value = window._publishLastSubtitlePath;
+      } else {
+        autoDetectSubtitles(videoPath);
+      }
+    }
+    
+    // Clear previous info
+    ['yt-title', 'yt-desc', 'yt-tags', 'tt-title', 'tt-desc', 'tt-tags', 'fb-title', 'fb-desc', 'fb-tags', 'pub-content-input'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    ['yt-upload-log', 'pub-log', 'pub-analyze-status'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        if (el.tagName === 'DIV') el.innerHTML = '';
+        else el.textContent = '';
+      }
+    });
+
+    toast('✅ Đã thêm dữ liệu vào Đăng video', 'success');
+    switchPage('publish');
+  }
+}
+
+async function autoDetectSubtitles(videoPath) {
+  if (!videoPath) return;
+  try {
+    const res = await fetch('/api/detect_subtitles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_path: videoPath })
+    });
+    const data = await res.json();
+    if (data.ok && data.best_match) {
+      const subInput = document.getElementById('pub-sub-path');
+      if (subInput && (!subInput.value || subInput.value.trim() === '')) {
+        subInput.value = data.best_match;
+        toast('✨ Đã tự động tìm thấy phụ đề: ' + data.best_match.split(/[\\\/]/).pop(), 'success');
+      }
+    }
+  } catch (e) {
+    console.error('Lỗi tự động tìm phụ đề:', e);
+  }
 }
 
 function _appendProcLog(msg, level) {
@@ -794,17 +971,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   switchPublishPlatform(localStorage.getItem('publish_platform') || 'youtube');
 
-  // Handle collapsible cards
-  document.querySelectorAll('.card-collapsible .card-header').forEach(header => {
-    header.addEventListener('click', (e) => {
-      // Don't toggle if clicking on an interactive element inside header
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT' || e.target.closest('.card-actions')) {
-        return;
-      }
-      toggleCard(header);
-    });
-  });
-
   _initProcessConfigSync();
 });
 
@@ -826,13 +992,6 @@ function _initProcessConfigSync() {
     { proc: 'proc-tts-pitch', cfg: 'vp-tts-pitch' },
     { proc: 'proc-tts-rate', cfg: 'vp-tts-rate' },
     { proc: 'proc-tts-emotion', cfg: 'vp-tts-emotion' },
-    { proc: 'proc-afp-enabled', cfg: 'vp-afp-enabled', type: 'checkbox' },
-    { proc: 'proc-afp-flip',    cfg: 'vp-afp-flip',    type: 'checkbox' },
-    { proc: 'proc-afp-vignette',cfg: 'vp-afp-vignette',type: 'checkbox' },
-    { proc: 'proc-afp-vertical',cfg: 'vp-afp-vertical',type: 'checkbox' },
-    { proc: 'proc-afp-scale-w', cfg: 'vp-afp-scale-w' },
-    { proc: 'proc-afp-scale-h', cfg: 'vp-afp-scale-h' },
-    { proc: 'proc-afp-overlay-img', cfg: 'vp-afp-overlay-img' }
   ];
 
   mapping.forEach(m => {
@@ -841,8 +1000,12 @@ function _initProcessConfigSync() {
     if (!pEl || !cEl) return;
 
     const sync = (src, dest) => {
-      if (m.type === 'checkbox') dest.checked = src.checked;
-      else dest.value = src.value;
+      const val = m.type === 'checkbox' ? src.checked : src.value;
+      const cur = m.type === 'checkbox' ? dest.checked : dest.value;
+      if (val === cur) return; // Ngăn chặn vòng lặp vô tận
+
+      if (m.type === 'checkbox') dest.checked = val;
+      else dest.value = val;
       dest.dispatchEvent(new Event('change'));
     };
 
@@ -868,13 +1031,6 @@ function syncProcessConfigFromLoaded() {
     { proc: 'proc-tts-pitch', cfg: 'vp-tts-pitch' },
     { proc: 'proc-tts-rate', cfg: 'vp-tts-rate' },
     { proc: 'proc-tts-emotion', cfg: 'vp-tts-emotion' },
-    { proc: 'proc-afp-enabled', cfg: 'vp-afp-enabled', type: 'checkbox' },
-    { proc: 'proc-afp-flip',    cfg: 'vp-afp-flip',    type: 'checkbox' },
-    { proc: 'proc-afp-vignette',cfg: 'vp-afp-vignette',type: 'checkbox' },
-    { proc: 'proc-afp-vertical',cfg: 'vp-afp-vertical',type: 'checkbox' },
-    { proc: 'proc-afp-scale-w', cfg: 'vp-afp-scale-w' },
-    { proc: 'proc-afp-scale-h', cfg: 'vp-afp-scale-h' },
-    { proc: 'proc-afp-overlay-img', cfg: 'vp-afp-overlay-img' }
   ];
 
   mapping.forEach(m => {
@@ -1080,7 +1236,10 @@ function _showYouTubeError(err, prefix) {
 
 async function checkYouTubeAuth() {
   try {
-    const res = await API.get('/api/youtube_auth');
+    // Use plain fetch (not API.get) to avoid showing loading overlay
+    const r = await fetch('/api/youtube_auth');
+    if (!r.ok) { _setYouTubeAuthenticated(false, null); return; }
+    const res = await r.json();
     if (res?.authenticated) {
       _setYouTubeAuthenticated(true, res.channel);
     } else {
@@ -1088,35 +1247,49 @@ async function checkYouTubeAuth() {
     }
   } catch (e) {
     console.warn('YouTube auth check failed:', e);
-    _showYouTubeError(e, 'Không kiểm tra được trạng thái YouTube');
+    _setYouTubeAuthenticated(false, null);
   }
 }
 
 function _setYouTubeAuthenticated(authenticated, channel) {
   window._ytAuthenticated = authenticated;
-  const authBtn = document.getElementById('btn-yt-auth');
-  const logoutBtn = document.getElementById('btn-yt-logout');
-  const channelInfo = document.getElementById('yt-channel-info');
-  const authNeeded = document.getElementById('yt-auth-needed');
-  const status = document.getElementById('yt-status');
+
+  const disconnected = document.getElementById('yt-auth-disconnected');
+  const connected    = document.getElementById('yt-auth-connected');
 
   if (authenticated && channel) {
-    if (authBtn) authBtn.style.display = 'none';
-    if (logoutBtn) logoutBtn.style.display = 'inline-block';
-    if (channelInfo) {
-      channelInfo.style.display = 'block';
-      document.getElementById('yt-ch-name').textContent = channel.title || '--';
-      document.getElementById('yt-ch-subs').textContent = channel.subscribers || 'Ẩn';
-      document.getElementById('yt-ch-videos').textContent = channel.video_count || '0';
+    if (disconnected) disconnected.style.display = 'none';
+    if (connected)    connected.style.display    = 'flex';
+
+    // Channel name
+    const nameEl = document.getElementById('yt-ch-name');
+    if (nameEl) nameEl.textContent = channel.title || '--';
+
+    // Subscribers
+    const subsEl = document.getElementById('yt-ch-subs');
+    if (subsEl) {
+      const n = parseInt(channel.subscribers || 0);
+      subsEl.textContent = n >= 1000 ? (n / 1000).toFixed(1) + 'K' : (n || 'Ẩn');
     }
-    if (authNeeded) authNeeded.style.display = 'none';
-    if (status) status.textContent = '✓ Đã kết nối';
+
+    // Video count
+    const vidEl = document.getElementById('yt-ch-videos');
+    if (vidEl) vidEl.textContent = channel.video_count || '0';
+
+    // Avatar
+    const avatarImg = document.getElementById('yt-ch-avatar-img');
+    const avatarPh  = document.getElementById('yt-ch-avatar-ph');
+    if (avatarImg && channel.thumbnail) {
+      avatarImg.src = channel.thumbnail;
+      avatarImg.style.display = 'block';
+      if (avatarPh) avatarPh.style.display = 'none';
+    } else {
+      if (avatarImg) avatarImg.style.display = 'none';
+      if (avatarPh)  avatarPh.style.display  = 'flex';
+    }
   } else {
-    if (authBtn) authBtn.style.display = 'inline-block';
-    if (logoutBtn) logoutBtn.style.display = 'none';
-    if (channelInfo) channelInfo.style.display = 'none';
-    if (authNeeded) authNeeded.style.display = 'none';
-    if (status) status.textContent = 'Chưa kết nối';
+    if (disconnected) disconnected.style.display = 'flex';
+    if (connected)    connected.style.display    = 'none';
   }
 }
 
@@ -1138,10 +1311,10 @@ async function youtubeLogin() {
       let tries = 0;
       const timer = setInterval(async () => {
         tries += 1;
+        // Stop immediately if popup closed or max tries reached
+        if ((popup && popup.closed) || tries >= 60) { clearInterval(timer); return; }
         await checkYouTubeAuth();
-        if (window._ytAuthenticated || (popup && popup.closed) || tries >= 60) {
-          clearInterval(timer);
-        }
+        if (window._ytAuthenticated) { clearInterval(timer); }
       }, 2000);
     }
   } catch (e) {
@@ -1216,7 +1389,10 @@ function _setTikTokAuthenticated(authenticated, account) {
 
 async function checkTikTokAuth() {
   try {
-    const res = await API.get('/api/tiktok_auth');
+    // Use plain fetch (not API.get) to avoid showing loading overlay
+    const r = await fetch('/api/tiktok_auth');
+    if (!r.ok) { _setTikTokAuthenticated(false, null); return; }
+    const res = await r.json();
     if (res?.authenticated) {
       _setTikTokAuthenticated(true, res.account || {});
     } else {
@@ -1634,25 +1810,25 @@ async function refreshHfVoices() {
     const res = await fetch('/api/hf_voices');
     if (!res.ok) return;
     const data = await res.json();
+    const voices = Array.isArray(data?.voices) ? data.voices : [];
     
     ['vp-hf-embeddings', 'tr-hf-embeddings', 'proc-hf-embeddings'].forEach(id => {
       const select = document.getElementById(id);
       if (!select) return;
       const current = select.value;
       select.innerHTML = '<option value="">(Không dùng / Mặc định)</option>';
-      (data.voices || []).forEach(v => {
+      voices.forEach(v => {
         const opt = document.createElement('option');
         opt.value = v.path;
         opt.textContent = v.name;
         select.appendChild(opt);
       });
-      // khôi phục
-      if (Array.from(select.options).some(o => o.value === current)) {
+      if (Array.from(select.options || []).some(o => o.value === current)) {
         select.value = current;
       }
     });
   } catch (err) {
-    console.error('refreshHfVoices error:', err);
+    // HF voices not available - silently ignore
   }
 }
 

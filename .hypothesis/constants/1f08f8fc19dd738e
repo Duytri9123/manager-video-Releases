@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\storage\database.py
-# hypothesis_version: 6.151.10
-
-['author_id', 'author_name', 'aweme_id', 'aweme_type', 'config', 'create_time', 'created_at', 'dy_downloader.db', 'error_message', 'file_path', 'json_path', 'metadata', 'model', 'skip_reason', 'status', 'success_count', 'text_path', 'title', 'total_count', 'transcript_dir', 'updated_at', 'url', 'url_type', 'video_path']

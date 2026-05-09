@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\transcript_manager.py
-# hypothesis_version: 6.151.10
-
-[200, 600, '.m4a', '.mp3', '.mp4', '.wav', 'Authorization', 'OPENAI_API_KEY', 'TranscriptManager', 'api_key', 'api_key_env', 'api_url', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'aweme_id', 'disabled', 'enabled', 'error', 'error_message', 'failed', 'file', 'json', 'json_path', 'language', 'language_hint', 'missing_api_key', 'model', 'output_dir', 'rb', 'reason', 'response_format', 'response_formats', 'skip_reason', 'skipped', 'status', 'success', 'text', 'text_path', 'transcript', 'transcript_dir', 'transcription_error', 'txt', 'utf-8', 'video/mp4', 'video_path', 'w']

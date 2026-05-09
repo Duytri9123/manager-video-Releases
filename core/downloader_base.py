@@ -1099,6 +1099,7 @@ class BaseDownloader(ABC):
                 outline_width=int(vp_cfg.get("outline_width", 2)),
                 margin_v=margin_v,
                 subtitle_position=subtitle_position,
+                font_name=vp_cfg.get("font_name", "Arial"),
             )
             if ok:
                 processed_path = out_video

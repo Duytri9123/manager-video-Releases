@@ -53,30 +53,25 @@ function escHtml(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/* ── Tab Switching Helpers (Supports Scrollable Overview) ────────────────── */
+
+/* ── Tab Switching Helpers ── */
 function switchSubTab(el, tabId, itemClass, pageClass) {
   if (!el || !tabId) return;
   const target = document.getElementById(tabId);
   if (!target) return;
-
-  // If it's a scrollable page (new design)
-  if (target.classList.contains('proc-section') || target.classList.contains('cfg-section')) {
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    
-    // Update active nav button
-    document.querySelectorAll('.' + itemClass).forEach(m => m.classList.remove('active'));
-    el.classList.add('active');
-    return;
-  }
-
-  // Toggling visibility (classic design)
   document.querySelectorAll('.' + itemClass).forEach(m => m.classList.remove('active'));
   el.classList.add('active');
-
   document.querySelectorAll('.' + pageClass).forEach(p => p.classList.remove('active'));
   target.classList.add('active');
 }
 
 // Shorthands for components
-function switchConfigTab(el, id) { switchSubTab(el, id, 'config-menu-item', 'config-subpage'); }
+function switchConfigTab(el, id) {
+  document.querySelectorAll('.cfg-tab').forEach(b => { b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
+  el.classList.remove('btn-secondary'); el.classList.add('btn-primary');
+  ['cfg-sec-general','cfg-sec-process','cfg-sec-integration'].forEach(sid => {
+    const el2 = document.getElementById(sid);
+    if (el2) el2.style.display = (sid === id) ? '' : 'none';
+  });
+}
 function switchProcTab(el, id) { switchSubTab(el, id, 'proc-menu-item', 'proc-subpage'); }

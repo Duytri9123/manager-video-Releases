@@ -1,209 +1,210 @@
-      <!-- PAGE: TRANSCRIBE -->
-      <div id="page-transcribe" class="page">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start">
-          <div>
-            <div class="card">
-              <div class="card-header"><span class="card-title" data-i18n="lbl_tr_settings">Cài đặt phiên âm</span></div>
-              <div class="field"><label data-i18n="lbl_video_folder">Thư mục video</label><input type="text" id="tr-dir" placeholder="./Downloaded" value="./Downloaded"></div>
-              <div class="field">
-                <label data-i18n="lbl_single_file">File đơn (tùy chọn)</label>
-                <div class="flex-center gap-8">
-                  <input type="text" id="tr-file" placeholder="/path/to/video.mp4" style="flex:1">
-                  <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('tr-import-file')?.click()" data-i18n="btn_import_file">Import</button>
-                  <input type="file" id="tr-import-file" accept="video/*,.ass" style="display:none">
-                </div>
-                <div class="text-xs text-muted" id="tr-file-name">--</div>
-              </div>
-              <div class="field"><label data-i18n="lbl_output_dir">Thư mục xuất (tùy chọn)</label><input type="text" id="tr-out" placeholder="Leave empty = same as video"></div>
-              <div class="grid-2">
-                <div class="field">
-                  <label data-i18n="lbl_model">Mô hình Whisper</label>
-                  <select id="tr-model">
-                    <option value="tiny">tiny (nhanh nhất)</option>
-                    <option value="base" selected>base</option>
-                    <option value="small">small</option>
-                    <option value="medium">medium</option>
-                    <option value="large">large (tốt nhất)</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label data-i18n="lbl_language">Ngôn ngữ</label>
-                  <select id="tr-lang">
-                    <option value="zh" selected>Tiếng Trung</option>
-                    <option value="vi">Tiếng Việt</option>
-                    <option value="en">Tiếng Anh</option>
-                    <option value="ja">Tiếng Nhật</option>
-                    <option value="ko">Tiếng Hàn</option>
-                  </select>
-                </div>
-              </div>
-              <div class="check-grid mt-8">
-                <label class="check-item"><input type="checkbox" id="tr-srt"><span data-i18n="lbl_export_srt">Xuất SRT</span></label>
-                <label class="check-item"><input type="checkbox" id="tr-skip" checked><span data-i18n="lbl_skip_existing">Bỏ qua đã có</span></label>
-                <label class="check-item"><input type="checkbox" id="tr-sc"><span data-i18n="lbl_simplified">Chữ giản thể</span></label>
-              </div>
-              <div class="card" style="margin-top:12px">
-                <div class="card-header"><span class="card-title">Nghe thử giọng</span></div>
-                <div class="grid-2">
-                  <div class="field">
-                    <label>TTS Engine</label>
-                    <select id="tr-tts-engine" onchange="document.getElementById('tr-hf-config').style.display = this.value==='huggingface'?'block':'none'">
-                      <option value="fpt-ai" selected>FPT AI TTS</option>
-                      <option value="edge-tts">Edge TTS (Microsoft)</option>
-                      <option value="minimax">MiniMax TTS</option>
-                      <option value="gtts">gTTS (Google)</option>
-                      <option value="huggingface">HuggingFace TTS</option>
-                    </select>
-                  </div>
-                    <div class="field">
-                      <label>Giọng đọc</label>
-                      <select id="tr-tts-voice"></select>
-                    </div>
-                  </div>
-                  <!-- HuggingFace TTS config -->
-                  <div id="tr-hf-config" style="display:none;margin-top:8px">
-                    <div class="grid-2">
-                      <div class="field">
-                        <label>HF Model</label>
-                        <input type="text" id="tr-hf-model" placeholder="facebook/mms-tts-vie" value="facebook/mms-tts-vie">
-                      </div>
-                      <div class="field">
-                        <label>Device</label>
-                        <select id="tr-hf-device">
-                          <option value="cpu" selected>CPU</option>
-                          <option value="cuda">CUDA (GPU)</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div class="field mt-8">
-                      <label>Speaker Embeddings <span style="color:var(--dim);font-size:11px">(để clone giọng speecht5_tts)</span></label>
-                      <div style="display:flex;gap:4px">
-                        <select id="tr-hf-embeddings" style="flex:1">
-                          <option value="">(Không dùng / Mặc định)</option>
-                        </select>
-                        <button class="btn btn-secondary btn-sm" type="button" onclick="uploadHfVoice()" title="Thêm giọng mới">+</button>
-                        <button class="btn btn-secondary btn-sm" type="button" onclick="refreshHfVoices()" title="Tải lại">↻</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="grid-2 mt-8">
-                    <div class="field">
-                      <label data-i18n="lbl_tts_pitch">Cao độ</label>
-                      <input type="text" id="tr-tts-pitch" placeholder="+0Hz" value="+0Hz">
-                    </div>
-                    <div class="field">
-                      <label data-i18n="lbl_tts_rate">Tốc độ</label>
-                      <input type="text" id="tr-tts-rate" placeholder="+0%" value="+0%">
-                    </div>
-                  </div>
-                  <div class="grid-2 mt-8">
-                    <div class="field">
-                      <label data-i18n="lbl_tts_emotion">Cảm xúc</label>
-                      <select id="tr-tts-emotion">
-                        <option value="default" selected>Mặc định</option>
-                        <option value="cheerful">Vui vẻ</option>
-                        <option value="sad">Buồn</option>
-                        <option value="angry">Giận dữ</option>
-                        <option value="excited">Hào hứng</option>
-                        <option value="friendly">Thân thiện</option>
-                      </select>
-                    </div>
-                  </div>
-                <div class="field">
-                  <label>Nhập text để nghe thử</label>
-                  <textarea id="tr-preview-text" rows="3" placeholder="Nhập một câu tiếng Việt để nghe thử giọng đọc"></textarea>
-                </div>
-                <div class="btn-group" style="margin-top:8px;align-items:center;gap:10px;">
-                  <button class="btn btn-secondary" type="button" id="btn-tr-preview" onclick="previewTranscribeVoice()">Nghe thử</button>
-                  <audio id="tr-preview-audio" controls style="display:none;max-width:320px"></audio>
-                </div>
-              </div>
-              <div class="btn-group mt-12" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <button class="btn btn-primary" id="btn-tr" onclick="startTranscribe()" data-i18n="btn_start_tr">Bắt đầu phiên âm</button>
-                <button class="btn btn-secondary" onclick="extractAudioOnly()" title="Tách riêng âm thanh từ video đã chọn">Tách MP3</button>
-              </div>
-              <div class="btn-group mt-8">
-                <button class="btn btn-secondary" style="width:100%" onclick="generateTtsFromAss()" title="Tạo voice MP3 từ nội dung file .ass">Tạo MP3 từ file .ass</button>
-              </div>
-            </div>
+﻿<!-- PAGE: TRANSCRIBE -->
+<div id="page-transcribe" class="page">
+  <div class="grid-2" style="align-items:start;gap:14px">
 
-            <div class="card card-collapsible collapsed card-has-body mt-12">
-              <div class="card-header">
-                <span class="card-title">🎙 Chỉnh giọng Review chuyên nghiệp</span>
-                <div class="card-actions">
-                  <label class="toggle-wrap">
-                    <input type="checkbox" class="toggle-input" id="tr-fx-enabled">
-                    <div class="toggle"></div>
-                    <span class="toggle-label text-sm">Bật hiệu ứng</span>
-                  </label>
-                </div>
-              </div>
-              <div class="card-body">
-                <div class="grid-2">
-                  <div class="field">
-                    <label>Pitch (Bán âm)</label>
-                    <input type="number" id="tr-fx-pitch" step="0.1" value="1.5">
-                  </div>
-                  <div class="field">
-                    <label>Speed (Tốc độ)</label>
-                    <input type="number" id="tr-fx-speed" step="0.01" value="1.08">
-                  </div>
-                </div>
-                <div class="section-title mt-8">Equalizer (EQ)</div>
-                <div class="grid-3">
-                  <div class="field">
-                    <label>Bass (dB)</label>
-                    <input type="number" id="tr-fx-bass" step="1" value="-2">
-                  </div>
-                  <div class="field">
-                    <label>Mid (dB)</label>
-                    <input type="number" id="tr-fx-mid" step="1" value="2">
-                  </div>
-                  <div class="field">
-                    <label>Treble (dB)</label>
-                    <input type="number" id="tr-fx-treble" step="1" value="3">
-                  </div>
-                </div>
-                <div class="grid-2 mt-8">
-                  <div class="field">
-                    <label>Nén (Compression)</label>
-                    <select id="tr-fx-comp">
-                      <option value="none">Tắt</option>
-                      <option value="light" selected>Nhẹ (Reviewer)</option>
-                      <option value="heavy">Mạnh</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label>Vang (Reverb)</label>
-                    <input type="number" id="tr-fx-reverb" min="0" max="100" value="5" placeholder="%">
-                  </div>
-                </div>
-              </div>
+    <!-- LEFT: Settings + TTS Preview + Voice FX -->
+    <div>
+
+      <!-- Settings card -->
+      <div class="card card-collapsible card-has-body">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">🎙 Cài đặt phiên âm</span>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label>Thư mục video</label>
+            <input type="text" id="tr-dir" value="./Downloaded" placeholder="./Downloaded">
+          </div>
+          <div class="field">
+            <label>File đơn (video hoặc .ass)</label>
+            <div class="flex-center gap-8">
+              <input type="text" id="tr-file" placeholder="Đường dẫn file..." style="flex:1">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('tr-import-file').click()">Import</button>
+              <input type="file" id="tr-import-file" accept="video/*,.ass" style="display:none">
+            </div>
+            <div class="text-xs text-muted mt-4" id="tr-file-name">--</div>
+          </div>
+          <div class="field">
+            <label>Thư mục xuất</label>
+            <input type="text" id="tr-out" placeholder="Để trống = cùng thư mục video">
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Mô hình Whisper</label>
+              <select id="tr-model">
+                <option value="tiny">tiny (nhanh nhất)</option>
+                <option value="base" selected>base</option>
+                <option value="small">small</option>
+                <option value="medium">medium</option>
+                <option value="large">large (tốt nhất)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Ngôn ngữ gốc</label>
+              <select id="tr-lang">
+                <option value="zh" selected>Tiếng Trung</option>
+                <option value="vi">Tiếng Việt</option>
+                <option value="en">Tiếng Anh</option>
+                <option value="ja">Tiếng Nhật</option>
+                <option value="ko">Tiếng Hàn</option>
+              </select>
             </div>
           </div>
-          <div>
-            <div class="card">
-              <div class="card-header"><span class="card-title" data-i18n="lbl_progress">Tiến trình</span></div>
-              <div class="progress-row">
-                <span class="progress-label" data-i18n="lbl_overall">Tổng thể</span>
-                <div class="progress-bar-wrap"><div class="progress-bar pb-overall" id="pb-tr-overall"></div></div>
-                <span class="progress-pct" id="pb-tr-overall-pct">0%</span>
-              </div>
-              <div class="progress-info text-muted" id="lbl-tr-overall">--</div>
-              <div class="progress-row mt-8">
-                <span class="progress-label" data-i18n="lbl_step">Bước</span>
-                <div class="progress-bar-wrap"><div class="progress-bar pb-step" id="pb-tr-file"></div></div>
-                <span class="progress-pct" id="pb-tr-file-pct">0%</span>
-              </div>
-              <div class="progress-info text-muted" id="lbl-tr-file">--</div>
-            </div>
-            <div class="card">
-              <div class="card-header">
-                <span class="card-title" data-i18n="lbl_log">Nhật ký</span>
-                <div class="card-actions"><button class="btn btn-secondary btn-sm" onclick="clearLog('tr-log')" data-i18n="btn_clear_log">Xóa</button></div>
-              </div>
-              <div class="log-box" id="tr-log"></div>
-            </div>
+          <div class="check-grid mb-12">
+            <label class="check-item"><input type="checkbox" id="tr-srt"><span>Xuất file .srt</span></label>
+            <label class="check-item"><input type="checkbox" id="tr-skip" checked><span>Bỏ qua file đã có</span></label>
+            <label class="check-item"><input type="checkbox" id="tr-sc"><span>Chuyển phồn → giản thể</span></label>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btn-tr" onclick="startTranscribe()" data-i18n="btn_start_tr">▶ Bắt đầu phiên âm</button>
+            <button class="btn btn-secondary" onclick="extractAudioOnly()">🎵 Tách MP3</button>
+            <button class="btn btn-secondary" onclick="generateTtsFromAss()">🔊 Tạo MP3 từ .ass</button>
           </div>
         </div>
       </div>
+
+      <!-- TTS Preview card -->
+      <div class="card card-collapsible card-has-body">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">🔊 Nghe thử giọng TTS</span>
+        </div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div class="field">
+              <label>TTS Engine</label>
+              <select id="tr-tts-engine" onchange="_syncVoiceOptions('tr-tts-engine','tr-tts-voice')">
+                <option value="fpt-ai" selected>FPT AI TTS</option>
+                <option value="edge-tts">Edge TTS (Microsoft)</option>
+                <option value="minimax">MiniMax TTS</option>
+                <option value="gtts">gTTS (Google)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Giọng đọc</label>
+              <select id="tr-tts-voice"></select>
+            </div>
+            <div class="field">
+              <label>Cao độ</label>
+              <input type="text" id="tr-tts-pitch" placeholder="+0Hz" value="+0Hz">
+            </div>
+            <div class="field">
+              <label>Tốc độ đọc</label>
+              <input type="text" id="tr-tts-rate" placeholder="+0%" value="+0%">
+            </div>
+          </div>
+          <div class="field">
+            <label>Cảm xúc</label>
+            <select id="tr-tts-emotion">
+              <option value="default" selected>Mặc định</option>
+              <option value="cheerful">Vui vẻ</option>
+              <option value="sad">Buồn</option>
+              <option value="angry">Giận dữ</option>
+              <option value="excited">Hào hứng</option>
+              <option value="friendly">Thân thiện</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Nội dung nghe thử</label>
+            <textarea id="tr-preview-text" rows="2" placeholder="Nhập văn bản để nghe thử giọng đọc..."></textarea>
+          </div>
+          <div class="flex-center gap-8 mt-8">
+            <button class="btn btn-secondary btn-sm" id="btn-tr-preview" onclick="previewTranscribeVoice()">▶ Nghe thử</button>
+            <audio id="tr-preview-audio" controls style="display:none;height:32px;flex:1"></audio>
+          </div>
+        </div>
+      </div>
+
+      <!-- Voice FX card (collapsed) -->
+      <div class="card card-collapsible collapsed card-has-body">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">🎚 Hiệu ứng giọng (FX)</span>
+          <div class="card-actions" onclick="event.stopPropagation()">
+            <label class="toggle-wrap">
+              <input type="checkbox" class="toggle-input" id="tr-fx-enabled">
+              <div class="toggle"></div>
+              <span class="toggle-label text-sm">Bật</span>
+            </label>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div class="field"><label>Pitch (bán âm)</label><input type="number" id="tr-fx-pitch" step="0.1" value="1.5"></div>
+            <div class="field"><label>Speed</label><input type="number" id="tr-fx-speed" step="0.01" value="1.08"></div>
+          </div>
+          <div class="grid-3 mt-8">
+            <div class="field"><label>Bass (dB)</label><input type="number" id="tr-fx-bass" step="1" value="-2"></div>
+            <div class="field"><label>Mid (dB)</label><input type="number" id="tr-fx-mid" step="1" value="2"></div>
+            <div class="field"><label>Treble (dB)</label><input type="number" id="tr-fx-treble" step="1" value="3"></div>
+          </div>
+          <div class="grid-2 mt-8">
+            <div class="field">
+              <label>Nén (Comp)</label>
+              <select id="tr-fx-comp">
+                <option value="none" selected>Tắt</option>
+                <option value="light">Nhẹ</option>
+                <option value="heavy">Mạnh</option>
+              </select>
+            </div>
+            <div class="field"><label>Vang (Reverb %)</label><input type="number" id="tr-fx-reverb" min="0" max="100" value="5"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end left -->
+
+    <!-- RIGHT: Progress + Log -->
+    <div>
+
+      <!-- Progress card -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📊 Tiến trình</span>
+        </div>
+        <div class="progress-row">
+          <span class="progress-label">Tổng thể</span>
+          <div class="progress-bar-wrap"><div class="progress-bar pb-overall" id="pb-tr-overall"></div></div>
+          <span class="progress-pct" id="pb-tr-overall-pct">0%</span>
+        </div>
+        <div class="progress-info text-muted mb-8" id="lbl-tr-overall">--</div>
+        <div class="progress-row">
+          <span class="progress-label">File hiện tại</span>
+          <div class="progress-bar-wrap"><div class="progress-bar pb-step" id="pb-tr-file"></div></div>
+          <span class="progress-pct" id="pb-tr-file-pct">0%</span>
+        </div>
+        <div class="progress-info text-muted" id="lbl-tr-file">--</div>
+      </div>
+
+      <!-- Log card -->
+      <div class="card card-collapsible card-has-body">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">📝 Nhật ký</span>
+          <div class="card-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-secondary btn-sm" onclick="clearLog('tr-log')">Xóa</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="log-box" id="tr-log" style="height:320px"></div>
+        </div>
+      </div>
+
+    </div><!-- end right -->
+  </div><!-- end grid -->
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+    document.getElementById('tr-tts-engine')?.addEventListener('change', function() {
+      _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+    });
+    document.getElementById('tr-import-file')?.addEventListener('change', function() {
+      const file = this.files && this.files[0] ? this.files[0] : null;
+      window._trSelectedFile = file;
+      const pathBox = document.getElementById('tr-file');
+      const label = document.getElementById('tr-file-name');
+      if (pathBox) pathBox.value = file ? file.name : '';
+      if (label) label.textContent = file ? file.name : '--';
+      this.value = '';
+    });
+  });
+  </script>
+</div>

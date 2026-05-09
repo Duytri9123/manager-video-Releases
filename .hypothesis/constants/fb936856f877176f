@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\anti_fingerprint.py
-# hypothesis_version: 6.151.10
-
-[0.0, 0.03, 0.05, 0.12, 0.25, 0.5, 1.02, 1.05, 2.0, -2000, 100, 999, 1080, 1920, 44100, ',', '-1', '-b:a', '-c:a', '-c:v', '-crf', '-filter_complex', '-filters', '-i', '-map', '-map_metadata', '-metadata', '-preset', '-print_format', '-show_format', '-show_streams', '-v', '-y', '/', '0', '0/1', '0:a', '0:v', '128k', ';', 'H*0.88', 'W*0.75', '[0:v]copy[vout]', '[aout]', '[vout]', 'aac', 'audio', 'avg_frame_rate', 'bottom_left', 'bottom_right', 'brightness', 'codec_name', 'codec_type', 'contrast', 'copy', 'crf', 'delogo', 'duration', 'eq_high_db', 'eq_low_db', 'ffmpeg', 'ffmpeg command: %s', 'ffmpeg failed: %s', 'ffprobe', 'format', 'height', 'json', 'libx264', 'none', 'pitch_semitones', 'quiet', 'random', 'sample_rate', 'saturation', 'streams', 'top_left', 'top_right', 'unknown error', 'veryfast', 'video', 'width', 'zoom_factor']

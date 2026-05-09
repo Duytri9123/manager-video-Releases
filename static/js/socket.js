@@ -1,5 +1,12 @@
 /* ── Socket.IO setup ─────────────────────────────────────────────────────── */
-const socket = io();
+let socket = null;
+try {
+  socket = io();
+} catch(e) {
+  console.warn('Socket.IO not available:', e.message);
+  // Create a no-op socket stub so the rest of the code doesn't break
+  socket = { on: () => {}, emit: () => {}, connected: false };
+}
 
 function _clampPct(v) {
   return Math.max(0, Math.min(100, Number(v) || 0));

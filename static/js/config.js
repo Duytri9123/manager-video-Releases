@@ -1,33 +1,45 @@
 
+/* ── Config tab switcher is in utils.js ── */
+
 // TTS thử giọng đọc
 document.addEventListener('DOMContentLoaded', () => {
+  // Init TTS voice options for config page
+  if (typeof _syncVoiceOptions === 'function') {
+    _syncVoiceOptions('vp-tts-engine', 'vp-tts-voice');
+  }
+  document.getElementById('vp-tts-engine')?.addEventListener('change', function() {
+    if (typeof _syncVoiceOptions === 'function') _syncVoiceOptions('vp-tts-engine', 'vp-tts-voice');
+  });
+
   const btn = document.getElementById('btn-tts-test');
   if (!btn) return;
   btn.onclick = async () => {
     btn.disabled = true;
     btn.textContent = 'Đang thử...';
     try {
-      const engine = document.getElementById('vp-tts-engine').value;
-      const voice = document.getElementById('vp-tts-voice').value;
-      const text = 'Xin chào, đây là giọng đọc mẫu.';
-      const res = await fetch('/api/tts_test', {
+      const engine = document.getElementById('vp-tts-engine')?.value || 'edge-tts';
+      const voice = document.getElementById('vp-tts-voice')?.value || 'vi-VN-HoaiMyNeural';
+      const text = 'Xin chào, đây là giọng đọc mẫu tiếng Việt.';
+      const res = await fetch('/api/tts_preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ engine, voice, text })
+        body: JSON.stringify({ text, tts_engine: engine, tts_voice: voice })
       });
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
+        const audio = document.getElementById('vp-preview-audio') || new Audio();
+        audio.src = url;
+        audio.style.display = 'block';
         audio.play();
       } else {
-        alert('Không thử được giọng đọc!');
+        toast('Không thử được giọng đọc!', 'error');
       }
     } catch (e) {
-      alert('Lỗi thử giọng đọc!');
+      toast('Lỗi thử giọng đọc: ' + e.message, 'error');
     }
     btn.disabled = false;
-    btn.textContent = 'Thử giọng đọc';
+    btn.textContent = '▶ Thử giọng đọc';
   };
 });
 /* ── Config page ─────────────────────────────────────────────────────────── */
@@ -244,4 +256,29 @@ async function saveConfig() {
 
   await API.post('/api/config', data);
   toast(t('toast_config_saved'), 'success');
+}
+
+async function uploadClientSecrets(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/api/upload_client_secrets', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.message, 'success');
+    } else {
+      toast('Lỗi: ' + (data.error || 'Không rõ'), 'error');
+    }
+  } catch (e) {
+    toast('Lỗi kết nối: ' + e.message, 'error');
+  } finally {
+    input.value = ''; // Reset input
+  }
 }

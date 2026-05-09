@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\utils\translation.py
-# hypothesis_version: 6.151.10
-
-[0.1, 500, 1000, 2000, 'Accept-Language', 'Authorization', 'Content-Type', 'Mozilla/5.0', 'POST', 'User-Agent', '^(\\d+)[.)]\\s*(.*)', 'application/json', 'auto', 'choices', 'content', 'deepseek', 'deepseek-chat', 'deepseek_key', 'end', 'fallback', 'google', 'gpt-4o-mini', 'hf', 'hf_token', 'huggingface', 'max_tokens', 'message', 'messages', 'model', 'none', 'openai', 'openai_key', 'role', 'sentences', 'start', 'temperature', 'trans', 'user', 'utf-8', 'vi']

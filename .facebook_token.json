@@ -1,0 +1,49 @@
+{
+  "user_token": "EAAS5DC5i6TwBRcvqFlrIiiatKaIKIwZCEQB4XWCpGKkN2iPg2D2c5GxjMTWNfOJ8mJVcIt6TXZBJ0yVfgzIMEvTJ82JJliu7hdnlIQEzzxkAxuYsi5ZASR3Iq9A6ylTCkPjKqjndDcAXgzLqFMe8lE3rQN8ItgUmdu4s1gZCdoyS4a6yTWKZC4v3WfH3RXimhCZAmq2DrLska89nJjX88xiOje6wmbE85DMlspZBrWStDZBw0xtK2V2mgfZAe92c4n7eB9QZAomoiCxHPko8RkPfZC5NQZDZD",
+  "user_id": "1509611477502530",
+  "user_name": "Nguyễn Duy Trí",
+  "pages": [
+    {
+      "id": "1111623275360249",
+      "name": "Gió Sông",
+      "access_token": "EAAS5DC5i6TwBRT3ggu3hYiULFucolvQRYxYS2V7ZCnRMgJLmhe1yPL8nVQIScbB7bQ9W1wbYJ0TZBHUGIWJSxFo1TPqTd4jgnKoBuYjUN8ZAeq2qqeRWUJSCEPmSZAZCVIsZBOZBGDgp4ctQDKD9TEJwnhOo0IXKqeMIUzhI0yNBKCgR6MHswPhmhtpskaZBi7wXpRgUMohwY2DcwTdFXgqaZBn2uy7PNz0cqtj1wGrKA",
+      "category": "Personal blog",
+      "tasks": [
+        "MODERATE",
+        "MESSAGING",
+        "ANALYZE",
+        "ADVERTISE",
+        "CREATE_CONTENT",
+        "MANAGE"
+      ]
+    },
+    {
+      "id": "813278198533042",
+      "name": "Trạm Giải Trí",
+      "access_token": "EAAS5DC5i6TwBRfYNav06eAfyNFZBrkAgYNpXgJxFDfXabbk5XEHSipoGQRgzPzcDapSLffM1Nm0yOtUhu6ybox6LadGUgjVaOrOHedaHASBI1PZBXicQHx3yDpcMoBkeq8AoWNJnsiAlt6TiHnWWCitKQpl4fvUyXwHJMj9RGNyOwE8EB0IecpOjleTZCwATzUJpVuvBjCJCdg0JgTdFUzOFPZAKtrrmzZBUwPWaV",
+      "category": "Digital creator",
+      "tasks": [
+        "MODERATE",
+        "MESSAGING",
+        "ANALYZE",
+        "ADVERTISE",
+        "CREATE_CONTENT",
+        "MANAGE"
+      ]
+    },
+    {
+      "id": "255717904302451",
+      "name": "Ẩm Thực Douyin",
+      "access_token": "EAAS5DC5i6TwBRSessxVwG06OYdYT8DxNNXs1TGyh8KNs2HDXX1HRTnhCLjId5yUuZBlqRsw7qGm1TboYYZBjSZCZAFni5LG8xGSALToRdpnZC6doe4RnEfpI4C9bp20flSI9HB8lCjYhtEXQfMpptaV2PVjewmDD8lEOf9gnFSvXgxrWYxqI8SOzRtFqFZBmVyLEiOQ2xxLBL0yOykhplt8ZC3z9xDJAJed1vDzOcMZD",
+      "category": "Commercial and industrial",
+      "tasks": [
+        "MODERATE",
+        "MESSAGING",
+        "ANALYZE",
+        "ADVERTISE",
+        "CREATE_CONTENT",
+        "MANAGE"
+      ]
+    }
+  ]
+}

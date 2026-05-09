@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\user_modes\collect_strategy.py
-# hypothesis_version: 6.151.10
-
-['aweme_id', 'collect', 'collects_id', 'collects_id_str', 'collects_info', 'get_collect_aweme', 'get_user_collects', 'has_more', 'id', 'items', 'max_cursor']

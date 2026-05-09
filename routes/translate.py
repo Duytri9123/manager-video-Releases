@@ -1,0 +1,164 @@
+"""Translate Blueprint — /api/translate*, /api/translation_status routes."""
+from flask import Blueprint, jsonify, request
+from core_app import load_cfg, LOGGER
+
+bp = Blueprint("translate", __name__)
+
+
+@bp.route("/api/translate_batch", methods=["POST"])
+def api_translate_batch():
+    """Translate multiple texts in one request to save tokens."""
+    data = request.json or {}
+    texts = data.get("texts") or []
+    provider = data.get("provider", "auto")
+    if not texts:
+        return jsonify({"results": [], "provider": "none"})
+    cfg = load_cfg()
+    trans_cfg = cfg.get("translation") or {}
+    try:
+        from utils.translation import translate_texts
+        results, used = translate_texts(texts, trans_cfg, provider)
+        return jsonify({"results": results, "provider": used})
+    except Exception as e:
+        return jsonify({"results": texts, "provider": "error", "error": str(e)})
+
+
+@bp.route("/api/translate", methods=["POST"])
+def api_translate():
+    data = request.json or {}
+    text = (data.get("text") or "").strip()
+    provider = data.get("provider", "auto")
+    if not text:
+        return jsonify({"result": "", "provider": "none"})
+    cfg = load_cfg()
+    trans_cfg = cfg.get("translation") or {}
+    try:
+        from utils.translation import translate_texts
+        results, used = translate_texts([text], trans_cfg, provider)
+        return jsonify({"result": results[0] if results else text, "provider": used})
+    except Exception as e:
+        return jsonify({"result": text, "provider": "error", "error": str(e)})
+
+
+@bp.route("/api/translate_descs", methods=["POST"])
+def api_translate_descs():
+    """Dịch danh sách tiêu đề video sau khi đã tải xong."""
+    data = request.json or {}
+    descs = data.get("descs", [])
+    provider = (data.get("provider") or "").strip()
+    if not descs or not provider:
+        return jsonify({"results": descs, "provider": "none"})
+    cfg = load_cfg()
+    tr_cfg = dict(cfg.get("translation") or {})
+    tr_cfg["preferred_provider"] = provider
+    try:
+        from utils.translation import translate_texts
+        results, used = translate_texts(descs, tr_cfg, provider)
+        if results and len(results) == len(descs):
+            return jsonify({"results": results, "provider": used})
+        return jsonify({"results": descs, "provider": "error", "error": "Kết quả không khớp số lượng"})
+    except Exception as e:
+        LOGGER.warning("translate_descs failed: %s", e)
+        return jsonify({"results": descs, "provider": "error", "error": str(e)})
+
+
+@bp.route("/api/translation_status", methods=["GET"])
+def translation_status():
+    cfg = load_cfg()
+    trans_cfg = cfg.get("translation") or {}
+    from utils.translation import get_translation_providers
+    providers = get_translation_providers(trans_cfg)
+    preferred = trans_cfg.get("preferred_provider", "auto")
+    return jsonify({
+        "providers": providers,
+        "preferred": preferred,
+        "has_deepseek": bool(trans_cfg.get("deepseek_key")),
+        "has_openai": bool(trans_cfg.get("openai_key")),
+        "has_hf": bool(trans_cfg.get("hf_token")),
+    })
+
+
+@bp.route("/api/analyze_video_content", methods=["POST"])
+def api_analyze_video_content():
+    """Use AI to analyze video content and generate titles/descriptions/hashtags for YouTube, TikTok, Facebook."""
+    import json as _json
+    import urllib.request
+
+    data = request.json or {}
+    content = (data.get("content") or "").strip()
+    provider = (data.get("provider") or "deepseek").strip().lower()
+
+    if not content:
+        return jsonify({"ok": False, "error": "Nội dung trống"}), 400
+
+    cfg = load_cfg()
+    trans_cfg = cfg.get("translation") or {}
+
+    api_configs = {
+        "deepseek": ("https://api.deepseek.com/v1/chat/completions", trans_cfg.get("deepseek_key", ""), "deepseek-chat"),
+        "openai": ("https://api.openai.com/v1/chat/completions", trans_cfg.get("openai_key", ""), "gpt-4o-mini"),
+        "groq": ("https://api.groq.com/openai/v1/chat/completions", trans_cfg.get("groq_key", ""), "llama-3.1-8b-instant"),
+    }
+
+    # Try requested provider first, then fallback
+    order = [provider] + [p for p in ["deepseek", "openai", "groq"] if p != provider]
+
+    prompt = f"""Bạn là chuyên gia marketing video. Phân tích nội dung video sau và tạo thông tin đăng cho 3 nền tảng.
+
+NỘI DUNG VIDEO:
+{content[:2000]}
+
+Hãy trả về JSON với cấu trúc sau (không có markdown, chỉ JSON thuần):
+{{
+  "youtube": {{
+    "title": "Tiêu đề hấp dẫn cho YouTube (tối đa 100 ký tự)",
+    "description": "Mô tả chi tiết cho YouTube (200-500 ký tự, có emoji)",
+    "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+  }},
+  "tiktok": {{
+    "caption": "Caption ngắn gọn cho TikTok (tối đa 150 ký tự)",
+    "description": "Mô tả thêm cho TikTok",
+    "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3", "#hashtag4", "#hashtag5"]
+  }},
+  "facebook": {{
+    "title": "Tiêu đề bài đăng Facebook",
+    "description": "Nội dung bài đăng Facebook (150-300 ký tự, thân thiện, có emoji)",
+    "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"]
+  }}
+}}"""
+
+    last_error = ""
+    for prov in order:
+        api_url, api_key, model = api_configs.get(prov, ("", "", ""))
+        if not api_key:
+            continue
+        try:
+            payload = _json.dumps({
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.7,
+                "max_tokens": 1000,
+            }).encode()
+            req = urllib.request.Request(
+                api_url,
+                data=payload,
+                method="POST",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                resp_data = _json.loads(resp.read())
+
+            raw = resp_data["choices"][0]["message"]["content"].strip()
+            # Remove markdown code blocks if present
+            raw = raw.strip("```json").strip("```").strip()
+            result = _json.loads(raw)
+            return jsonify({"ok": True, "result": result, "provider": prov})
+        except Exception as e:
+            last_error = str(e)
+            LOGGER.warning("analyze_video_content %s failed: %s", prov, e)
+            continue
+
+    return jsonify({"ok": False, "error": f"Tất cả AI provider thất bại: {last_error}"}), 500

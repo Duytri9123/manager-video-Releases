@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\auth\ms_token_manager.py
-# hypothesis_version: 6.151.10
-
-[164, 182, 184, 1000, 3600, '==', 'Content-Type', 'MsTokenManager', 'POST', 'Set-Cookie', 'User-Agent', 'dataType', 'douyin', 'f2', 'get_all', 'magic', 'msToken', 'strData', 'tspFromClient', 'ulr', 'url', 'utf-8', 'version']

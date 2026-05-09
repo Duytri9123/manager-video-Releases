@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\user_downloader.py
-# hypothesis_version: 6.151.10
-
-[240, 600, 'UserDownloader', 'author', 'aweme_id', 'browser_fallback', 'collect', 'collectmix', 'enabled', 'failed', 'headless', 'idle_rounds', 'max_scrolls', 'merged_ids', 'mode', 'nickname', 'number', 'post', 'post_items', 'post_pages', 'sec_uid', 'selected_ids', 'self', 'skipped', 'status', 'success', 'uid', 'unknown', 'wait_timeout_seconds', '下载作品', '下载模式', '作品待下载', '使用当前登录账号收藏夹上下文', '浏览器回补', '获取作者信息']

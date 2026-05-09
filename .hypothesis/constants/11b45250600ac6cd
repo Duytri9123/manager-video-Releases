@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\downloader_factory.py
-# hypothesis_version: 6.151.10
-
-['DownloaderFactory', 'api_client', 'collection', 'config', 'cookie_manager', 'database', 'file_manager', 'gallery', 'music', 'progress_reporter', 'queue_manager', 'rate_limiter', 'retry_handler', 'user', 'video']

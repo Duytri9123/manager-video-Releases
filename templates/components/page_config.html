@@ -1,355 +1,361 @@
-      <div id="page-config" class="page">
-        <style>
-          .cfg-wrapper {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding-bottom: 60px;
-          }
-          
-          /* Quick Navigation bar on top */
-          .cfg-nav-top {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 24px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: var(--bg);
-            padding: 10px 0;
-            border-bottom: 1px solid var(--border);
-          }
-          .cfg-btn-nav {
-            padding: 8px 16px;
-            background: var(--bg2);
-            border: 1px solid var(--border);
-            border-radius: 30px;
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: var(--text2);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-          }
-          .cfg-btn-nav:hover {
-            background: var(--bg3);
-            border-color: var(--accent);
-            color: var(--text);
-          }
-          
-          /* Sections */
-          .cfg-section {
-            margin-bottom: 40px;
-            animation: fadeIn 0.5s ease;
-          }
-          .cfg-section-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--accent);
-            width: fit-content;
-          }
-          .cfg-section-title {
-            font-size: 1.3rem;
-            font-weight: 800;
-            color: var(--text);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          .cfg-section-icon { font-size: 1.5rem; }
+<!-- PAGE: CONFIG -->
+<div id="page-config" class="page">
 
-          /* Sticky Footer Save Button */
-          .cfg-footer {
-            position: sticky;
-            bottom: 20px;
-            display: flex;
-            justify-content: flex-end;
-            pointer-events: none;
-            z-index: 110;
-          }
-          .btn-save-sticky {
-            pointer-events: auto;
-            padding: 14px 40px;
-            font-size: 1rem;
-            font-weight: 700;
-            border-radius: 50px;
-            background: var(--accent);
-            color: white;
-            box-shadow: 0 8px 25px rgba(108,99,255,0.4);
-            border: none;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          }
-          .btn-save-sticky:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(108,99,255,0.6); }
-        </style>
+  <!-- Tab navigation -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;background:var(--bg2);padding:8px;border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow)">
+    <button class="btn btn-primary cfg-tab" onclick="switchConfigTab(this,'cfg-sec-general')">⚙️ Chung</button>
+    <button class="btn btn-secondary cfg-tab" onclick="switchConfigTab(this,'cfg-sec-process')">🎬 Xử lý video</button>
+    <button class="btn btn-secondary cfg-tab" onclick="switchConfigTab(this,'cfg-sec-integration')">🔗 Tích hợp &amp; Đăng</button>
+  </div>
 
-        <div class="cfg-wrapper">
-          <!-- NAVIGATION JUMPERS -->
-          <div class="cfg-nav-top">
-            <button class="cfg-btn-nav active" onclick="switchConfigTab(this, 'cfg-sec-general')">⚙️ <span data-i18n="cfg_tab_general">Cấu hình chung</span></button>
-            <button class="cfg-btn-nav" onclick="switchConfigTab(this, 'cfg-sec-process')">🎬 <span data-i18n="cfg_tab_process">Xử lý Video</span></button>
-            <button class="cfg-btn-nav" onclick="switchConfigTab(this, 'cfg-sec-afp')">🛡️ <span data-i18n="cfg_tab_afp">Bảo mật & AFP</span></button>
-            <button class="cfg-btn-nav" onclick="switchConfigTab(this, 'cfg-sec-integration')">🌍 <span data-i18n="cfg_tab_integration">Dịch & Đăng tải</span></button>
-          </div>
+  <!-- SECTION 1: General -->
+  <div id="cfg-sec-general">
 
-          <!-- SECTION 1: GENERAL -->
-          <section id="cfg-sec-general" class="cfg-section">
-            <div class="cfg-section-header">
-              <span class="cfg-section-icon">⚙️</span>
-              <span class="cfg-section-title" data-i18n="cfg_tab_general">Cấu hình hệ thống</span>
-            </div>
-            
-            <div class="card">
-              <div class="card-header"><span class="card-title">Lưu trữ & Luồng</span></div>
-              <div class="field">
-                 <label data-i18n="lbl_save_path">Thư mục lưu video mặc định</label>
-                 <div class="flex gap-8">
-                   <input type="text" id="cfg-path" placeholder="./Downloaded" style="flex:1">
-                 </div>
-              </div>
-              <div class="grid-3 gap-16">
-                 <div class="field"><label data-i18n="lbl_threads">Số luồng tải</label><input type="number" id="cfg-threads" value="4"></div>
-                 <div class="field"><label data-i18n="lbl_retries">Số lần thử lại</label><input type="number" id="cfg-retries" value="3"></div>
-                 <div class="field"><label>Timeout (s)</label><input type="number" id="cfg-timeout" value="30"></div>
-              </div>
-            </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🔗 Danh sách URL</span>
+      </div>
+      <div class="field">
+        <label>URLs (mỗi dòng một URL)</label>
+        <textarea id="cfg-urls" rows="4" placeholder="https://www.douyin.com/user/...&#10;https://www.tiktok.com/@..."></textarea>
+      </div>
+    </div>
 
-            <div class="card mt-20">
-              <div class="card-header"><span class="card-title">Tùy chọn tải về (Download Options)</span></div>
-              <div class="check-grid">
-                <label class="check-item"><input type="checkbox" id="cfg-dl-video" checked><span data-i18n="lbl_filter_video">Tải Video</span></label>
-                <label class="check-item"><input type="checkbox" id="cfg-dl-music" checked><span data-i18n="lbl_music">Tải Nhạc nền</span></label>
-                <label class="check-item"><input type="checkbox" id="cfg-dl-cover" checked><span data-i18n="lbl_cover">Tải Ảnh bìa</span></label>
-                <label class="check-item"><input type="checkbox" id="cfg-dl-json" checked><span data-i18n="lbl_json">Lưu Metadata (JSON)</span></label>
-                <label class="check-item"><input type="checkbox" id="cfg-dl-folder" checked><span data-i18n="lbl_folder">Tạo thư mục riêng</span></label>
-              </div>
-            </div>
-          </section>
-
-          <!-- SECTION 2: VIDEO PROCESSING -->
-          <section id="cfg-sec-process" class="cfg-section">
-            <div class="cfg-section-header">
-              <span class="cfg-section-icon">🎬</span>
-              <span class="cfg-section-title" data-i18n="cfg_tab_process">Xử lý Video tự động</span>
-            </div>
-            <div class="card">
-              <div class="section-title mb-12">Phụ đề & Dịch thuật</div>
-              <div class="grid-2 gap-20">
-                 <div class="field"><label data-i18n="lbl_transcribe_provider">Công cụ Phiên âm</label><select id="cfg-tr-provider"><option value="groq">Groq Whisper (Siêu nhanh)</option><option value="whisper-local">Whisper Local (Máy tính)</option></select></div>
-                 <div class="field"><label data-i18n="lbl_translate_provider">Công cụ Dịch thuật</label><select id="cfg-trans-provider"><option value="deepseek">DeepSeek AI</option><option value="openai">OpenAI GPT</option><option value="google">Google Translate</option></select></div>
-              </div>
-              <div class="field mt-12"><label data-i18n="lbl_groq_api_key">Groq API Key</label><input type="password" id="cfg-groq-key" placeholder="gsk_..."></div>
-              <div class="field mt-12"><label data-i18n="lbl_deepseek_api_key">DeepSeek API Key</label><input type="password" id="cfg-deepseek-key" placeholder="sk-..."></div>
-            </div>
-          </section>
-
-          <!-- SECTION 3: ANTI-FINGERPRINT -->
-          <section id="cfg-sec-afp" class="cfg-section">
-            <div class="cfg-section-header">
-              <span class="cfg-section-icon">🛡️</span>
-              <span class="cfg-section-title" data-i18n="cfg_tab_afp">Bảo mật & Tránh quét (AFP)</span>
-            </div>
-            <div class="card">
-              <label class="check-item mb-16"><input type="checkbox" id="cfg-afp-enabled"><strong>Kích hoạt bộ lọc Anti-Fingerprint (Lách luật nội dung)</strong></label>
-              <div class="grid-2 gap-20">
-                <div class="field"><label>Brightness (-1.0 to 1.0)</label><input type="number" id="cfg-afp-brightness" value="0.02" step="0.01"></div>
-                <div class="field"><label>Contrast (0.5 to 2.0)</label><input type="number" id="cfg-afp-contrast" value="1.05" step="0.01"></div>
-                <div class="field"><label>Saturation (0.0 to 3.0)</label><input type="number" id="cfg-afp-saturation" value="1.1" step="0.01"></div>
-                <div class="field"><label>Sharpness (0.0 to 5.0)</label><input type="number" id="cfg-afp-sharpness" value="0.5" step="0.01"></div>
-              </div>
-              <hr class="divider">
-              <div class="check-grid">
-                <label class="check-item"><input type="checkbox" id="cfg-afp-flip"><span>Lật ngang video (Flip)</span></label>
-                <label class="check-item"><input type="checkbox" id="cfg-afp-vignette"><span>Thêm viền tối (Vignette)</span></label>
-              </div>
-            </div>
-          </section>
-
-          <!-- SECTION 4: INTEGRATION -->
-          <section id="cfg-sec-integration" class="cfg-section">
-            <div class="cfg-section-header">
-              <span class="cfg-section-icon">🌍</span>
-              <span class="cfg-section-title" data-i18n="cfg_tab_integration">Đăng tải & Tích hợp</span>
-            </div>
-            <div class="card">
-              <div class="card-header">
-                <span class="card-title" data-i18n="lbl_vp_title">Xu ly video sau khi tai</span>
-                <div class="card-actions">
-                  <label class="toggle-wrap">
-                    <input type="checkbox" class="toggle-input" id="vp-enabled" checked>
-                    <div class="toggle"></div>
-                    <span class="toggle-label text-sm" data-i18n="lbl_enable">Bat</span>
-                  </label>
-                </div>
-              </div>
-              <div id="vp-opts">
-                <div class="grid-2">
-                  <div class="field">
-                    <label data-i18n="lbl_model">Mo hinh Whisper</label>
-                    <select id="vp-model">
-                      <option value="tiny">tiny</option>
-                      <option value="base">base</option>
-                      <option value="small" selected>small</option>
-                      <option value="medium">medium</option>
-                      <option value="large">large</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label data-i18n="lbl_source_language">Ngon ngu goc</label>
-                    <select id="vp-lang">
-                      <option value="zh" selected data-i18n="opt_lang_zh">Tieng Trung</option>
-                      <option value="en" data-i18n="opt_lang_en">Tieng Anh</option>
-                      <option value="ja" data-i18n="opt_lang_ja">Tieng Nhat</option>
-                      <option value="ko" data-i18n="opt_lang_ko">Tieng Han</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="check-grid mb-12">
-                  <label class="check-item"><input type="checkbox" id="vp-burn"><span data-i18n="lbl_burn_subs">Burn phụ đề</span></label>
-                  <label class="check-item"><input type="checkbox" id="vp-translate" checked><span data-i18n="lbl_translate_subs">Dịch sang VI</span></label>
-                  <label class="check-item"><input type="checkbox" id="vp-burn-vi"><span data-i18n="lbl_burn_vi_subs">Burn phụ đề VI</span></label>
-                  <label class="check-item"><input type="checkbox" id="vp-voice" checked><span data-i18n="lbl_voice_convert">Đổi giọng VI</span></label>
-                  <label class="check-item"><input type="checkbox" id="vp-keep-bg"><span data-i18n="lbl_keep_bg">Giữ nhạc nền</span></label>
-                </div>
-                <div class="grid-2">
-                  <div class="field">
-                    <label data-i18n="lbl_tts_voice">Giọng đọc</label>
-                    <select id="vp-tts-voice">
-                      <option value="vi-VN-HoaiMyNeural">Hoai My (Nữ)</option>
-                      <option value="vi-VN-NamMinhNeural">Nam Minh (Nam)</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label data-i18n="lbl_font_size">Cỡ chữ phụ đề</label>
-                    <input type="number" id="vp-font-size" min="10" max="72" value="32">
-                  </div>
-                  <div class="field" style="display:flex;align-items:center;gap:8px;padding-top:10px">
-                    <label class="check-item">
-                      <input type="checkbox" id="vp-blur-original" checked>
-                      <span data-i18n="lbl_blur_original">Che phụ đề gốc</span>
-                    </label>
-                  </div>
-                  <div class="field">
-                    <label data-i18n="lbl_blur_zone">Vùng làm mờ</label>
-                    <select id="vp-blur-zone">
-                      <option value="bottom" selected data-i18n="opt_blur_bottom">Dưới</option>
-                      <option value="top" data-i18n="opt_blur_top">Trên</option>
-                      <option value="none" data-i18n="opt_blur_none">Không</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="grid-2 mt-8">
-                  <div class="field">
-                    <label data-i18n="lbl_tts_engine">TTS Engine</label>
-                    <select id="vp-tts-engine" onchange="document.getElementById('vp-hf-config').style.display = this.value==='huggingface'?'block':'none'">
-                      <option value="fpt-ai" selected>FPT AI TTS</option>
-                      <option value="edge-tts">Edge TTS (Microsoft)</option>
-                      <option value="minimax">MiniMax TTS</option>
-                      <option value="gtts">gTTS (Google)</option>
-                      <option value="huggingface">HuggingFace TTS</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label data-i18n="lbl_bg_volume">Âm lượng nền</label>
-                    <input type="number" id="vp-bg-volume" min="0" max="1" step="0.1" value="0.1">
-                  </div>
-                </div>
-                <!-- HuggingFace TTS config (ẩn mặc định) -->
-                <div id="vp-hf-config" style="display:none;margin-top:8px">
-                  <div class="grid-2">
-                    <div class="field">
-                      <label>HF Model</label>
-                      <input type="text" id="vp-hf-model" placeholder="facebook/mms-tts-vie" value="facebook/mms-tts-vie">
-                    </div>
-                    <div class="field">
-                      <label>Device</label>
-                      <select id="vp-hf-device">
-                        <option value="cpu" selected>CPU</option>
-                        <option value="cuda">CUDA (GPU)</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div class="field mt-8">
-                    <label>Speaker Embeddings <span style="color:var(--dim);font-size:11px">(để clone giọng speecht5_tts)</span></label>
-                    <div style="display:flex;gap:4px">
-                      <select id="vp-hf-embeddings" style="flex:1">
-                        <option value="">(Không dùng / Mặc định)</option>
-                      </select>
-                      <button class="btn btn-secondary btn-sm" type="button" onclick="uploadHfVoice()" title="Thêm giọng mới">+</button>
-                      <button class="btn btn-secondary btn-sm" type="button" onclick="refreshHfVoices()" title="Tải lại">↻</button>
-                    </div>
-                  </div>
-                </div>
-                <div class="grid-2 mt-8">
-                  <div class="field">
-                    <label data-i18n="lbl_tts_pitch">Cao độ</label>
-                    <input type="text" id="vp-tts-pitch" placeholder="+0Hz" value="+0Hz">
-                  </div>
-                  <div class="field">
-                    <label data-i18n="lbl_tts_rate">Tốc độ</label>
-                    <input type="text" id="vp-tts-rate" placeholder="+0%" value="+0%">
-                  </div>
-                </div>
-                <div class="grid-2 mt-8">
-                  <div class="field">
-                    <label data-i18n="lbl_tts_emotion">Cảm xúc</label>
-                    <select id="vp-tts-emotion">
-                      <option value="default" selected>Mặc định</option>
-                      <option value="cheerful">Vui vẻ</option>
-                      <option value="sad">Buồn</option>
-                      <option value="angry">Giận dữ</option>
-                      <option value="excited">Hào hứng</option>
-                      <option value="friendly">Thân thiện</option>
-                    </select>
-                  </div>
-                  <div class="field" style="display:flex;align-items:flex-end">
-                    <button class="btn btn-secondary btn-sm" type="button" onclick="previewConfigVoice()">Nghe thử</button>
-                    <audio id="vp-preview-audio" controls style="display:none;margin-left:10px;height:32px"></audio>
-                  </div>
-                </div>
-                </div>
-                
-                <hr class="divider">
-                <div class="section-title">🛡 Lách bản quyền (Anti-Fingerprint)</div>
-                <div class="check-grid mb-12">
-                  <label class="check-item"><input type="checkbox" id="vp-afp-enabled"><span>Kích hoạt lách</span></label>
-                  <label class="check-item"><input type="checkbox" id="vp-afp-flip"><span>Lật ngang</span></label>
-                  <label class="check-item"><input type="checkbox" id="vp-afp-vignette"><span>Vignette</span></label>
-                  <label class="check-item"><input type="checkbox" id="vp-afp-vertical"><span>Video dọc</span></label>
-                </div>
-                <div class="grid-2 mt-8">
-                  <div class="field">
-                    <label>Scale Chiều rộng (px)</label>
-                    <input type="number" id="vp-afp-scale-w" value="0">
-                  </div>
-                  <div class="field">
-                    <label>Scale Chiều cao (px)</label>
-                    <input type="number" id="vp-afp-scale-h" value="0">
-                  </div>
-                </div>
-                <div class="field mt-8">
-                  <label>Đường dẫn Overlay Image</label>
-                  <input type="text" id="vp-afp-overlay-img" placeholder="temp_uploads/...">
-                </div>
-
-                <div class="alert-info" style="margin-top:8px">
-                  <span data-i18n="lbl_vp_note">Can: pip install openai-whisper edge-tts. Video se duoc xu ly ngay sau khi tai xong.</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <!-- STICKY FOOTER SAVE -->
-          <div class="cfg-footer">
-            <button class="btn-save-sticky" onclick="saveConfig()">
-              💾 <span data-i18n="btn_save_config">Lưu toàn bộ cấu hình</span>
-            </button>
-          </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📁 Đường dẫn &amp; Kết nối</span>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Thư mục lưu</label>
+          <input type="text" id="cfg-path" value="./Downloaded/" placeholder="./Downloaded/">
+        </div>
+        <div class="field">
+          <label>Proxy</label>
+          <input type="text" id="cfg-proxy" placeholder="http://127.0.0.1:7890">
+        </div>
+        <div class="field">
+          <label>Số luồng tải</label>
+          <input type="number" id="cfg-thread" min="1" max="20" value="5">
+        </div>
+        <div class="field">
+          <label>Số lần thử lại</label>
+          <input type="number" id="cfg-retry" min="0" max="10" value="3">
+        </div>
+        <div class="field">
+          <label>Ngày bắt đầu</label>
+          <input type="date" id="cfg-start">
+        </div>
+        <div class="field">
+          <label>Ngày kết thúc</label>
+          <input type="date" id="cfg-end">
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📋 Chế độ tải</span>
+      </div>
+      <div class="check-grid mb-12" id="mode-checks">
+        <label class="check-item"><input type="checkbox" value="post" checked><span>Bài đăng</span></label>
+        <label class="check-item"><input type="checkbox" value="like"><span>Video đã thích</span></label>
+        <label class="check-item"><input type="checkbox" value="mix"><span>Hợp tuyển</span></label>
+        <label class="check-item"><input type="checkbox" value="music"><span>Nhạc</span></label>
+        <label class="check-item"><input type="checkbox" value="collect"><span>Bộ sưu tập</span></label>
+        <label class="check-item"><input type="checkbox" value="collectmix"><span>Bộ sưu tập Mix</span></label>
+      </div>
+      <div class="section-title">Số lượng tối đa (0 = không giới hạn)</div>
+      <div class="grid-3">
+        <div class="field"><label>Bài đăng</label><input type="number" id="n-post" min="0" value="0"></div>
+        <div class="field"><label>Đã thích</label><input type="number" id="n-like" min="0" value="0"></div>
+        <div class="field"><label>Bộ sưu tập</label><input type="number" id="n-collect" min="0" value="0"></div>
+        <div class="field"><label>Nhạc</label><input type="number" id="n-music" min="0" value="0"></div>
+        <div class="field"><label>Hợp tuyển</label><input type="number" id="n-mix" min="0" value="0"></div>
+        <div class="field"><label>Collect Mix</label><input type="number" id="n-collectmix" min="0" value="0"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🗂 Tùy chọn lưu trữ</span>
+      </div>
+      <div class="check-grid">
+        <label class="check-item"><input type="checkbox" id="opt-music"><span>Tải nhạc nền</span></label>
+        <label class="check-item"><input type="checkbox" id="opt-cover"><span>Tải ảnh bìa</span></label>
+        <label class="check-item"><input type="checkbox" id="opt-json"><span>Lưu metadata JSON</span></label>
+        <label class="check-item"><input type="checkbox" id="opt-folder"><span>Tạo thư mục riêng</span></label>
+      </div>
+    </div>
+
+  </div><!-- end cfg-sec-general -->
+
+  <!-- SECTION 2: Video Processing -->
+  <div id="cfg-sec-process" style="display:none">
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🎬 Xử lý video tự động</span>
+        <div class="card-actions">
+          <label class="toggle-wrap">
+            <input type="checkbox" class="toggle-input" id="vp-enabled" checked>
+            <div class="toggle"></div>
+            <span class="toggle-label text-sm">Bật</span>
+          </label>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Mô hình Whisper</label>
+          <select id="vp-model">
+            <option value="tiny">tiny (nhanh nhất)</option>
+            <option value="base" selected>base</option>
+            <option value="small">small</option>
+            <option value="medium">medium</option>
+            <option value="large">large (tốt nhất)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Ngôn ngữ gốc</label>
+          <select id="vp-lang">
+            <option value="zh" selected>Tiếng Trung</option>
+            <option value="en">Tiếng Anh</option>
+            <option value="ja">Tiếng Nhật</option>
+            <option value="ko">Tiếng Hàn</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Chế độ xử lý</label>
+          <select id="vp-process-mode">
+            <option value="ai" selected>AI (Groq API)</option>
+            <option value="model">Model local</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Vùng che phụ đề gốc</label>
+          <select id="vp-blur-zone">
+            <option value="bottom" selected>Dưới</option>
+            <option value="top">Trên</option>
+            <option value="none">Không che</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Cỡ chữ phụ đề</label>
+          <input type="number" id="vp-font-size" min="10" max="72" value="22">
+        </div>
+      </div>
+      <div class="check-grid mt-8">
+        <label class="check-item"><input type="checkbox" id="vp-burn"><span>Ghi phụ đề vào video</span></label>
+        <label class="check-item"><input type="checkbox" id="vp-blur-original" checked><span>Che phụ đề gốc</span></label>
+        <label class="check-item"><input type="checkbox" id="vp-translate" checked><span>Dịch sang tiếng Việt</span></label>
+        <label class="check-item"><input type="checkbox" id="vp-burn-vi" checked><span>Ghi phụ đề VI</span></label>
+        <label class="check-item"><input type="checkbox" id="vp-voice" checked><span>Đổi giọng tiếng Việt</span></label>
+        <label class="check-item"><input type="checkbox" id="vp-keep-bg"><span>Giữ nhạc nền</span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🔊 Cài đặt TTS (Text-to-Speech)</span>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>TTS Engine</label>
+          <select id="vp-tts-engine">
+            <option value="fpt-ai" selected>FPT AI TTS</option>
+            <option value="edge-tts">Edge TTS (Microsoft)</option>
+            <option value="minimax">MiniMax TTS</option>
+            <option value="gtts">gTTS (Google)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Giọng đọc</label>
+          <select id="vp-tts-voice"></select>
+        </div>
+        <div class="field">
+          <label>Cao độ</label>
+          <input type="text" id="vp-tts-pitch" placeholder="+0Hz" value="+0Hz">
+        </div>
+        <div class="field">
+          <label>Tốc độ đọc</label>
+          <input type="text" id="vp-tts-rate" placeholder="+0%" value="+0%">
+        </div>
+        <div class="field">
+          <label>Cảm xúc</label>
+          <select id="vp-tts-emotion">
+            <option value="default" selected>Mặc định</option>
+            <option value="cheerful">Vui vẻ</option>
+            <option value="sad">Buồn</option>
+            <option value="angry">Giận dữ</option>
+            <option value="excited">Hào hứng</option>
+            <option value="friendly">Thân thiện</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Âm lượng nhạc nền (0–1)</label>
+          <input type="number" id="vp-bg-volume" min="0" max="1" step="0.05" value="0.15">
+        </div>
+      </div>
+      <div class="field mt-8">
+        <label>Tốc độ TTS</label>
+        <div class="flex-center gap-8">
+          <input type="range" id="vp-tts-speed" min="0.5" max="2.0" step="0.1" value="1.0"
+            oninput="document.getElementById('vp-tts-speed-val').textContent=parseFloat(this.value).toFixed(1)+'x'" style="flex:1">
+          <span class="text-xs text-muted" id="vp-tts-speed-val" style="min-width:36px">1.0x</span>
+        </div>
+      </div>
+      <div class="check-grid mt-8">
+        <label class="check-item"><input type="checkbox" id="vp-auto-speed" checked><span>Tự động tốc độ</span></label>
+      </div>
+      <div class="flex-center gap-8 mt-12">
+        <button class="btn btn-secondary btn-sm" id="btn-tts-test">▶ Thử giọng đọc</button>
+        <audio id="vp-preview-audio" controls style="display:none;height:32px;flex:1"></audio>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🔑 API Keys &amp; Dịch thuật</span>
+      </div>
+      <div class="field">
+        <label>Provider ưu tiên</label>
+        <select id="cfg-preferred-provider">
+          <option value="auto" selected>Auto (tự động chọn)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="groq">Groq</option>
+          <option value="huggingface">HuggingFace</option>
+          <option value="google">Google Translate</option>
+        </select>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>DeepSeek API Key</label><input type="password" id="cfg-deepseek-key" placeholder="sk-..."></div>
+        <div class="field"><label>Groq API Key</label><input type="password" id="cfg-groq-key" placeholder="gsk_..."></div>
+        <div class="field"><label>Groq Model</label><input type="text" id="cfg-groq-model" placeholder="llama-3.1-8b-instant"></div>
+        <div class="field"><label>OpenAI API Key</label><input type="password" id="cfg-openai-key" placeholder="sk-..."></div>
+        <div class="field"><label>HuggingFace Token</label><input type="password" id="cfg-hf-token" placeholder="hf_..."></div>
+      </div>
+      <div class="check-grid mt-8">
+        <label class="check-item"><input type="checkbox" id="cfg-naming-enabled" checked><span>Đặt tên file tự động (AI)</span></label>
+      </div>
+    </div>
+
+    <!-- Hidden AFP fields (kept for config save/load compatibility) -->
+    <div style="display:none" aria-hidden="true">
+      <input type="checkbox" id="vp-afp-enabled">
+      <input type="checkbox" id="vp-afp-flip">
+      <input type="checkbox" id="vp-afp-vignette">
+      <input type="checkbox" id="vp-afp-vertical">
+      <input type="number" id="vp-afp-scale-w" value="0">
+      <input type="number" id="vp-afp-scale-h" value="0">
+      <input type="text" id="vp-afp-overlay-img">
+      <input type="number" id="vp-afp-brightness" value="0.02">
+      <input type="number" id="vp-afp-contrast" value="1.03">
+      <input type="text" id="vp-hf-model" value="facebook/mms-tts-vie">
+      <input type="text" id="vp-hf-device" value="cpu">
+      <input type="text" id="vp-hf-embeddings">
+    </div>
+
+  </div><!-- end cfg-sec-process -->
+
+  <!-- SECTION 3: Integration & Upload -->
+  <div id="cfg-sec-integration" style="display:none">
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🔑 Cấu hình YouTube API</span>
+      </div>
+      <div class="field">
+        <label>File client_secrets.json (Tải từ Google Cloud Console)</label>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <input type="file" id="yt-secrets-file" accept=".json" style="display:none" onchange="uploadClientSecrets(this)">
+          <button class="btn btn-secondary w-full" onclick="document.getElementById('yt-secrets-file').click()">
+            📂 Chọn file client_secrets.json
+          </button>
+        </div>
+        <div class="text-xs text-muted mt-8">
+          * File này dùng để xác thực OAuth với YouTube. Sau khi tải lên, bạn có thể Đăng nhập YouTube ở trang Đăng video.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📤 Cài đặt đăng video mặc định</span>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Nền tảng mặc định</label>
+          <select id="cfg-upload-platform">
+            <option value="youtube" selected>YouTube</option>
+            <option value="tiktok">TikTok</option>
+            <option value="both">Cả hai</option>
+          </select>
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end">
+          <label class="check-item">
+            <input type="checkbox" id="cfg-upload-auto">
+            <span>Tự động đăng sau khi xử lý</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">▶ YouTube — Template mặc định</span>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Template tiêu đề</label>
+          <input type="text" id="cfg-yt-title-template" placeholder="{title}" value="{title}">
+        </div>
+        <div class="field">
+          <label>Template mô tả</label>
+          <input type="text" id="cfg-yt-desc-template" placeholder="{title}" value="{title}">
+        </div>
+        <div class="field">
+          <label>Chế độ riêng tư mặc định</label>
+          <select id="cfg-yt-privacy">
+            <option value="private" selected>🔒 Riêng tư</option>
+            <option value="unlisted">🔗 Ẩn</option>
+            <option value="public">🌐 Công khai</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🎵 TikTok — Template mặc định</span>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Template tiêu đề</label>
+          <input type="text" id="cfg-tt-title-template" placeholder="{title}" value="{title}">
+        </div>
+        <div class="field">
+          <label>Template caption</label>
+          <input type="text" id="cfg-tt-caption-template" placeholder="{title}" value="{title}">
+        </div>
+        <div class="field">
+          <label>Chế độ hiển thị mặc định</label>
+          <select id="cfg-tt-privacy">
+            <option value="private" selected>🔒 Riêng tư</option>
+            <option value="friends">👥 Bạn bè</option>
+            <option value="public">🌐 Công khai</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end cfg-sec-integration -->
+
+  <!-- Sticky save button -->
+  <div style="position:sticky;bottom:0;background:var(--bg);padding:12px 0;border-top:1px solid var(--border);margin-top:8px">
+    <button class="btn btn-primary" onclick="saveConfig()" style="width:100%;justify-content:center;font-size:14px;padding:12px">
+      💾 Lưu cấu hình
+    </button>
+  </div>
+
+</div>

@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\mix_downloader.py
-# hypothesis_version: 6.151.10
-
-['MixDownloader', 'author', 'aweme', 'aweme_detail', 'aweme_id', 'aweme_info', 'failed', 'get_mix_aweme', 'get_mix_detail', 'has_more', 'items', 'max_cursor', 'missing_aweme_id', 'mix', 'mix_id', 'nickname', 'number', 'skipped', 'status', 'success', '下载合集', '合集作品待下载']

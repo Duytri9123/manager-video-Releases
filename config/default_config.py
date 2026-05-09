@@ -118,6 +118,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "fpt_api_key": "ssMeU5l89LMLfg8jhDzTBWV7D22s1xOy",
         "bg_volume": 0.15,
         "font_size": 18,
+        "font_name": "Arial",
+        "font_color": "white",
+        "outline_color": "black",
+        "outline_width": 2,
         "blur_height": 15,
         "subtitle_format": "ass",
         "max_words_per_segment": 5,  # Số từ tối đa trong 1 câu (cho tiếng Việt/Anh, 0 = không giới hạn)

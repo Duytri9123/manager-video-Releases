@@ -1,48 +1,57 @@
 <!-- PAGE: PROCESS VIDEO -->
 <div id="page-process" class="page">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start">
+  <!-- Save defaults bar -->
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px;gap:8px">
+    <button class="btn btn-secondary btn-sm" onclick="procRestoreDefaults()" title="Khôi phục về mặc định đã lưu">
+      ↩ Khôi phục
+    </button>
+    <button class="btn btn-primary btn-sm" onclick="procSaveDefaults()">
+      💾 Lưu mặc định
+    </button>
+  </div>
+  <div class="page-layout-2col">
 
-    <!-- ═══ CỘT TRÁI: CÀI ĐẶT ═══ -->
+    <!-- LEFT: Settings -->
     <div>
 
-      <!-- 1. NGUỒN VIDEO -->
-      <div class="card card-collapsible card-has-body">
-        <div class="card-header">
+      <!-- Source -->
+      <div class="card card-collapsible">
+        <div class="card-header" onclick="toggleCard(this)">
           <span class="card-title">📥 Nguồn Video</span>
         </div>
         <div class="card-body">
           <div class="field">
-            <label data-i18n="lbl_import_file">Import file</label>
+            <label>Import file video</label>
             <div class="flex-center gap-8">
               <input type="text" id="proc-video" placeholder="./Downloaded/.../video.mp4" readonly style="flex:1">
-              <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('proc-file')?.click()" data-i18n="btn_import_file">Import</button>
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('proc-file').click()">📂 Chọn</button>
               <input type="file" id="proc-file" accept="video/*" style="display:none">
             </div>
-            <div class="text-xs text-muted" id="proc-file-name">--</div>
+            <div class="text-xs text-muted mt-4" id="proc-file-name">--</div>
           </div>
           <div class="field">
-            <label data-i18n="lbl_video_url">URL video (tải và xử lý)</label>
+            <label>URL video (tải và xử lý)</label>
             <input type="text" id="proc-url" placeholder="https://www.douyin.com/video/...">
           </div>
           <div class="field">
-            <label data-i18n="lbl_output_dir">Thư mục xuất</label>
-            <input type="text" id="proc-out" placeholder="Để trống = cùng thư mục video">
+            <label>Thư mục xuất (để trống = cùng thư mục video)</label>
+            <input type="text" id="proc-out" placeholder="./output">
           </div>
           <div class="btn-group mt-8">
-            <button class="btn btn-primary btn-sm" id="btn-proc" onclick="startProcessVideo()">▶ Xử lý ngay</button>
-            <button class="btn btn-secondary btn-sm" onclick="_addProcTask('url')">+ Thêm URL vào hàng chờ</button>
-            <button class="btn btn-secondary btn-sm" onclick="_addProcTask('file')">+ Thêm File vào hàng chờ</button>
+            <button class="btn btn-primary" id="btn-proc" onclick="_addCurrentToQueue()">➕ Thêm vào hàng chờ</button>
           </div>
         </div>
       </div>
 
-      <!-- 2. MÔ HÌNH AI -->
-      <div class="card card-collapsible collapsed card-has-body">
-        <div class="card-header"><span class="card-title">🤖 Mô hình AI</span></div>
+      <!-- AI Model -->
+      <div class="card card-collapsible collapsed">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">🤖 Mô hình AI</span>
+        </div>
         <div class="card-body">
           <div class="grid-2">
             <div class="field">
-              <label data-i18n="lbl_model">Mô hình Whisper</label>
+              <label>Mô hình Whisper</label>
               <select id="proc-model">
                 <option value="tiny">tiny (nhanh nhất)</option>
                 <option value="base" selected>base</option>
@@ -52,7 +61,7 @@
               </select>
             </div>
             <div class="field">
-              <label data-i18n="lbl_language">Ngôn ngữ gốc</label>
+              <label>Ngôn ngữ gốc</label>
               <select id="proc-lang">
                 <option value="zh" selected>Tiếng Trung</option>
                 <option value="en">Tiếng Anh</option>
@@ -61,149 +70,218 @@
               </select>
             </div>
             <div class="field">
-              <label data-i18n="lbl_transcribe_provider">Phiên âm bằng</label>
+              <label>Phiên âm bằng</label>
               <select id="proc-transcribe-provider-model">
-                <option value="model" selected>Whisper local</option>
-                <option value="groq">Groq Whisper API</option>
+                <option value="groq" selected>Groq Whisper API</option>
+                <option value="model">Whisper local</option>
               </select>
             </div>
             <div class="field">
-              <label data-i18n="lbl_translate_provider">Dịch phụ đề bằng</label>
+              <label>Dịch phụ đề bằng</label>
               <select id="proc-trans-provider-model">
                 <option value="deepseek" selected>DeepSeek</option>
                 <option value="groq">Groq</option>
                 <option value="openai">OpenAI</option>
-                <option value="huggingface">HuggingFace</option>
                 <option value="google">Google</option>
                 <option value="auto">Auto</option>
               </select>
             </div>
           </div>
-          <!-- AI mode selectors (hidden, kept for JS compat) -->
-          <div id="proc-ai-panel" style="display:none">
-            <select id="proc-transcribe-provider-ai"><option value="groq" selected>Groq</option></select>
-            <select id="proc-trans-provider-ai"><option value="deepseek" selected>DeepSeek</option><option value="groq">Groq</option><option value="openai">OpenAI</option><option value="huggingface">HuggingFace</option><option value="google">Google</option><option value="auto">Auto</option></select>
+          <div class="btn-group mt-8 mb-8">
+            <button class="btn btn-primary btn-sm" id="proc-tab-ai" onclick="setProcessMode('ai')">🤖 AI Mode</button>
+            <button class="btn btn-secondary btn-sm" id="proc-tab-model" onclick="setProcessMode('model')">⚙️ Model local</button>
           </div>
+          <div style="display:none">
+            <select id="proc-transcribe-provider-ai"><option value="groq" selected>Groq</option></select>
+            <select id="proc-trans-provider-ai"><option value="deepseek" selected>DeepSeek</option><option value="groq">Groq</option><option value="openai">OpenAI</option><option value="google">Google</option><option value="auto">Auto</option></select>
+          </div>
+          <div id="proc-ai-panel" style="display:none"></div>
           <div id="proc-model-panel" style="display:none"></div>
         </div>
       </div>
 
-      <!-- 3. PHỤ ĐỀ -->
-      <div class="card card-collapsible collapsed card-has-body">
-        <div class="card-header">
-          <span class="card-title">💬 Phụ đề & Dịch</span>
-          <div class="card-actions">
+      <!-- Subtitles -->
+      <div class="card card-collapsible collapsed">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">💬 Phụ đề &amp; Dịch</span>
+          <div class="card-actions" onclick="event.stopPropagation()">
             <label class="toggle-wrap">
               <input type="checkbox" class="toggle-input" id="proc-burn" checked>
               <div class="toggle"></div>
-              <span class="toggle-label text-sm">Ghi phụ đề lên video</span>
+              <span class="toggle-label text-sm">Ghi phụ đề</span>
             </label>
           </div>
         </div>
-        <div class="card-body" id="proc-burn-opts">
-          <div class="check-grid mb-12" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-            <label class="check-item">
-              <input type="checkbox" id="proc-translate-subs" checked>
-              <span>Tạo bản dịch tiếng Việt</span>
-            </label>
-            <label class="check-item">
-              <input type="checkbox" id="proc-burn-vi" checked>
-              <span>Ghi phụ đề tiếng Việt</span>
-            </label>
-            <label class="check-item">
-              <input type="checkbox" id="proc-blur-original" checked>
-              <span>Che phụ đề gốc (blur)</span>
-            </label>
+        <div class="card-body">
+          <div class="check-grid mb-12">
+            <label class="check-item"><input type="checkbox" id="proc-translate-subs" checked><span>Dịch tiếng Việt</span></label>
+            <label class="check-item"><input type="checkbox" id="proc-burn-vi" checked><span>Ghi phụ đề VI</span></label>
+            <label class="check-item"><input type="checkbox" id="proc-blur-original" checked><span>Che phụ đề gốc</span></label>
           </div>
           <div class="grid-2">
-            <div class="field">
-              <label>Cỡ chữ</label>
-              <input type="number" id="proc-font-size" min="10" max="72" value="32">
-            </div>
+            <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="proc-font-size" min="1" max="20" step="0.5" value="4.5"
+              oninput="subPreviewUpdate()"></div>
             <div class="field">
               <label>Màu chữ</label>
-              <select id="proc-font-color">
-                <option value="white" selected>Trắng</option>
-                <option value="yellow">Vàng</option>
-                <option value="cyan">Xanh cyan</option>
-              </select>
+              <div style="display:flex;gap:8px;align-items:center">
+                <select id="proc-font-color" onchange="subPreviewUpdate();_syncColorPicker()" style="flex:1">
+                  <option value="white" selected>Trắng</option>
+                  <option value="yellow">Vàng</option>
+                  <option value="cyan">Xanh cyan</option>
+                  <option value="custom">Tùy chỉnh...</option>
+                </select>
+                <input type="color" id="proc-font-color-picker" value="#ffffff"
+                  style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer;flex-shrink:0"
+                  oninput="_onColorPickerChange()">
+              </div>
             </div>
-            <div class="field">
-              <label>Khoảng cách đáy (px)</label>
-              <input type="number" id="proc-margin-v" min="0" max="100" value="20">
-            </div>
+            <div class="field"><label>Khoảng cách đáy (%)</label><input type="number" id="proc-margin-v" min="0" max="50" step="0.5" value="3"
+              oninput="subPreviewUpdate()"></div>
             <div class="field">
               <label>Vị trí phụ đề</label>
-              <select id="proc-sub-pos">
+              <select id="proc-sub-pos" onchange="subPreviewUpdate()">
                 <option value="bottom" selected>Dưới</option>
                 <option value="top">Trên</option>
               </select>
             </div>
           </div>
+
+          <!-- ── Subtitle + Frame Preview ── -->
+          <div class="sub-preview-box mt-12">
+            <div class="sub-preview-header">
+              <span style="font-size:12px;font-weight:700;color:var(--text2)">🖼 Preview</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <label style="font-size:11px;color:var(--text-muted);margin:0">Thời điểm (giây)</label>
+                <input type="number" id="sub-preview-ts" min="0" step="1" value="5"
+                  style="width:70px;padding:4px 6px;font-size:12px"
+                  oninput="subPreviewFetchFrame()">
+                <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px"
+                  onclick="subPreviewFetchFrame()">📷 Lấy frame</button>
+              </div>
+            </div>
+
+            <!-- Shared canvas preview area — switches between subtitle mode and frame mode -->
+            <div id="sub-preview-wrap" style="position:relative;width:100%;background:#111;border-radius:6px;overflow:hidden;min-height:120px;display:flex;align-items:center;justify-content:center">
+              <!-- Subtitle mode: raw img + overlays -->
+              <img id="sub-preview-img" src="" alt="" style="width:100%;display:none;vertical-align:bottom">
+              <div id="sub-preview-placeholder" style="color:#555;font-size:12px;padding:30px;text-align:center">
+                Chọn video và bấm 📷 Lấy frame để xem preview
+              </div>
+              <div id="sub-preview-blur" style="display:none;position:absolute;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:2px;"></div>
+              <canvas id="sub-preview-blur-canvas" style="display:none;position:absolute;pointer-events:none;border-radius:2px;"></canvas>
+              <div id="sub-preview-text" style="position:absolute;left:0;right:0;pointer-events:none;padding:0 12px;text-align:center;display:none"></div>
+              <!-- Frame mode: canvas replaces img -->
+              <canvas id="frame-preview-canvas" style="display:none;width:100%;border-radius:6px"></canvas>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+              <label style="font-size:11px;color:var(--text-muted);margin:0;flex-shrink:0">Nội dung mẫu</label>
+              <input type="text" id="sub-preview-sample" value="Đây là phụ đề tiếng Việt mẫu"
+                style="flex:1;font-size:12px;padding:4px 8px"
+                oninput="subPreviewUpdate()">
+            </div>
+
+            <!-- ── Frame Video Controls (inline, toggleable) ── -->
+            <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+              <div class="flex-between mb-8">
+                <span style="font-size:12px;font-weight:700;color:var(--text2)">🎞 Khung video 9:16</span>
+                <label class="toggle-wrap">
+                  <input type="checkbox" class="toggle-input" id="frame-enabled" onchange="frameToggle()">
+                  <div class="toggle"></div>
+                  <span class="toggle-label text-sm">Bật</span>
+                </label>
+              </div>
+
+              <div id="frame-controls" style="display:none">
+                <!-- Title -->
+                <div class="field">
+                  <label>📝 Tiêu đề phía trên</label>
+                  <input type="text" id="frame-title" placeholder="Nhập tiêu đề..." oninput="framePreviewUpdate()">
+                </div>
+                <div class="grid-2 mt-8">
+                  <div class="field">
+                    <label>Cỡ chữ (%)</label>
+                    <input type="number" id="frame-title-size" value="5" min="1" max="15" step="0.5" oninput="framePreviewUpdate()">
+                  </div>
+                  <div class="field">
+                    <label>Màu chữ</label>
+                    <div style="display:flex;gap:6px">
+                      <input type="color" id="frame-title-color" value="#ff0000"
+                        style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer"
+                        oninput="framePreviewUpdate()">
+                      <input type="text" id="frame-title-color-hex" value="#ff0000"
+                        style="flex:1;font-family:monospace;font-size:12px"
+                        oninput="document.getElementById('frame-title-color').value=this.value;framePreviewUpdate()">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Side blur -->
+                <div class="grid-2 mt-8">
+                  <div class="field">
+                    <label>🌫 Độ rộng mờ 2 bên (%)</label>
+                    <input type="number" id="frame-blur-w" value="15" min="0" max="40" step="1" oninput="framePreviewUpdate()">
+                  </div>
+                  <div class="field">
+                    <label>Độ mờ (0-100)</label>
+                    <input type="number" id="frame-blur-opacity" value="60" min="0" max="100" step="5" oninput="framePreviewUpdate()">
+                  </div>
+                </div>
+                <div class="field mt-4">
+                  <label>Kiểu vùng mờ</label>
+                  <div style="display:flex;gap:8px">
+                    <label class="check-item" style="flex:1">
+                      <input type="radio" name="frame-blur-mode" value="overlay" checked onchange="framePreviewUpdate()">
+                      <span>Đè lên video</span>
+                    </label>
+                    <label class="check-item" style="flex:1">
+                      <input type="radio" name="frame-blur-mode" value="expand" onchange="framePreviewUpdate()">
+                      <span>Đẩy ra ngoài</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Logo -->
+                <div class="field mt-8">
+                  <label>🏷 Logo (PNG/JPG)</label>
+                  <div style="display:flex;gap:8px">
+                    <input type="text" id="frame-logo-path" placeholder="Chọn file logo..." readonly style="flex:1;font-size:12px">
+                    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('frame-logo-file').click()">📂</button>
+                    <input type="file" id="frame-logo-file" accept="image/*" style="display:none" onchange="frameSetLogo(this)">
+                  </div>
+                </div>
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Kích thước logo (% chiều cao)</label>
+                    <input type="number" id="frame-logo-size" value="12" min="2" max="40" step="0.5" oninput="framePreviewUpdate()">
+                  </div>
+                  <div class="field">
+                    <label>Vị trí từ trên (%)</label>
+                    <input type="number" id="frame-logo-top" value="3" min="0" max="90" step="0.5" oninput="framePreviewUpdate()">
+                  </div>
+                  <div class="field">
+                    <label>Vị trí từ trái (%)</label>
+                    <input type="number" id="frame-logo-left" value="3" min="0" max="90" step="0.5" oninput="framePreviewUpdate()">
+                  </div>
+                  <div class="field">
+                    <label>Bo tròn (<span id="frame-logo-radius-val">50</span>%)</label>
+                    <input type="range" id="frame-logo-radius" min="0" max="50" step="1" value="50"
+                      style="width:100%"
+                      oninput="document.getElementById('frame-logo-radius-val').textContent=this.value;framePreviewUpdate()">
+                  </div>
+                </div>
+                <div class="text-xs text-muted mt-4">Preview tỷ lệ 9:16 — kích thước thay đổi theo điều chỉnh</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 4. ANTI-FINGERPRINT -->
-      <div class="card card-collapsible collapsed card-has-body">
-        <div class="card-header">
-          <span class="card-title">🛡 Lách bản quyền (Anti-Fingerprint)</span>
-          <div class="card-actions">
-            <label class="toggle-wrap">
-              <input type="checkbox" class="toggle-input" id="proc-afp-enabled">
-              <div class="toggle"></div>
-              <span class="toggle-label text-sm">Bật</span>
-            </label>
-          </div>
-        </div>
-        <div class="card-body" id="proc-afp-opts">
-          <div class="check-grid mb-12" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-            <label class="check-item"><input type="checkbox" id="proc-afp-flip"><span>Lật ngang (Flip)</span></label>
-            <label class="check-item"><input type="checkbox" id="proc-afp-vignette"><span>Vignette</span></label>
-            <label class="check-item"><input type="checkbox" id="proc-afp-vertical"><span>Video dọc (9:16)</span></label>
-          </div>
-          <div class="grid-2">
-            <div class="field">
-              <label>Scale W (px)</label>
-              <input type="number" id="proc-afp-scale-w" value="0" placeholder="0 = Auto">
-            </div>
-            <div class="field">
-              <label>Scale H (px)</label>
-              <input type="number" id="proc-afp-scale-h" value="0" placeholder="0 = Auto">
-            </div>
-            <div class="field">
-              <label>Độ sáng</label>
-              <input type="number" id="proc-afp-brightness" step="0.01" value="0.02">
-            </div>
-            <div class="field">
-              <label>Tương phản</label>
-              <input type="number" id="proc-afp-contrast" step="0.01" value="1.03">
-            </div>
-          </div>
-          <div class="field mt-8">
-            <label>Tốc độ video</label>
-            <div style="display:flex;align-items:center;gap:10px">
-              <input type="range" id="proc-afp-speed" min="0.8" max="1.2" step="0.01" value="1.0"
-                oninput="this.nextElementSibling.textContent=parseFloat(this.value).toFixed(2)+'x'"
-                style="flex:1;accent-color:var(--accent)">
-              <span class="text-xs" style="min-width:36px">1.00x</span>
-            </div>
-          </div>
-          <div class="field mt-8">
-            <label>Ảnh Overlay (PNG trong suốt)</label>
-            <div class="flex-center gap-8">
-              <input type="text" id="proc-afp-overlay-img" readonly style="flex:1" placeholder="Chưa chọn...">
-              <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('proc-afp-overlay-file').click()">Chọn</button>
-              <input type="file" id="proc-afp-overlay-file" accept="image/*" style="display:none" onchange="uploadOverlay(this,'overlay')">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 5. GIỌNG NÓI -->
-      <div class="card card-collapsible collapsed card-has-body">
-        <div class="card-header">
+      <!-- Voice -->
+      <div class="card card-collapsible collapsed">
+        <div class="card-header" onclick="toggleCard(this)">
           <span class="card-title">🎙 Đổi giọng tiếng Việt</span>
-          <div class="card-actions">
+          <div class="card-actions" onclick="event.stopPropagation()">
             <label class="toggle-wrap">
               <input type="checkbox" class="toggle-input" id="proc-voice" checked>
               <div class="toggle"></div>
@@ -211,50 +289,21 @@
             </label>
           </div>
         </div>
-        <div class="card-body" id="proc-voice-opts">
+        <div class="card-body">
           <div class="grid-2">
             <div class="field">
               <label>TTS Engine</label>
-              <select id="proc-tts-engine" onchange="(function(v){document.getElementById('proc-hf-config').style.display=v==='huggingface'?'block':'none';document.getElementById('proc-voice-field').style.display=v==='huggingface'?'none':'block';})(this.value)">
+              <select id="proc-tts-engine" onchange="_syncVoiceOptions('proc-tts-engine','proc-tts-voice')">
                 <option value="fpt-ai" selected>FPT AI TTS</option>
                 <option value="edge-tts">Edge TTS (Microsoft)</option>
                 <option value="minimax">MiniMax TTS</option>
                 <option value="gtts">gTTS (Google)</option>
-                <option value="huggingface">HuggingFace TTS</option>
               </select>
             </div>
-            <div class="field" id="proc-voice-field">
+            <div class="field">
               <label>Giọng đọc</label>
               <select id="proc-tts-voice"></select>
             </div>
-          </div>
-          <!-- HuggingFace config -->
-          <div id="proc-hf-config" style="display:none;margin-top:8px">
-            <div class="grid-2">
-              <div class="field">
-                <label>HF Model</label>
-                <input type="text" id="proc-hf-model" placeholder="facebook/mms-tts-vie" value="facebook/mms-tts-vie">
-              </div>
-              <div class="field">
-                <label>Device</label>
-                <select id="proc-hf-device">
-                  <option value="cpu" selected>CPU</option>
-                  <option value="cuda">CUDA (GPU)</option>
-                </select>
-              </div>
-            </div>
-            <div class="field mt-8">
-              <label>Speaker Embeddings</label>
-              <div style="display:flex;gap:4px">
-                <select id="proc-hf-embeddings" style="flex:1">
-                  <option value="">(Mặc định)</option>
-                </select>
-                <button class="btn btn-secondary btn-sm" type="button" onclick="uploadHfVoice()" title="Thêm giọng">+</button>
-                <button class="btn btn-secondary btn-sm" type="button" onclick="refreshHfVoices()" title="Tải lại">↻</button>
-              </div>
-            </div>
-          </div>
-          <div class="grid-2 mt-8">
             <div class="field">
               <label>Cao độ</label>
               <input type="text" id="proc-tts-pitch" placeholder="+0Hz" value="+0Hz">
@@ -276,122 +325,147 @@
             </div>
             <div class="field">
               <label>Tốc độ TTS</label>
-              <div style="display:flex;align-items:center;gap:8px">
+              <div class="flex-center gap-8">
                 <input type="range" id="proc-tts-speed" min="0.5" max="3.0" step="0.1" value="1.0"
-                  oninput="document.getElementById('proc-tts-speed-val').textContent=parseFloat(this.value).toFixed(1)+'x';document.getElementById('proc-auto-speed').checked=false"
-                  style="flex:1;accent-color:var(--accent)">
+                  oninput="document.getElementById('proc-tts-speed-val').textContent=parseFloat(this.value).toFixed(1)+'x'" style="flex:1">
                 <span class="text-xs" id="proc-tts-speed-val" style="min-width:32px">1.0x</span>
               </div>
             </div>
           </div>
-          <label class="check-item mt-4">
-            <input type="checkbox" id="proc-auto-speed" checked
-              onchange="document.getElementById('proc-tts-speed').value=1.0;document.getElementById('proc-tts-speed-val').textContent='1.0x'">
-            <span class="text-xs">Tự động khớp tốc độ theo segment</span>
-          </label>
-          <label class="check-item mt-4">
-            <input type="checkbox" id="proc-keep-bg">
-            <span>Giữ nhạc nền gốc</span>
-          </label>
+          <div class="check-grid mt-8">
+            <label class="check-item"><input type="checkbox" id="proc-auto-speed" checked><span>Tự động tốc độ</span></label>
+            <label class="check-item"><input type="checkbox" id="proc-keep-bg"><span>Giữ nhạc nền</span></label>
+          </div>
           <div class="field mt-8">
             <label>Âm lượng nhạc nền</label>
-            <div style="display:flex;align-items:center;gap:8px">
+            <div class="flex-center gap-8">
               <input type="range" id="proc-bg-vol" min="0" max="1" step="0.1" value="0.1"
-                oninput="document.getElementById('proc-bg-vol-val').textContent=this.value"
-                style="flex:1;accent-color:var(--accent)">
+                oninput="document.getElementById('proc-bg-vol-val').textContent=this.value" style="flex:1">
               <span class="text-xs text-muted" id="proc-bg-vol-val">0.1</span>
             </div>
           </div>
-
+          <div class="flex-center gap-8 mt-8">
+            <button class="btn btn-secondary btn-sm" onclick="previewProcessVoice()">▶ Nghe thử</button>
+            <audio id="proc-preview-audio" controls style="display:none;height:32px;flex:1"></audio>
+          </div>
           <!-- Voice FX -->
           <hr class="divider">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span class="text-sm" style="font-weight:600">🎚 Hiệu ứng giọng (FX)</span>
-            <label class="check-item" style="margin:0">
-              <input type="checkbox" id="proc-fx-enabled">
-              <span class="text-xs">Bật</span>
+          <div class="flex-between mb-8">
+            <span class="section-title" style="margin:0">🎚 Hiệu ứng giọng (FX)</span>
+            <label class="toggle-wrap">
+              <input type="checkbox" class="toggle-input" id="proc-fx-enabled">
+              <div class="toggle"></div>
+              <span class="toggle-label text-sm">Bật</span>
             </label>
           </div>
           <div class="grid-2">
-            <div class="field">
-              <label>Pitch (bán âm)</label>
-              <input type="number" id="proc-fx-pitch" step="0.1" value="1.5">
-            </div>
-            <div class="field">
-              <label>Speed</label>
-              <input type="number" id="proc-fx-speed" step="0.01" value="1.08">
-            </div>
+            <div class="field"><label>Pitch (bán âm)</label><input type="number" id="proc-fx-pitch" step="0.1" value="1.5"></div>
+            <div class="field"><label>Speed</label><input type="number" id="proc-fx-speed" step="0.01" value="1.08"></div>
           </div>
           <div class="grid-3 mt-8">
-            <div class="field">
-              <label>Bass (dB)</label>
-              <input type="number" id="proc-fx-bass" step="1" value="-2">
-            </div>
-            <div class="field">
-              <label>Mid (dB)</label>
-              <input type="number" id="proc-fx-mid" step="1" value="2">
-            </div>
-            <div class="field">
-              <label>Treble (dB)</label>
-              <input type="number" id="proc-fx-treble" step="1" value="3">
-            </div>
+            <div class="field"><label>Bass (dB)</label><input type="number" id="proc-fx-bass" step="1" value="-2"></div>
+            <div class="field"><label>Mid (dB)</label><input type="number" id="proc-fx-mid" step="1" value="2"></div>
+            <div class="field"><label>Treble (dB)</label><input type="number" id="proc-fx-treble" step="1" value="3"></div>
           </div>
           <div class="grid-2 mt-8">
             <div class="field">
               <label>Nén (Comp)</label>
               <select id="proc-fx-comp">
                 <option value="none">Tắt</option>
-                <option value="light" selected>Reviewer</option>
+                <option value="light" selected>Nhẹ</option>
                 <option value="heavy">Mạnh</option>
               </select>
             </div>
-            <div class="field">
-              <label>Vang (Reverb %)</label>
-              <input type="number" id="proc-fx-reverb" min="0" max="100" value="5">
-            </div>
+            <div class="field"><label>Vang (Reverb %)</label><input type="number" id="proc-fx-reverb" min="0" max="100" value="5"></div>
           </div>
         </div>
       </div>
 
-    </div><!-- end cột trái -->
+    </div><!-- end left -->
 
-    <!-- ═══ CỘT PHẢI: HÀNG CHỜ + TIẾN TRÌNH + ĐĂNG ═══ -->
+    <!-- RIGHT: Queue + Progress + Log -->
     <div>
 
-      <!-- HÀNG CHỜ XỬ LÝ -->
-      <div class="card card-collapsible card-has-body">
-        <div class="card-header">
+      <!-- Batch Process Queue -->
+      <div class="card card-collapsible">
+        <div class="card-header" onclick="toggleCard(this)">
           <span class="card-title">📋 Hàng chờ xử lý (<span id="batch-count">0</span>)</span>
-          <div class="card-actions">
-            <button class="btn btn-danger btn-sm" onclick="window._batchQueue=[];_renderBatchQueue()">Xóa tất cả</button>
+          <div class="card-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-danger btn-sm" onclick="window._batchQueue=[];_renderBatchQueue()">🗑 Xóa</button>
           </div>
         </div>
         <div class="card-body">
-          <div id="batch-queue-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
-            <div class="empty-state text-muted text-xs">Chưa có task nào. Thêm URL hoặc file từ cột trái.</div>
+          <div class="flex-center gap-8 mb-8">
+            <button class="btn btn-secondary btn-sm" onclick="_addProcTask('url')">+ URL</button>
+            <button class="btn btn-secondary btn-sm" onclick="_addProcTask('file')">+ File</button>
           </div>
-          <button class="btn btn-primary" id="btn-proc-main" onclick="_runBatchQueueFlow()" style="width:100%;justify-content:center;margin-top:12px">
-            ✨ Bắt đầu xử lý hàng chờ
-          </button>
+          <div id="batch-queue-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
+            <div class="empty-state text-xs">Chưa có task nào.</div>
+          </div>
+          <div class="btn-group mt-8">
+            <button class="btn btn-primary" id="btn-proc-main" onclick="_runBatchQueueFlow()" style="flex:1;justify-content:center">
+              ▶ Xử lý hàng chờ
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- TIẾN TRÌNH -->
+      <!-- Download Queue — REMOVED per user request -->
+
+      <!-- ASS Review Panel (shown after translation completes) -->
+      <div class="card" id="proc-ass-review-card" style="display:none;border:2px solid var(--accent)">
+        <div class="card-header" style="background:var(--accent-light)">
+          <span class="card-title" style="color:var(--accent)">📝 Kiểm tra nội dung dịch</span>
+          <span class="badge badge-accent">Chờ xác nhận</span>
+        </div>
+        <div class="card-body">
+          <div class="alert-info mb-8" style="font-size:12px">
+            File phụ đề tiếng Việt đã được tạo. Kiểm tra và chỉnh sửa nếu cần, sau đó bấm <b>Tiếp tục</b>.
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px" id="proc-ass-review-path"></div>
+          <textarea id="proc-ass-review-content" rows="10"
+            style="width:100%;font-family:monospace;font-size:11px;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px;background:#f8faff">
+          </textarea>
+          <div class="btn-group mt-8">
+            <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="procAssReviewContinue()">
+              ✅ Tiếp tục xử lý
+            </button>
+            <button class="btn btn-secondary" onclick="procAssReviewSkipAlways()">
+              ⏭ Không cần kiểm tra nữa
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress -->
       <div class="card">
-        <div class="card-header"><span class="card-title">📊 Tiến trình</span></div>
+        <div class="card-header">
+          <span class="card-title">📊 Tiến trình</span>
+          <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-proc-pause" style="display:none" onclick="procTogglePause()">
+              ⏸ Dừng
+            </button>
+          </div>
+        </div>
         <div class="progress-row">
           <span class="progress-label">Tổng thể</span>
           <div class="progress-bar-wrap"><div class="progress-bar pb-overall" id="pb-proc-overall"></div></div>
           <span class="progress-pct" id="pb-proc-overall-pct">0%</span>
         </div>
         <div class="progress-info text-muted" id="lbl-proc-overall">--</div>
+        
+        <div id="proc-done-actions" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <button class="btn btn-success w-full" onclick="sendLastProcessedToPublish()">
+            📤 Thêm dữ liệu vào Đăng video
+          </button>
+        </div>
       </div>
 
-      <!-- NHẬT KÝ -->
-      <div class="card card-collapsible card-has-body">
-        <div class="card-header">
+      <!-- Log -->
+      <div class="card card-collapsible">
+        <div class="card-header" onclick="toggleCard(this)">
           <span class="card-title">📝 Nhật ký</span>
-          <div class="card-actions">
+          <div class="card-actions" onclick="event.stopPropagation()">
             <button class="btn btn-secondary btn-sm" onclick="clearLog('proc-log')">Xóa</button>
           </div>
         </div>
@@ -400,291 +474,898 @@
         </div>
       </div>
 
-      <!-- ĐĂNG VIDEO -->
-      <div class="card card-collapsible collapsed card-has-body">
-        <div class="card-header">
-          <span class="card-title">🚀 Đăng video</span>
-          <div class="card-actions"><span class="text-xs text-muted" id="publish-status">Chưa chọn</span></div>
-        </div>
-        <div class="card-body">
-          <!-- File list -->
-          <div class="field">
-            <label>📁 File cần đăng</label>
-            <div class="flex-center gap-8">
-              <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('publish-file-input')?.click()">+ Thêm file</button>
-              <input type="file" id="publish-file-input" accept="video/*" multiple style="display:none" onchange="handlePublishFileInput(this)">
-              <button class="btn btn-danger btn-sm" type="button" onclick="window._procFileQueue=[];_renderProcFileList()">Xóa tất cả</button>
-            </div>
-            <div style="font-size:11px;color:var(--dim);margin-top:4px">Hoặc xử lý video → file output tự động thêm vào đây</div>
-            <div id="proc-file-list" style="margin-top:8px;display:flex;flex-direction:column;gap:4px"></div>
-          </div>
-
-          <!-- Platform -->
-          <div class="grid-2">
-            <div class="field">
-              <label>Nền tảng</label>
-              <select id="publish-platform" onchange="switchPublishPlatform(this.value)">
-                <option value="youtube" selected>▶ YouTube</option>
-                <option value="tiktok">🎵 TikTok</option>
-                <option value="both">🚀 Cả 2</option>
-              </select>
-            </div>
-            <div class="field" style="display:flex;align-items:flex-end">
-              <label class="check-item">
-                <input type="checkbox" id="publish-auto-upload">
-                <span>Tự động đăng sau xử lý</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- YouTube panel -->
-          <div id="publish-youtube-panel">
-            <div id="yt-channel-info" style="padding:8px;background:rgba(0,0,0,.2);border-radius:4px;font-size:12px;display:none;margin-bottom:8px">
-              <div><strong>Channel</strong>: <span id="yt-ch-name">--</span></div>
-              <div><strong>Subscribers</strong>: <span id="yt-ch-subs">--</span></div>
-              <div><strong>Videos</strong>: <span id="yt-ch-videos">--</span></div>
-            </div>
-            <div id="yt-auth-needed" style="display:none"></div>
-            <div class="btn-group mb-8">
-              <button class="btn btn-secondary btn-sm" id="btn-yt-auth" onclick="youtubeLogin()">Đăng nhập YouTube</button>
-              <button class="btn btn-danger btn-sm" id="btn-yt-logout" onclick="youtubeLogout()" style="display:none">Đăng xuất</button>
-            </div>
-            <div class="field">
-              <label>Tiêu đề YouTube</label>
-              <input type="text" id="yt-title" placeholder="{title}">
-            </div>
-            <div class="field">
-              <label>Mô tả</label>
-              <textarea id="yt-desc" rows="2" placeholder="{title}"></textarea>
-            </div>
-            <div class="field">
-              <label>Chế độ riêng tư</label>
-              <select id="yt-privacy">
-                <option value="private" selected>Riêng tư</option>
-                <option value="unlisted">Ẩn</option>
-                <option value="public">Công khai</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- TikTok panel -->
-          <div id="publish-tiktok-panel" style="display:none">
-            <div id="tt-account-info" style="padding:8px;background:rgba(0,0,0,.2);border-radius:4px;font-size:12px;display:none;margin-bottom:8px">
-              <div><strong>Open ID</strong>: <span id="tt-account-openid">--</span></div>
-              <div><strong>Scope</strong>: <span id="tt-account-scope">--</span></div>
-            </div>
-            <div id="tt-auth-needed" style="padding:8px;background:rgba(255,107,107,.1);border-radius:4px;border:1px solid rgba(255,107,107,.3);margin-bottom:8px">
-              <div style="font-size:12px;color:#ff6b6b">Bạn chưa đăng nhập TikTok API.</div>
-            </div>
-            <div class="btn-group mb-8">
-              <button class="btn btn-secondary btn-sm" id="btn-tt-auth" onclick="tiktokLogin()">Đăng nhập TikTok</button>
-              <button class="btn btn-danger btn-sm" id="btn-tt-logout" onclick="tiktokLogout()" style="display:none">Đăng xuất</button>
-            </div>
-            <div class="field">
-              <label>Tiêu đề TikTok</label>
-              <input type="text" id="tt-title" placeholder="{title}">
-            </div>
-            <div class="field">
-              <label>Hashtags</label>
-              <input type="text" id="tt-tags" placeholder="#douyin #vietsub #viral">
-            </div>
-            <div class="field">
-              <label>Chế độ hiển thị</label>
-              <select id="tt-privacy">
-                <option value="SELF_ONLY">Riêng tư</option>
-                <option value="MUTUAL_FOLLOW_FRIENDS">Bạn bè</option>
-                <option value="PUBLIC_TO_EVERYONE" selected>Công khai</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="btn-group mt-12">
-            <button class="btn btn-primary btn-sm" onclick="publishSelectedPlatform()">🚀 Đăng video</button>
-            <button class="btn btn-secondary btn-sm" onclick="savePublishSettings()">Lưu cấu hình</button>
-          </div>
-          <div class="log-box" id="publish-log" style="height:120px;display:none;margin-top:8px"></div>
-        </div>
-      </div>
-
-      <!-- HÀNG CHỜ DOWNLOAD (compat) -->
-      <div class="card card-collapsible collapsed card-has-body">
-        <div class="card-header">
-          <span class="card-title">⬇ Hàng chờ Download (<span id="queue-count">0</span>)</span>
-          <div class="card-actions">
-            <button class="btn btn-danger btn-sm" onclick="clearQueue()">Xóa</button>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="flex-center gap-8 mb-12">
-            <input type="text" id="manual-url" placeholder="Dán URL video..." style="flex:1">
-            <button class="btn btn-secondary btn-sm" onclick="addManualUrl()">Thêm</button>
-          </div>
-          <div id="queue-list" style="max-height:200px;overflow-y:auto">
-            <div class="empty-state">Hàng chờ trống</div>
-          </div>
-          <button class="btn btn-primary" id="btn-dl" onclick="startQueueDownload()" style="width:100%;justify-content:center;margin-top:12px">
-            Chạy hàng chờ download
-          </button>
-        </div>
-      </div>
-
-    </div><!-- end cột phải -->
+    </div><!-- end right -->
   </div><!-- end grid -->
 
-  <!-- BATCH QUEUE LOGIC -->
+  <!-- Batch queue JS -->
   <script>
-    window._batchQueue = window._batchQueue || [];
-    window._isBatchProcessing = false;
-
-    function _addProcTask(type) {
+  window._batchQueue = window._batchQueue || [];
+  function _addProcTask(type) {
+    const urlEl = document.getElementById('proc-url');
+    const pathEl = document.getElementById('proc-video');
+    const val = (type === 'url') ? urlEl?.value.trim() : pathEl?.value.trim();
+    if (!val) { toast('Vui lòng nhập URL hoặc chọn file', 'warning'); return; }
+    window._batchQueue.push({ id: 'bt-'+Date.now(), type, val, status: 'pending' });
+    if (type === 'url' && urlEl) urlEl.value = '';
+    _renderBatchQueue();
+    toast('Đã thêm vào hàng chờ', 'success');
+  }
+  function _renderBatchQueue() {
+    const list = document.getElementById('batch-queue-list');
+    const cnt = document.getElementById('batch-count');
+    if (cnt) cnt.textContent = window._batchQueue.length;
+    if (!list) return;
+    if (!window._batchQueue.length) {
+      list.innerHTML = '<div class="empty-state text-xs">Chưa có task nào.</div>';
+      return;
+    }
+    list.innerHTML = window._batchQueue.map((t,i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
+        <span style="color:var(--text-muted)">${t.type==='url'?'🔗':'📄'}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
+        <span class="badge ${t.status==='done'?'badge-green':t.status==='error'?'badge-red':'badge-gray'}">${t.status}</span>
+        <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px">✕</button>
+      </div>`).join('');
+  }
+  function _runBatchQueueFlow() {
+    if (!window._batchQueue.length) { toast('Hàng chờ trống', 'warning'); return; }
+    toast('Bắt đầu xử lý ' + window._batchQueue.length + ' task', 'info');
+    const first = window._batchQueue[0];
+    if (first.type === 'url') {
       const urlEl = document.getElementById('proc-url');
+      if (urlEl) urlEl.value = first.val;
+    } else {
       const pathEl = document.getElementById('proc-video');
-      const val = (type === 'url') ? urlEl?.value.trim() : pathEl?.value.trim();
-      if (!val) { toast('Vui lòng nhập URL hoặc chọn file', 'warning'); return; }
-
-      const task = {
-        id: 'bt-' + Date.now() + '-' + Math.random().toString(36).slice(2,7),
-        type, val, status: 'pending',
-        settings: _collectProcSettings()
-      };
-      window._batchQueue.push(task);
-      if (type === 'url' && urlEl) urlEl.value = '';
-      _renderBatchQueue();
-      toast('Đã thêm vào hàng chờ', 'success');
+      if (pathEl) pathEl.value = first.val;
     }
+    startProcessVideo();
+  }
 
-    function _collectProcSettings() {
-      return {
-        burn_subs:         document.getElementById('proc-burn')?.checked ?? true,
-        blur_original:     document.getElementById('proc-blur-original')?.checked ?? true,
-        translate_subs:    document.getElementById('proc-translate-subs')?.checked ?? true,
-        burn_vi_subs:      document.getElementById('proc-burn-vi')?.checked ?? true,
-        voice_convert:     document.getElementById('proc-voice')?.checked ?? false,
-        keep_bg_music:     document.getElementById('proc-keep-bg')?.checked ?? false,
-        font_size:         parseInt(document.getElementById('proc-font-size')?.value || '32', 10),
-        font_color:        document.getElementById('proc-font-color')?.value || 'white',
-        subtitle_position: document.getElementById('proc-sub-pos')?.value || 'bottom',
-        margin_v:          parseInt(document.getElementById('proc-margin-v')?.value || '20', 10),
-        tts_engine:        document.getElementById('proc-tts-engine')?.value || 'fpt-ai',
-        tts_voice:         document.getElementById('proc-tts-voice')?.value || 'banmai',
-        tts_pitch:         document.getElementById('proc-tts-pitch')?.value || '+0Hz',
-        tts_rate:          document.getElementById('proc-tts-rate')?.value || '+0%',
-        tts_emotion:       document.getElementById('proc-tts-emotion')?.value || 'default',
-        tts_speed:         parseFloat(document.getElementById('proc-tts-speed')?.value || '1.0'),
-        auto_speed:        document.getElementById('proc-auto-speed')?.checked ?? true,
-        bg_volume:         parseFloat(document.getElementById('proc-bg-vol')?.value || '0.1'),
-        fx_enabled:        document.getElementById('proc-fx-enabled')?.checked ?? false,
-        fx_pitch:          parseFloat(document.getElementById('proc-fx-pitch')?.value || '1.5'),
-        fx_speed:          parseFloat(document.getElementById('proc-fx-speed')?.value || '1.08'),
-        fx_bass:           parseInt(document.getElementById('proc-fx-bass')?.value || '-2'),
-        fx_mid:            parseInt(document.getElementById('proc-fx-mid')?.value || '2'),
-        fx_treble:         parseInt(document.getElementById('proc-fx-treble')?.value || '3'),
-        fx_comp:           document.getElementById('proc-fx-comp')?.value || 'light',
-        fx_reverb:         parseInt(document.getElementById('proc-fx-reverb')?.value || '5'),
-        afp_enabled:       document.getElementById('proc-afp-enabled')?.checked ?? false,
-        afp_flip:          document.getElementById('proc-afp-flip')?.checked ?? false,
-        afp_vignette:      document.getElementById('proc-afp-vignette')?.checked ?? false,
-        afp_vertical:      document.getElementById('proc-afp-vertical')?.checked ?? false,
-        afp_scale_w:       parseInt(document.getElementById('proc-afp-scale-w')?.value || '0'),
-        afp_scale_h:       parseInt(document.getElementById('proc-afp-scale-h')?.value || '0'),
-        afp_brightness:    parseFloat(document.getElementById('proc-afp-brightness')?.value || '0.02'),
-        afp_contrast:      parseFloat(document.getElementById('proc-afp-contrast')?.value || '1.03'),
-        afp_speed:         parseFloat(document.getElementById('proc-afp-speed')?.value || '1.0'),
-        afp_overlay_img:   document.getElementById('proc-afp-overlay-img')?.value || '',
-        out_dir:           document.getElementById('proc-out')?.value?.trim() || '',
-        process_mode:      window._procMode || 'ai',
-        groq_api_key:      '',
-        groq_model:        '',
-        translate_provider: (typeof _getProcessProvider === 'function') ? _getProcessProvider('translate') : 'auto',
-        transcribe_provider: (typeof _getProcessProvider === 'function') ? _getProcessProvider('transcribe') : 'model',
-      };
+  /* ── ASS Review ── */
+  window._procSkipReview  = localStorage.getItem('proc_skip_review') === '1';
+  window._procReviewResolve = null; // Promise resolver waiting for user confirm
+  window._procAssPath = '';
+
+  function procAssReviewSkipAlways() {
+    window._procSkipReview = true;
+    localStorage.setItem('proc_skip_review', '1');
+    toast('Sẽ không hỏi kiểm tra nữa', 'info');
+    procAssReviewContinue();
+  }
+
+  async function procAssReviewContinue() {
+    // Save edited content back to server
+    const content = document.getElementById('proc-ass-review-content')?.value;
+    const path    = window._procAssPath;
+    if (content && path) {
+      try {
+        await fetch('/api/proc_save_ass', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, content })
+        });
+      } catch (_) {}
     }
+    // Hide review panel
+    const card = document.getElementById('proc-ass-review-card');
+    if (card) card.style.display = 'none';
 
-    function _renderBatchQueue() {
-      const list = document.getElementById('batch-queue-list');
-      const countEl = document.getElementById('batch-count');
-      if (!list) return;
-      if (countEl) countEl.textContent = window._batchQueue.length;
-      if (!window._batchQueue.length) {
-        list.innerHTML = '<div class="empty-state text-muted text-xs">Chưa có task nào.</div>';
-        return;
-      }
-      const statusIcon = { pending: '⏳', processing: '⚙️', done: '✅', error: '❌' };
-      list.innerHTML = window._batchQueue.map(t => {
-        const short = t.val.length > 55 ? t.val.slice(0,52)+'...' : t.val;
-        return `<div class="batch-task-card ${t.status}" id="${t.id}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)">
-          <span style="font-size:14px">${statusIcon[t.status]||'⏳'}</span>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${short}</div>
-            <div style="font-size:10px;color:var(--dim)">${t.settings.tts_engine} · ${t.settings.tts_voice || '--'}</div>
-          </div>
-          ${t.status==='pending'?`<button class="btn btn-sm" style="padding:2px 6px;font-size:11px" onclick="_removeBatchTask('${t.id}')">✕</button>`:''}
-        </div>`;
-      }).join('');
+    // Resume processing (frame video will run after pipeline completes)
+    if (window._procReviewResolve) {
+      window._procReviewResolve('continue');
+      window._procReviewResolve = null;
     }
-
-    function _removeBatchTask(id) {
-      window._batchQueue = window._batchQueue.filter(t => t.id !== id);
-      _renderBatchQueue();
-    }
-
-    async function _runBatchQueueFlow() {
-      const pending = window._batchQueue.filter(t => t.status === 'pending');
-      if (!pending.length) {
-        const url = document.getElementById('proc-url')?.value?.trim();
-        const file = document.getElementById('proc-video')?.value?.trim();
-        if (url || file) { _addProcTask(url ? 'url' : 'file'); setTimeout(_runBatchQueueFlow, 100); return; }
-        toast('Hàng chờ trống!', 'warning'); return;
-      }
-      if (window._isBatchProcessing) return;
-      window._isBatchProcessing = true;
-      const btn = document.getElementById('btn-proc-main');
-      if (btn) { btn.disabled = true; btn.textContent = '⚙️ Đang xử lý...'; }
-
-      for (const task of window._batchQueue) {
-        if (task.status !== 'pending') continue;
-        task.status = 'processing'; _renderBatchQueue();
-        try {
-          await _executeProcessTask(task);
-          task.status = 'done';
-        } catch(e) {
-          task.status = 'error';
-          toast('Lỗi: ' + task.val.slice(0,40), 'error');
-        }
-        _renderBatchQueue();
-      }
-
-      window._isBatchProcessing = false;
-      if (btn) { btn.disabled = false; btn.textContent = '✨ Bắt đầu xử lý hàng chờ'; }
-      toast('Hoàn thành tất cả task!', 'success');
-    }
-
-    async function _executeProcessTask(task) {
-      const body = { ...task.settings, video_path: task.type==='file'?task.val:'', video_url: task.type==='url'?task.val:'' };
-      const res = await fetch('/api/process_video', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    try {
+      await fetch('/api/proc_resume', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'continue' })
       });
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      const logBox = document.getElementById('proc-log');
-      if (logBox) { const d=document.createElement('div'); d.className='log-line log-info'; d.textContent='>>> '+task.val; logBox.appendChild(d); }
-      return new Promise((resolve, reject) => {
-        function pump() {
-          reader.read().then(({done, value}) => {
-            if (done) { resolve(); return; }
-            decoder.decode(value).split('\n').filter(Boolean).forEach(line => {
-              try {
-                const d = JSON.parse(line);
-                if (d.log) _appendProcLog(d.log, d.level||'info');
-                if (d.overall !== undefined) _setProcProgress(d.overall, d.overall_lbl||'');
-                if (d.file_path) { window._publishLastOutputPath = d.file_path; window._ytLastOutputPath = d.file_path; }
-              } catch(_) {}
-            });
-            pump();
-          }).catch(reject);
-        }
-        pump();
-      });
+    } catch (_) {}
+  }
+
+  async function _triggerFrameVideo() {
+    // Get the current video being processed
+    const videoPath = window._publishLastOutputPath
+                   || document.getElementById('proc-video')?.value?.trim();
+    if (!videoPath) return;
+
+    // Upload logo if selected
+    let logoPath = '';
+    if (window._frameLogoFile) {
+      try {
+        const form = new FormData();
+        form.append('file', window._frameLogoFile);
+        form.append('type', 'logo');
+        const r = await fetch('/api/upload_anti_fp_image', { method: 'POST', body: form });
+        const d = await r.json();
+        if (d.ok) logoPath = d.path;
+      } catch (_) {}
     }
+
+    const payload = {
+      video_path:     videoPath,
+      title:          document.getElementById('frame-title')?.value || '',
+      title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
+      title_color:    document.getElementById('frame-title-color')?.value || '#ff0000',
+      blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
+      blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
+      blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
+      logo_path:      logoPath,
+      logo_size_pct:  parseFloat(document.getElementById('frame-logo-size')?.value || 12),
+      logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
+      logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
+      logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
+    };
+
+    _appendProcLog('🎞 Đang tạo khung video 9:16...', 'info');
+    try {
+      const res  = await fetch('/api/make_vertical_video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        _appendProcLog('✅ Khung video: ' + data.output_path, 'success');
+        window._publishLastOutputPath = data.output_path;
+      } else {
+        _appendProcLog('❌ Tạo khung thất bại: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      _appendProcLog('❌ Lỗi tạo khung: ' + e.message, 'error');
+    }
+  }
+
+  function _showAssReview(assPath, content) {
+    window._procAssPath = assPath;
+    const card = document.getElementById('proc-ass-review-card');
+    const pathEl = document.getElementById('proc-ass-review-path');
+    const ta = document.getElementById('proc-ass-review-content');
+    if (pathEl) pathEl.textContent = '📄 ' + assPath;
+    if (ta) ta.value = content || '';
+    if (card) { card.style.display = 'block'; card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  }
+
+  /* ── Pause / Resume ── */
+  window._procPaused = false;
+  window._procReader = null; // current stream reader
+
+  function procTogglePause() {
+    const btn = document.getElementById('btn-proc-pause');
+    if (!window._procPaused) {
+      window._procPaused = true;
+      if (btn) { btn.textContent = '▶ Tiếp tục'; btn.style.background = 'var(--success)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--success)'; }
+      toast('⏸ Đã dừng — bấm Tiếp tục để tiếp tục', 'info');
+      // Signal server to pause
+      fetch('/api/proc_resume', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause' })
+      }).catch(() => {});
+    } else {
+      window._procPaused = false;
+      if (btn) { btn.textContent = '⏸ Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; }
+      toast('▶ Tiếp tục xử lý', 'info');
+      fetch('/api/proc_resume', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resume' })
+      }).catch(() => {});
+    }
+  }
+
+  function _procShowPauseBtn(show) {
+    const btn = document.getElementById('btn-proc-pause');
+    if (btn) btn.style.display = show ? 'inline-flex' : 'none';
+    if (!show) { window._procPaused = false; if (btn) { btn.textContent = '⏸ Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; } }
+  }
+
+  /* ── Subtitle Preview ── */
+  let _subPreviewTimer = null;
+
+  function subPreviewUpdate() {
+    if (document.getElementById('frame-enabled')?.checked) {
+      framePreviewUpdate(); // re-draw canvas including subtitle
+    } else {
+      _renderSubOverlay();
+    }
+  }
+
+  // ── Color picker sync ──
+  const _colorPresets = { white:'#ffffff', yellow:'#ffff00', cyan:'#00ffff' };
+  function _syncColorPicker() {
+    const sel = document.getElementById('proc-font-color');
+    const picker = document.getElementById('proc-font-color-picker');
+    if (!sel || !picker) return;
+    if (sel.value !== 'custom') {
+      picker.value = _colorPresets[sel.value] || '#ffffff';
+    }
+    subPreviewUpdate();
+  }
+  function _onColorPickerChange() {
+    const sel = document.getElementById('proc-font-color');
+    if (sel) sel.value = 'custom';
+    subPreviewUpdate();
+  }
+  function _getSubtitleColor() {
+    const sel = document.getElementById('proc-font-color');
+    const picker = document.getElementById('proc-font-color-picker');
+    if (sel?.value === 'custom' && picker) return picker.value;
+    return _colorPresets[sel?.value] || '#ffffff';
+  }
+  // Init picker on load
+  document.addEventListener('DOMContentLoaded', () => { _syncColorPicker(); });
+
+  function _getPreviewVideoPath() {
+    // Priority: first item in batch queue (file type) → proc-video field
+    if (window._batchQueue && window._batchQueue.length > 0) {
+      const first = window._batchQueue[0];
+      if (first.type === 'file' && first.val) return { type: 'file', val: first.val };
+      if (first.type === 'url'  && first.val) return { type: 'url',  val: first.val };
+    }
+    const v = document.getElementById('proc-video')?.value?.trim();
+    if (v) return { type: 'file', val: v };
+    return null;
+  }
+
+  function _renderSubOverlay() {
+    const wrap    = document.getElementById('sub-preview-wrap');
+    const overlay = document.getElementById('sub-preview-text');
+    const blurEl  = document.getElementById('sub-preview-blur');
+    if (!overlay || !wrap) return;
+
+    const img = document.getElementById('sub-preview-img');
+    if (!img || img.style.display === 'none') return; // no frame yet
+
+    const sample   = document.getElementById('sub-preview-sample')?.value || 'Phụ đề mẫu';
+    const fontSize = parseInt(document.getElementById('proc-font-size')?.value || 32);
+    const color    = document.getElementById('proc-font-color')?.value || 'white';
+    const marginV  = parseInt(document.getElementById('proc-margin-v')?.value || 20);
+    const pos      = document.getElementById('proc-sub-pos')?.value || 'bottom';
+    const blurOn   = document.getElementById('proc-blur-original')?.checked || false;
+
+    // Actual rendered image dimensions — use getBoundingClientRect for accuracy
+    const imgW = img.naturalWidth  || 1280;
+    const imgH = img.naturalHeight || 720;
+    const rect  = img.getBoundingClientRect();
+    // getBoundingClientRect returns 0 if element not visible — fallback to offsetWidth
+    const dispW = (rect.width  > 0 ? rect.width  : img.offsetWidth)  || wrap.offsetWidth || 640;
+    const dispH = (rect.height > 0 ? rect.height : img.offsetHeight) || Math.round(dispW * imgH / imgW);
+
+    // font_size and margin_v are % of video height.
+    // Apply same % to dispH → preview always matches real video proportionally.
+    const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
+    const marginPct = parseFloat(document.getElementById('proc-margin-v')?.value  || 3);
+    const scaledFont   = Math.max(6, Math.round(dispH * fontPct   / 100));
+    const scaledMargin = Math.max(2, Math.round(dispH * marginPct / 100));
+
+    const colorMap = { white: '#ffffff', yellow: '#ffff00', cyan: '#00ffff' };
+    const cssColor = (typeof _getSubtitleColor === 'function')
+      ? _getSubtitleColor()
+      : (colorMap[color] || '#ffffff');
+
+    // ── Blur zone: covers original subtitle area (bottom/top edge of video) ──
+    // Real params: height=15%, width=80%, lift=6% from edge
+    const blurH    = 0.15;
+    const blurW    = 0.80;
+    const blurLift = 0.06;
+
+    const bH    = Math.round(dispH * blurH);
+    const bW    = Math.round(dispW * blurW);
+    const bLeft = Math.round(dispW * (1 - blurW) / 2);
+    const liftPx = Math.round(dispH * blurLift);
+
+    // Canvas-based pixel blur (matches real FFmpeg blur effect)
+    const canvas = document.getElementById('sub-preview-blur-canvas');
+    const _posBlur = (el) => {
+      el.style.width  = bW + 'px';
+      el.style.height = bH + 'px';
+      el.style.left   = bLeft + 'px';
+      el.style.right  = 'auto';
+      if (pos === 'top') { el.style.top = liftPx + 'px'; el.style.bottom = 'auto'; }
+      else               { el.style.bottom = liftPx + 'px'; el.style.top = 'auto'; }
+    };
+
+    if (blurOn && canvas && img.complete && img.naturalWidth > 0) {
+      canvas.width  = bW;
+      canvas.height = bH;
+      canvas.style.display = 'block';
+      _posBlur(canvas);
+
+      // Compute source region in natural image coords
+      const wrapRect = wrap.getBoundingClientRect();
+      const imgRect  = img.getBoundingClientRect();
+      // img may be offset inside wrap (e.g. flex centering)
+      const imgOffX = imgRect.left - wrapRect.left;
+      const imgOffY = imgRect.top  - wrapRect.top;
+      const scaleX  = imgW / (imgRect.width  || dispW);
+      const scaleY  = imgH / (imgRect.height || dispH);
+
+      const canvasLeft   = bLeft - imgOffX;
+      const canvasBottom = pos === 'top'
+        ? liftPx - imgOffY
+        : (imgRect.height || dispH) - liftPx - bH - imgOffY;
+
+      const sx = Math.round(canvasLeft   * scaleX);
+      const sy = Math.round(canvasBottom * scaleY);
+      const sw = Math.round(bW * scaleX);
+      const sh = Math.round(bH * scaleY);
+
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, bW, bH);
+      ctx.filter = 'blur(10px)';
+      ctx.drawImage(img, Math.max(0,sx), Math.max(0,sy), Math.max(1,sw), Math.max(1,sh),
+                    -10, -10, bW + 20, bH + 20);
+      ctx.filter = 'none';
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(0, 0, bW, bH);
+      if (blurEl) blurEl.style.display = 'none';
+    } else if (blurOn && blurEl) {
+      blurEl.style.display = 'block';
+      _posBlur(blurEl);
+      if (canvas) canvas.style.display = 'none';
+    } else {
+      if (blurEl) blurEl.style.display = 'none';
+      if (canvas) canvas.style.display = 'none';
+    }
+
+    // ── Subtitle text: positioned by margin_v from edge, above blur zone ──
+    overlay.style.display    = 'block';
+    overlay.style.fontSize   = scaledFont + 'px';
+    overlay.style.color      = cssColor;
+    // Outline via text-shadow (matches FFmpeg outline rendering)
+    overlay.style.textShadow = [
+      '1px 1px 2px #000', '-1px -1px 2px #000',
+      '1px -1px 2px #000', '-1px 1px 2px #000',
+      '0 2px 4px rgba(0,0,0,0.8)'
+    ].join(',');
+    overlay.style.fontWeight  = '700';
+    overlay.style.fontFamily  = 'Arial, sans-serif';
+    overlay.style.lineHeight  = '1.3';
+    overlay.style.wordBreak   = 'break-word';
+    overlay.style.padding     = '0 12px';
+    overlay.style.background  = 'none';
+
+    if (pos === 'top') {
+      overlay.style.top    = scaledMargin + 'px';
+      overlay.style.bottom = 'auto';
+    } else {
+      overlay.style.bottom = scaledMargin + 'px';
+      overlay.style.top    = 'auto';
+    }
+    overlay.textContent = sample;
+  }
+
+  async function subPreviewFetchFrame() {
+    const source = _getPreviewVideoPath();
+    if (!source) { toast('Chưa có video trong hàng chờ hoặc chưa chọn file', 'warning'); return; }
+
+    const ts  = parseFloat(document.getElementById('sub-preview-ts')?.value || 5);
+    const img = document.getElementById('sub-preview-img');
+    const ph  = document.getElementById('sub-preview-placeholder');
+    const btn = document.querySelector('[onclick="subPreviewFetchFrame()"]');
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    if (ph)  ph.textContent = 'Đang tải frame...';
+
+    try {
+      let endpoint, body;
+
+      if (source.type === 'file') {
+        endpoint = '/api/video_frame';
+        body = { video_path: source.val, timestamp: ts };
+      } else {
+        // URL: find latest downloaded mp4 in Downloaded folder
+        endpoint = '/api/video_frame_from_url';
+        body = { url: source.val, timestamp: ts };
+      }
+
+      const res  = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.ok && data.image) {
+        if (img) {
+          img.onload = () => {
+            if (document.getElementById('frame-enabled')?.checked) {
+              img.style.display = 'none';
+              framePreviewUpdate();
+            } else {
+              _renderSubOverlay();
+            }
+          };
+          img.src = data.image;
+          img.style.display = 'block';
+        }
+        if (ph) ph.style.display = 'none';
+      } else {
+        if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'Không lấy được frame'; }
+        toast('Không lấy được frame: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
+      toast('Lỗi: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '📷 Lấy frame'; }
+    }
+  }
+
+  function _addCurrentToQueue() {
+    const urlEl  = document.getElementById('proc-url');
+    const pathEl = document.getElementById('proc-video');
+    const url    = urlEl?.value?.trim();
+    const path   = pathEl?.value?.trim();
+
+    if (!url && !path) { toast('Vui lòng nhập URL hoặc chọn file video', 'warning'); return; }
+
+    if (url) {
+      window._batchQueue.push({ id: 'bt-' + Date.now(), type: 'url', val: url, status: 'pending' });
+      urlEl.value = '';
+      toast('✅ Đã thêm URL vào hàng chờ', 'success');
+    } else {
+      window._batchQueue.push({ id: 'bt-' + Date.now(), type: 'file', val: path, status: 'pending' });
+      toast('✅ Đã thêm file vào hàng chờ', 'success');
+    }
+    _renderBatchQueue();
+
+    // Auto-fetch preview frame from first queue item
+    setTimeout(() => subPreviewFetchFrame(), 300);
+  }
+
+  // Re-render overlay on resize
+  window.addEventListener('resize', () => {
+    if (document.getElementById('sub-preview-img')?.style.display !== 'none') _renderSubOverlay();
+    framePreviewUpdate();
+  });
+
+  // Re-render when "Che phụ đề gốc" checkbox changes
+  document.addEventListener('DOMContentLoaded', () => {
+    const blurChk = document.getElementById('proc-blur-original');
+    if (blurChk) blurChk.addEventListener('change', () => _renderSubOverlay());
+  });
+
+  /* ════════════════════════════════════════════════════════
+     FRAME VIDEO EDITOR — Canvas Preview
+  ════════════════════════════════════════════════════════ */
+  window._frameLogoImg  = null;
+  window._frameLogoFile = null;
+
+  function frameSetLogo(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    window._frameLogoFile = file;
+    document.getElementById('frame-logo-path').value = file.name;
+
+    // Upload to server immediately so backend can use it
+    const form = new FormData();
+    form.append('file', file);
+    form.append('type', 'logo');
+    fetch('/api/upload_anti_fp_image', { method: 'POST', body: form })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          // Store server path as data attribute
+          document.getElementById('frame-logo-path').dataset.serverPath = d.path;
+        }
+      }).catch(() => {});
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => { window._frameLogoImg = img; framePreviewUpdate(); };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  function _roundRect(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y,     x + w, y + r,     r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x,     y + h, x,     y + h - r, r);
+    ctx.lineTo(x,     y + r);
+    ctx.arcTo(x,     y,     x + r, y,         r);
+    ctx.closePath();
+  }
+
+  function framePreviewUpdate() {
+    if (!document.getElementById('frame-enabled')?.checked) return;
+    const srcImg = document.getElementById('sub-preview-img');
+    if (!srcImg || !srcImg.complete || !srcImg.naturalWidth) return;
+    _drawFramePreview(srcImg);
+  }
+
+  function _drawFramePreview(srcImg) {
+    const canvas = document.getElementById('frame-preview-canvas');
+    if (!canvas) return;
+
+    const title       = document.getElementById('frame-title')?.value || '';
+    const titleSizePct= parseFloat(document.getElementById('frame-title-size')?.value || 5);
+    const titleColor  = document.getElementById('frame-title-color')?.value || '#ff0000';
+    const blurWPct    = parseFloat(document.getElementById('frame-blur-w')?.value || 15) / 100;
+    const blurOpacity = parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100;
+    const logoSizePct = parseFloat(document.getElementById('frame-logo-size')?.value || 12) / 100;
+    const logoTopPct  = parseFloat(document.getElementById('frame-logo-top')?.value || 3) / 100;
+    const logoLeftPct = parseFloat(document.getElementById('frame-logo-left')?.value || 3) / 100;
+    const logoRadiusPct = parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50) / 100;
+    const blurMode    = document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay';
+
+    const srcNW = srcImg.naturalWidth  || 640;
+    const srcNH = srcImg.naturalHeight || 360;
+    const wrap  = document.getElementById('sub-preview-wrap');
+    const wrapW = wrap?.offsetWidth || 640;
+
+    // Title bar
+    const titleFontPx = Math.max(10, Math.round(wrapW * titleSizePct / 100));
+    const titleBarH   = Math.round(titleFontPx * 2.4);
+
+    // Side blur width in preview pixels
+    const sideW = Math.round(wrapW * blurWPct);
+
+    // ── Mode: overlay — blur overlaps video, canvas = wrapW × (titleBarH + vidH) ──
+    // ── Mode: expand  — blur outside video, canvas = wrapW × (titleBarH + vidH),
+    //                    video shrinks to fit center ──
+    let cW, cH, vidX, vidY, vidW, vidH;
+
+    if (blurMode === 'expand') {
+      // Video area = wrapW - 2*sideW, keep AR
+      vidW = Math.max(10, wrapW - 2 * sideW);
+      vidH = Math.round(vidW * srcNH / srcNW);
+      vidX = sideW;
+      vidY = titleBarH;
+      cW   = wrapW;
+      cH   = titleBarH + vidH;
+    } else {
+      // overlay: video fills full width, blur overlaps
+      vidW = wrapW;
+      vidH = Math.round(wrapW * srcNH / srcNW);
+      vidX = 0;
+      vidY = titleBarH;
+      cW   = wrapW;
+      cH   = titleBarH + vidH;
+    }
+
+    canvas.width  = cW;
+    canvas.height = cH;
+    canvas.style.width  = cW + 'px';
+    canvas.style.height = cH + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, cW, cH);
+
+    // ── Draw main video ──
+    ctx.drawImage(srcImg, vidX, vidY, vidW, vidH);
+
+    // ── Draw blur panels ──
+    if (sideW > 0 && blurOpacity > 0) {
+      if (blurMode === 'expand') {
+        // Blur fills the side strips (outside video)
+        // Left: stretch left edge of video
+        ctx.save();
+        ctx.filter = 'blur(12px)';
+        // Draw a stretched slice of the video's left edge
+        ctx.drawImage(srcImg, 0, 0, Math.min(20, srcNW), srcNH,
+          0, vidY, sideW + 16, vidH);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        ctx.fillRect(0, vidY, sideW, vidH);
+
+        // Right
+        ctx.save();
+        ctx.filter = 'blur(12px)';
+        ctx.drawImage(srcImg, Math.max(0, srcNW - 20), 0, Math.min(20, srcNW), srcNH,
+          cW - sideW - 16, vidY, sideW + 16, vidH);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        ctx.fillRect(cW - sideW, vidY, sideW, vidH);
+      } else {
+        // overlay: blur overlaps left/right of video
+        // Left panel: draw blurred portion of video
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, vidY, sideW, vidH);
+        ctx.clip();
+        ctx.filter = 'blur(12px)';
+        ctx.drawImage(srcImg, vidX - 8, vidY, vidW + 16, vidH);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        ctx.fillRect(0, vidY, sideW, vidH);
+
+        // Right panel
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(cW - sideW, vidY, sideW, vidH);
+        ctx.clip();
+        ctx.filter = 'blur(12px)';
+        ctx.drawImage(srcImg, vidX - 8, vidY, vidW + 16, vidH);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        ctx.fillRect(cW - sideW, vidY, sideW, vidH);
+      }
+    }
+
+    // ── Title bar ──
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cW, titleBarH);
+
+    if (title) {
+      ctx.font = `bold ${titleFontPx}px Arial, sans-serif`;
+      ctx.fillStyle = titleColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const maxW = cW * 0.9;
+      const words = title.split(' ');
+      let lines = [], line = '';
+      for (const w of words) {
+        const test = line ? line + ' ' + w : w;
+        if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+        else line = test;
+      }
+      if (line) lines.push(line);
+      const lH = titleFontPx * 1.3;
+      const startY = (titleBarH - lines.length * lH) / 2 + lH / 2;
+      lines.forEach((l, i) => ctx.fillText(l, cW / 2, startY + i * lH));
+    }
+
+    // ── Logo: % of video height, keep original aspect ratio, position by % ──
+    if (window._frameLogoImg && logoSizePct > 0) {
+      const logoNW = window._frameLogoImg.naturalWidth  || window._frameLogoImg.width;
+      const logoNH = window._frameLogoImg.naturalHeight || window._frameLogoImg.height;
+      const logoAR = logoNW / (logoNH || 1);
+      const lH = Math.max(8, Math.round(vidH * logoSizePct));
+      const lW = Math.round(lH * logoAR);
+      const lX = Math.round(cW * logoLeftPct);
+      const lY = vidY + Math.round(vidH * logoTopPct);
+      // Border radius: % of shorter side (0%=square, 50%=circle)
+      const r  = Math.round(Math.min(lW, lH) * logoRadiusPct);
+      ctx.save();
+      ctx.beginPath();
+      _roundRect(ctx, lX, lY, lW, lH, r);
+      ctx.clip();
+      ctx.drawImage(window._frameLogoImg, lX, lY, lW, lH);
+      ctx.restore();
+    }
+
+    // ── Subtitle overlay on canvas (same as subtitle-only mode) ──
+    _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
+  }
+
+  function _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH) {
+    const sample    = document.getElementById('sub-preview-sample')?.value || '';
+    if (!sample) return;
+
+    const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
+    const marginPct = parseFloat(document.getElementById('proc-margin-v')?.value  || 3);
+    const pos       = document.getElementById('proc-sub-pos')?.value || 'bottom';
+    const cssColor  = (typeof _getSubtitleColor === 'function') ? _getSubtitleColor() : '#ffffff';
+
+    // Scale relative to video area height (same formula as _renderSubOverlay)
+    const scaledFont   = Math.max(6, Math.round(vidH * fontPct   / 100));
+    const scaledMargin = Math.max(2, Math.round(vidH * marginPct / 100));
+
+    ctx.font         = `bold ${scaledFont}px Arial, sans-serif`;
+    ctx.fillStyle    = cssColor;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = pos === 'top' ? 'top' : 'bottom';
+    ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur   = 4;
+    ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1;
+
+    const textX = vidX + vidW / 2;
+    const textY = pos === 'top'
+      ? vidY + scaledMargin
+      : vidY + vidH - scaledMargin;
+
+    // Word wrap within video width
+    const maxW = vidW * 0.9;
+    const words = sample.split(' ');
+    let lines = [], line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+      else line = test;
+    }
+    if (line) lines.push(line);
+
+    const lH = scaledFont * 1.3;
+    if (pos === 'top') {
+      lines.forEach((l, i) => ctx.fillText(l, textX, textY + i * lH));
+    } else {
+      // Draw from bottom up
+      lines.reverse().forEach((l, i) => ctx.fillText(l, textX, textY - i * lH));
+    }
+    ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     SAVE / RESTORE DEFAULTS
+  ════════════════════════════════════════════════════════ */
+  const _PROC_DEFAULTS_KEY = 'proc_settings_defaults_v1';
+
+  // All field IDs to save (id → type)
+  const _PROC_FIELDS = [
+    // Subtitle
+    { id:'proc-burn',           type:'checkbox' },
+    { id:'proc-translate-subs', type:'checkbox' },
+    { id:'proc-burn-vi',        type:'checkbox' },
+    { id:'proc-blur-original',  type:'checkbox' },
+    { id:'proc-font-size',      type:'value' },
+    { id:'proc-font-color',     type:'value' },
+    { id:'proc-font-color-picker', type:'value' },
+    { id:'proc-margin-v',       type:'value' },
+    { id:'proc-sub-pos',        type:'value' },
+    // Voice
+    { id:'proc-voice',          type:'checkbox' },
+    { id:'proc-tts-engine',     type:'value' },
+    { id:'proc-tts-voice',      type:'value' },
+    { id:'proc-tts-pitch',      type:'value' },
+    { id:'proc-tts-rate',       type:'value' },
+    { id:'proc-tts-emotion',    type:'value' },
+    { id:'proc-tts-speed',      type:'value' },
+    { id:'proc-auto-speed',     type:'checkbox' },
+    { id:'proc-keep-bg',        type:'checkbox' },
+    { id:'proc-bg-vol',         type:'value' },
+    // FX
+    { id:'proc-fx-enabled',     type:'checkbox' },
+    { id:'proc-fx-pitch',       type:'value' },
+    { id:'proc-fx-speed',       type:'value' },
+    { id:'proc-fx-bass',        type:'value' },
+    { id:'proc-fx-mid',         type:'value' },
+    { id:'proc-fx-treble',      type:'value' },
+    { id:'proc-fx-comp',        type:'value' },
+    { id:'proc-fx-reverb',      type:'value' },
+    // Frame video
+    { id:'frame-enabled',       type:'checkbox' },
+    { id:'frame-title',         type:'value' },
+    { id:'frame-title-size',    type:'value' },
+    { id:'frame-title-color',   type:'value' },
+    { id:'frame-blur-w',        type:'value' },
+    { id:'frame-blur-opacity',  type:'value' },
+    { id:'frame-logo-size',     type:'value' },
+    { id:'frame-logo-top',      type:'value' },
+    { id:'frame-logo-left',     type:'value' },
+    // Output dir
+    { id:'proc-out',            type:'value' },
+  ];
+
+  function procSaveDefaults() {
+    const data = {};
+    _PROC_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      data[f.id] = f.type === 'checkbox' ? el.checked : el.value;
+    });
+    // Save blur mode radio
+    const blurMode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value;
+    if (blurMode) data['frame-blur-mode'] = blurMode;
+
+    try {
+      localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data));
+      toast('✅ Đã lưu cài đặt mặc định', 'success');
+    } catch (e) {
+      toast('Lỗi lưu: ' + e.message, 'error');
+    }
+  }
+
+  function procRestoreDefaults() {
+    try {
+      const raw = localStorage.getItem(_PROC_DEFAULTS_KEY);
+      if (!raw) { toast('Chưa có cài đặt mặc định nào được lưu', 'warning'); return; }
+      const data = JSON.parse(raw);
+      _PROC_FIELDS.forEach(f => {
+        const el = document.getElementById(f.id);
+        if (!el || !(f.id in data)) return;
+        if (f.type === 'checkbox') el.checked = data[f.id];
+        else el.value = data[f.id];
+        // Trigger change events for dependent UI
+        el.dispatchEvent(new Event('change'));
+        el.dispatchEvent(new Event('input'));
+      });
+      // Restore blur mode radio
+      if (data['frame-blur-mode']) {
+        const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
+        if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+      }
+      // Sync voice options after restore
+      if (typeof _syncVoiceOptions === 'function') {
+        _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+      }
+      toast('✅ Đã khôi phục cài đặt mặc định', 'success');
+    } catch (e) {
+      toast('Lỗi khôi phục: ' + e.message, 'error');
+    }
+  }
+
+  // Auto-restore on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      const raw = localStorage.getItem(_PROC_DEFAULTS_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        _PROC_FIELDS.forEach(f => {
+          const el = document.getElementById(f.id);
+          if (!el || !(f.id in data)) return;
+          if (f.type === 'checkbox') el.checked = data[f.id];
+          else el.value = data[f.id];
+        });
+        if (data['frame-blur-mode']) {
+          const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
+          if (radio) radio.checked = true;
+        }
+        if (typeof _syncVoiceOptions === 'function') {
+          _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+        }
+        if (typeof _syncColorPicker === 'function') _syncColorPicker();
+      }
+    } catch (_) {}
+  });
+
+  function frameToggle() {
+    const enabled = document.getElementById('frame-enabled')?.checked;
+    const controls = document.getElementById('frame-controls');
+    if (controls) controls.style.display = enabled ? 'block' : 'none';
+
+    const img    = document.getElementById('sub-preview-img');
+    const canvas = document.getElementById('frame-preview-canvas');
+    const blurC  = document.getElementById('sub-preview-blur-canvas');
+    const blurD  = document.getElementById('sub-preview-blur');
+    const text   = document.getElementById('sub-preview-text');
+
+    if (enabled) {
+      // Frame mode: hide subtitle DOM overlays (subtitle drawn on canvas instead)
+      if (blurC)  blurC.style.display  = 'none';
+      if (blurD)  blurD.style.display  = 'none';
+      if (text)   text.style.display   = 'none';
+      if (canvas) canvas.style.display = 'block';
+      // Keep img hidden but loaded as source
+      if (img)    img.style.display    = 'none';
+      framePreviewUpdate();
+    } else {
+      // Subtitle mode: hide frame canvas, show img + overlays
+      if (canvas) canvas.style.display = 'none';
+      if (img && img.src && img.src !== window.location.href) {
+        img.style.display = 'block';
+        _renderSubOverlay();
+      }
+    }
+  }
+
+  // Auto-update frame preview when frame-enabled toggled
+  document.addEventListener('DOMContentLoaded', () => {
+    // frame-enabled change is handled by inline onchange="frameToggle()"
+    const blurChk = document.getElementById('proc-blur-original');
+    if (blurChk) blurChk.addEventListener('change', () => _renderSubOverlay());
+  });
   </script>
+
+<style>
+.sub-preview-box {
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--bg3);
+}
+.sub-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#sub-preview-wrap {
+  border: 1px solid #333;
+  user-select: none;
+}
+#sub-preview-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+</style>
 </div>

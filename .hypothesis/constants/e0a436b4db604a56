@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\url_parser.py
-# hypothesis_version: 6.151.10
-
-['/collection/(\\d+)', '/mix/(\\d+)', '/music/(\\d+)', '/video/(\\d+)', 'URLParser', 'aweme_id', 'collection', 'gallery', 'mix_id', 'modal_id=(\\d+)', 'music', 'music_id', 'note_id', 'original_url', 'sec_uid', 'type', 'user', 'video']

@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\__init__.py
-# hypothesis_version: 6.151.10
-
-['DouyinAPIClient', 'DownloaderFactory', 'MixDownloader', 'MusicDownloader', 'URLParser']

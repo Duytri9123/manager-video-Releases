@@ -1,0 +1,369 @@
+"""TTS Blueprint — /api/tts_preview, /api/tts_from_ass, /api/hf_voices/* routes."""
+import asyncio
+import io
+import json
+import shutil
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from flask import Blueprint, jsonify, request, send_file, Response
+from flask import stream_with_context
+from core_app import load_cfg, LOGGER, ROOT, VOICES_DIR
+
+bp = Blueprint("tts", __name__)
+
+
+# ── /api/tts_preview ─────────────────────────────────────────────────────────
+@bp.route("/api/tts_preview", methods=["POST"])
+def tts_preview():
+    data = request.json or {}
+    text = str(data.get("text") or "").strip()
+    tts_engine = str(data.get("tts_engine") or "edge-tts").strip().lower()
+    tts_voice = str(data.get("tts_voice") or "banmai").strip()
+    tts_pitch = str(data.get("tts_pitch") or "+0Hz").strip()
+    tts_rate = str(data.get("tts_rate") or "+0%").strip()
+    tts_emotion = str(data.get("tts_emotion") or "default").strip()
+
+    if not text:
+        return jsonify({"ok": False, "error": "Text preview is empty"}), 400
+
+    try:
+        from core.video_processor import _tts_edge, _tts_gtts, _tts_fpt_ai, FPT_TTS_DEFAULT_KEY
+        cfg = load_cfg()
+        vp_cfg = cfg.get("video_process") or {}
+        fpt_api_key = (
+            str(data.get("fpt_api_key") or "").strip()
+            or str(vp_cfg.get("fpt_api_key") or "").strip()
+            or FPT_TTS_DEFAULT_KEY
+        )
+        fpt_speed = int(data.get("fpt_speed") or 0)
+
+        fx_enabled = bool(data.get("fx_enabled", False))
+        fx_params = {
+            "pitch":   float(data.get("fx_pitch",  1.5)),
+            "speed":   float(data.get("fx_speed",  1.08)),
+            "bass":    float(data.get("fx_bass",   -2)),
+            "mid":     float(data.get("fx_mid",    2)),
+            "treble":  float(data.get("fx_treble", 3)),
+            "comp":    str(data.get("fx_comp",     "none")),
+            "reverb":  float(data.get("fx_reverb", 0)),
+        }
+
+        with tempfile.TemporaryDirectory(prefix="tts_preview_") as tmpdir:
+            out_path = Path(tmpdir) / "preview.mp3"
+            try:
+                if tts_engine == "gtts":
+                    ok = _tts_gtts(text, "vi", out_path)
+                elif tts_engine == "fpt-ai":
+                    ok = asyncio.run(_tts_fpt_ai(text, tts_voice, out_path, fpt_api_key, fpt_speed))
+                elif tts_engine == "minimax":
+                    from core.video_processor import _tts_minimax
+                    ok = asyncio.run(_tts_minimax(text, tts_voice, out_path))
+                elif tts_engine == "huggingface":
+                    return jsonify({"ok": False, "error": "HuggingFace TTS not supported in this version"}), 400
+                else:
+                    ok = asyncio.run(_tts_edge(text, tts_voice, out_path, rate=tts_rate, pitch=tts_pitch, style=tts_emotion))
+            except Exception as inner_e:
+                return jsonify({"ok": False, "error": f"TTS generation failed: {str(inner_e)}"}), 500
+
+            if not ok or (not out_path.exists()) or out_path.stat().st_size <= 0:
+                return jsonify({"ok": False, "error": "Unable to synthesize preview audio (empty file)"}), 500
+
+            if fx_enabled:
+                from core.video_processor import find_ffmpeg, apply_audio_effects
+                ffmpeg = find_ffmpeg()
+                if ffmpeg:
+                    fx_out = Path(tmpdir) / "preview_fx.mp3"
+                    try:
+                        apply_audio_effects(
+                            input_path=out_path,
+                            output_path=fx_out,
+                            ffmpeg=ffmpeg,
+                            pitch_semitones=fx_params["pitch"],
+                            speed=fx_params["speed"],
+                            bass=int(fx_params["bass"]),
+                            mid=int(fx_params["mid"]),
+                            treble=int(fx_params["treble"]),
+                            compression=fx_params["comp"],
+                            reverb=int(fx_params["reverb"]),
+                        )
+                        if fx_out.exists() and fx_out.stat().st_size > 0:
+                            out_path = fx_out
+                    except Exception:
+                        pass  # fallback to non-fx audio
+
+            audio_data = io.BytesIO(out_path.read_bytes())
+            audio_data.seek(0)
+            return send_file(audio_data, mimetype="audio/mpeg", as_attachment=False, download_name="preview.mp3")
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── /api/tts_from_ass ─────────────────────────────────────────────────────────
+@bp.route("/api/tts_from_ass", methods=["POST"])
+def tts_from_ass():
+    import asyncio as _asyncio
+    from core.video_processor import (
+        find_ffmpeg, FPT_TTS_DEFAULT_KEY,
+        _parse_ass_file, MultiProviderTTS, _run_ffmpeg,
+    )
+
+    data = {}
+    if request.form:
+        data.update(request.form.to_dict(flat=True))
+    if request.is_json:
+        data.update(request.get_json(silent=True) or {})
+
+    uploaded_file = request.files.get("ass_file") if request.files else None
+    ass_path = None
+    tmp_upload_dir = None
+
+    if uploaded_file and uploaded_file.filename:
+        tmp_upload_dir = Path(tempfile.mkdtemp(prefix="tts_ass_upload_"))
+        ass_path = tmp_upload_dir / uploaded_file.filename
+        uploaded_file.save(str(ass_path))
+        if not str(data.get("output_dir") or "").strip():
+            data["output_dir"] = str(ROOT / "Downloaded")
+    else:
+        ass_path = Path(str(data.get("ass_path") or "").strip())
+
+    tts_engine  = str(data.get("tts_engine")  or "edge-tts").lower()
+    tts_voice   = str(data.get("tts_voice")   or "vi-VN-HoaiMyNeural")
+    tts_pitch   = str(data.get("tts_pitch")   or "+0Hz")
+    tts_rate    = str(data.get("tts_rate")    or "+0%")
+    tts_emotion = str(data.get("tts_emotion") or "default")
+    fx_enabled  = str(data.get("fx_enabled")  or "false").lower() in ("true", "1")
+    fx_params = {
+        "pitch":       float(data.get("fx_pitch")   or 1.5),
+        "speed":       float(data.get("fx_speed")   or 1.08),
+        "bass":        int(float(data.get("fx_bass")    or -2)),
+        "mid":         int(float(data.get("fx_mid")     or 2)),
+        "treble":      int(float(data.get("fx_treble")  or 3)),
+        "compression": str(data.get("fx_comp")    or "light"),
+        "reverb":      int(float(data.get("fx_reverb")  or 5)),
+    }
+    output_dir = str(data.get("output_dir") or "").strip()
+
+    cfg = load_cfg()
+    vp_cfg = cfg.get("video_process") or {}
+    fpt_api_key = (
+        str(data.get("fpt_api_key") or "").strip()
+        or str(vp_cfg.get("fpt_api_key") or "").strip()
+        or FPT_TTS_DEFAULT_KEY
+    )
+
+    def _emit(log_lines: list, msg: str, level: str = "info", pct: int = None):
+        log_lines.append(f"[{level.upper()}] {msg}")
+        payload = {"log": msg, "level": level}
+        if pct is not None:
+            payload["overall"] = pct
+            payload["overall_lbl"] = msg
+        return json.dumps(payload, ensure_ascii=False) + "\n"
+
+    def generate():
+        log_lines = []
+        ffmpeg = find_ffmpeg()
+
+        if not ffmpeg:
+            yield _emit(log_lines, "FFmpeg không tìm thấy.", "error", 0)
+            return
+
+        if not ass_path or not ass_path.exists():
+            yield _emit(log_lines, f"File .ass không tồn tại: {ass_path}", "error", 0)
+            return
+
+        if output_dir:
+            out_dir = Path(output_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            out_dir = ass_path.parent
+
+        out_mp3 = out_dir / (ass_path.stem + "_tts.mp3")
+        log_file = out_dir / (ass_path.stem + "_tts.log")
+
+        yield _emit(log_lines, f"📂 File ASS: {ass_path}", "info", 0)
+        yield _emit(log_lines, f"📁 Thư mục xuất: {out_dir}", "info", 2)
+
+        try:
+            segments = _parse_ass_file(ass_path)
+            if not segments:
+                yield _emit(log_lines, "Không tìm thấy dialogue trong file .ass", "error", 0)
+                return
+
+            yield _emit(log_lines, f"✅ Đọc được {len(segments)} đoạn từ file .ass", "info", 5)
+
+            with tempfile.TemporaryDirectory(prefix="tts_ass_") as tmpdir:
+                tmpdir = Path(tmpdir)
+                tts = MultiProviderTTS(
+                    voice=tts_voice, engine=tts_engine,
+                    fpt_api_key=fpt_api_key, fpt_speed=0,
+                    pitch=tts_pitch, rate=tts_rate, style=tts_emotion,
+                )
+                translations = [s.get("text", "") for s in segments]
+
+                yield _emit(log_lines, f"🎙 Bắt đầu tổng hợp giọng ({tts_engine}, {tts_voice})...", "info", 10)
+
+                clips = _asyncio.run(tts.generate_all(
+                    segments, translations, tmpdir,
+                    max_concurrency=2, retries=2,
+                    tts_speed=1.0, auto_speed=False, ffmpeg=ffmpeg,
+                    fx_enabled=fx_enabled, fx_params=fx_params,
+                ))
+
+                if not clips:
+                    yield _emit(log_lines, "Không tạo được clip TTS nào.", "error", 0)
+                    return
+
+                yield _emit(log_lines, f"✅ Tổng hợp xong {len(clips)} clip", "info", 70)
+
+                if fx_enabled:
+                    yield _emit(log_lines, "🎛 Đã áp dụng hiệu ứng FX vào từng clip", "info", 75)
+
+                yield _emit(log_lines, "🔗 Đang ghép các clip thành file MP3...", "info", 80)
+                concat_list = tmpdir / "concat.txt"
+                with open(str(concat_list), "w", encoding="utf-8") as f:
+                    for c in clips:
+                        f.write(f"file '{str(c['path']).replace(chr(92), '/')}'\n")
+
+                ok, err = _run_ffmpeg([
+                    ffmpeg, "-f", "concat", "-safe", "0",
+                    "-i", str(concat_list),
+                    "-c:a", "libmp3lame", "-b:a", "128k",
+                    str(out_mp3), "-y", "-loglevel", "error"
+                ])
+
+                if not ok:
+                    yield _emit(log_lines, f"❌ Ghép MP3 thất bại: {err}", "error", 0)
+                    return
+
+            yield _emit(log_lines, f"✅ Hoàn thành! File MP3: {out_mp3}", "success", 100)
+            yield json.dumps({"ok": True, "output_path": str(out_mp3), "clips": len(clips)}, ensure_ascii=False) + "\n"
+
+        except Exception as exc:
+            LOGGER.exception("tts_from_ass error")
+            yield _emit(log_lines, f"❌ Lỗi: {exc}", "error", 0)
+        finally:
+            try:
+                with open(str(log_file), "w", encoding="utf-8") as lf:
+                    lf.write(f"=== TTS from ASS — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+                    lf.write(f"ASS: {ass_path}\n")
+                    lf.write(f"Engine: {tts_engine} | Voice: {tts_voice} | FX: {fx_enabled}\n\n")
+                    lf.write("\n".join(log_lines))
+                    lf.write("\n")
+            except Exception:
+                pass
+            if tmp_upload_dir:
+                shutil.rmtree(str(tmp_upload_dir), ignore_errors=True)
+
+    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+
+
+# ── /api/hf_voices ────────────────────────────────────────────────────────────
+@bp.route("/api/hf_voices", methods=["GET"])
+def list_hf_voices():
+    voices = []
+    for f in VOICES_DIR.glob("*"):
+        if f.suffix in (".npy", ".pt"):
+            voices.append({"name": f.name, "path": str(f.absolute())})
+    return jsonify({"ok": True, "voices": voices})
+
+
+@bp.route("/api/hf_voices/upload", methods=["POST"])
+def upload_hf_voice():
+    import os
+    import sys
+    import types
+    import subprocess
+    import numpy as np
+    from werkzeug.utils import secure_filename
+
+    if "audio" not in request.files:
+        return jsonify({"ok": False, "error": "No audio file uploaded"}), 400
+    file = request.files["audio"]
+    name = str(request.form.get("name") or "voice").strip()
+    name = secure_filename(name)
+    if not name:
+        name = "voice"
+    if not name.endswith(".npy"):
+        name += ".npy"
+
+    out_path = VOICES_DIR / name
+    if out_path.exists():
+        return jsonify({"ok": False, "error": "Tên giọng này đã tồn tại"}), 400
+
+    try:
+        import torch
+        import torchaudio
+
+        mock_m = types.ModuleType("mock_m")
+        sys.modules["k2"] = mock_m
+        for sub in ["k2", "k2_fsa", "nlp"]:
+            sys.modules[f"speechbrain.integrations.{sub}"] = mock_m
+        from speechbrain.inference.speaker import EncoderClassifier
+
+        if os.name == "nt":
+            import shutil as _shutil
+            if not hasattr(os, "_orig_symlink_patched"):
+                os._orig_symlink_patched = True
+                _orig_symlink = os.symlink
+                def _force_copy_symlink(src, dst, target_is_directory=False, **kwargs):
+                    try:
+                        _orig_symlink(src, dst, target_is_directory=target_is_directory, **kwargs)
+                    except OSError:
+                        if target_is_directory:
+                            _shutil.copytree(src, dst, dirs_exist_ok=True)
+                        else:
+                            _shutil.copy2(src, dst)
+                os.symlink = _force_copy_symlink
+
+        with tempfile.NamedTemporaryFile(suffix=".tmp", delete=False) as tmp_in:
+            in_path = tmp_in.name
+            file.save(in_path)
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_out:
+            wav_path = tmp_out.name
+
+        try:
+            from core.video_processor import find_ffmpeg
+            ffmpeg = find_ffmpeg()
+            subprocess.run(
+                [ffmpeg, "-y", "-i", in_path, "-ar", "16000", "-ac", "1", wav_path],
+                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"Lỗi covert audio bằng ffmpeg: {e}"}), 400
+
+        classifier = EncoderClassifier.from_hparams(
+            source="speechbrain/spkrec-xvect-voxceleb", savedir="tmpdir"
+        )
+        signal, fs = torchaudio.load(wav_path, backend="soundfile")
+        if signal.shape[0] > 1:
+            signal = torch.mean(signal, dim=0, keepdim=True)
+
+        embeddings = classifier.encode_batch(signal)
+        embeddings = embeddings.squeeze(1).detach().cpu().numpy()
+        np.save(str(out_path), embeddings)
+
+        try:
+            os.unlink(in_path)
+            os.unlink(wav_path)
+        except Exception:
+            pass
+
+        return jsonify({"ok": True, "name": name, "path": str(out_path.absolute())})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/hf_voices/<name>", methods=["DELETE"])
+def delete_hf_voice(name):
+    from werkzeug.utils import secure_filename
+    safe_name = secure_filename(name)
+    target = VOICES_DIR / safe_name
+    if target.exists() and target.is_file():
+        try:
+            target.unlink()
+            return jsonify({"ok": True})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": False, "error": "Not found"}), 404

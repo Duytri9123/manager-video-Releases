@@ -1,0 +1,580 @@
+<!-- PAGE: PUBLISH VIDEO -->
+<div id="page-publish" class="page">
+  <div class="page-layout-2col">
+    
+    <!-- LEFT COLUMN: MEDIA & AI CONTENT -->
+    <div class="col-left">
+      <div class="card premium-card">
+        <div class="card-header">
+          <span class="card-title"><span class="nav-icon" style="margin-right:8px">📤</span>Đăng video lên đa nền tảng</span>
+        </div>
+        
+        <div class="card-body">
+          <!-- File selection group -->
+          <div class="content-group">
+            <div class="section-title">📁 Chọn tệp tin</div>
+            
+            <div class="field">
+              <label>🎬 File video <span class="text-red">*</span></label>
+              <div class="input-with-button">
+                <input type="text" id="pub-video-path" placeholder="Chọn file video hoặc nhập đường dẫn..." readonly>
+                <button class="btn btn-secondary" onclick="document.getElementById('pub-video-file').click()">📂 Duyệt</button>
+                <input type="file" id="pub-video-file" accept="video/*" style="display:none" onchange="_pubSetVideoFile(this)">
+              </div>
+            </div>
+
+            <div class="field">
+              <label>📝 File phụ đề (.srt / .ass)</label>
+              <div class="input-with-button">
+                <input type="text" id="pub-sub-path" placeholder="Chọn file phụ đề (tùy chọn)..." readonly>
+                <button class="btn btn-secondary" onclick="document.getElementById('pub-sub-file').click()">📂 Duyệt</button>
+                <input type="file" id="pub-sub-file" accept=".srt,.ass" style="display:none" onchange="_pubSetSubFile(this)">
+              </div>
+            </div>
+          </div>
+
+          <!-- AI content generation -->
+          <div class="ai-generation-box">
+            <div class="ai-header">
+              <div class="ai-title">🤖 AI Phân tích & Sáng tạo</div>
+              <div class="ai-controls">
+                <select id="pub-ai-provider" class="pub-select-sm">
+                  <option value="deepseek" selected>DeepSeek</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="groq">Groq</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" onclick="_pubLoadSubContent()">📥 Nhập từ phụ đề</button>
+              </div>
+            </div>
+            
+            <div class="field">
+              <textarea id="pub-content-input" rows="4" placeholder="Dán nội dung video hoặc phụ đề vào đây để AI phân tích tiêu đề, mô tả và hashtag..."></textarea>
+            </div>
+            
+            <button class="btn btn-primary w-full" id="btn-pub-analyze" onclick="pubAnalyzeContent()">
+              ✨ Xử lý & Tạo nội dung bằng AI
+            </button>
+            <div id="pub-analyze-status" class="status-msg"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: PLATFORM CONFIGURATION -->
+    <div class="col-right">
+      <div class="card premium-card">
+        <div class="platform-tabs-header">
+          <div class="platform-tab active" id="pub-tab-yt" onclick="pubSwitchTab('youtube')">
+            <span class="yt-color">▶</span><span>YouTube</span>
+            <div class="tab-toggle" id="pub-toggle-yt" onclick="event.stopPropagation();pubTogglePlatform('youtube')">✓</div>
+          </div>
+          <div class="platform-tab" id="pub-tab-tt" onclick="pubSwitchTab('tiktok')">
+            <span class="tt-color">🎵</span><span>TikTok</span>
+            <div class="tab-toggle" id="pub-toggle-tt" onclick="event.stopPropagation();pubTogglePlatform('tiktok')">✓</div>
+          </div>
+          <div class="platform-tab" id="pub-tab-fb" onclick="pubSwitchTab('facebook')">
+            <span class="fb-color">📘</span><span>Facebook</span>
+            <div class="tab-toggle" id="pub-toggle-fb" onclick="event.stopPropagation();pubTogglePlatform('facebook')">✓</div>
+          </div>
+        </div>
+
+        <div class="platform-content">
+          <!-- YouTube Panel -->
+          <div id="pub-panel-youtube" class="platform-panel active">
+            <!-- YouTube Auth Status Bar -->
+            <div id="yt-auth-bar" class="yt-auth-bar">
+
+              <!-- Chưa đăng nhập -->
+              <div id="yt-auth-disconnected" class="yt-status-row">
+                <div class="yt-status-icon">▶</div>
+                <div class="yt-status-text">
+                  <div class="yt-status-label">YouTube</div>
+                  <div class="yt-status-sub" style="color:var(--text-muted)">Chưa kết nối</div>
+                </div>
+                <button class="btn btn-sm btn-yt" id="btn-yt-auth" onclick="youtubeLogin()">
+                  🔑 Đăng nhập
+                </button>
+              </div>
+
+              <!-- Đã đăng nhập -->
+              <div id="yt-auth-connected" class="yt-status-row" style="display:none">
+                <div id="yt-ch-avatar-wrap" class="yt-ch-avatar">
+                  <img id="yt-ch-avatar-img" src="" alt="" onerror="this.style.display='none';document.getElementById('yt-ch-avatar-ph').style.display='flex'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">
+                  <div id="yt-ch-avatar-ph" class="yt-ch-avatar-ph">▶</div>
+                </div>
+                <div class="yt-status-text" style="flex:1;min-width:0">
+                  <div class="yt-ch-name" id="yt-ch-name">--</div>
+                  <div class="yt-ch-stats">
+                    <span>👥 <span id="yt-ch-subs">--</span></span>
+                    <span>🎬 <span id="yt-ch-videos">--</span> video</span>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                  <span class="badge badge-green" style="white-space:nowrap">✓ Đã kết nối</span>
+                  <button class="btn btn-sm btn-danger" id="btn-yt-logout" onclick="youtubeLogout()">Đăng xuất</button>
+                </div>
+              </div>
+
+            </div>
+
+            <div class="field">
+              <label>Tiêu đề YouTube</label>
+              <input type="text" id="yt-title" placeholder="Nhập tiêu đề video...">
+            </div>
+
+            <div class="field">
+              <label>Mô tả video</label>
+              <textarea id="yt-desc" rows="4" placeholder="Nhập mô tả video..."></textarea>
+            </div>
+
+            <div class="field">
+              <label>Tags (cách nhau bằng dấu phẩy)</label>
+              <input type="text" id="yt-tags" placeholder="tag1, tag2, tag3...">
+            </div>
+
+            <div class="settings-grid">
+              <div class="field">
+                <label>Chế độ hiển thị</label>
+                <select id="yt-privacy" onchange="toggleYtScheduleDisplay()">
+                  <option value="private" selected>🔒 Riêng tư</option>
+                  <option value="unlisted">🔗 Không công khai</option>
+                  <option value="public">🌐 Công khai</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>&nbsp;</label>
+                <label class="check-item w-full" style="height: 38px; margin: 0;">
+                  <input type="checkbox" id="yt-is-short"><span>📱 YouTube Shorts</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- YouTube Schedule Section -->
+            <div id="yt-schedule-wrap" class="schedule-box">
+              <label class="check-item mb-8">
+                <input type="checkbox" id="yt-use-schedule" onchange="toggleYtScheduleFields()">
+                <span>📅 Đặt lịch đăng video</span>
+              </label>
+              <div id="yt-schedule-fields" class="settings-grid" style="display:none; margin-top: 10px;">
+                <div class="field">
+                  <label>Ngày đăng</label>
+                  <input type="date" id="yt-sched-date">
+                </div>
+                <div class="field">
+                  <label>Giờ đăng</label>
+                  <input type="time" id="yt-sched-time">
+                </div>
+              </div>
+              <div class="text-xs text-muted mt-4">
+                * Lưu ý: YouTube yêu cầu video phải ở chế độ <b>Riêng tư</b> khi đặt lịch.
+              </div>
+            </div>
+
+            <button class="btn btn-lg btn-yt w-full mt-12" id="btn-yt-upload" onclick="pubUploadYouTube()">
+              🚀 Bắt đầu Đăng lên YouTube
+            </button>
+            
+            <div class="log-box mt-12" id="yt-upload-log" style="height:120px;display:none"></div>
+          </div>
+
+          <!-- TikTok Panel -->
+          <div id="pub-panel-tiktok" class="platform-panel">
+            <div class="platform-header-row">
+              <div class="platform-name"><span class="tt-color">🎵</span> TikTok</div>
+              <div class="badge badge-accent">Đăng qua trình duyệt</div>
+            </div>
+
+            <div class="field">
+              <label>Caption TikTok</label>
+              <input type="text" id="tt-title" placeholder="Nhập caption...">
+            </div>
+
+            <div class="field">
+              <label>Hashtags</label>
+              <input type="text" id="tt-tags" placeholder="#douyin #vietsub #viral">
+            </div>
+
+            <div class="field">
+              <label>Mô tả thêm</label>
+              <textarea id="tt-desc" rows="3" placeholder="Thông tin thêm..."></textarea>
+            </div>
+
+            <div class="field">
+              <label>Quyền riêng tư</label>
+              <select id="tt-privacy">
+                <option value="PUBLIC_TO_EVERYONE" selected>🌐 Công khai</option>
+                <option value="FRIENDS">👥 Bạn bè</option>
+                <option value="SELF_ONLY">🔒 Chỉ mình tôi</option>
+              </select>
+            </div>
+
+            <button class="btn btn-lg btn-tt w-full mt-8" onclick="pubOpenTikTok()">
+              🎵 Mở TikTok & Copy nội dung
+            </button>
+          </div>
+
+          <!-- Facebook Panel -->
+          <div id="pub-panel-facebook" class="platform-panel">
+
+            <!-- Chưa kết nối -->
+            <div id="pub-fb-disconnected">
+              <div class="platform-header-row">
+                <div class="platform-name"><span class="fb-color">📘</span> Facebook</div>
+                <span class="badge badge-gray">Chưa kết nối</span>
+              </div>
+              <div class="alert-info mb-12" style="font-size:12px">
+                Nhập <b>User Access Token</b> từ
+                <a href="https://developers.facebook.com/tools/explorer/" target="_blank" style="color:var(--accent)">Graph API Explorer</a>
+                để kết nối và đăng video lên Pages.
+              </div>
+              <div class="field">
+                <label>User Access Token</label>
+                <div style="display:flex;gap:8px">
+                  <input type="password" id="pub-fb-token-input"
+                    placeholder="EAAxxxxxxx..."
+                    style="flex:1;font-family:monospace;font-size:11px">
+                  <button class="btn btn-sm btn-secondary" onclick="pubFbToggleToken()">👁</button>
+                </div>
+              </div>
+              <button class="btn btn-primary w-full mt-8" id="btn-pub-fb-connect" onclick="pubFbConnect()">
+                🔗 Kết nối Facebook
+              </button>
+            </div>
+
+            <!-- Đã kết nối -->
+            <div id="pub-fb-connected" style="display:none">
+              <div class="platform-header-row">
+                <div class="platform-name"><span class="fb-color">📘</span> Facebook</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span class="badge badge-green">✓ <span id="pub-fb-user-name">--</span></span>
+                  <button class="btn btn-sm btn-danger" onclick="pubFbDisconnect()">Ngắt</button>
+                </div>
+              </div>
+
+              <!-- Chọn Page -->
+              <div class="field">
+                <label>📄 Đăng lên Page</label>
+                <select id="pub-fb-page-select" onchange="pubFbOnPageChange()">
+                  <option value="">-- Chọn Page --</option>
+                </select>
+              </div>
+
+              <!-- Nội dung -->
+              <div class="field">
+                <label>Tiêu đề video</label>
+                <input type="text" id="fb-title" placeholder="Tiêu đề...">
+              </div>
+
+              <div class="field">
+                <label>Mô tả / Caption</label>
+                <textarea id="fb-desc" rows="4" placeholder="Nội dung bài đăng, hashtag..."></textarea>
+              </div>
+
+              <!-- Chế độ + Lịch đăng -->
+              <div class="settings-grid" style="margin-top:8px">
+                <div class="field">
+                  <label>🔒 Chế độ đăng</label>
+                  <select id="pub-fb-privacy">
+                    <option value="EVERYONE" selected>🌐 Công khai</option>
+                    <option value="FRIENDS">👥 Bạn bè</option>
+                    <option value="ONLY_ME">🔒 Chỉ mình tôi</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>&nbsp;</label>
+                  <label class="check-item" style="height:38px;margin:0">
+                    <input type="checkbox" id="pub-fb-use-schedule" onchange="pubFbToggleSchedule()">
+                    <span>📅 Đặt lịch đăng</span>
+                  </label>
+                </div>
+              </div>
+              <div id="pub-fb-schedule-fields" style="display:none;margin-top:8px">
+                <input type="datetime-local" id="pub-fb-schedule-dt" style="width:100%">
+                <div class="text-xs text-muted mt-4">Để trống = đăng ngay lập tức</div>
+              </div>
+
+              <button class="btn btn-lg btn-fb w-full mt-12" id="btn-pub-fb-upload" onclick="pubUploadFacebook()">
+                🚀 Đăng Video lên Facebook
+              </button>
+
+              <div class="log-box mt-12" id="fb-upload-log" style="height:120px;display:none"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="log-box mt-12" id="pub-log" style="height:120px;display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* CSS bổ sung cho Page Publish Premium */
+.premium-card {
+  box-shadow: 0 10px 25px rgba(26,115,232,0.08);
+  border: 1px solid rgba(26,115,232,0.15);
+  transition: all 0.3s ease;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.input-with-button input {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-generation-box {
+  background: linear-gradient(135deg, #f0f7ff 0%, #e1effe 100%);
+  border: 1.5px solid rgba(26,115,232,0.2);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 20px;
+}
+
+.ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ai-title {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.ai-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.pub-select-sm {
+  width: auto !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+}
+
+.status-msg {
+  font-size: 11px;
+  margin-top: 8px;
+  min-height: 16px;
+}
+
+.platform-tabs-header {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+.platform-tab {
+  flex: 1;
+  padding: 12px;
+  text-align: center;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  position: relative;
+  background: var(--bg3);
+}
+
+.platform-tab:hover {
+  border-color: var(--accent2);
+  background: var(--accent-light);
+}
+
+.platform-tab.active {
+  border-color: var(--accent);
+  background: white;
+  box-shadow: 0 4px 12px rgba(26,115,232,0.15);
+  transform: translateY(-2px);
+}
+
+.platform-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg3);
+  border-radius: 8px;
+}
+
+.platform-name {
+  font-weight: 700;
+  font-size: 16px;
+  flex: 1;
+}
+
+.channel-info {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  text-align: right;
+  margin-right: 10px;
+}
+
+.ch-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.flex-end {
+  display: flex;
+  align-items: flex-end;
+}
+
+.schedule-box {
+  background: #fff9eb;
+  border: 1px solid #ffeeba;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 15px;
+}
+
+.schedule-box input {
+  width: 100%;
+}
+
+.check-item {
+  background: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-sizing: border-box;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.check-item:hover {
+  background: white;
+  border-color: var(--accent);
+}
+
+.check-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.w-full { width: 100% !important; justify-content: center; }
+
+.btn-yt { background: #ff0000; color: white; border: none; }
+.btn-yt:hover { background: #cc0000; }
+.btn-tt { background: #000000; color: white; border: none; }
+.btn-tt:hover { background: #333333; }
+.btn-fb { background: #1877f2; color: white; border: none; }
+.btn-fb:hover { background: #145dbf; }
+
+/* ── Facebook AI box ── */
+.fb-ai-box {
+  background: linear-gradient(135deg,#f0f7ff,#e1effe);
+  border: 1.5px solid rgba(26,115,232,.2);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.fb-ai-box textarea {
+  background: #fff;
+  font-size: 12px;
+  min-height: 60px;
+}
+
+@media (max-width: 480px) {
+  .settings-grid { grid-template-columns: 1fr; }
+  .platform-tabs-header { gap: 5px; }
+  .platform-tab { padding: 8px 4px; font-size: 11px; }
+}
+
+/* ── YouTube Auth Status Bar ── */
+.yt-auth-bar {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.yt-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.yt-status-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ff0000;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.yt-status-text { flex: 1; min-width: 0; }
+.yt-status-label { font-weight: 700; font-size: 14px; color: var(--text); }
+.yt-status-sub { font-size: 11px; margin-top: 1px; }
+.yt-ch-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #ff0000;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+.yt-ch-avatar-ph {
+  width: 100%;
+  height: 100%;
+  background: #ff0000;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+.yt-ch-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.yt-ch-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+</style>

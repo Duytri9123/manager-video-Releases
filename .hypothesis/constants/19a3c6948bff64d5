@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\user_modes\post_strategy.py
-# hypothesis_version: 6.151.10
-
-['PostUserModeStrategy', 'create_time', 'get_user_post', 'has_more', 'increase', 'max_cursor', 'number', 'post', 'status_code', 'uid', '分页受限，尝试浏览器回补', '分页抓取中', '拉取作品列表']

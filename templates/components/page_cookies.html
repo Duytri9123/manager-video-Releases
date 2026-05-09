@@ -1,50 +1,93 @@
-      <!-- PAGE: COOKIES -->
-      <div id="page-cookies" class="page">
-        <div class="card">
-          <div class="card-header"><span class="card-title" data-i18n="lbl_cookie_mode">Chế độ Cookie</span></div>
-          <div class="flex-center gap-12 mb-12">
-            <label class="toggle-wrap">
-              <input type="checkbox" class="toggle-input" id="ck-mode-toggle" onchange="onCookieModeChange()">
-              <div class="toggle"></div>
-              <span class="toggle-label" data-i18n="lbl_use_custom">Dùng Cookie tùy chỉnh</span>
-            </label>
-            <span id="ck-mode-badge" class="badge" style="color:var(--text2)" data-i18n="lbl_cookie_default">Mặc định</span>
-          </div>
-          <div class="text-sm text-muted" id="ck-mode-desc" data-i18n="lbl_cookie_default_desc">Đang dùng cookie mặc định</div>
-        </div>
-        <div id="ck-custom-wrap" style="display:none">
-          <div class="card">
-            <div class="card-header"><span class="card-title" data-i18n="lbl_parse_browser">Phân tích từ trình duyệt</span></div>
-            <div class="field">
-              <label data-i18n="lbl_paste_cookie">Dán chuỗi cookie từ DevTools</label>
-              <textarea id="ck-raw" placeholder="ttwid=...; odin_tt=...; passport_csrf_token=..."></textarea>
-            </div>
-            <div class="btn-group">
-              <button class="btn btn-secondary" onclick="parseCookie()" data-i18n="btn_parse">Phân tích</button>
-              <button class="btn btn-secondary" onclick="autoFetch()" data-i18n="btn_auto_fetch">Tự động lấy</button>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title" data-i18n="lbl_cookie_fields">Các trường Cookie</span>
-              <div class="card-actions">
-                <div class="status-bar" id="ck-status"><span class="dot dot-yellow"></span><span data-i18n="lbl_not_validated">Chưa xác thực</span></div>
-              </div>
-            </div>
-            <div class="grid-2">
-              <div class="field"><label>ttwid</label><input type="text" id="ck-ttwid" placeholder="1|..."></div>
-              <div class="field"><label>odin_tt</label><input type="text" id="ck-odin_tt"></div>
-              <div class="field"><label>passport_csrf_token</label><input type="text" id="ck-passport_csrf_token"></div>
-              <div class="field"><label>msToken</label><input type="text" id="ck-msToken"></div>
-              <div class="field"><label>sid_guard</label><input type="text" id="ck-sid_guard"></div>
-              <div class="field"><label>s_v_web_id</label><input type="text" id="ck-s_v_web_id"></div>
-              <div class="field"><label>__ac_nonce</label><input type="text" id="ck-__ac_nonce"></div>
-              <div class="field"><label>__ac_signature</label><input type="text" id="ck-__ac_signature"></div>
-            </div>
-            <div class="btn-group mt-8">
-              <button class="btn btn-primary" onclick="saveCookies()" data-i18n="btn_save">Lưu</button>
-              <button class="btn btn-secondary" onclick="validateCookie()" data-i18n="btn_validate">Xác thực</button>
-            </div>
-          </div>
+﻿<!-- PAGE: COOKIES -->
+<div id="page-cookies" class="page">
+
+  <!-- Mode toggle card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🍪 Chế độ Cookie</span>
+      <div class="card-actions">
+        <span class="badge badge-accent" id="ck-mode-badge" data-i18n="lbl_cookie_default">Mặc định</span>
+      </div>
+    </div>
+    <div class="flex-between mb-8">
+      <div>
+        <div class="text-sm" id="ck-mode-desc" data-i18n="lbl_cookie_default_desc">Sử dụng cookie mặc định từ hệ thống.</div>
+      </div>
+      <label class="toggle-wrap">
+        <input type="checkbox" class="toggle-input" id="ck-mode-toggle" onchange="onCookieModeChange()">
+        <div class="toggle"></div>
+        <span class="toggle-label text-sm">Cookie tùy chỉnh</span>
+      </label>
+    </div>
+    <div id="ck-custom-wrap" style="display:none">
+      <div class="alert-info">Đang dùng cookie tùy chỉnh. Điền các trường bên dưới và nhấn Lưu.</div>
+    </div>
+  </div>
+
+  <!-- Parse card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📋 Phân tích Cookie</span>
+    </div>
+    <div class="field">
+      <label>Dán chuỗi cookie thô vào đây</label>
+      <textarea id="ck-raw" rows="3" placeholder="ttwid=xxx; odin_tt=xxx; passport_csrf_token=xxx; ..."></textarea>
+    </div>
+    <div class="btn-group mt-8">
+      <button class="btn btn-primary btn-sm" onclick="parseCookie()">🔍 Phân tích</button>
+      <button class="btn btn-secondary btn-sm" onclick="autoFetch()">⚡ Tự động lấy</button>
+    </div>
+  </div>
+
+  <!-- Fields card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🔑 Các trường Cookie</span>
+      <div class="card-actions">
+        <div class="status-bar" id="ck-status">
+          <span class="dot dot-gray"></span>
+          <span class="text-xs text-muted">Chưa kiểm tra</span>
         </div>
       </div>
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label>ttwid</label>
+        <input type="text" id="ck-ttwid" placeholder="ttwid value...">
+      </div>
+      <div class="field">
+        <label>odin_tt</label>
+        <input type="text" id="ck-odin_tt" placeholder="odin_tt value...">
+      </div>
+      <div class="field">
+        <label>passport_csrf_token</label>
+        <input type="text" id="ck-passport_csrf_token" placeholder="csrf token...">
+      </div>
+      <div class="field">
+        <label>msToken</label>
+        <input type="text" id="ck-msToken" placeholder="msToken value...">
+      </div>
+      <div class="field">
+        <label>sid_guard</label>
+        <input type="text" id="ck-sid_guard" placeholder="sid_guard value...">
+      </div>
+      <div class="field">
+        <label>s_v_web_id</label>
+        <input type="text" id="ck-s_v_web_id" placeholder="s_v_web_id value...">
+      </div>
+      <div class="field">
+        <label>__ac_nonce</label>
+        <input type="text" id="ck-__ac_nonce" placeholder="__ac_nonce value...">
+      </div>
+      <div class="field">
+        <label>__ac_signature</label>
+        <input type="text" id="ck-__ac_signature" placeholder="__ac_signature value...">
+      </div>
+    </div>
+    <div class="btn-group mt-12">
+      <button class="btn btn-primary" onclick="saveCookies()">💾 Lưu Cookie</button>
+      <button class="btn btn-secondary" onclick="validateCookie()">✅ Kiểm tra hợp lệ</button>
+    </div>
+  </div>
+
+</div>

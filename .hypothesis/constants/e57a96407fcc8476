@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\utils\validators.py
-# hypothesis_version: 6.151.10
-
-['._- ', '/collection/', '/gallery/', '/mix/', '/music/', '/note/', '/slides/', '/user/', '/video/', '[\\s_]+', '_', 'collection', 'gallery', 'music', 'untitled', 'user', 'v.douyin.com', 'video']

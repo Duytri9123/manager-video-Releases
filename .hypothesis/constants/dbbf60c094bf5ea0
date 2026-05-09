@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\utils\__init__.py
-# hypothesis_version: 6.151.10
-
-['XBogus', 'format_size', 'generate_x_bogus', 'parse_timestamp', 'sanitize_filename', 'setup_logger', 'validate_url']

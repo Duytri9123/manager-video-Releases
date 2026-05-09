@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\user_modes\base_strategy.py
-# hypothesis_version: 6.151.10
-
-['UserDownloader', 'UserModeStrategy', 'aweme', 'aweme_detail', 'aweme_id', 'aweme_info', 'aweme_list', 'create_time', 'has_more', 'id', 'increase', 'items', 'max_cursor', 'nickname', 'number', 'raw', 'risk_flags', 'status_code', 'uid', 'unknown']

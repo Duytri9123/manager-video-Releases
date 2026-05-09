@@ -292,7 +292,8 @@ function _renderVideos() {
 
   if (!page.length) { grid.innerHTML = '<div class="empty-state">Không có video</div>'; return; }
 
-  grid.innerHTML = page.map((v, idx) => {
+  // Build HTML — use data-aweme-id to avoid full re-render flicker
+  const newHtml = page.map((v, idx) => {
     const thumb = v.cover ? '/api/proxy_image?url=' + encodeURIComponent(v.cover) : '';
     const inQueue = _isAwemeInQueue(v.aweme_id);
     if (inQueue) _selectedIds.delete(v.aweme_id);
@@ -301,10 +302,11 @@ function _renderVideos() {
     const descVi = (_viEnabled && v.desc_vi) ? v.desc_vi : '';
     const durTxt = fmtDur(v.duration);
     const durationLabel = v.type === 'video' ? (durTxt || '--:--') : '';
-    const loadAttr = 'eager';
-    return '<div class="vcard' + (sel ? ' selected' : '') + (inQueue ? ' in-queue' : '') + '" onclick="toggleSelect(\'' + v.aweme_id + '\')">' +
+    return '<div class="vcard' + (sel ? ' selected' : '') + (inQueue ? ' in-queue' : '') + '" data-aweme="' + v.aweme_id + '" onclick="toggleSelect(\'' + v.aweme_id + '\')">' +
       '<div class="vcard-thumb">' +
-        (thumb ? '<img src="' + thumb + '" loading="' + loadAttr + '">' : '<div class="vcard-thumb-ph">&#127916;</div>') +
+        (thumb
+          ? '<img src="' + thumb + '" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;display:block">'
+          : '<div class="vcard-thumb-ph">&#127916;</div>') +
         '<div class="vcard-check">' + (sel ? '&#10003;' : '') + '</div>' +
         (inQueue ? '<span class="vcard-lock">&#128274;</span>' : '') +
         (v.type === 'gallery' ? '<span class="vcard-type badge-gallery">&#128247;</span>' : '') +
@@ -322,6 +324,23 @@ function _renderVideos() {
       '</div>' +
     '</div>';
   }).join('');
+
+  // Only update DOM if content actually changed (prevents image flicker on re-render)
+  if (grid.dataset.lastHtml !== newHtml) {
+    grid.dataset.lastHtml = newHtml;
+    grid.innerHTML = newHtml;
+  } else {
+    // Content same — just update selected/queue states without full re-render
+    grid.querySelectorAll('.vcard').forEach(card => {
+      const id = card.dataset.aweme;
+      if (!id) return;
+      const inQ = _isAwemeInQueue(id);
+      const sel2 = !inQ && _selectedIds.has(id);
+      card.className = 'vcard' + (sel2 ? ' selected' : '') + (inQ ? ' in-queue' : '');
+      const chk = card.querySelector('.vcard-check');
+      if (chk) chk.innerHTML = sel2 ? '&#10003;' : '';
+    });
+  }
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(list.length / _userPageSize));
@@ -361,6 +380,38 @@ function _updateSelCount() {
   if (el) el.textContent = _selectedIds.size;
   const btn = document.getElementById('btn-dl-selected');
   if (btn) btn.classList.toggle('hidden', _selectedIds.size === 0);
+}
+
+function addSelectedToProcessQueue() {
+  const selected = _userVideos.filter(v => _selectedIds.has(v.aweme_id));
+  if (!selected.length) return;
+
+  // Ensure _batchQueue exists (defined in page_process.html script)
+  if (!window._batchQueue) window._batchQueue = [];
+
+  let added = 0;
+  selected.forEach(v => {
+    const url = 'https://www.douyin.com/video/' + v.aweme_id;
+    // Avoid duplicates
+    if (!window._batchQueue.find(t => t.val === url)) {
+      window._batchQueue.push({
+        id: 'bt-' + Date.now() + '-' + v.aweme_id,
+        type: 'url',
+        val: url,
+        status: 'pending',
+        desc: v.desc_vi || v.desc || url,
+      });
+      added++;
+    }
+  });
+
+  if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
+  toast(`✅ Đã thêm ${added} video vào hàng chờ xử lý`, 'success');
+
+  // Switch to process page
+  if (added > 0) {
+    switchPage('process');
+  }
 }
 
 async function downloadSelected() {

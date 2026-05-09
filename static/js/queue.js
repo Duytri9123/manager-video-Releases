@@ -266,6 +266,9 @@ function _runSingleQueueItem(item, index, total) {
                 window._publishLastOutputPath = d.file_path;
                 window._ytLastOutputPath = d.file_path;
               }
+              if (d.subtitle_path) {
+                window._publishLastSubtitlePath = d.subtitle_path;
+              }
             } catch (_) {}
           });
           read();
@@ -349,4 +352,26 @@ async function _runQueueViaProcessApi() {
   _setProcProgress(hasFailed ? 0 : 100, hasFailed ? 'Hoàn tất có lỗi' : 'Hoàn tất hàng chờ');
   renderQueue();
   toast(hasFailed ? 'Hàng chờ hoàn tất, có mục lỗi' : 'Hàng chờ đã hoàn tất', hasFailed ? 'warning' : 'success');
+
+  const doneActions = document.getElementById('dl-done-actions');
+  if (doneActions && !hasFailed) doneActions.style.display = 'block';
+}
+
+function sendLastDownloadedToPublish() {
+  if (!window._publishLastOutputPath) {
+    toast('Không tìm thấy đường dẫn video vừa tải', 'warning');
+    return;
+  }
+  if (typeof sendToPublish === 'function') {
+    sendToPublish(window._publishLastOutputPath);
+  } else {
+    // Fallback if not globally available
+    const pathInput = document.getElementById('pub-video-path');
+    if (pathInput) {
+      pathInput.value = window._publishLastOutputPath;
+      window._pubVideoFile = null;
+      toast('✅ Đã thêm dữ liệu vào Đăng video', 'success');
+      if (typeof switchPage === 'function') switchPage('publish');
+    }
+  }
 }

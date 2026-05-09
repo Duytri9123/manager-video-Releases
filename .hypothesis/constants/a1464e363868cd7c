@@ -1,4 +1,0 @@
-# file: C:\Users\QUANG HUAN\PycharmProjects\douyin-downloader\core\music_downloader.py
-# hypothesis_version: 6.151.10
-
-['%Y-%m-%d', '.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav', 'MusicDownloader', 'audio_url', 'author', 'author_id', 'author_name', 'aweme', 'aweme_id', 'aweme_list', 'aweme_type', 'cover', 'cover_large', 'cover_thumb', 'create_time', 'date', 'desc', 'failed', 'file_names', 'file_path', 'file_paths', 'folderstyle', 'get_music_aweme', 'get_music_detail', 'items', 'json', 'media_type', 'metadata', 'music', 'music_id', 'music_info', 'music_name', 'nickname', 'owner', 'play_url', 'play_url_lowbr', 'skipped', 'success', 'title', '下载音乐', '单音乐下载']
