@@ -85,6 +85,50 @@ function _pCountHashtags(str) {
   return (String(str).match(/#[^\s#]+/g) || []).length;
 }
 
+/* ──────────────────────────────────────────────────────────────
+   Helpers tránh hashtag trùng giữa caption/title và field hashtags
+   ────────────────────────────────────────────────────────────── */
+function _pStripInlineHashtags(text) {
+  if (!text) return '';
+  // Drop "#abc" tokens, collapse leftover whitespace.
+  return String(text)
+    .replace(/#[^\s#]+/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
+    .trim();
+}
+
+function _pDedupHashtagString(str) {
+  if (!str) return '';
+  const seen = new Set();
+  const out = [];
+  for (const tok of String(str).split(/\s+/)) {
+    if (!tok) continue;
+    const key = tok.toLowerCase().replace(/^#+/, '');
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tok.startsWith('#') ? tok : '#' + tok);
+  }
+  return out.join(' ');
+}
+
+/**
+ * Build a single caption that combines prose (title/description) with the
+ * hashtags field — with hashtags only appearing once. Use this when posting
+ * to TikTok or Facebook to avoid duplicating tags.
+ */
+function _pBuildCaption(prose, hashtagsStr) {
+  const cleanProse = _pStripInlineHashtags(prose || '');
+  const cleanTags  = _pDedupHashtagString(hashtagsStr || '');
+  return [cleanProse, cleanTags].filter(Boolean).join('\n');
+}
+
+// Expose for publish.js (loaded earlier, called later from user actions).
+window._pStripInlineHashtags = _pStripInlineHashtags;
+window._pDedupHashtagString  = _pDedupHashtagString;
+window._pBuildCaption        = _pBuildCaption;
+
 /* ════════════════════════════════════════════════════════════════
    AI ANALYZE & AUTO-FILL from ASS content
 ════════════════════════════════════════════════════════════════ */
@@ -142,28 +186,27 @@ function pPubApplyAIResult(info) {
 
   // ── YouTube ──
   const yt = info.youtube || {};
-  const ytTitle = _pYtTruncateTitle(yt.title || '');
+  const ytTitle = _pYtTruncateTitle(_pStripInlineHashtags(yt.title || ''));
   const fill = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
   const arr  = v => Array.isArray(v) ? v.join(', ') : (v || '');
 
   fill('p-yt-title', ytTitle);
-  fill('p-yt-desc',  yt.description || '');
+  fill('p-yt-desc',  _pStripInlineHashtags(yt.description || ''));
   fill('p-yt-tags',  arr(yt.tags));
   _pUpdateYtTitleCount();
 
   // ── TikTok ──
   const tt = info.tiktok || {};
-  fill('p-tt-title', tt.caption || '');
-  fill('p-tt-desc',  tt.description || '');
+  fill('p-tt-title', _pStripInlineHashtags(tt.caption || ''));
   const ttTags = Array.isArray(tt.hashtags) ? tt.hashtags.join(' ') : (tt.hashtags || '');
-  fill('p-tt-tags',  _pTtLimitHashtags(ttTags, 5));
+  fill('p-tt-tags',  _pTtLimitHashtags(_pDedupHashtagString(ttTags), 5));
   _pUpdateTtTagsCount();
 
   // ── Facebook ──
   const fb = info.facebook || {};
-  fill('p-fb-title', fb.title || '');
+  fill('p-fb-title', _pStripInlineHashtags(fb.title || ''));
   const fbTags = Array.isArray(fb.hashtags) ? fb.hashtags.join(' ') : (fb.hashtags || '');
-  fill('p-fb-desc',  [fb.description, fbTags].filter(Boolean).join('\n\n'));
+  fill('p-fb-tags',  _pDedupHashtagString(fbTags));
 }
 
 function _pUpdateYtTitleCount() {
@@ -685,7 +728,9 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
   }
 
   const title   = document.getElementById('p-fb-title')?.value?.trim() || '';
-  const desc    = document.getElementById('p-fb-desc')?.value?.trim()  || '';
+  const tags    = document.getElementById('p-fb-tags')?.value?.trim()  || '';
+  // Dedup hashtags + strip inline hashtags from title to avoid double-printing.
+  const desc    = _pBuildCaption(title, tags);
   const postTypeRaw = document.getElementById('p-fb-post-type')?.value || 'auto';
 
   let scheduledTime = '';
@@ -1005,9 +1050,8 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
   // caption, then wait for the user to press Post manually. This avoids the
   // "copy caption → paste" chore without violating the ToS by posting for them.
   const caption  = document.getElementById('p-tt-title')?.value?.trim() || '';
-  const desc     = document.getElementById('p-tt-desc')?.value?.trim()  || '';
-  const hashtags = _pTtLimitHashtags(document.getElementById('p-tt-tags')?.value?.trim() || '', 5);
-  const fullCaption = [caption, desc, hashtags].filter(Boolean).join('\n');
+  const hashtags = _pTtLimitHashtags(_pDedupHashtagString(document.getElementById('p-tt-tags')?.value?.trim() || ''), 5);
+  const fullCaption = _pBuildCaption(caption, hashtags);
 
   if (!videoPath) {
     _appendProcLog?.('⚠ TikTok: chưa có file video để upload', 'warning');

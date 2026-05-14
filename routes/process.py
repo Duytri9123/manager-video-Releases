@@ -281,6 +281,30 @@ def upload_anti_fp_image():
     return jsonify({"ok": True, "path": str(save_path)})
 
 
+@bp.route("/api/upload_batch_video", methods=["POST"])
+def upload_batch_video():
+    """Upload a video file for batch publishing. Returns server path."""
+    from utils.validators import sanitize_filename
+
+    upload_file = request.files.get("file") if request.files else None
+    if not upload_file or not upload_file.filename:
+        return jsonify({"ok": False, "error": "No file provided"}), 400
+
+    safe_name = sanitize_filename(upload_file.filename)
+    upload_dir = ROOT / "temp_uploads" / "batch_pub"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    save_path = upload_dir / safe_name
+    # Avoid overwrite
+    if save_path.exists():
+        import time as _time
+        stem = save_path.stem
+        save_path = upload_dir / f"{stem}_{int(_time.time())}{save_path.suffix}"
+
+    upload_file.save(str(save_path))
+    return jsonify({"ok": True, "path": str(save_path)})
+
+
 @bp.route("/api/read_subtitle", methods=["POST"])
 def read_subtitle():
     """Read a subtitle file (.srt, .ass) from local path."""

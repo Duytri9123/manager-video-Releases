@@ -225,6 +225,21 @@ function _buildQueueProcessPayload(videoUrl) {
     // CapCut settings
     capcut_enabled: document.getElementById('dl-capcut-enabled')?.checked ?? false,
     capcut_auto_open: document.getElementById('dl-capcut-auto-open')?.checked ?? false,
+    // Frame video
+    frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
+    frame_title:          document.getElementById('frame-title')?.value || '',
+    frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
+    frame_title_color:    document.getElementById('frame-title-color')?.value || '#000000',
+    frame_title_color_2:  document.getElementById('frame-title-color-2')?.value || '#ff0000',
+    frame_title_split_color: document.getElementById('frame-title-split-color')?.checked ?? true,
+    frame_blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
+    frame_blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
+    frame_blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
+    frame_logo_path:      document.getElementById('frame-logo-path')?.dataset?.serverPath || '',
+    frame_logo_size_pct:  parseFloat(document.getElementById('frame-logo-size')?.value || 12),
+    frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
+    frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
+    frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
   };
 }
 

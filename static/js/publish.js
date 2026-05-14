@@ -161,16 +161,16 @@ async function pubAnalyzeContent() {
 
     const fill = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
     const arr  = v => Array.isArray(v) ? v.join(', ') : (v || '');
+    const stripTags = window._pStripInlineHashtags || (s => String(s || ''));
+    const dedupTags = window._pDedupHashtagString  || (s => String(s || ''));
 
-    fill('yt-title', info.youtube?.title);
-    fill('yt-desc',  info.youtube?.description);
+    fill('yt-title', stripTags(info.youtube?.title));
+    fill('yt-desc',  stripTags(info.youtube?.description));
     fill('yt-tags',  arr(info.youtube?.tags));
-    fill('tt-title', info.tiktok?.caption);
-    fill('tt-desc',  info.tiktok?.description);
-    fill('tt-tags',  Array.isArray(info.tiktok?.hashtags) ? info.tiktok.hashtags.join(' ') : info.tiktok?.hashtags);
-    fill('fb-title', info.facebook?.title);
-    fill('fb-desc',  info.facebook?.description);
-    fill('fb-tags',  Array.isArray(info.facebook?.hashtags) ? info.facebook.hashtags.join(' ') : info.facebook?.hashtags);
+    fill('tt-title', stripTags(info.tiktok?.caption));
+    fill('tt-tags',  dedupTags(Array.isArray(info.tiktok?.hashtags) ? info.tiktok.hashtags.join(' ') : info.tiktok?.hashtags));
+    fill('fb-title', stripTags(info.facebook?.title));
+    fill('fb-tags',  dedupTags(Array.isArray(info.facebook?.hashtags) ? info.facebook.hashtags.join(' ') : info.facebook?.hashtags));
 
     if (status) status.textContent = '✅ Đã điền thông tin';
     toast('✅ AI tạo nội dung thành công!', 'success');
@@ -316,12 +316,10 @@ async function pubUploadYouTube() {
 async function pubOpenTikTok() {
   try {
     const videoPath = document.getElementById('pub-video-path')?.value?.trim();
-    const captionParts = [
-      document.getElementById('tt-title')?.value?.trim(),
-      document.getElementById('tt-desc')?.value?.trim(),
-      document.getElementById('tt-tags')?.value?.trim(),
-    ].filter(Boolean);
-    const caption = captionParts.join('\n');
+    // Use shared helper to dedup hashtags + strip inline tags from caption text
+    const ttTitle = document.getElementById('tt-title')?.value?.trim() || '';
+    const ttTags  = document.getElementById('tt-tags')?.value?.trim()  || '';
+    const caption = (window._pBuildCaption || ((a, b) => [a, b].filter(Boolean).join('\n')))(ttTitle, ttTags);
     const privacy = document.getElementById('tt-privacy')?.value || 'PUBLIC_TO_EVERYONE';
 
     // Parse scheduled time if user enabled it
@@ -515,9 +513,11 @@ async function pubFbGenerateAI() {
 
     const fb = (data.result || {}).facebook || {};
     const fill = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
-    fill('fb-title', fb.title);
+    const stripTags = window._pStripInlineHashtags || (s => String(s || ''));
+    const dedupTags = window._pDedupHashtagString  || (s => String(s || ''));
+    fill('fb-title', stripTags(fb.title));
     const hashtags = Array.isArray(fb.hashtags) ? fb.hashtags.join(' ') : (fb.hashtags || '');
-    fill('fb-desc', [fb.description, hashtags].filter(Boolean).join('\n\n'));
+    fill('fb-tags', dedupTags(hashtags));
 
     if (status) status.textContent = '✅ Đã tạo nội dung';
     toast('✅ AI tạo nội dung Facebook thành công!', 'success');
@@ -604,7 +604,9 @@ async function pubUploadFacebook() {
   } catch (_) { /* ignore — let the real call surface the error */ }
 
   const title    = document.getElementById('fb-title')?.value?.trim() || '';
-  const desc     = document.getElementById('fb-desc')?.value?.trim()  || '';
+  const tags     = document.getElementById('fb-tags')?.value?.trim()  || '';
+  // Dedup hashtags + strip inline hashtags from title to avoid double-printing.
+  const desc     = (window._pBuildCaption || ((a, b) => [a, b].filter(Boolean).join('\n')))(title, tags);
   const postTypeRaw = document.getElementById('pub-fb-post-type')?.value || 'auto';
   const schedVal = document.getElementById('pub-fb-use-schedule')?.checked
                    ? document.getElementById('pub-fb-schedule-dt')?.value : '';

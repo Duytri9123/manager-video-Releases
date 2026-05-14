@@ -193,18 +193,13 @@
             </div>
 
             <div class="field">
-              <label>Caption TikTok</label>
-              <input type="text" id="tt-title" placeholder="Nhập caption...">
+              <label>Nội dung</label>
+              <textarea id="tt-title" rows="3" placeholder="Nhập nội dung video..."></textarea>
             </div>
 
             <div class="field">
               <label>Hashtags</label>
               <input type="text" id="tt-tags" placeholder="#douyin #vietsub #viral">
-            </div>
-
-            <div class="field">
-              <label>Mô tả thêm</label>
-              <textarea id="tt-desc" rows="3" placeholder="Thông tin thêm..."></textarea>
             </div>
 
             <div class="field">
@@ -299,8 +294,8 @@
               </div>
 
               <div class="field">
-                <label>Mô tả / Caption</label>
-                <textarea id="fb-desc" rows="4" placeholder="Nội dung bài đăng, hashtag..."></textarea>
+                <label>Hashtags</label>
+                <input type="text" id="fb-tags" placeholder="#viral #trending #video">
               </div>
 
               <!-- Định dạng + Lịch đăng -->
@@ -341,6 +336,83 @@
 
         <div class="log-box mt-12" id="pub-log" style="height:120px;display:none"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       BATCH PUBLISH — Import nhiều cặp video + ASS
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="card premium-card mt-16" id="batch-publish-card">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span class="card-title">📦 Đăng hàng loạt (Video + ASS)</span>
+      <label class="toggle-wrap">
+        <input type="checkbox" class="toggle-input" id="batch-pub-enabled" onchange="_batchPubToggle()">
+        <div class="toggle"></div>
+        <span class="toggle-label text-sm">Bật</span>
+      </label>
+    </div>
+    <div class="card-body" id="batch-pub-body" style="display:none">
+      <div class="alert-info mb-12" style="font-size:12px">
+        💡 Import nhiều cặp file (1 video + 1 file ASS). AI sẽ đọc nội dung ASS để tự động tạo tiêu đề, mô tả, hashtag cho từng video rồi đăng lên các nền tảng đã bật.
+      </div>
+
+      <!-- Import files -->
+      <div class="field">
+        <label>📂 Chọn nhiều file (video + ASS xen kẽ hoặc cùng tên)</label>
+        <div class="input-with-button">
+          <input type="text" id="batch-pub-info" placeholder="Chưa chọn file..." readonly style="flex:1">
+          <button class="btn btn-secondary" onclick="document.getElementById('batch-pub-files').click()">📂 Chọn files</button>
+          <input type="file" id="batch-pub-files" multiple accept="video/*,.ass,.srt" style="display:none" onchange="_batchPubImportFiles(this)">
+        </div>
+        <div class="text-xs text-muted mt-4">Chọn tất cả video + ASS cùng lúc. Hệ thống tự ghép cặp theo tên file (video.mp4 ↔ video.ass)</div>
+      </div>
+
+      <!-- AI Provider -->
+      <div class="field mt-8">
+        <label>🤖 AI Provider (phân tích nội dung)</label>
+        <select id="batch-pub-ai-provider" style="width:auto">
+          <option value="deepseek" selected>DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="groq">Groq</option>
+        </select>
+      </div>
+
+      <!-- Schedule -->
+      <div class="grid-2 mt-8">
+        <div class="field">
+          <label>📅 Đặt lịch (khoảng cách giờ)</label>
+          <input type="number" id="batch-pub-interval" value="0" min="0" step="0.5" placeholder="0 = đăng ngay">
+          <div class="text-xs text-muted mt-4">0 = đăng ngay tất cả, >0 = cách nhau N giờ</div>
+        </div>
+        <div class="field">
+          <label>Bắt đầu lúc</label>
+          <input type="datetime-local" id="batch-pub-start">
+        </div>
+      </div>
+
+      <!-- Queue list -->
+      <div class="mt-12">
+        <div class="flex-between mb-8">
+          <span style="font-weight:700;font-size:13px">📋 Danh sách (<span id="batch-pub-count">0</span> cặp)</span>
+          <button class="btn btn-danger btn-sm" onclick="_batchPubClear()">🗑 Xóa tất cả</button>
+        </div>
+        <div id="batch-pub-list" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+          <div class="empty-state text-xs" style="padding:20px;text-align:center;color:var(--text-muted)">Chưa có cặp video nào.</div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="btn-group mt-12">
+        <button class="btn btn-primary" id="btn-batch-pub-analyze" onclick="_batchPubAnalyzeAll()" style="flex:1">
+          🤖 AI Phân tích tất cả
+        </button>
+        <button class="btn btn-primary" id="btn-batch-pub-start" onclick="_batchPubStartAll()" style="flex:1;background:#28a745">
+          🚀 Đăng tất cả
+        </button>
+      </div>
+
+      <!-- Log -->
+      <div class="log-box mt-12" id="batch-pub-log" style="height:150px;display:none"></div>
     </div>
   </div>
 </div>

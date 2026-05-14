@@ -38,6 +38,7 @@ _DEFAULT_COOKIES = {
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "douyin-dl-secret"
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 GB max upload
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",

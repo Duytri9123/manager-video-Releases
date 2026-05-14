@@ -279,7 +279,24 @@ class YouTubeUploader:
             video_path = Path(video_path)
             if not video_path.exists():
                 raise FileNotFoundError(f"Video file not found: {video_path}")
-            
+
+            # ── Auto-detect: video < 3 phút → ép YouTube Shorts (9:16) ───────
+            # Quy tắc: video ngắn dưới 3 phút luôn upload ở chế độ 9:16
+            if not is_short:
+                duration = self._probe_duration(video_path)
+                if 0 < duration < 180:
+                    logger.info(
+                        "[Upload] Video %.1fs (< 3 phút) — tự động bật chế độ Shorts 9:16",
+                        duration,
+                    )
+                    is_short = True
+                    if on_progress:
+                        on_progress({
+                            'status': 'auto_short',
+                            'pct': 0,
+                            'message': f'Video {duration:.1f}s < 3 phút — tự động bật Shorts 9:16',
+                        })
+
             # ── Auto-convert to 9:16 for YouTube Shorts ──────────────────────
             upload_path = video_path
             _tmp_vertical = None
@@ -444,6 +461,53 @@ class YouTubeUploader:
             if on_progress:
                 on_progress({'status': 'error', 'message': str(e)})
             raise
+
+    def _probe_duration(self, video_path: Path) -> float:
+        """Return video duration in seconds via ffprobe / ffmpeg. 0.0 if unknown."""
+        import subprocess
+        import re
+        import shutil as _sh
+
+        # Prefer ffprobe (faster, structured output)
+        ffprobe = _sh.which("ffprobe") or _sh.which("ffprobe.exe")
+        if ffprobe:
+            try:
+                out = subprocess.check_output(
+                    [
+                        ffprobe, "-v", "error",
+                        "-show_entries", "format=duration",
+                        "-of", "default=noprint_wrappers=1:nokey=1",
+                        str(video_path),
+                    ],
+                    stderr=subprocess.DEVNULL,
+                    timeout=20,
+                )
+                return float(out.decode("utf-8", errors="ignore").strip() or 0.0)
+            except Exception:
+                pass
+
+        # Fallback to ffmpeg -i parse
+        ffmpeg = _sh.which("ffmpeg") or _sh.which("ffmpeg.exe")
+        if not ffmpeg:
+            return 0.0
+        try:
+            r = subprocess.run(
+                [ffmpeg, "-i", str(video_path)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=20,
+            )
+            info = r.stderr or ""
+            m = re.search(r"Duration:\s*(\d+):(\d+):(\d+)\.(\d+)", info)
+            if m:
+                return (
+                    int(m.group(1)) * 3600
+                    + int(m.group(2)) * 60
+                    + int(m.group(3))
+                    + int(m.group(4)) / 100
+                )
+        except Exception:
+            pass
+        return 0.0
 
     def _ensure_vertical_for_shorts(
         self,

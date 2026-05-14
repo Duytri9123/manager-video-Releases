@@ -448,7 +448,7 @@ function sendToPublish(videoPath) {
     }
     
     // Clear previous info
-    ['yt-title', 'yt-desc', 'yt-tags', 'tt-title', 'tt-desc', 'tt-tags', 'fb-title', 'fb-desc', 'fb-tags', 'pub-content-input'].forEach(id => {
+    ['yt-title', 'yt-desc', 'yt-tags', 'tt-title', 'tt-tags', 'fb-title', 'fb-tags', 'pub-content-input'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -1143,7 +1143,6 @@ function loadPublishSettings() {
     setVal('yt-desc', upload.youtube?.description_template || document.getElementById('yt-desc')?.value || '');
     setVal('yt-privacy', upload.youtube?.privacy_status || document.getElementById('yt-privacy')?.value || 'private');
     setVal('tt-title', upload.tiktok?.title_template || document.getElementById('tt-title')?.value || '');
-    setVal('tt-desc', upload.tiktok?.caption_template || document.getElementById('tt-desc')?.value || '');
     setVal('tt-privacy', upload.tiktok?.privacy_status || document.getElementById('tt-privacy')?.value || 'public');
   }).catch(() => {});
 }
@@ -1236,7 +1235,7 @@ function _getPublishTitle(platform, fallbackPath) {
 }
 
 function _getPublishDescription(platform) {
-  const inputId = platform === 'tiktok' ? 'tt-desc' : 'yt-desc';
+  const inputId = platform === 'tiktok' ? 'tt-title' : 'yt-desc';
   const raw = (document.getElementById(inputId)?.value || '').trim();
   const baseTitle = _getPublishTitle(platform, window._publishLastOutputPath || window._ytLastOutputPath || '');
   return _renderPublishTemplate(raw || '{title}', {
@@ -1749,7 +1748,6 @@ async function savePublishSettings() {
         },
         tiktok: {
           title_template: document.getElementById('tt-title')?.value || '{title}',
-          caption_template: document.getElementById('tt-desc')?.value || '{title}',
           privacy_status: document.getElementById('tt-privacy')?.value || 'public',
         },
       },

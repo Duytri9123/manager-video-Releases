@@ -401,7 +401,28 @@ def fb_post_video():
                     files=files_data,
                     timeout=300,
                 )
-                result = resp.json()
+                # Handle empty or non-JSON responses
+                if not resp.text or not resp.text.strip():
+                    err_reasons = {
+                        413: "Video quá lớn — Facebook giới hạn 10GB cho video thường, 1GB cho Reel.",
+                        400: "Yêu cầu không hợp lệ — kiểm tra lại thông tin video.",
+                        401: "Token hết hạn hoặc không hợp lệ — cần kết nối lại Facebook.",
+                        403: "Không có quyền đăng — kiểm tra quyền pages_manage_posts.",
+                    }
+                    reason = err_reasons.get(resp.status_code, f"Facebook trả về HTTP {resp.status_code} với body rỗng.")
+                    yield send(
+                        log=f"❌ {reason}",
+                        level="error", overall=0, token_error=(resp.status_code in (401, 403)),
+                    )
+                    return
+                try:
+                    result = resp.json()
+                except Exception as _je:
+                    yield send(
+                        log=f"❌ Facebook trả về dữ liệu không hợp lệ (HTTP {resp.status_code}): {resp.text[:200]}",
+                        level="error", overall=0,
+                    )
+                    return
             except ImportError:
                 # Fallback: urllib multipart
                 import urllib.request
