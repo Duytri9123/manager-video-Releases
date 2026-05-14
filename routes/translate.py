@@ -11,13 +11,14 @@ def api_translate_batch():
     data = request.json or {}
     texts = data.get("texts") or []
     provider = data.get("provider", "auto")
+    context = data.get("context", "")
     if not texts:
         return jsonify({"results": [], "provider": "none"})
     cfg = load_cfg()
     trans_cfg = cfg.get("translation") or {}
     try:
         from utils.translation import translate_texts
-        results, used = translate_texts(texts, trans_cfg, provider)
+        results, used = translate_texts(texts, trans_cfg, provider, context=context)
         return jsonify({"results": results, "provider": used})
     except Exception as e:
         return jsonify({"results": texts, "provider": "error", "error": str(e)})
@@ -28,13 +29,14 @@ def api_translate():
     data = request.json or {}
     text = (data.get("text") or "").strip()
     provider = data.get("provider", "auto")
+    context = data.get("context", "")
     if not text:
         return jsonify({"result": "", "provider": "none"})
     cfg = load_cfg()
     trans_cfg = cfg.get("translation") or {}
     try:
         from utils.translation import translate_texts
-        results, used = translate_texts([text], trans_cfg, provider)
+        results, used = translate_texts([text], trans_cfg, provider, context=context)
         return jsonify({"result": results[0] if results else text, "provider": used})
     except Exception as e:
         return jsonify({"result": text, "provider": "error", "error": str(e)})
@@ -103,27 +105,37 @@ def api_analyze_video_content():
     # Try requested provider first, then fallback
     order = [provider] + [p for p in ["deepseek", "openai", "groq"] if p != provider]
 
-    prompt = f"""Bạn là chuyên gia marketing video. Phân tích nội dung video sau và tạo thông tin đăng cho 3 nền tảng.
+    prompt = f"""Bạn là chuyên gia marketing video trên mạng xã hội Việt Nam. Phân tích nội dung video sau và tạo thông tin đăng cho 3 nền tảng.
 
 NỘI DUNG VIDEO:
 {content[:2000]}
 
+QUY TẮC VỀ TAGS/HASHTAGS:
+- Tags phải KHÔNG DẤU (ví dụ: "xuhuong", "haihuoc", "thunghiem", không phải "xu hướng")
+- Kết hợp tags tiếng Việt không dấu + tags tiếng Anh phổ biến
+- Tags phải phù hợp với nội dung video cụ thể
+- Luôn bao gồm các tags xu hướng: xuhuong, viral, fyp, foryou
+- Thêm tags tiếng Anh liên quan đến thể loại video (experiment, challenge, satisfying, asmr, funny, etc.)
+- Tags ngắn gọn, 1-2 từ, dễ tìm kiếm
+- TikTok hashtags phải có # phía trước, YouTube tags không cần #
+- TikTok CHỈ ĐƯỢC TỐI ĐA 5 hashtags (không hơn!)
+
 Hãy trả về JSON với cấu trúc sau (không có markdown, chỉ JSON thuần):
 {{
   "youtube": {{
-    "title": "Tiêu đề hấp dẫn cho YouTube (tối đa 100 ký tự)",
-    "description": "Mô tả chi tiết cho YouTube (200-500 ký tự, có emoji)",
-    "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+    "title": "Tiêu đề hấp dẫn cho YouTube (tối đa 100 ký tự, tiếng Việt)",
+    "description": "Mô tả chi tiết cho YouTube (200-500 ký tự, có emoji, có hashtags cuối)",
+    "tags": ["xuhuong", "viral", "tag tiếng Việt không dấu", "english tag", "thêm 10-15 tags nữa"]
   }},
   "tiktok": {{
-    "caption": "Caption ngắn gọn cho TikTok (tối đa 150 ký tự)",
+    "caption": "Caption ngắn gọn cho TikTok (tối đa 150 ký tự, tiếng Việt)",
     "description": "Mô tả thêm cho TikTok",
-    "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3", "#hashtag4", "#hashtag5"]
+    "hashtags": ["#xuhuong", "#fyp", "#viral", "#tag_khong_dau", "#english_tag"]
   }},
   "facebook": {{
-    "title": "Tiêu đề bài đăng Facebook",
+    "title": "Tiêu đề bài đăng Facebook (tiếng Việt, hấp dẫn)",
     "description": "Nội dung bài đăng Facebook (150-300 ký tự, thân thiện, có emoji)",
-    "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"]
+    "hashtags": ["#xuhuong", "#viral", "#tag_khong_dau", "#english_tag", "thêm 3-5 hashtags"]
   }}
 }}"""
 

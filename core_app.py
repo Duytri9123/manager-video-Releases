@@ -359,9 +359,19 @@ def _preload_whisper_model():
 _youtube_uploader = None
 
 
-def _get_youtube_uploader():
+def _get_youtube_uploader(account_id: str = None):
     global _youtube_uploader
+    if account_id:
+        # Create a new uploader for specific account (not cached as singleton)
+        from tools.youtube_uploader import YouTubeUploader
+        return YouTubeUploader(client_secrets_file="client_secrets.json", account_id=account_id)
     if _youtube_uploader is None:
         from tools.youtube_uploader import YouTubeUploader
         _youtube_uploader = YouTubeUploader(client_secrets_file="client_secrets.json")
     return _youtube_uploader
+
+
+def _reset_youtube_uploader():
+    """Reset singleton so next call re-reads client_secrets.json."""
+    global _youtube_uploader
+    _youtube_uploader = None

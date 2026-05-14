@@ -16,6 +16,8 @@ def create_app():
     from routes.config import bp as config_bp
     from routes.content import bp as content_bp
     from routes.facebook import bp as facebook_bp
+    from routes.accounts import bp as accounts_bp
+    from routes.tiktok import bp as tiktok_bp
 
     app.register_blueprint(pages_bp)
     app.register_blueprint(queue_bp)
@@ -29,6 +31,8 @@ def create_app():
     app.register_blueprint(config_bp)
     app.register_blueprint(content_bp)
     app.register_blueprint(facebook_bp)
+    app.register_blueprint(accounts_bp)
+    app.register_blueprint(tiktok_bp)
 
     # Register SocketIO event handlers
     register_socketio_handlers()

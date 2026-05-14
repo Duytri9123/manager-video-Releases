@@ -195,6 +195,165 @@ def user_videos():
     return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
 
 
+# ── /api/user_videos_all (browser fallback, NDJSON stream) ───────────────────
+@bp.route("/api/user_videos_all", methods=["POST"])
+def user_videos_all():
+    """Dùng Playwright quét trang user Douyin để lấy đủ aweme_id khi API bị
+    giới hạn pagination. Stream NDJSON về UI để hiển thị tiến độ.
+
+    Payload: { url: str, known_ids?: [str] }
+    """
+    data = request.json or {}
+    url = (data.get("url") or "").strip()
+    known_ids = set(str(x) for x in (data.get("known_ids") or []) if x)
+    if not url:
+        return jsonify({"error": "No URL"}), 400
+
+    import json as _j
+    import queue as _queue
+    import threading as _threading
+
+    # Kiểm tra Playwright có sẵn không — nếu không, trả lỗi ngay.
+    try:
+        import playwright  # noqa: F401
+    except Exception:
+        return jsonify({
+            "error": "Playwright chưa được cài. Chạy: pip install playwright && playwright install chromium",
+        }), 500
+
+    def parse_item(item):
+        cover = _extract_cover(item)
+        ts = item.get("create_time", 0)
+        dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d") if ts else ""
+        return {
+            "aweme_id": item.get("aweme_id", ""),
+            "desc":     (item.get("desc", "") or "")[:80],
+            "cover":    cover,
+            "date":     dt,
+            "ts":       ts,
+            "play":     (item.get("statistics") or {}).get("play_count", 0),
+            "like":     (item.get("statistics") or {}).get("digg_count", 0),
+            "comment":  (item.get("statistics") or {}).get("comment_count", 0),
+            "type":     "gallery" if item.get("images") else "video",
+            "duration": (item.get("video") or {}).get("duration", 0) or
+                        (item.get("video") or {}).get("video_duration", 0) or
+                        item.get("duration", 0) or 0,
+        }
+
+    # Hàng đợi cho cầu async → generator SSE-like
+    q: "_queue.Queue[str]" = _queue.Queue()
+    SENTINEL = object()
+
+    def _emit(kind: str, **payload):
+        payload["kind"] = kind
+        q.put(_j.dumps(payload, ensure_ascii=False) + "\n")
+
+    async def run_fetch():
+        from config import ConfigLoader
+        from auth import CookieManager
+        from core import DouyinAPIClient, URLParser
+        config = ConfigLoader(str(CONFIG_FILE))
+        cm = CookieManager()
+        cm.set_cookies(get_cookies_with_fallback())
+        parsed = URLParser.parse(url)
+        if not parsed or parsed.get("type") != "user":
+            _emit("error", message="Invalid user URL")
+            return
+        sec_uid = parsed.get("sec_uid", "")
+
+        browser_cfg = (config.get("browser_fallback") or {}) if hasattr(config, "get") else {}
+        headless = bool(browser_cfg.get("headless", False))
+        max_scrolls = int(browser_cfg.get("max_scrolls", 240) or 240)
+        idle_rounds = int(browser_cfg.get("idle_rounds", 8) or 8)
+        wait_timeout_seconds = int(browser_cfg.get("wait_timeout_seconds", 600) or 600)
+
+        async with DouyinAPIClient(cm.get_cookies(), proxy=config.get("proxy")) as api:
+            _emit("status", message="Mở trình duyệt để lấy danh sách video...")
+            try:
+                aweme_ids = await api.collect_user_post_ids_via_browser(
+                    sec_uid,
+                    expected_count=0,
+                    headless=headless,
+                    max_scrolls=max_scrolls,
+                    idle_rounds=idle_rounds,
+                    wait_timeout_seconds=wait_timeout_seconds,
+                )
+            except Exception as exc:
+                _emit("error", message=f"Browser fallback lỗi: {exc}")
+                return
+
+            if not aweme_ids:
+                _emit("error", message="Không lấy được video qua trình duyệt (có thể cần đăng nhập hoặc giải captcha).")
+                return
+
+            # Tận dụng items đã bắt được từ network khi scroll (không phải gọi lại API detail)
+            cached_items = {}
+            try:
+                cached_items = api.pop_browser_post_aweme_items() or {}
+            except Exception:
+                cached_items = {}
+
+            missing_ids = [aid for aid in aweme_ids if str(aid) not in known_ids]
+            _emit(
+                "progress",
+                collected=len(aweme_ids),
+                missing=len(missing_ids),
+                cached=len([a for a in missing_ids if str(a) in cached_items]),
+            )
+
+            # Phát video có sẵn từ cache trước (nhanh, không tốn request)
+            emitted_batch = []
+            for aid in missing_ids:
+                item = cached_items.get(str(aid))
+                if not item:
+                    continue
+                emitted_batch.append(parse_item(item))
+                if len(emitted_batch) >= 10:
+                    _emit("videos", videos=emitted_batch)
+                    emitted_batch = []
+            if emitted_batch:
+                _emit("videos", videos=emitted_batch)
+                emitted_batch = []
+
+            # Những id còn lại chưa có item → gọi API detail
+            remaining = [aid for aid in missing_ids if str(aid) not in cached_items]
+            total_remain = len(remaining)
+            for idx, aid in enumerate(remaining, start=1):
+                try:
+                    detail = await api.get_video_detail(str(aid), suppress_error=True)
+                except Exception:
+                    detail = None
+                if detail:
+                    emitted_batch.append(parse_item(detail))
+                if emitted_batch and (len(emitted_batch) >= 5 or idx == total_remain):
+                    _emit("videos", videos=emitted_batch)
+                    emitted_batch = []
+                if idx == 1 or idx == total_remain or idx % 5 == 0:
+                    _emit("progress", fetched=idx, total=total_remain, phase="detail")
+
+            _emit("done", total_ids=len(aweme_ids))
+
+    def worker():
+        try:
+            asyncio.run(run_fetch())
+        except Exception as exc:  # noqa: BLE001
+            _emit("error", message=str(exc))
+        finally:
+            q.put(SENTINEL)
+
+    t = _threading.Thread(target=worker, daemon=True)
+    t.start()
+
+    def generate():
+        while True:
+            chunk = q.get()
+            if chunk is SENTINEL:
+                break
+            yield chunk
+
+    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+
+
 # ── /api/proxy_image ──────────────────────────────────────────────────────────
 @bp.route("/api/proxy_image")
 def proxy_image():

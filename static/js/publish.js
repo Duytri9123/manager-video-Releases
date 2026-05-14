@@ -312,11 +312,101 @@ async function pubUploadYouTube() {
   }
 }
 
-/* ── TikTok / Facebook (manual) ── */
-function pubOpenTikTok() {
-  const caption = [document.getElementById('tt-title')?.value?.trim(), document.getElementById('tt-tags')?.value?.trim()].filter(Boolean).join('\n');
-  if (caption) { try { navigator.clipboard.writeText(caption); toast('📋 Đã copy caption', 'info'); } catch(_){} }
-  window.open('https://www.tiktok.com/upload', '_blank');
+/* ── TikTok (semi-auto via Playwright) ── */
+async function pubOpenTikTok() {
+  try {
+    const videoPath = document.getElementById('pub-video-path')?.value?.trim();
+    const captionParts = [
+      document.getElementById('tt-title')?.value?.trim(),
+      document.getElementById('tt-desc')?.value?.trim(),
+      document.getElementById('tt-tags')?.value?.trim(),
+    ].filter(Boolean);
+    const caption = captionParts.join('\n');
+    const privacy = document.getElementById('tt-privacy')?.value || 'PUBLIC_TO_EVERYONE';
+
+    // Parse scheduled time if user enabled it
+    let scheduledTime = '';
+    if (document.getElementById('pub-tt-use-schedule')?.checked) {
+      const raw = document.getElementById('pub-tt-schedule-dt')?.value;
+      if (!raw) {
+        toast('⚠ Vui lòng chọn ngày giờ đặt lịch', 'warning');
+        return;
+      }
+      // datetime-local returns "YYYY-MM-DDTHH:MM" in local time. Parse as local.
+      const dt = new Date(raw);
+      const minFuture = new Date(Date.now() + 15 * 60 * 1000);
+      if (dt > minFuture) {
+        // Send as ISO (UTC). Backend converts back to local time for TikTok.
+        scheduledTime = dt.toISOString();
+      } else {
+        toast('⚠ Lịch phải ít nhất 15 phút trong tương lai', 'warning');
+        return;
+      }
+    }
+
+    // Always copy caption to clipboard as safety net
+    if (caption) {
+      try { await navigator.clipboard.writeText(caption); } catch (_) {}
+    }
+
+    // If no video path on disk → can't use Playwright (needs a local file path).
+    if (!videoPath) {
+      toast('ℹ Chưa có đường dẫn file video — mở TikTok Studio để bạn kéo-thả thủ công. Caption đã copy.', 'info', 5000);
+      window.open('https://www.tiktok.com/tiktokstudio/upload', '_blank');
+      return;
+    }
+
+    // Use Playwright to open Chromium with persistent profile, attach file + fill caption.
+    const btn = document.querySelector('[onclick*="pubOpenTikTok"]');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang mở Chromium...'; }
+
+    const payload = { video_path: videoPath, caption, privacy };
+    if (scheduledTime) payload.scheduled_time = scheduledTime;
+
+    const r = await fetch('/api/tiktok/prepare_upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
+
+    if (!d.ok) {
+      toast('❌ TikTok: ' + (d.error || 'Lỗi không xác định'), 'error', 8000);
+      return;
+    }
+    const schedMsg = scheduledTime ? ` (có đặt lịch)` : '';
+    toast(`✅ Đã mở Chromium TikTok Studio${schedMsg}. File sẽ tự gắn — hãy chờ rồi nhấn Post.`, 'success', 8000);
+  } catch (e) {
+    console.error('pubOpenTikTok error:', e);
+    toast('❌ TikTok lỗi: ' + (e.message || e), 'error', 8000);
+    const btn = document.querySelector('[onclick*="pubOpenTikTok"]');
+    if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
+  }
+}
+
+function pubTtToggleSchedule() {
+  const checked = document.getElementById('pub-tt-use-schedule')?.checked;
+  const box = document.getElementById('pub-tt-schedule-fields');
+  if (box) box.style.display = checked ? 'block' : 'none';
+
+  // Auto-fill default: now + 30 min (avoids the "15 min future" error)
+  if (checked) {
+    const dtInput = document.getElementById('pub-tt-schedule-dt');
+    if (dtInput && !dtInput.value) {
+      const future = new Date(Date.now() + 30 * 60 * 1000);
+      // toISOString returns UTC; we need local time for datetime-local input
+      const off = future.getTimezoneOffset() * 60 * 1000;
+      const local = new Date(future.getTime() - off);
+      dtInput.value = local.toISOString().slice(0, 16);
+    }
+    // Also set min so user can't pick past times
+    if (dtInput) {
+      const now = new Date(Date.now() + 15 * 60 * 1000);
+      const off = now.getTimezoneOffset() * 60 * 1000;
+      dtInput.min = new Date(now.getTime() - off).toISOString().slice(0, 16);
+    }
+  }
 }
 
 /* ── Facebook API integration (publish page) ── */
@@ -501,9 +591,21 @@ async function pubUploadFacebook() {
   const videoPath = document.getElementById('pub-video-path')?.value?.trim();
   if (!videoFile && !videoPath) { toast('Vui lòng chọn file video trước', 'warning'); return; }
 
+  // Quick preflight: warn early if token is missing required scopes. The actual
+  // publish call will still be attempted so the user can see the real Graph
+  // error, but this saves a minute of uploading the file if token is obviously
+  // broken.
+  try {
+    const d = await fetch('/api/facebook/status').then(r => r.json());
+    if (!d.connected) {
+      toast('⚠ Facebook chưa kết nối — hãy bấm "Kết nối Facebook" trước', 'warning', 6000);
+      return;
+    }
+  } catch (_) { /* ignore — let the real call surface the error */ }
+
   const title    = document.getElementById('fb-title')?.value?.trim() || '';
   const desc     = document.getElementById('fb-desc')?.value?.trim()  || '';
-  const privacy  = document.getElementById('pub-fb-privacy')?.value || 'EVERYONE';
+  const postTypeRaw = document.getElementById('pub-fb-post-type')?.value || 'auto';
   const schedVal = document.getElementById('pub-fb-use-schedule')?.checked
                    ? document.getElementById('pub-fb-schedule-dt')?.value : '';
   let scheduledTime = '';
@@ -515,29 +617,136 @@ async function pubUploadFacebook() {
   }
 
   const btn = document.getElementById('btn-pub-fb-upload');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang đăng...'; }
+  const setBusy = (busy) => {
+    if (btn) { btn.disabled = busy; btn.textContent = busy ? '⏳ Đang đăng...' : '🚀 Đăng Video lên Facebook'; }
+  };
   const logBox = document.getElementById('fb-upload-log');
   if (logBox) { logBox.style.display = 'block'; logBox.innerHTML = ''; }
 
-  try {
+  setBusy(true);
+
+  // ── Auto-detect Reel vs Video (server-side validation of file on disk) ──
+  let postType = postTypeRaw;
+  if (postType === 'auto') {
+    if (videoFile) {
+      _pubFbLog('ℹ Dùng file upload trực tiếp — không auto-detect 9:16, mặc định dạng video thường.', 'info');
+      postType = 'video';
+    } else if (videoPath) {
+      try {
+        const r = await fetch('/api/facebook/validate_reel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_path: videoPath })
+        });
+        const d = await r.json();
+        if (d.is_vertical_9_16 && d.ok) {
+          postType = 'reel';
+          _pubFbLog(`🎬 Video ${d.width}x${d.height} → đăng dạng Reel`, 'info');
+        } else {
+          postType = 'video';
+          if (d.error) _pubFbLog(`ℹ ${d.error} → đăng video thường`, 'info');
+        }
+      } catch (_) {
+        postType = 'video';
+      }
+    } else {
+      postType = 'video';
+    }
+  }
+
+  const endpoint = postType === 'reel'
+    ? '/api/facebook/post_reel'
+    : '/api/facebook/post_video';
+
+  const buildForm = () => {
     const form = new FormData();
     form.append('page_id', pageId);
-    form.append('title', title);
     form.append('description', desc);
-    form.append('privacy', privacy);
     if (scheduledTime) form.append('scheduled_time', scheduledTime);
-    if (videoFile) {
-      form.append('video_file', videoFile);
+    // Only the regular /videos endpoint accepts title and a file upload field
+    if (postType !== 'reel') {
+      form.append('title', title);
+      if (videoFile) form.append('video_file', videoFile);
+      else           form.append('video_path', videoPath);
     } else {
+      // Reel 3-phase flow requires a path on disk (no direct file_upload supported by our impl)
+      if (!videoPath) {
+        throw new Error('Reel cần file trên đĩa — hãy xử lý video trước rồi điền đường dẫn.');
+      }
       form.append('video_path', videoPath);
     }
+    return form;
+  };
 
-    const res = await fetch('/api/facebook/post_video', { method: 'POST', body: form });
-    if (!res.ok || !res.body) throw new Error('Không thể kết nối server');
+  _pubFbLog(`🚀 Đang đăng lên Facebook (${postType === 'reel' ? 'Reel' : 'Video'})...`, 'info');
+
+  // Retry up to 5 times; token errors trigger the modal and don't count against the limit
+  try {
+    let form;
+    try { form = buildForm(); }
+    catch (e) { toast(e.message, 'error'); return; }
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const result = await _pubFbUploadOnce(endpoint, form);
+
+      if (result.success) {
+        toast('✅ Đăng Facebook thành công!', 'success', 6000);
+        return;
+      }
+
+      if (result.tokenError) {
+        // Prefer the shared modal from proc_publish.js
+        if (typeof _pFbShowTokenModal === 'function') {
+          const action = await _pFbShowTokenModal(result.errorMsg || '');
+          if (action === 'retry')  { form = buildForm(); attempt--; continue; }
+          if (action === 'skip')   { _pubFbLog('⏭ Bỏ qua video này', 'warning'); return; }
+          return; // cancel
+        } else {
+          _pubFbLog('❌ Token hết hạn — vui lòng kết nối lại Facebook', 'error');
+          toast('⚠ Token Facebook hết hạn — kết nối lại', 'warning', 6000);
+          return;
+        }
+      }
+
+      // Non-token error — stop retrying
+      if (result.errorMsg) toast('Lỗi: ' + result.errorMsg, 'error');
+      return;
+    }
+    _pubFbLog('❌ Đã thử lại 5 lần nhưng không thành công', 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
+/**
+ * Single Facebook upload attempt.
+ * Returns: { success, tokenError, errorMsg }
+ */
+async function _pubFbUploadOnce(endpoint, form) {
+  const out = { success: false, tokenError: false, errorMsg: '' };
+  try {
+    const res = await fetch(endpoint, { method: 'POST', body: form });
+
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      let tokenError = false;
+      try {
+        const errData = await res.json();
+        errMsg = errData.error || errMsg;
+        tokenError = !!errData.token_error;
+      } catch (_) {}
+      if (res.status === 401) tokenError = true;
+      _pubFbLog('❌ ' + errMsg, 'error');
+      out.errorMsg = errMsg;
+      out.tokenError = tokenError;
+      return out;
+    }
+    if (!res.body) { out.errorMsg = 'Server không trả về stream'; return out; }
 
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
+    let gotOk = false;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -548,15 +757,23 @@ async function pubUploadFacebook() {
         try {
           const d = JSON.parse(t);
           if (d.log) _pubFbLog(d.log, d.level || 'info');
-          if (d.url) { _pubFbLog('🔗 ' + d.url, 'success'); toast('✅ Đăng Facebook thành công!', 'success', 6000); }
+          if (d.url) _pubFbLog('🔗 ' + d.url, 'success');
+          if (d.ok)  gotOk = true;
+          if (d.token_error) {
+            out.tokenError = true;
+            out.errorMsg = d.error || d.log || 'Token hết hạn';
+          } else if (d.error) {
+            out.errorMsg = d.error;
+          }
         } catch (_) { _pubFbLog(t, 'info'); }
       }
     }
+    out.success = gotOk;
+    return out;
   } catch (e) {
     _pubFbLog('❌ ' + e.message, 'error');
-    toast('Lỗi: ' + e.message, 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🚀 Đăng Video lên Facebook'; }
+    out.errorMsg = e.message;
+    return out;
   }
 }
 

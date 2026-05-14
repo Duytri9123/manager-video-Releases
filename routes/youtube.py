@@ -3,7 +3,7 @@ import json as _j
 from pathlib import Path
 from flask import Blueprint, jsonify, request, Response
 from flask import stream_with_context
-from core_app import _get_youtube_uploader, ROOT
+from core_app import _get_youtube_uploader, _reset_youtube_uploader, ROOT
 import os
 
 bp = Blueprint("youtube", __name__)
@@ -166,27 +166,93 @@ def youtube_upload():
         def send(**kw):
             return _j.dumps(kw, ensure_ascii=False) + "\n"
 
-        try:
-            yield send(log="[YouTube] Bắt đầu upload...", level="info")
-            result = uploader.upload_video(
-                video_path=video_path,
-                title=title,
-                description=description,
-                tags=tags,
-                privacy_status=privacy_status,
-                is_short=is_short,
-                publish_at=publish_at,
-            )
+        # Collect progress messages from uploader via queue
+        import queue
+        progress_queue = queue.Queue()
 
+        def _on_progress(info):
+            progress_queue.put(info)
+
+        try:
+            file_size_mb = video_path.stat().st_size / 1024 / 1024
+            yield send(log=f"[YouTube] 📂 Video: {video_path.name} ({file_size_mb:.1f} MB)", level="info")
+            yield send(log=f"[YouTube] 📝 Title: {title[:60]}", level="info")
+            if is_short:
+                yield send(log="[YouTube] 🎬 Mode: YouTube Shorts (sẽ convert 9:16 nếu cần)", level="info")
+            yield send(log=f"[YouTube] 🔒 Privacy: {privacy_status}", level="info")
+            yield send(log="[YouTube] ⏳ Bắt đầu upload...", level="info")
+
+            # Run upload in a thread so we can stream progress
+            import threading
+            result_holder = [None]
+            error_holder = [None]
+
+            def _upload_thread():
+                try:
+                    result_holder[0] = uploader.upload_video(
+                        video_path=video_path,
+                        title=title,
+                        description=description,
+                        tags=tags,
+                        privacy_status=privacy_status,
+                        is_short=is_short,
+                        publish_at=publish_at,
+                        on_progress=_on_progress,
+                    )
+                except Exception as e:
+                    error_holder[0] = e
+                finally:
+                    progress_queue.put(None)  # Signal done
+
+            t = threading.Thread(target=_upload_thread, daemon=True)
+            t.start()
+
+            # Stream progress to frontend
+            last_pct = -1
+            while True:
+                try:
+                    info = progress_queue.get(timeout=1)
+                except queue.Empty:
+                    continue
+
+                if info is None:
+                    break  # Upload thread finished
+
+                status = info.get('status', '')
+                pct = info.get('pct', 0)
+                msg = info.get('message', '')
+
+                if status == 'converting':
+                    yield send(log=f"[YouTube] 🔄 {msg}", level="info")
+                elif status == 'converted':
+                    yield send(log=f"[YouTube] ✓ {msg}", level="success")
+                elif status == 'uploading':
+                    # Only log every 10% to avoid spam
+                    if pct >= last_pct + 10 or pct == 100:
+                        yield send(log=f"[YouTube] ⬆️ Uploading... {pct}%", level="info", progress=pct)
+                        last_pct = pct
+                elif status == 'retrying':
+                    yield send(log=f"[YouTube] ⚠️ {msg}", level="warning")
+                elif status == 'error':
+                    yield send(log=f"[YouTube] ✗ {msg}", level="error")
+                elif status == 'success':
+                    yield send(log="[YouTube] ⬆️ Upload 100%", level="info", progress=100)
+
+            t.join(timeout=5)
+
+            if error_holder[0]:
+                raise error_holder[0]
+
+            result = result_holder[0]
             if result:
                 yield send(
-                    log=f"[YouTube] ✓ Upload thành công! {result['url']}",
+                    log=f"[YouTube] ✅ Upload thành công! {result['url']}",
                     level="success",
                     video_id=result["id"],
                     url=result["url"],
                 )
             else:
-                yield send(log="[YouTube] ✗ Upload thất bại", level="error")
+                yield send(log="[YouTube] ✗ Upload thất bại (không có kết quả)", level="error")
         except Exception as e:
             yield send(log=f"[YouTube] ✗ Lỗi: {str(e)}", level="error")
         finally:
@@ -204,6 +270,7 @@ def youtube_logout():
     """Logout from YouTube (revoke token)."""
     uploader = _get_youtube_uploader()
     if uploader.revoke_auth():
+        _reset_youtube_uploader()  # Reset singleton so new client_secrets is loaded on next login
         return jsonify({"ok": True, "message": "Logged out from YouTube"})
     return jsonify({"ok": False, "error": "Failed to logout"}), 500
 

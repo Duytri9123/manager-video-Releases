@@ -261,6 +261,43 @@
   <!-- SECTION 3: Integration & Upload -->
   <div id="cfg-sec-integration" style="display:none">
 
+    <!-- Hardware Info -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🖥 Phần cứng & FFmpeg Preset</span>
+      </div>
+      <div class="card-body">
+        <div id="hardware-info-display">
+          <span class="text-xs text-muted">Đang tải thông tin phần cứng...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Multi-Account Management -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">👥 Quản lý tài khoản</span>
+        <div class="card-actions">
+          <button class="btn btn-secondary btn-sm" onclick="migrateExistingAccounts()" title="Migrate tài khoản cũ sang hệ thống mới">
+            🔄 Migrate
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="accounts-management-panel">
+          <span class="text-xs text-muted">Đang tải...</span>
+        </div>
+        <div class="btn-group mt-12">
+          <button class="btn btn-secondary btn-sm" onclick="addFacebookAccount()">
+            📘 Thêm Facebook
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="if(typeof youtubeLogin==='function')youtubeLogin()">
+            📺 Thêm YouTube
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header">
         <span class="card-title">🔑 Cấu hình YouTube API</span>

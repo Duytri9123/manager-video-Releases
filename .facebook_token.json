@@ -1,12 +1,25 @@
 {
-  "user_token": "EAAS5DC5i6TwBRcvqFlrIiiatKaIKIwZCEQB4XWCpGKkN2iPg2D2c5GxjMTWNfOJ8mJVcIt6TXZBJ0yVfgzIMEvTJ82JJliu7hdnlIQEzzxkAxuYsi5ZASR3Iq9A6ylTCkPjKqjndDcAXgzLqFMe8lE3rQN8ItgUmdu4s1gZCdoyS4a6yTWKZC4v3WfH3RXimhCZAmq2DrLska89nJjX88xiOje6wmbE85DMlspZBrWStDZBw0xtK2V2mgfZAe92c4n7eB9QZAomoiCxHPko8RkPfZC5NQZDZD",
+  "user_token": "EAAS5DC5i6TwBRQvZA3sIZAnKUPITZB4gG6tOjFGuztPprT5UgZAWQZCdwpXpybb90be9f3ngBWTIlSyTpuP5wKmbphsD4GT1o860JC21ZCBH0lzxkVybrKswLSXmroidUt0EOKuW8zye4du7O93wmCnDescCUOKYZBH8g50UrpMMh6MaAJL77JGgbuoz53aBtfrvJTAP5BkmxYpyPfJYkFD1YzGbEucZCdaf8qduvZBPf47JeVXC0h7ZCNxERlZBcte6LYM08TjSqmZByN1y9XsaZCFcR",
   "user_id": "1509611477502530",
   "user_name": "Nguyễn Duy Trí",
+  "token_type": "USER",
+  "granted_perms": [
+    "business_management",
+    "catalog_management",
+    "leads_retrieval",
+    "pages_manage_ads",
+    "pages_manage_posts",
+    "pages_read_engagement",
+    "pages_show_list",
+    "public_profile",
+    "publish_video"
+  ],
+  "missing_perms": [],
   "pages": [
     {
       "id": "1111623275360249",
       "name": "Gió Sông",
-      "access_token": "EAAS5DC5i6TwBRT3ggu3hYiULFucolvQRYxYS2V7ZCnRMgJLmhe1yPL8nVQIScbB7bQ9W1wbYJ0TZBHUGIWJSxFo1TPqTd4jgnKoBuYjUN8ZAeq2qqeRWUJSCEPmSZAZCVIsZBOZBGDgp4ctQDKD9TEJwnhOo0IXKqeMIUzhI0yNBKCgR6MHswPhmhtpskaZBi7wXpRgUMohwY2DcwTdFXgqaZBn2uy7PNz0cqtj1wGrKA",
+      "access_token": "EAAS5DC5i6TwBRVqDrfZCGdXt7EXZA1H5vF95b3NwXswVqyGfctOZCKGA0T7fTZAM8hZC19TZC3hb7eWhUnrGgUpBJPVIboCLZB1HrUsIDp6WbtY4VmYr0NN4soq6g8o49xUg0ujhqWxoCHxkkfQnkFB0HwGV9S0o7eg2CdMpXYu6iYDjstJEpfBqTjG7Rbb3fmd5nrZBe3sBYoyQ7uZAuUimRCGB5RHQ2z8kvZAUb3ZC9kZD",
       "category": "Personal blog",
       "tasks": [
         "MODERATE",
@@ -20,7 +33,7 @@
     {
       "id": "813278198533042",
       "name": "Trạm Giải Trí",
-      "access_token": "EAAS5DC5i6TwBRfYNav06eAfyNFZBrkAgYNpXgJxFDfXabbk5XEHSipoGQRgzPzcDapSLffM1Nm0yOtUhu6ybox6LadGUgjVaOrOHedaHASBI1PZBXicQHx3yDpcMoBkeq8AoWNJnsiAlt6TiHnWWCitKQpl4fvUyXwHJMj9RGNyOwE8EB0IecpOjleTZCwATzUJpVuvBjCJCdg0JgTdFUzOFPZAKtrrmzZBUwPWaV",
+      "access_token": "EAAS5DC5i6TwBRb5SEFD2xZA8VxnqdxCmIfFqYzqmqueAHVLDBEpV2A8ZAd815IEmGm3kXyixAvbrPpGIv7G1NkCNh4PZByjz0lunFZCZANzoDdEIUsrOVAWzlsJi0iZCehmDtpyDcvQuI5btTQjZCr8TPw9DKB3g81P5sudT0gADECVZBUiPZCX8TpyDIXjE3UMQEGSZCsSzyFtSN9JlEwUr8ZBKctrirQTEP1OD1j6wlQZD",
       "category": "Digital creator",
       "tasks": [
         "MODERATE",
@@ -34,7 +47,7 @@
     {
       "id": "255717904302451",
       "name": "Ẩm Thực Douyin",
-      "access_token": "EAAS5DC5i6TwBRSessxVwG06OYdYT8DxNNXs1TGyh8KNs2HDXX1HRTnhCLjId5yUuZBlqRsw7qGm1TboYYZBjSZCZAFni5LG8xGSALToRdpnZC6doe4RnEfpI4C9bp20flSI9HB8lCjYhtEXQfMpptaV2PVjewmDD8lEOf9gnFSvXgxrWYxqI8SOzRtFqFZBmVyLEiOQ2xxLBL0yOykhplt8ZC3z9xDJAJed1vDzOcMZD",
+      "access_token": "EAAS5DC5i6TwBRcebsJ46xaqhNIAX2qHkKW0ZCdrWIBY7XoecCZAeCr7DZCjYjQghg6TR4fpbZBpxu07oDfZC9jwZCQVwzbjaX2AuMwxeRaHXH4IOl5uZBbU4jnnPZBAVp25TXqbEfS1M3oZCObz0DFDEfVpyGSPGZCuNAjukBjMdPWLI23iWt8Bj2qZAsfvj8AgXTPyUum2LoHjfE8dBRusi5nQ0rh2MVoWAL1SNvrOVgZDZD",
       "category": "Commercial and industrial",
       "tasks": [
         "MODERATE",

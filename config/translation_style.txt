@@ -1,0 +1,42 @@
+## Phong cách dịch phụ đề Trung → Việt
+
+### Nguyên tắc cốt lõi
+- HIỂU NỘI DUNG VIDEO TRƯỚC, dịch SAU. Đọc toàn bộ phụ đề để nắm chủ đề rồi mới dịch.
+- Dịch như YouTuber/TikToker Việt Nam đang thuyết minh — tự nhiên, gần gũi, dễ hiểu.
+- KHÔNG dịch sát từng chữ, KHÔNG dùng ngôn ngữ học thuật.
+- Mỗi câu phải có nghĩa trọn vẹn, người xem đọc 1 lần là hiểu ngay.
+
+### Giọng điệu
+- Dùng "chúng ta", "mình", "nhé", "nào", "kìa" để tạo cảm giác gần gũi.
+- Thêm từ cảm thán khi phù hợp: "Ồ!", "Wow!", "Trời ơi!", "Kinh khủng!"
+- Giữ năng lượng và nhịp điệu giống video gốc.
+
+### Sửa lỗi nhận dạng giọng nói (ASR) — QUAN TRỌNG
+Subtitle từ auto-transcription LUÔN có lỗi đồng âm. PHẢI sửa dựa vào ngữ cảnh video:
+- Xác định chủ đề video → suy ra từ nào bị nhận sai
+- Ví dụ video về côn trùng: 红火椅/红卫/红回忆 → 红火蚁 = kiến lửa đỏ
+- Ví dụ video về nấu ăn: 青梅精 → tinh dầu mận xanh, 风油精 → dầu gió
+- Tên kênh/người: giữ nguyên hoặc phiên âm, KHÔNG dịch nghĩa
+
+### Quy tắc nhất quán — BẮT BUỘC
+- Dùng CÙNG MỘT thuật ngữ xuyên suốt TOÀN BỘ video
+- Đã dịch 1 từ theo cách nào → giữ nguyên từ đầu đến cuối
+- Ví dụ: 红火蚁 = "kiến lửa đỏ" → KHÔNG đổi sang "kiến lửa", "kiến đỏ", "loài kiến"
+
+### Câu hoàn chỉnh
+- Mỗi dòng subtitle PHẢI là câu hoàn chỉnh, có nghĩa trọn vẹn
+- KHÔNG để câu cụt, fragment, hay chỉ 1-2 từ vô nghĩa
+- Nếu câu gốc quá ngắn/cụt → kết hợp ngữ cảnh để viết thành câu có nghĩa
+
+### Độ dài phụ đề
+- Tối đa 2 dòng, mỗi dòng không quá 25 ký tự
+- Ưu tiên ngắn gọn, súc tích — người xem chỉ có vài giây để đọc
+- Bỏ từ thừa, từ đệm không cần thiết
+
+### Ví dụ dịch tốt
+- 把红火椅放进青梅精 → Cho kiến lửa đỏ vào tinh dầu mận xanh
+- 它能成功逃走吗 → Liệu chúng có trốn thoát được không?
+- 看一下这个颜色挺好看的是不是 → Nhìn màu này đẹp phết đúng không?
+- OK 大功告成 → OK, xong rồi!
+- 好,刚刚当期的红卫好像并没有意识到前面是陷阱 → Hình như đám kiến vừa rồi không nhận ra phía trước là bẫy
+- 我们来看看结果怎么样 → Cùng xem kết quả thế nào nhé!

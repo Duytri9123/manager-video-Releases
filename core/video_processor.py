@@ -41,13 +41,26 @@ def find_ffmpeg() -> Optional[str]:
     return None
 
 
-def run_ffmpeg(args: list, desc: str = "") -> tuple[bool, str]:
-    """Run ffmpeg command, return (success, stderr)."""
+def run_ffmpeg(args: list, desc: str = "", timeout: int = 600) -> tuple[bool, str]:
+    """Run ffmpeg command, return (success, stderr). Timeout default 10 minutes."""
     try:
-        r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         return r.returncode == 0, r.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return False, f"FFmpeg timeout sau {timeout}s — video quá dài hoặc filter quá nặng"
     except Exception as e:
         return False, str(e)
+
+
+def _get_encoding_args(ffmpeg: Optional[str] = None) -> list[str]:
+    """Get hardware-optimized encoding args. Falls back to libx264 veryfast crf 23."""
+    try:
+        from core.hardware_presets import get_optimal_preset
+        preset = get_optimal_preset(ffmpeg)
+        return preset.build_output_args()
+    except Exception:
+        return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-c:a", "aac", "-b:a", "128k"]
 
 
 def get_media_duration_seconds(ffmpeg: str, media_path: Path) -> float:
@@ -391,12 +404,16 @@ def apply_anti_fingerprint(
 
     audio_filters = [speed_a_filter] if speed_a_filter else []
 
+    # Get hardware-optimized encoding params
+    from core.hardware_presets import get_optimal_preset
+    _preset = get_optimal_preset(ffmpeg)
+    _enc_args = _preset.build_output_args()
+
     if not has_overlay and not has_logo:
         # Chỉ vf + audio filter
         vf_args = ["-vf", combined_vf] if combined_vf else []
         af_args = ["-af", ",".join(audio_filters)] if audio_filters else ["-c:a", "copy"]
-        cmd += vf_args + ["-map", "0:v", "-map", "0:a?"] + af_args + [
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        cmd += vf_args + ["-map", "0:v", "-map", "0:a?"] + af_args + _enc_args + [
             str(output_path),
         ]
     else:
@@ -404,8 +421,7 @@ def apply_anti_fingerprint(
         cmd += [
             "-filter_complex", filter_str,
             "-map", "[vout]", "-map", "0:a?",
-        ] + af_args + [
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        ] + af_args + _enc_args + [
             str(output_path),
         ]
 
@@ -452,14 +468,14 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font_name},{font_size},{primary},&H000000FF,{outline},{shadow_c},0,0,0,0,100,100,0,0,1,{outline_width},{shadow},{alignment},10,10,{margin_v},1
+Style: Default,{font_name},{font_size},{primary},&H000000FF,{outline},{shadow_c},-1,0,0,0,100,100,0,0,1,{outline_width},{shadow},{alignment},10,10,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-    def split_text_to_lines(text, max_words=5):
-        # Tách text thành các dòng tối đa max_words từ mỗi dòng
+    def _split_words(text, max_words=5):
+        """Tách text thành các dòng tối đa max_words từ mỗi dòng."""
         words = text.split()
         result = []
         for i in range(0, len(words), max_words):
@@ -470,18 +486,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     lines = [header]
     for seg in segments:
-        start = _fmt_ass_time(seg["start"])
-        end   = _fmt_ass_time(seg["end"])
-        text  = seg.get("text", "").replace("\n", " ")
-        split_lines = split_text_to_lines(text, max_words=5)
-        n = len(split_lines)
-        if n == 0:
+        text = seg.get("text", "").replace("\n", " ").strip()
+        if not text:
             continue
-        # Chia đều thời gian cho các dòng nhỏ
+        split_lines = _split_words(text, max_words=5)
+        n = len(split_lines)
         seg_duration = (seg["end"] - seg["start"]) / n
         for i, line in enumerate(split_lines):
             sub_start = seg["start"] + i * seg_duration
-            sub_end = seg["start"] + (i+1) * seg_duration - 0.01
+            sub_end = seg["start"] + (i + 1) * seg_duration - 0.01
             s = _fmt_ass_time(sub_start)
             e = _fmt_ass_time(sub_end)
             lines.append(f"Dialogue: 0,{s},{e},Default,,0,0,0,,{line}")
@@ -772,7 +785,7 @@ def make_vertical_video(
     ffmpeg: str,
     title: str = "",
     title_size_pct: float = 5.0,
-    title_color: str = "#ff0000",
+    title_color: str = "#000000",
     blur_w_pct: float = 15.0,
     blur_opacity: float = 0.6,
     blur_mode: str = "overlay",
@@ -833,18 +846,9 @@ def make_vertical_video(
     with tempfile.TemporaryDirectory(prefix="frame_video_") as tmpdir:
         tmpdir = Path(tmpdir)
 
-        # Scale source to vid_w × vid_h
-        scaled_mp4 = tmpdir / "scaled.mp4"
-        ok, err = run_ffmpeg([
-            ffmpeg, "-i", str(video_path),
-            "-vf", f"scale={vid_w}:{vid_h}",
-            "-c:a", "copy", str(scaled_mp4), "-y", "-loglevel", "error"
-        ])
-        if not ok:
-            return False, f"Scale failed: {err}"
-
+        # Build filter_complex: scale + blur + canvas + title in one pass
         filters = []
-        filters.append(f"[0:v]null[vid]")
+        filters.append(f"[0:v]scale={vid_w}:{vid_h}[vid]")
 
         if side_w > 0:
             # Left blur: stretch left edge
@@ -892,18 +896,22 @@ def make_vertical_video(
             filters.append(
                 f"[c6]drawtext=text='{safe_title}':fontsize={title_font_px}:"
                 f"fontcolor={title_ffcolor}:x=(w-text_w)/2:y={title_bar_h//2}-text_h/2:"
-                f"box=0[c7]"
+                f"font='Arial'[c7]"
             )
             last = "c7"
         else:
             last = "c6"
 
+        # Get hardware-optimized encoding params
+        from core.hardware_presets import get_optimal_preset
+        _preset = get_optimal_preset(ffmpeg)
+        _enc_args = _preset.build_output_args()
+
         cmd = [
-            ffmpeg, "-i", str(scaled_mp4),
+            ffmpeg, "-i", str(video_path),
             "-filter_complex", ";".join(filters),
             "-map", f"[{last}]", "-map", "0:a?",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k",
+        ] + _enc_args + [
             str(output_path), "-y", "-loglevel", "error"
         ]
         ok, err = run_ffmpeg(cmd)
@@ -1012,25 +1020,16 @@ def make_vertical_video(
     with tempfile.TemporaryDirectory(prefix="frame_video_") as tmpdir:
         tmpdir = Path(tmpdir)
 
-        # Scale source to out_w x out_h_vid
-        scaled_mp4 = tmpdir / "scaled.mp4"
-        ok, err = run_ffmpeg([
-            ffmpeg, "-i", str(video_path),
-            "-vf", f"scale={out_w}:{out_h_vid}",
-            "-c:a", "copy", str(scaled_mp4), "-y", "-loglevel", "error"
-        ])
-        if not ok:
-            return False, f"Scale failed: {err}"
-
-        # Build filter_complex
+        # Build filter_complex (single pass — no intermediate file)
         blur_str = 20
         alpha_val = int(blur_opacity * 255)
 
         filters = []
+        # Scale input video
+        filters.append(f"[0:v]scale={out_w}:{out_h_vid}[vid]")
         # White canvas: full output size (title bar + video)
         filters.append(f"color=white:{out_w}x{out_h_total}:r=30[canvas]")
         # Video at y=title_bar_h
-        filters.append(f"[0:v]null[vid]")
         filters.append(f"[canvas][vid]overlay=0:{title_bar_h}[base]")
 
         if side_w > 0:
@@ -1063,7 +1062,7 @@ def make_vertical_video(
             filters.append(
                 f"[{last_base}]drawtext=text='{safe_title}':fontsize={title_font_px}:"
                 f"fontcolor={title_ffcolor}:x=(w-text_w)/2:y={title_y}:"
-                f"box=0[c_final]"
+                f"font='Arial'[c_final]"
             )
             last = "c_final"
         else:
@@ -1071,12 +1070,12 @@ def make_vertical_video(
 
         filter_str = ";".join(filters)
 
+        _enc_args = _get_encoding_args(ffmpeg)
         cmd = [
-            ffmpeg, "-i", str(scaled_mp4),
+            ffmpeg, "-i", str(video_path),
             "-filter_complex", filter_str,
             "-map", f"[{last}]", "-map", "0:a?",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k",
+        ] + _enc_args + [
             str(output_path), "-y", "-loglevel", "error"
         ]
         ok, err = run_ffmpeg(cmd)
@@ -1100,8 +1099,7 @@ def make_vertical_video(
                 ffmpeg, "-i", str(output_path), "-i", str(logo_path),
                 "-filter_complex", logo_filter,
                 "-map", "0:a?",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-c:a", "copy",
+            ] + _enc_args + [
                 str(logo_tmp), "-y", "-loglevel", "error"
             ])
             if ok2 and logo_tmp.exists():
@@ -1132,39 +1130,57 @@ def burn_subtitles(
     subtitle_position: str = "bottom",
     subtitle_format: str = "srt",
     font_name: str = "Arial",
+    # Frame video params
+    frame_enabled: bool = False,
+    frame_title: str = "",
+    frame_title_size_pct: float = 5.0,
+    frame_title_color: str = "#000000",
+    frame_blur_w_pct: float = 15.0,
+    frame_blur_opacity: float = 0.6,
+    frame_target_w: int = 1080,
+    log_callback=None,
 ) -> tuple[bool, str]:
     """
     Burn subtitles into video.
     If subtitle_format='ass': use ASS filter (no blur needed, faster).
     If subtitle_format='srt': use SRT with optional blur strip.
+    If frame_enabled=True: also creates 9:16 frame in same encode pass (ASS mode only).
     """
     # Tự động căn giữa vùng che blur với phụ đề
     blur_lift_pct_adj = blur_lift_pct
     if blur_original and blur_zone != "none":
-        # Giả sử subtitle nằm ở bottom, tính toán lại vị trí vùng che để căn giữa phụ đề
-        # margin_v: pixel, font_size: pixel, outline_width: pixel
-        # Giả sử video cao 1080px, tính theo tỉ lệ
         video_height = 1080
         sub_height = font_size + 2 * outline_width
-        # Khoảng cách từ mép dưới lên baseline phụ đề
         if subtitle_position == "bottom":
             sub_y = video_height - margin_v - sub_height // 2
             blur_h = int(video_height * blur_height_pct)
             blur_y = sub_y - blur_h // 2
             blur_lift_pct_adj = max(0.0, 1.0 - (blur_y + blur_h) / video_height)
+            if log_callback:
+                log_callback(f"📏 Tính vùng che: sub_y={sub_y}px, blur_y={blur_y}→{blur_y+blur_h}px, lift_adj={blur_lift_pct_adj:.3f}", "info")
         elif subtitle_position == "top":
             sub_y = margin_v + sub_height // 2
             blur_h = int(video_height * blur_height_pct)
             blur_y = sub_y - blur_h // 2
             blur_lift_pct_adj = max(0.0, blur_y / video_height)
+            if log_callback:
+                log_callback(f"📏 Tính vùng che (top): sub_y={sub_y}px, blur_y={blur_y}→{blur_y+blur_h}px, lift_adj={blur_lift_pct_adj:.3f}", "info")
 
     if str(subtitle_format).lower() == "ass":
         return _burn_ass(video_path, srt_path, output_path, ffmpeg,
                          font_size, font_color, outline_color, outline_width,
                          margin_v, subtitle_position,
-                         blur_original, blur_zone, blur_height_pct, blur_width_pct, blur_lift_pct_adj, font_name)
+                         blur_original, blur_zone, blur_height_pct, blur_width_pct, blur_lift_pct_adj, font_name,
+                         frame_enabled=frame_enabled,
+                         frame_title=frame_title,
+                         frame_title_size_pct=frame_title_size_pct,
+                         frame_title_color=frame_title_color,
+                         frame_blur_w_pct=frame_blur_w_pct,
+                         frame_blur_opacity=frame_blur_opacity,
+                         frame_target_w=frame_target_w,
+                         log_callback=log_callback)
 
-    # SRT path (original logic)
+    # SRT path (original logic — no frame support)
     return _burn_srt(video_path, srt_path, output_path, ffmpeg,
                      blur_original, blur_zone, blur_height_pct, blur_width_pct, blur_lift_pct_adj,
                      font_size, font_color, outline_color, outline_width,
@@ -1188,8 +1204,33 @@ def _burn_ass(
     blur_width_pct: float = 0.80,
     blur_lift_pct: float = 0.06,
     font_name: str = "Arial",
+    # Legacy frame params (ignored — frame is now embedded in ASS file)
+    frame_enabled: bool = False,
+    frame_title: str = "",
+    frame_title_size_pct: float = 5.0,
+    frame_title_color: str = "#000000",
+    frame_blur_w_pct: float = 15.0,
+    frame_blur_opacity: float = 0.6,
+    frame_target_w: int = 1080,
+    log_callback=None,
 ) -> tuple[bool, str]:
-    """Burn ASS subtitle file into video. Optionally blur a zone to hide burned-in original subs."""
+    """Burn ASS subtitle file into video. Optionally blur a zone to hide burned-in original subs.
+    Frame elements (title bar, blur panels) are now embedded directly in the ASS file.
+    log_callback: optional callable(msg, level) for progress logging.
+    """
+    import time as _time
+
+    def _log(msg, level="info"):
+        if log_callback:
+            log_callback(msg, level)
+
+    t0 = _time.time()
+    _log(f"📂 Video: {video_path.name} ({video_path.stat().st_size / 1024 / 1024:.1f} MB)")
+    _log(f"📄 Phụ đề: {ass_path.name}")
+    _log(f"⚙️ Cài đặt: font={font_size}px, color={font_color}, margin={margin_v}px, pos={subtitle_position}")
+    if blur_original:
+        _log(f"🌫 Che phụ đề gốc: zone={blur_zone}, height={blur_height_pct*100:.0f}%")
+
     video_path  = Path(video_path)
     ass_path    = Path(ass_path)
     output_path = Path(output_path)
@@ -1200,64 +1241,184 @@ def _burn_ass(
         tmp_ass   = Path(tmpdir) / "subs.ass"
         tmp_out   = Path(tmpdir) / "output.mp4"
 
+        t1 = _time.time()
+        _log("📋 Đang copy file vào thư mục tạm...")
         shutil.copy2(str(video_path), str(tmp_video))
+        _log(f"✓ Copy video xong ({_time.time()-t1:.1f}s)")
 
         # If input is SRT, convert to ASS on the fly
         if ass_path.suffix.lower() == ".srt":
+            _log("🔄 Chuyển đổi SRT → ASS...")
             segs = _parse_srt(ass_path)
             alignment = 8 if str(subtitle_position).lower() == "top" else 2
             tmp_ass = write_ass(segs, tmp_ass, font_size=font_size,
                                 font_color=font_color, outline_color=outline_color,
                                 outline_width=outline_width, margin_v=margin_v,
                                 alignment=alignment, font_name=font_name)
+            _log(f"✓ Chuyển đổi xong: {len(segs)} đoạn phụ đề")
         else:
             shutil.copy2(str(ass_path), str(tmp_ass))
+            _log(f"✓ Copy phụ đề ASS xong")
 
         ass_esc = str(tmp_ass).replace("\\", "/")
         if len(ass_esc) >= 2 and ass_esc[1] == ':':
             ass_esc = ass_esc[0] + "\\:" + ass_esc[2:]
 
-        # Single-pass pipeline: blur zone (optional) + burn ASS in one encode.
+        # Check if ASS file has logo info embedded in comments
+        _logo_file = None
+        _logo_size_pct = 6.0
+        _logo_top_pct = 3.0
+        _logo_left_pct = 3.0
+        _logo_radius_pct = 50.0
+        _logo_position = "top-left"
+        try:
+            _ass_content = tmp_ass.read_text(encoding="utf-8")
+            _logo_match = re.search(r"^; Logo:\s*(.+)$", _ass_content, re.MULTILINE)
+            if _logo_match:
+                _lp = _logo_match.group(1).strip()
+                if _lp and Path(_lp).exists():
+                    _logo_file = Path(_lp)
+            _logo_size_match = re.search(r"^; Logo size:\s*([\d.]+)%", _ass_content, re.MULTILINE)
+            if _logo_size_match:
+                _logo_size_pct = float(_logo_size_match.group(1))
+            _logo_top_match = re.search(r"^; Logo top:\s*([\d.]+)%", _ass_content, re.MULTILINE)
+            if _logo_top_match:
+                _logo_top_pct = float(_logo_top_match.group(1))
+            _logo_left_match = re.search(r"^; Logo left:\s*([\d.]+)%", _ass_content, re.MULTILINE)
+            if _logo_left_match:
+                _logo_left_pct = float(_logo_left_match.group(1))
+            _logo_radius_match = re.search(r"^; Logo radius:\s*([\d.]+)%", _ass_content, re.MULTILINE)
+            if _logo_radius_match:
+                _logo_radius_pct = float(_logo_radius_match.group(1))
+            _logo_pos_match = re.search(r"^; Logo position:\s*(.+)$", _ass_content, re.MULTILINE)
+            if _logo_pos_match:
+                _logo_position = _logo_pos_match.group(1).strip()
+        except Exception:
+            pass
+
+        # Build filter: optional blur zone + ASS + optional logo overlay
+        extra_inputs = []
         if blur_original and blur_zone != "none":
             h_pct = _clamp_float(blur_height_pct, 0.08, 0.45)
             w_pct = max(0.35, min(1.0, float(blur_width_pct)))
             lift_pct = _clamp_float(blur_lift_pct, 0.0, 0.20)
             if blur_zone == "bottom":
                 y_start = max(0.0, 1.0 - h_pct - lift_pct)
+                _log(f"🌫 Vùng che: từ {y_start*100:.0f}% → {(y_start+h_pct)*100:.0f}%")
                 filter_complex = (
                     f"[0:v]split[orig][copy];"
                     f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:ih*{y_start:.4f},"
                     f"boxblur=luma_radius=20:luma_power=3[blurred];"
-                    f"[orig][blurred]overlay=(W-w)/2:H*{y_start:.4f},ass='{ass_esc}'[vout]"
+                    f"[orig][blurred]overlay=(W-w)/2:H*{y_start:.4f},ass='{ass_esc}'[subbed]"
                 )
-            else:  # top
+            else:
                 filter_complex = (
                     f"[0:v]split[orig][copy];"
                     f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:0,"
                     f"boxblur=luma_radius=20:luma_power=3[blurred];"
-                    f"[orig][blurred]overlay=(W-w)/2:0,ass='{ass_esc}'[vout]"
+                    f"[orig][blurred]overlay=(W-w)/2:0,ass='{ass_esc}'[subbed]"
                 )
-
-            ok, err = run_ffmpeg([
-                ffmpeg, "-i", str(tmp_video),
-                "-filter_complex", filter_complex,
-                "-map", "[vout]", "-map", "0:a?",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-c:a", "copy",
-                str(tmp_out), "-y", "-loglevel", "error"
-            ])
         else:
-            ok, err = run_ffmpeg([
-                ffmpeg, "-i", str(tmp_video),
-                "-vf", f"ass='{ass_esc}'",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-c:a", "copy",
-                str(tmp_out), "-y", "-loglevel", "error"
-            ])
+            filter_complex = f"[0:v]ass='{ass_esc}'[subbed]"
 
+        # Add logo overlay if available
+        if _logo_file and _logo_file.exists():
+            extra_inputs = ["-i", str(_logo_file)]
+
+            # Get video dimensions to calculate logo size and position in pixels
+            try:
+                _vr = subprocess.run([ffmpeg, "-i", str(tmp_video)],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace")
+                _vm = re.search(r"(\d{2,5})x(\d{2,5})", _vr.stderr or "")
+                _vid_w, _vid_h = (int(_vm.group(1)), int(_vm.group(2))) if _vm else (1280, 720)
+            except Exception:
+                _vid_w, _vid_h = 1280, 720
+
+            # Logo height in pixels = video_height * size_pct / 100
+            logo_h_px = max(20, int(_vid_h * _logo_size_pct / 100))
+            # Position in pixels from percentage
+            # logo_top_pct is relative to video content area (below title bar)
+            # So we need to add title bar height offset
+            # Read title bar height from ASS comments
+            _title_bar_h_from_ass = 0
+            try:
+                _tbh_match = re.search(r"^; Title bar height:\s*([\d.]+)%", _ass_content, re.MULTILINE)
+                if _tbh_match:
+                    _title_bar_h_from_ass = int(_vid_h * float(_tbh_match.group(1)) / 100)
+            except Exception:
+                pass
+            logo_x_px = max(0, int(_vid_w * _logo_left_pct / 100))
+            logo_y_px = max(0, int(_vid_h * _logo_top_pct / 100) + _title_bar_h_from_ass)
+
+            # Border radius: 0% = square, 50% = circle
+            # radius in pixels = min(w,h)/2 * radius_pct/50
+            r_pct = max(0.0, min(50.0, _logo_radius_pct))
+
+            if r_pct >= 49.0:
+                # Full circle mask: alpha = 255 if inside circle, 0 outside
+                cx = f"(W/2)"
+                cy = f"(H/2)"
+                radius = f"(min(W,H)/2)"
+                mask_expr = f"if(lte(hypot(X-{cx},Y-{cy}),{radius}),255,0)"
+                logo_filter = (
+                    f"[1:v]scale=-1:{logo_h_px},format=rgba,"
+                    f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{mask_expr}'[logo]"
+                )
+            elif r_pct > 0.5:
+                # Rounded rectangle mask
+                # r = min(w,h) * radius_pct / 100
+                logo_filter = (
+                    f"[1:v]scale=-1:{logo_h_px},format=rgba,"
+                    f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':"
+                    f"a='if(between(X,W*{r_pct/100:.3f},W*(1-{r_pct/100:.3f})),255,"
+                    f"if(between(Y,H*{r_pct/100:.3f},H*(1-{r_pct/100:.3f})),255,"
+                    f"if(lte(hypot(X-W*{r_pct/100:.3f},Y-H*{r_pct/100:.3f}),min(W,H)*{r_pct/100:.3f}),255,"
+                    f"if(lte(hypot(X-W*(1-{r_pct/100:.3f}),Y-H*{r_pct/100:.3f}),min(W,H)*{r_pct/100:.3f}),255,"
+                    f"if(lte(hypot(X-W*{r_pct/100:.3f},Y-H*(1-{r_pct/100:.3f})),min(W,H)*{r_pct/100:.3f}),255,"
+                    f"if(lte(hypot(X-W*(1-{r_pct/100:.3f}),Y-H*(1-{r_pct/100:.3f})),min(W,H)*{r_pct/100:.3f}),255,0))))))'[logo]"
+                )
+            else:
+                # No radius — square logo
+                logo_filter = f"[1:v]scale=-1:{logo_h_px}[logo]"
+
+            filter_complex += (
+                f";{logo_filter};"
+                f"[subbed][logo]overlay={logo_x_px}:{logo_y_px}[vout]"
+            )
+            _log(f"🏷 Logo: {_logo_file.name} (h={logo_h_px}px, x={logo_x_px}, y={logo_y_px}, radius={r_pct}%)")
+        else:
+            filter_complex += ";[subbed]null[vout]"
+
+        map_label = "[vout]"
+        _log(f"🎬 Pipeline: {'blur + ' if blur_original else ''}burn ASS{' + logo' if _logo_file else ''}")
+
+        # ── Encode ────────────────────────────────────────────────────────────
+        _enc_args = _get_encoding_args(ffmpeg)
+        _log(f"🎬 Bắt đầu encode ({' '.join(_enc_args[:4])})...")
+        t_encode = _time.time()
+
+        ok, err = run_ffmpeg([
+            ffmpeg, "-i", str(tmp_video),
+        ] + extra_inputs + [
+            "-filter_complex", filter_complex,
+            "-map", map_label, "-map", "0:a?",
+        ] + _enc_args + [
+            str(tmp_out), "-y", "-loglevel", "error"
+        ])
+
+        encode_time = _time.time() - t_encode
         if ok and tmp_out.exists():
+            out_size = tmp_out.stat().st_size / 1024 / 1024
+            _log(f"✓ Encode xong: {encode_time:.1f}s ({out_size:.1f} MB)", "success")
+            _log("📋 Đang copy file output...")
+            t_copy = _time.time()
             shutil.copy2(str(tmp_out), str(output_path))
+            _log(f"✓ Copy xong ({_time.time()-t_copy:.1f}s) → {output_path.name}", "success")
+            total_time = _time.time() - t0
+            _log(f"🏁 Tổng thời gian: {total_time:.1f}s", "success")
             return True, ""
+
+        _log(f"❌ FFmpeg thất bại sau {encode_time:.1f}s: {err[:200]}", "error")
         return False, err
 
 
@@ -1307,7 +1468,9 @@ def _burn_srt(
         # subtitle ASS style
         alignment = "8" if str(subtitle_position).lower() == "top" else "2"
         sub_style = (
+            f"FontName=Arial,"
             f"FontSize={font_size},"
+            f"Bold=1,"
             f"PrimaryColour=&H00{_hex_color(font_color)},"
             f"OutlineColour=&H00{_hex_color(outline_color)},"
             f"Outline={outline_width},"
@@ -1397,6 +1560,378 @@ def _hex_color(name: str) -> str:
         except Exception:
             pass
     return colors.get(name.lower(), "FFFFFF")
+
+
+def _hex_to_ass_color(hex_color: str) -> str:
+    """Convert #RRGGBB or color name → ASS &H00BBGGRR format."""
+    bgr = _hex_color(hex_color)
+    return f"&H00{bgr}"
+
+
+def _hex_to_ass_color_alpha(hex_color: str, alpha: int = 0) -> str:
+    """Convert #RRGGBB + alpha (0=opaque, 255=transparent) → ASS &HAABBGGRR."""
+    bgr = _hex_color(hex_color)
+    return f"&H{alpha:02X}{bgr}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Generate short frame title from video content using AI
+# ══════════════════════════════════════════════════════════════════════════════
+
+def generate_frame_title(
+    translated_texts: list[str],
+    original_texts: list[str] = None,
+    trans_cfg: dict = None,
+    preferred_provider: str = "deepseek",
+    video_title: str = "",
+) -> str:
+    """
+    Use AI to generate a short, catchy Vietnamese title for the frame bar.
+    Based on the translated subtitle content.
+
+    Returns a short title string (max ~30 chars), e.g.:
+    "Đưa 8888 con kiến lửa vào ốc táo!"
+    """
+    import json
+    import urllib.request
+
+    if not translated_texts:
+        return video_title[:30] if video_title else ""
+
+    cfg = trans_cfg or {}
+    # Pick the best available API key
+    api_key = ""
+    api_url = ""
+    model = ""
+
+    deepseek_key = cfg.get("deepseek_key", "")
+    groq_key = cfg.get("groq_key", "")
+    openai_key = cfg.get("openai_key", "")
+
+    if preferred_provider == "deepseek" and deepseek_key:
+        api_key = deepseek_key
+        api_url = "https://api.deepseek.com/v1/chat/completions"
+        model = "deepseek-chat"
+    elif preferred_provider == "groq" and groq_key:
+        api_key = groq_key
+        api_url = "https://api.groq.com/openai/v1/chat/completions"
+        model = cfg.get("groq_model", "llama-3.1-8b-instant")
+    elif deepseek_key:
+        api_key = deepseek_key
+        api_url = "https://api.deepseek.com/v1/chat/completions"
+        model = "deepseek-chat"
+    elif groq_key:
+        api_key = groq_key
+        api_url = "https://api.groq.com/openai/v1/chat/completions"
+        model = cfg.get("groq_model", "llama-3.1-8b-instant")
+    elif openai_key:
+        api_key = openai_key
+        api_url = "https://api.openai.com/v1/chat/completions"
+        model = "gpt-4o-mini"
+
+    if not api_key:
+        # Fallback: use first 30 chars of first translated text
+        for t in translated_texts:
+            if t and t.strip():
+                return t.strip()[:30]
+        return video_title[:30] if video_title else ""
+
+    # Build content summary from translated texts
+    content_sample = " ".join(t for t in translated_texts[:10] if t).strip()
+    if len(content_sample) > 500:
+        content_sample = content_sample[:500]
+
+    prompt = (
+        f"Video title: {video_title or '(unknown)'}\n"
+        f"Content (Vietnamese subtitles): {content_sample}\n\n"
+        "Tạo MỘT tiêu đề ngắn gọn, hấp dẫn bằng tiếng Việt cho video này.\n"
+        "Yêu cầu:\n"
+        "- Tối đa 30-40 ký tự\n"
+        "- Gây tò mò, thu hút click\n"
+        "- Kiểu: 'Cho kiến lửa đỏ vào bột ngứa rồi hút chân không lại!'\n"
+        "- Nếu có số liệu cụ thể (số con vật, số lượng) thì giữ lại\n"
+        "- Dùng dấu | để đánh dấu phần NHẤN MẠNH (sẽ đổi màu vàng)\n"
+        "  Ví dụ: 'Cho kiến lửa đỏ vào|bột ngứa rồi hút chân không lại!'\n"
+        "  Phần sau dấu | là phần nhấn mạnh (gây shock/tò mò)\n"
+        "- Chỉ trả về tiêu đề, không giải thích\n\n"
+        "Tiêu đề:"
+    )
+
+    try:
+        payload = json.dumps({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "Bạn tạo tiêu đề video ngắn gọn, hấp dẫn bằng tiếng Việt. Dùng | để đánh dấu phần nhấn mạnh."},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.7,
+            "max_tokens": 80,
+        }).encode()
+        req = urllib.request.Request(
+            api_url, data=payload, method="POST",
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as response:
+            data = json.loads(response.read())
+        title = data["choices"][0]["message"]["content"].strip()
+        # Clean up: remove quotes, newlines
+        title = title.strip('"\'').split("\n")[0].strip()
+        # Limit length
+        if len(title) > 50:
+            title = title[:47] + "..."
+        return title
+    except Exception as e:
+        logging.getLogger(__name__).warning("generate_frame_title failed: %s", e)
+        # Fallback
+        for t in translated_texts:
+            if t and t.strip():
+                return t.strip()[:35]
+        return video_title[:35] if video_title else ""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ASS with Frame Elements — Embed blur panels + title bar into ASS file
+# ══════════════════════════════════════════════════════════════════════════════
+
+def write_ass_with_frame(
+    segments: list[dict],
+    out_path: Path,
+    video_duration: float,
+    play_res_x: int = 1080,
+    play_res_y: int = 1920,
+    # Subtitle params
+    font_size: int = 32,
+    font_color: str = "white",
+    outline_color: str = "black",
+    outline_width: int = 2,
+    shadow: int = 1,
+    margin_v: int = 20,
+    alignment: int = 2,
+    font_name: str = "Arial",
+    max_words_per_line: int = 5,
+    # Frame: Title bar (overlay on top of video)
+    title_text: str = "",
+    title_size_pct: float = 7.0,
+    title_color: str = "#000000",
+    title_color_2: str = "#ff0000",  # Second color for emphasis part of title
+    title_split_color: bool = True,  # Enable split-color (half/half)
+    title_bar_color: str = "#ffffff",
+    title_bar_h_pct: float = 12.0,  # height of title bar as % of PlayResY
+    # Frame: Side blur panels (overlay on sides of video)
+    blur_w_pct: float = 15.0,
+    blur_opacity: float = 0.6,
+    blur_color: str = "#000000",
+    # Logo
+    logo_path: str = "",  # Path to logo image (will be noted in ASS comments for ffmpeg)
+    logo_size_pct: float = 6.0,  # Logo height as % of video height (smaller = better)
+    logo_top_pct: float = 3.0,  # Logo Y position as % from top
+    logo_left_pct: float = 3.0,  # Logo X position as % from left
+    logo_radius_pct: float = 50.0,  # Border radius: 0=square, 50=circle
+    logo_position: str = "top-left",  # top-left, top-right
+) -> Path:
+    """
+    Write ASS subtitle file with frame elements (title bar + side blur panels)
+    embedded as ASS drawing commands.
+
+    All frame elements are OVERLAY on the original video (no size change):
+    - Title bar: white rectangle at top covering title_bar_h_pct% of video height
+    - Side blur panels: semi-transparent dark rectangles on left/right sides
+
+    PlayRes should match the video's actual dimensions.
+
+    Parameters:
+        segments: list of {start, end, text} dicts (optional, can be empty)
+        video_duration: total video duration in seconds
+        play_res_x/y: must match video dimensions (width × height)
+        title_text: text to show in title bar (overlay on top of video)
+        title_size_pct: title font size as % of width
+        title_color: title text color (#RRGGBB)
+        title_bar_color: title bar background color
+        title_bar_h_pct: title bar height as % of video height
+        blur_w_pct: side blur panel width as % of video width
+        blur_opacity: opacity of blur panels (0.0-1.0)
+        blur_color: color of blur panels
+    """
+    out_path = Path(out_path)
+
+    # Calculate dimensions (all overlays on the video area)
+    title_bar_h = max(40, int(play_res_y * title_bar_h_pct / 100))
+    title_bar_h = title_bar_h + (title_bar_h % 2)
+    title_font_px = max(16, int(play_res_x * title_size_pct / 100))
+
+    side_w = max(0, int(play_res_x * blur_w_pct / 100))
+
+    # ASS alpha: 0=opaque, FF=transparent (opposite of normal)
+    blur_alpha = max(0, min(255, int((1.0 - blur_opacity) * 255)))
+    title_bar_bgr = _hex_color(title_bar_color)
+    title_text_bgr = _hex_color(title_color)
+    blur_bgr = _hex_color(blur_color)
+
+    # ── Build styles ──────────────────────────────────────────────────────────
+    sub_primary = f"&H00{_hex_color(font_color)}"
+    sub_outline = f"&H00{_hex_color(outline_color)}"
+    sub_shadow_c = "&H80000000"
+
+    styles = []
+    # Default subtitle style
+    styles.append(
+        f"Style: Default,{font_name},{font_size},{sub_primary},&H000000FF,{sub_outline},{sub_shadow_c},"
+        f"-1,0,0,0,100,100,0,0,1,{outline_width},{shadow},{alignment},10,10,{margin_v},1"
+    )
+    # Title bar background style (drawing)
+    styles.append(
+        f"Style: TitleBar,Arial,1,&H00{title_bar_bgr},&H00{title_bar_bgr},&H00{title_bar_bgr},&H00{title_bar_bgr},"
+        f"0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1"
+    )
+    # Title text style — BOLD, no outline (title bar has white background)
+    styles.append(
+        f"Style: TitleText,{font_name},{title_font_px},&H00{title_text_bgr},&H000000FF,&H00000000,&H00000000,"
+        f"-1,0,0,0,100,100,0,0,1,0,0,8,10,10,{title_bar_h // 4},1"
+    )
+    # Side blur panel style (semi-transparent)
+    styles.append(
+        f"Style: BlurLeft,Arial,1,&H{blur_alpha:02X}{blur_bgr},&H{blur_alpha:02X}{blur_bgr},"
+        f"&H{blur_alpha:02X}{blur_bgr},&H{blur_alpha:02X}{blur_bgr},"
+        f"0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1"
+    )
+    styles.append(
+        f"Style: BlurRight,Arial,1,&H{blur_alpha:02X}{blur_bgr},&H{blur_alpha:02X}{blur_bgr},"
+        f"&H{blur_alpha:02X}{blur_bgr},&H{blur_alpha:02X}{blur_bgr},"
+        f"0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1"
+    )
+
+    # ── Build header ──────────────────────────────────────────────────────────
+    header = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {play_res_x}
+PlayResY: {play_res_y}
+WrapStyle: 0
+; Frame elements embedded: title bar + side blur panels (overlay on video)
+; Title: {title_text}
+; Title color: {title_color} / {title_color_2} (split)
+; Title bar height: {title_bar_h_pct}%
+; Blur width: {blur_w_pct}%
+; Blur opacity: {blur_opacity}
+; Logo: {logo_path}
+; Logo size: {logo_size_pct}%
+; Logo top: {logo_top_pct}%
+; Logo left: {logo_left_pct}%
+; Logo radius: {logo_radius_pct}%
+; Logo position: {logo_position}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+{chr(10).join(styles)}
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+
+    lines = [header]
+
+    # ── Frame elements as Dialogue lines with drawing commands ────────────────
+    # Title bar has the highest layer so it's drawn on top
+    end_time = _fmt_ass_time(video_duration + 1.0)
+    start_time = "0:00:00.00"
+
+    # 1. Title bar background (white rectangle at top, overlay on video)
+    has_title = bool(title_text and title_text.strip())
+    if has_title or title_bar_h_pct > 0:
+        title_draw = f"m 0 0 l {play_res_x} 0 {play_res_x} {title_bar_h} 0 {title_bar_h}"
+        lines.append(
+            f"Dialogue: 3,{start_time},{end_time},TitleBar,,0,0,0,,{{\\pos(0,0)\\p1}}{title_draw}{{\\p0}}"
+        )
+
+    # 2. Title text (centered in title bar) — UPPERCASE, split color, no outline
+    if has_title:
+        # Position title at 35% of title bar height (higher up for better visual)
+        title_y = int(title_bar_h * 0.35)
+        # Uppercase the title for impact
+        safe_title = title_text.replace("{", "").replace("}", "").replace("\\", "").upper()
+
+        if title_split_color and len(safe_title) > 1:
+            color1_bgr = _hex_color(title_color)
+            color2_bgr = _hex_color(title_color_2)
+
+            # Check if AI provided a | separator for emphasis split
+            if "|" in safe_title:
+                parts = safe_title.split("|", 1)
+                part1 = parts[0].strip()
+                part2 = parts[1].strip()
+            else:
+                # Fallback: split at word boundary near middle
+                words = safe_title.split()
+                if len(words) >= 2:
+                    mid_word = len(words) // 2
+                    part1 = " ".join(words[:mid_word])
+                    part2 = " ".join(words[mid_word:])
+                else:
+                    part1 = safe_title
+                    part2 = ""
+
+            # No outline (\bord0) — clean look matching the title bar background
+            if part2:
+                colored_title = (
+                    f"{{\\an8\\pos({play_res_x // 2},{title_y})\\bord0}}"
+                    f"{{\\c&H00{color1_bgr}&}}{part1} "
+                    f"{{\\c&H00{color2_bgr}&}}{part2}"
+                )
+            else:
+                colored_title = (
+                    f"{{\\an8\\pos({play_res_x // 2},{title_y})\\bord0}}"
+                    f"{{\\c&H00{color1_bgr}&}}{part1}"
+                )
+            lines.append(
+                f"Dialogue: 4,{start_time},{end_time},TitleText,,0,0,0,,{colored_title}"
+            )
+        else:
+            lines.append(
+                f"Dialogue: 4,{start_time},{end_time},TitleText,,0,0,0,,"
+                f"{{\\an8\\pos({play_res_x // 2},{title_y})\\bord0}}{safe_title}"
+            )
+
+    # 3. Left blur panel (semi-transparent, covers full video height including title bar area)
+    if side_w > 0:
+        left_draw = f"m 0 0 l {side_w} 0 {side_w} {play_res_y} 0 {play_res_y}"
+        lines.append(
+            f"Dialogue: 1,{start_time},{end_time},BlurLeft,,0,0,0,,"
+            f"{{\\pos(0,0)\\p1}}{left_draw}{{\\p0}}"
+        )
+
+        # 4. Right blur panel
+        right_x = play_res_x - side_w
+        right_draw = f"m 0 0 l {side_w} 0 {side_w} {play_res_y} 0 {play_res_y}"
+        lines.append(
+            f"Dialogue: 1,{start_time},{end_time},BlurRight,,0,0,0,,"
+            f"{{\\pos({right_x},0)\\p1}}{right_draw}{{\\p0}}"
+        )
+
+    # ── Subtitle dialogue lines (layer 2 — below title bar, above blur) ──────
+    def _split_words(text, max_words=5):
+        words = text.split()
+        result = []
+        for i in range(0, len(words), max_words):
+            chunk = " ".join(words[i:i + max_words])
+            if chunk:
+                result.append(chunk)
+        return result if result else [text]
+
+    for seg in segments:
+        text = seg.get("text", "").replace("\n", " ").strip()
+        if not text:
+            continue
+        split_lines = _split_words(text, max_words=max_words_per_line)
+        n = len(split_lines)
+        seg_duration = (seg["end"] - seg["start"]) / n
+        for i, line in enumerate(split_lines):
+            sub_start = seg["start"] + i * seg_duration
+            sub_end = seg["start"] + (i + 1) * seg_duration - 0.01
+            s = _fmt_ass_time(sub_start)
+            e = _fmt_ass_time(sub_end)
+            lines.append(f"Dialogue: 2,{s},{e},Default,,0,0,0,,{line}")
+
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    return out_path
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2043,24 +2578,31 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if subtitle_pos == "bottom" and user_margin_v is None:
         auto_margin = int(720 * (blur_height_pct * 0.5 + (blur_lift_pct if (blur_enabled and blur_zone == "bottom") else 0.0)))
         effective_margin_v = max(effective_margin_v, auto_margin)
+        # When frame is enabled, PlayRes matches video (e.g. 1920 height) so margin needs to be bigger
+        if _as_bool(data.get("frame_enabled", False), False):
+            effective_margin_v = max(effective_margin_v, 60)
     # If user set margin_v, use it as-is (already converted from % to px in JS)
 
     vi_ass_path = None
     final_output_path = None
 
-    yield send(log=f"[Bước 1/5] Phiên âm: {video_path.name}", level="info")
-    yield send(overall=5, overall_lbl="Bắt đầu...")
+    # ── Bước 1/5: Xác nhận video đã tải ──────────────────────────────────────
+    _vid_size_mb = video_path.stat().st_size / 1024 / 1024
+    yield send(log=f"[Bước 1/5] 📥 Video đã sẵn sàng: {video_path.name} ({_vid_size_mb:.1f} MB)", level="success")
+    yield send(log=f"[Bước 1/5] 📂 Thư mục output: {out_dir}", level="info")
+    yield send(log=f"[Bước 1/5] ⚙️ Cấu hình: burn={do_burn}, voice={do_voice}, translate={do_translate}, frame={_as_bool(data.get('frame_enabled', False), False)} (embedded in ASS)", level="info")
+    yield send(overall=5, overall_lbl="Video sẵn sàng")
 
-    # ── Step 1: Transcribe ────────────────────────────────────────────────────
+    # ── Bước 2/5: Phiên âm (Transcribe) ──────────────────────────────────────
     # Check video audio first
     has_audio = has_audio_track(video_path, ffmpeg)
     if not has_audio:
-        yield send(log=f"[Bước 1/5] ⚠ Video không có audio track", level="warning")
+        yield send(log=f"[Bước 2/5] ⚠ Video không có audio track", level="warning")
     
     if transcribe_provider == "model":
-        yield send(log=f"[Bước 1/5] Đang phiên âm bằng Whisper local ({model_name})...", level="info")
+        yield send(log=f"[Bước 2/5] 🎙 Đang phiên âm bằng Whisper local ({model_name})...", level="info")
     else:
-        yield send(log="[Bước 1/5] Đang phiên âm bằng Groq Whisper API...", level="info")
+        yield send(log="[Bước 2/5] 🎙 Đang phiên âm bằng Groq Whisper API...", level="info")
     yield send(overall=10, overall_lbl="Đang phiên âm...")
 
     ass_path = out_dir / f"{stem}.ass"  # dùng ASS thay SRT
@@ -2073,14 +2615,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     vi_ass_path_cached   = out_dir / f"{stem}_vi.ass"
     burned_path_cached   = out_dir / f"{stem}_subbed.mp4"
     voice_path_cached    = out_dir / f"{stem}_vi_voice.mp4"
-    af_path_cached       = out_dir / f"{stem}_af.mp4"
 
-    # Bước 1: nếu SRT đã có → load lại, skip transcribe
+    # Bước 2: nếu SRT đã có → load lại, skip transcribe
     if source_srt_path.exists() and source_srt_path.stat().st_size > 0:
         try:
             segments = _parse_srt(source_srt_path)
             if segments:
-                yield send(log=f"[Bước 1/5] ♻ Dùng lại phiên âm cũ ({len(segments)} đoạn): {source_srt_path.name}", level="info", subtitle_path=str(source_srt_path.resolve()))
+                yield send(log=f"[Bước 2/5] ♻ Dùng lại phiên âm cũ ({len(segments)} đoạn): {source_srt_path.name}", level="info", subtitle_path=str(source_srt_path.resolve()))
                 yield send(overall=35, overall_lbl=f"Phiên âm cũ: {len(segments)} đoạn")
                 transcribe_failed = False
         except Exception:
@@ -2113,45 +2654,45 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             segments = transcriber.transcribe(video_path, ffmpeg, source_srt_path)
             if not segments:
                 transcribe_failed = True
-                yield send(log="[Bước 1/5] ⚠ Không phát hiện giọng nói trong video", level="warning")
+                yield send(log="[Bước 2/5] ⚠ Không phát hiện giọng nói trong video", level="warning")
                 if not (do_voice or do_burn):
-                    yield send(log="[Bước 1/5] ✗ Không có giọng nói và TTS/burn phụ đề cũng bị tắt", level="error")
+                    yield send(log="[Bước 2/5] ✗ Không có giọng nói và TTS/burn phụ đề cũng bị tắt", level="error")
                     return
                 if do_burn and not do_voice:
-                    yield send(log="[Bước 1/5] ℹ Sẽ chỉ burn phụ đề, bỏ qua phiên âm", level="info")
+                    yield send(log="[Bước 2/5] ℹ Sẽ chỉ burn phụ đề, bỏ qua phiên âm", level="info")
                     segments = []
                 else:
                     video_duration = get_media_duration_seconds(ffmpeg, video_path)
                     if video_duration > 0:
                         segments = [{"start": 0.0, "end": video_duration, "text": "[Giọng nói tự động]"}]
-                        yield send(log=f"[Bước 1/5] ℹ Tạo 1 segment tự động (0s → {video_duration:.1f}s)", level="info")
+                        yield send(log=f"[Bước 2/5] ℹ Tạo 1 segment tự động (0s → {video_duration:.1f}s)", level="info")
                     else:
-                        yield send(log="[Bước 1/5] ✗ Không thể tính được thời lượng video", level="error")
+                        yield send(log="[Bước 2/5] ✗ Không thể tính được thời lượng video", level="error")
                         return
             else:
                 write_ass(segments, ass_path)
-                yield send(log=f"[Bước 1/5] ✓ Phiên âm {len(segments)} đoạn → {ass_path.name}", level="success", subtitle_path=str(ass_path.resolve()))
+                yield send(log=f"[Bước 2/5] ✓ Phiên âm {len(segments)} đoạn → {ass_path.name}", level="success", subtitle_path=str(ass_path.resolve()))
             yield send(overall=35, overall_lbl=f"Phiên âm xong: {len(segments)} đoạn")
         except RuntimeError as e:
             transcribe_failed = True
-            yield send(log=f"[Bước 1/5] ⚠ Phiên âm thất bại: {e}", level="warning")
+            yield send(log=f"[Bước 2/5] ⚠ Phiên âm thất bại: {e}", level="warning")
             if not (do_voice or do_burn):
-                yield send(log="[Bước 1/5] ✗ Không có giọng nói và TTS/burn phụ đề cũng bị tắt", level="error")
+                yield send(log="[Bước 2/5] ✗ Không có giọng nói và TTS/burn phụ đề cũng bị tắt", level="error")
                 return
             if do_burn and not do_voice:
-                yield send(log="[Bước 1/5] ℹ Sẽ chỉ burn phụ đề", level="info")
+                yield send(log="[Bước 2/5] ℹ Sẽ chỉ burn phụ đề", level="info")
                 segments = []
             else:
                 video_duration = get_media_duration_seconds(ffmpeg, video_path)
                 if video_duration > 0:
                     segments = [{"start": 0.0, "end": video_duration, "text": "[Giọng nói tự động]"}]
-                    yield send(log=f"[Bước 1/5] ℹ Tạo fallback segment (0s → {video_duration:.1f}s)", level="info")
+                    yield send(log=f"[Bước 2/5] ℹ Tạo fallback segment (0s → {video_duration:.1f}s)", level="info")
                 else:
-                    yield send(log="[Bước 1/5] ✗ Không thể tính được thời lượng video", level="error")
+                    yield send(log="[Bước 2/5] ✗ Không thể tính được thời lượng video", level="error")
                     return
         except Exception as e:
             transcribe_failed = True
-            yield send(log=f"[Bước 1/5] ⚠ Lỗi phiên âm: {e}", level="warning")
+            yield send(log=f"[Bước 2/5] ⚠ Lỗi phiên âm: {e}", level="warning")
             if not (do_voice or do_burn):
                 return
             if do_burn and not do_voice:
@@ -2164,13 +2705,15 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     return
 
 
-    # Step 2: Translate ZH → VI
+    # ── Bước 3/5: Dịch ZH → VI ─────────────────────────────────────────────────
     translated_texts = []
     if not do_translate:
-        yield send(log="[Bước 2/5] Bỏ qua dịch phụ đề vì đã tắt translate_subs", level="info")
+        yield send(log="[Bước 3/5] ℹ Bỏ qua dịch phụ đề (translate_subs=off)", level="info")
     else:
         # Resume: nếu vi.ass đã có → load lại segments và translated_texts từ đó
-        if vi_ass_path_cached.exists() and vi_ass_path_cached.stat().st_size > 0 and segments:
+        # BUT: if frame is enabled, skip resume because ASS needs to be regenerated with new frame settings
+        _frame_enabled_check = _as_bool(data.get("frame_enabled", False), False)
+        if not _frame_enabled_check and vi_ass_path_cached.exists() and vi_ass_path_cached.stat().st_size > 0 and segments:
             try:
                 cached_vi_segs = _parse_srt(vi_ass_path_cached) if vi_ass_path_cached.suffix == ".srt" else []
                 # Parse ASS để lấy text
@@ -2190,7 +2733,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     translated_texts = [s["text"] for s in cached_vi_segs]
                     vi_ass_path = vi_ass_path_cached
                     srt_path = vi_ass_path
-                    yield send(log=f"[Bước 2/5] ♻ Dùng lại bản dịch cũ ({len(translated_texts)} đoạn): {vi_ass_path_cached.name}", level="info", subtitle_path=str(vi_ass_path_cached.resolve()))
+                    yield send(log=f"[Bước 3/5] ♻ Dùng lại bản dịch cũ ({len(translated_texts)} đoạn): {vi_ass_path_cached.name}", level="info", subtitle_path=str(vi_ass_path_cached.resolve()))
                     yield send(overall=55, overall_lbl="Dùng lại bản dịch cũ")
             except Exception:
                 translated_texts = []
@@ -2199,7 +2742,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             n_segs = len(segments)
             batch_sz = 30
             n_batches = (n_segs + batch_sz - 1) // batch_sz
-            yield send(log=f"[Bước 2/5] Dịch {n_segs} đoạn sang tiếng Việt ({n_batches} batch)...", level="info")
+            yield send(log=f"[Bước 3/5] 🌐 Dịch {n_segs} đoạn sang tiếng Việt ({n_batches} batch)...", level="info")
             yield send(overall=45, overall_lbl=f"Đang dịch {n_segs} đoạn...")
             try:
                 from utils.translation import BatchTranslator
@@ -2227,10 +2770,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 texts = [seg.get("text", "").strip() for seg in segments]
                 has_ds = bool(trans_cfg.get("deepseek_key"))
                 has_groq = bool(trans_cfg.get("groq_key"))
-                yield send(log=f"[Bước 2/5] Provider: {provider} | deepseek={'✓' if has_ds else '✗'} | groq={'✓' if has_groq else '✗'}", level="info")
+                yield send(log=f"[Bước 3/5] Provider: {provider} | deepseek={'✓' if has_ds else '✗'} | groq={'✓' if has_groq else '✗'}", level="info")
                 translator = BatchTranslator(trans_cfg)
-                translated_texts, used = translator.translate(texts, provider)
-                yield send(log=f"[Bước 2/5] ✓ Dịch xong {len(translated_texts)} đoạn (provider: {used})", level="success")
+                translated_texts, used = translator.translate(texts, provider, context=stem_source)
+                yield send(log=f"[Bước 3/5] ✓ Dịch xong {len(translated_texts)} đoạn (provider: {used})", level="success")
                 yield send(overall=55, overall_lbl="Dịch xong")
 
                 if translated_texts:
@@ -2239,19 +2782,93 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     vi_ass_path = out_dir / f"{stem}_vi.ass"
                     vi_segs = [{"start": s["start"], "end": s["end"], "text": t}
                                for s, t in zip(segments, translated_texts) if t]
-                    write_ass(vi_segs, vi_ass_path,
-                              font_size=_as_int(data.get("font_size", 32), 32),
-                              font_color=data.get("font_color", "white"),
-                              outline_color=data.get("outline_color", "black"),
-                              outline_width=_as_int(data.get("outline_width", 2), 2),
-                              margin_v=effective_margin_v,
-                              alignment=alignment)
-                    yield send(log=f"[Bước 2/5] ✓ ASS tiếng Việt: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
+
+                    # Check if frame elements should be embedded in ASS
+                    frame_enabled = _as_bool(data.get("frame_enabled", False), False)
+
+                    if frame_enabled:
+                        # Get video dimensions to match PlayRes
+                        try:
+                            _r = subprocess.run([ffmpeg, "-i", str(video_path)],
+                                capture_output=True, text=True, encoding="utf-8", errors="replace")
+                            _m = re.search(r"(\d{2,5})x(\d{2,5})", _r.stderr or "")
+                            _vw, _vh = (int(_m.group(1)), int(_m.group(2))) if _m else (1280, 720)
+                        except Exception:
+                            _vw, _vh = 1280, 720
+
+                        _duration = get_media_duration_seconds(ffmpeg, video_path)
+                        if _duration <= 0:
+                            _duration = 600.0
+
+                        # Auto-generate title if not provided
+                        _frame_title = str(data.get("frame_title") or "").strip()
+                        if not _frame_title:
+                            yield send(log=f"[Bước 3/5] 🤖 AI đang tạo tiêu đề khung...", level="info")
+                            try:
+                                _frame_title = generate_frame_title(
+                                    translated_texts=translated_texts,
+                                    original_texts=texts,
+                                    trans_cfg=trans_cfg,
+                                    preferred_provider=provider,
+                                    video_title=stem_source,
+                                )
+                                yield send(log=f"[Bước 3/5] ✓ Tiêu đề AI: \"{_frame_title}\"", level="success")
+                            except Exception as _e:
+                                yield send(log=f"[Bước 3/5] ⚠ Không tạo được tiêu đề: {_e}", level="warning")
+                                _frame_title = ""
+
+                        # Logo path — default to img/logo.png
+                        _logo_path = str(data.get("frame_logo_path") or "").strip()
+                        if not _logo_path:
+                            _default_logo = Path(__file__).parent.parent / "img" / "logo.png"
+                            if _default_logo.exists():
+                                _logo_path = str(_default_logo)
+
+                        write_ass_with_frame(
+                            segments=vi_segs,
+                            out_path=vi_ass_path,
+                            video_duration=_duration,
+                            play_res_x=_vw,
+                            play_res_y=_vh,
+                            font_size=_as_int(data.get("font_size", 32), 32),
+                            font_color=data.get("font_color", "white"),
+                            outline_color=data.get("outline_color", "black"),
+                            outline_width=_as_int(data.get("outline_width", 2), 2),
+                            margin_v=effective_margin_v,
+                            alignment=alignment,
+                            title_text=_frame_title,
+                            title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
+                            title_color=str(data.get("frame_title_color") or "#000000"),
+                            title_color_2=str(data.get("frame_title_color_2") or "#ff0000"),
+                            title_split_color=_as_bool(data.get("frame_title_split_color", True), True),
+                            title_bar_color=str(data.get("frame_title_bar_color") or "#ffffff"),
+                            title_bar_h_pct=_as_float(data.get("frame_title_bar_h_pct"), 12.0),
+                            blur_w_pct=_as_float(data.get("frame_blur_w_pct"), 15.0),
+                            blur_opacity=_as_float(data.get("frame_blur_opacity"), 0.6),
+                            blur_color=str(data.get("frame_blur_color") or "#000000"),
+                            logo_path=_logo_path,
+                            logo_size_pct=_as_float(data.get("frame_logo_size_pct"), 6.0),
+                            logo_top_pct=_as_float(data.get("frame_logo_top_pct"), 3.0),
+                            logo_left_pct=_as_float(data.get("frame_logo_left_pct"), 3.0),
+                            logo_radius_pct=_as_float(data.get("frame_logo_radius_pct"), 50.0),
+                            logo_position=str(data.get("frame_logo_position") or "top-left"),
+                        )
+                        yield send(log=f"[Bước 3/5] ✓ ASS (có khung) tiếng Việt: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
+                        yield send(log=f"[Bước 3/5] 🎞 Khung: title=\"{_frame_title[:25]}\", blur={_as_float(data.get('frame_blur_w_pct'), 15.0)}%, logo={'✓' if _logo_path else '✗'}", level="info")
+                    else:
+                        write_ass(vi_segs, vi_ass_path,
+                                  font_size=_as_int(data.get("font_size", 32), 32),
+                                  font_color=data.get("font_color", "white"),
+                                  outline_color=data.get("outline_color", "black"),
+                                  outline_width=_as_int(data.get("outline_width", 2), 2),
+                                  margin_v=effective_margin_v,
+                                  alignment=alignment)
+                        yield send(log=f"[Bước 3/5] ✓ ASS tiếng Việt: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                     # Signal frontend to review the ASS file before continuing
                     yield send(
                         review_ass=True,
                         ass_path=str(vi_ass_path.resolve()),
-                        log=f"[Bước 2/5] ⏸ Chờ kiểm tra nội dung dịch: {vi_ass_path.name}",
+                        log=f"[Bước 3/5] ⏸ Chờ kiểm tra nội dung dịch: {vi_ass_path.name}",
                         level="info",
                     )
                     # Wait for frontend to confirm (or auto-continue if skip_review)
@@ -2262,27 +2879,42 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     _proc_review_event.wait(timeout=600)
                     _proc_review_event.set()
                     # Re-read vi_ass_path in case user edited it
-                    yield send(log=f"[Bước 2/5] ▶ Tiếp tục xử lý...", level="info")
+                    yield send(log=f"[Bước 3/5] ▶ Tiếp tục xử lý...", level="info")
 
                     if do_burn and do_burn_vi:
                         srt_path = vi_ass_path
-                        yield send(log=f"[Bước 2/5] Sẽ burn: {srt_path.name}", level="info")
+                        yield send(log=f"[Bước 3/5] Sẽ burn: {srt_path.name}", level="info")
             except Exception as e:
-                yield send(log=f"[Bước 2/5] ✗ Dịch thất bại: {e}", level="error")
+                yield send(log=f"[Bước 3/5] ✗ Dịch thất bại: {e}", level="error")
                 translated_texts = []
 
-    # ── Step 3: Burn subtitles ────────────────────────────────────────────────
+    # ── Bước 4/5: Burn phụ đề ────────────────────────────────────────────────
     burned_path = None
-    # Resume: nếu file subbed đã có → dùng lại
-    if do_burn and burned_path_cached.exists() and burned_path_cached.stat().st_size > 0:
+    # Resume: nếu file subbed đã có → dùng lại (BUT: skip if frame enabled to re-apply new frame settings)
+    _frame_enabled_for_burn = _as_bool(data.get("frame_enabled", False), False)
+    if do_burn and not _frame_enabled_for_burn and burned_path_cached.exists() and burned_path_cached.stat().st_size > 0:
         burned_path = burned_path_cached
         final_output_path = burned_path
-        yield send(log=f"[Bước 3/5] ♻ Dùng lại video phụ đề cũ: {burned_path.name}", level="info")
+        yield send(log=f"[Bước 4/5] ♻ Dùng lại video phụ đề cũ: {burned_path.name}", level="info")
         yield send(overall=80, overall_lbl="Dùng lại video phụ đề cũ")
     elif do_burn and srt_path.exists():
-        yield send(log=f"[Bước 3/5] Đang burn phụ đề ASS vào video...", level="info")
+        yield send(log=f"[Bước 4/5] 🔥 Đang burn phụ đề ASS vào video...", level="info")
         yield send(overall=65, overall_lbl="Đang burn phụ đề...")
         burned_path = out_dir / f"{stem}_subbed.mp4"
+
+        # Log details before starting (so user sees progress immediately)
+        _vid_size = video_path.stat().st_size / 1024 / 1024
+        yield send(log=f"[Bước 4/5] 📂 Video: {video_path.name} ({_vid_size:.1f} MB)", level="info")
+        yield send(log=f"[Bước 4/5] 📄 Phụ đề: {srt_path.name}", level="info")
+        _hw_preset = _get_encoding_args(ffmpeg)
+        _hw_desc = " ".join(_hw_preset[:6])
+        yield send(log=f"[Bước 4/5] 🎬 Đang encode ({_hw_desc})...", level="info")
+
+        # Collect logs from burn process
+        _burn_logs = []
+        def _burn_log_cb(msg, level="info"):
+            _burn_logs.append((msg, level))
+
         ok, err = burn_subtitles(
             video_path=video_path,
             srt_path=srt_path,
@@ -2300,27 +2932,32 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             margin_v=effective_margin_v,
             subtitle_position=data.get("subtitle_position", "bottom"),
             subtitle_format="ass",  # luôn dùng ASS
+            frame_enabled=False,
+            log_callback=_burn_log_cb,
         )
+        # Emit collected burn logs
+        for _msg, _lvl in _burn_logs:
+            yield send(log=f"[Bước 4/5] {_msg}", level=_lvl)
         if ok:
-            yield send(log=f"[Bước 3/5] ✓ Video có phụ đề: {burned_path.name}", level="success")
+            yield send(log=f"[Bước 4/5] ✓ Video có phụ đề: {burned_path.name}", level="success")
             yield send(overall=80, overall_lbl="Burn phụ đề xong")
             final_output_path = burned_path
         else:
-            yield send(log=f"[Bước 3/5] ✗ Burn thất bại: {err}", level="error")
+            yield send(log=f"[Bước 4/5] ✗ Burn thất bại: {err}", level="error")
             burned_path = None
     elif do_burn and not srt_path.exists():
-        yield send(log="[Bước 3/5] ⚠ Không có file phụ đề để burn", level="warning")
+        yield send(log="[Bước 4/5] ⚠ Không có file phụ đề để burn", level="warning")
     else:
-        yield send(log="[Bước 3/5] ℹ Bỏ qua burn phụ đề", level="info")
+        yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề", level="info")
 
-    # ── Step 4: Voice conversion ──────────────────────────────────────────────
+    # ── Bước 5/5: Tạo giọng tiếng Việt (TTS) ───────────────────────────────────
     # Resume: nếu file voice đã có → dùng lại
     if do_voice and voice_path_cached.exists() and voice_path_cached.stat().st_size > 0:
         final_output_path = voice_path_cached
-        yield send(log=f"[Bước 4/5] ♻ Dùng lại giọng tiếng Việt cũ: {voice_path_cached.name}", level="info")
-        yield send(overall=98, overall_lbl="Dùng lại giọng cũ")
+        yield send(log=f"[Bước 5/5] ♻ Dùng lại giọng tiếng Việt cũ: {voice_path_cached.name}", level="info")
+        yield send(overall=92, overall_lbl="Dùng lại giọng cũ")
     elif do_voice and translated_texts:
-        yield send(log="[Bước 4/5] Đang tạo giọng tiếng Việt...", level="info")
+        yield send(log="[Bước 5/5] 🗣 Đang tạo giọng tiếng Việt...", level="info")
         yield send(overall=85, overall_lbl="Đang tạo giọng nói...")
         source_for_voice = burned_path if burned_path else video_path
         voice_path = out_dir / f"{stem}_vi_voice.mp4"
@@ -2358,7 +2995,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     )
                 )
                 yield send(
-                    log=f"[Bước 4/5] TTS clips thành công: {len(tts_clips)}/{len(translated_texts)}",
+                    log=f"[Bước 5/5] TTS clips thành công: {len(tts_clips)}/{len(translated_texts)}",
                     level="info",
                 )
                 if tts_clips:
@@ -2371,7 +3008,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             coverage_ratio = min(100.0, max(0.0, (last_end / src_end) * 100.0))
                     yield send(
                         log=(
-                            f"[Bước 4/5] Độ phủ timeline giọng: "
+                            f"[Bước 5/5] Độ phủ timeline giọng: "
                             f"{_fmt_hms(first_start)} → {_fmt_hms(last_end)} "
                             f"(~{coverage_ratio:.1f}% thời lượng thoại)"
                         ),
@@ -2379,7 +3016,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     )
                 if len(tts_clips) < max(1, int(len(translated_texts) * 0.2)):
                     yield send(
-                        log="[Bước 4/5] Cảnh báo: quá ít clip TTS, có thể bị giới hạn dịch vụ. Hãy thử lại hoặc giảm tốc độ tạo giọng.",
+                        log="[Bước 5/5] ⚠ Quá ít clip TTS, có thể bị giới hạn dịch vụ. Hãy thử lại hoặc giảm tốc độ tạo giọng.",
                         level="warning",
                     )
                 mixer = AudioMixer(ffmpeg)
@@ -2392,67 +3029,28 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     tts_volume=_as_float(data.get("tts_volume", 1.8), 1.8),
                 )
             if ok:
-                yield send(log=f"[Bước 4/5] ✓ Giọng tiếng Việt: {voice_path.name}", level="success")
-                yield send(overall=98, overall_lbl="Tạo giọng xong")
+                yield send(log=f"[Bước 5/5] ✓ Giọng tiếng Việt: {voice_path.name}", level="success")
+                yield send(overall=92, overall_lbl="Tạo giọng xong")
                 final_output_path = voice_path
             else:
-                yield send(log=f"[Bước 4/5] ✗ Tạo giọng thất bại: {err}", level="error")
+                yield send(log=f"[Bước 5/5] ✗ Tạo giọng thất bại: {err}", level="error")
         except Exception as e:
-            yield send(log=f"[Bước 4/5] ✗ Lỗi tạo giọng: {e}", level="error")
-
-    # ── Step 5: Anti-Fingerprint ──────────────────────────────────────────────
-    af_cfg = (cfg_raw.get("video_process") or {}).get("anti_fingerprint") or {}
-    if _as_bool(af_cfg.get("enabled", False), False):
-        af_out = out_dir / f"{stem}_af.mp4"
-        # Resume: nếu file af đã có → dùng lại
-        if af_path_cached.exists() and af_path_cached.stat().st_size > 0:
-            final_output_path = af_path_cached
-            yield send(log=f"[Bước 5/5] ♻ Dùng lại anti-fingerprint cũ: {af_path_cached.name}", level="info")
-        else:
-            yield send(log="[Bước 5/5] Đang áp dụng anti-fingerprint...", level="info")
-            ok, err = apply_anti_fingerprint(
-                video_path=final_output_path,
-                output_path=af_out,
-                ffmpeg=ffmpeg,
-                overlay_image=af_cfg.get("overlay_image"),
-                overlay_opacity=_clamp_float(_as_float(af_cfg.get("overlay_opacity", 0.02), 0.02), 0.01, 1.0),
-                logo_image=af_cfg.get("logo_image"),
-                logo_enabled=_as_bool(af_cfg.get("logo_enabled", False), False),
-                logo_position=str(af_cfg.get("logo_position", "bottom-left")),
-                logo_max_width_pct=_clamp_float(_as_float(af_cfg.get("logo_max_width_pct", 0.15), 0.15), 0.01, 1.0),
-                logo_opacity=_clamp_float(_as_float(af_cfg.get("logo_opacity", 1.0), 1.0), 0.01, 1.0),
-                logo_padding=_as_int(af_cfg.get("logo_padding", 10), 10),
-                brightness=_as_float(af_cfg.get("brightness", 0.0), 0.0),
-                contrast=_as_float(af_cfg.get("contrast", 1.0), 1.0),
-                saturation=_as_float(af_cfg.get("saturation", 1.0), 1.0),
-                sharpness=_as_float(af_cfg.get("sharpness", 0.0), 0.0),
-                scale_w=_as_int(af_cfg.get("scale_w", 0), 0),
-                scale_h=_as_int(af_cfg.get("scale_h", 0), 0),
-                crop_pct=_as_float(af_cfg.get("crop_pct", 0.0), 0.0),
-                flip_h=_as_bool(af_cfg.get("flip_h", False), False),
-                vignette=_as_bool(af_cfg.get("vignette", False), False),
-                speed=_as_float(af_cfg.get("speed", 1.0), 1.0),
-            )
-            if ok:
-                final_output_path = af_out
-                yield send(log=f"[Bước 5/5] ✓ Anti-fingerprint: {af_out.name}", level="success")
-            else:
-                yield send(log=f"[Bước 5/5] ✗ Anti-fingerprint thất bại: {err}", level="error")
+            yield send(log=f"[Bước 5/5] ✗ Lỗi tạo giọng: {e}", level="error")
 
     if not final_output_path:
         final_output_path = video_path.resolve()
         yield send(log="[Hoàn tất] Không có bước chỉnh sửa nào, dùng lại file gốc", level="info", file_path=str(final_output_path))
 
+    # ── Cleanup file trung gian ───────────────────────────────────────────────
     if cleanup_outputs and final_output_path and final_output_path.exists():
         # Giữ lại SRT/ASS để resume lần sau, chỉ xóa file trung gian không cần thiết
         intermediates_to_clean = []
-        # Xóa _subbed nếu đã có _vi_voice hoặc _af (bước sau đã dùng xong)
+        # Xóa _subbed nếu đã có _vi_voice hoặc _framed (bước sau đã dùng xong)
         if burned_path and burned_path != final_output_path:
-            if voice_path_cached.exists() or af_path_cached.exists():
-                intermediates_to_clean.append(burned_path)
-        # Xóa _vi_voice nếu đã có _af
+            intermediates_to_clean.append(burned_path)
+        # Xóa _vi_voice nếu đã có _framed
         voice_p = out_dir / f"{stem}_vi_voice.mp4"
-        if voice_p.exists() and voice_p != final_output_path and af_path_cached.exists():
+        if voice_p.exists() and voice_p != final_output_path:
             intermediates_to_clean.append(voice_p)
 
         for extra in intermediates_to_clean:
@@ -2471,38 +3069,6 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 pass
 
         yield send(log=f"[Hoàn tất] File cuối cùng: {final_output_path.name}", level="success", file_path=str(final_output_path.resolve()))
-
-    # ── Bước 6: Tạo khung video (nếu bật) ────────────────────────────────────
-    frame_enabled = _as_bool(data.get("frame_enabled", False), False)
-    if frame_enabled and final_output_path and final_output_path.exists():
-        yield send(log="[Bước 6/6] 🎞 Đang tạo khung video...", level="info", overall=98, overall_lbl="Tạo khung video...")
-        try:
-            frame_out = out_dir / f"{stem}_framed.mp4"
-            ok_f, err_f = make_vertical_video(
-                video_path=final_output_path,
-                output_path=frame_out,
-                ffmpeg=ffmpeg,
-                title=str(data.get("frame_title") or ""),
-                title_size_pct=float(data.get("frame_title_size_pct") or 5.0),
-                title_color=str(data.get("frame_title_color") or "#ff0000"),
-                blur_w_pct=float(data.get("frame_blur_w_pct") or 15.0),
-                blur_opacity=float(data.get("frame_blur_opacity") or 0.6),
-                blur_mode=str(data.get("frame_blur_mode") or "overlay"),
-                logo_path=str(data.get("frame_logo_path") or "") or None,
-                logo_size_pct=float(data.get("frame_logo_size_pct") or 12.0),
-                logo_top_pct=float(data.get("frame_logo_top_pct") or 3.0),
-                logo_left_pct=float(data.get("frame_logo_left_pct") or 3.0),
-                logo_radius_pct=float(data.get("frame_logo_radius_pct") or 50.0),
-                target_w=int(data.get("frame_target_w") or 1080),
-            )
-            if ok_f and frame_out.exists():
-                final_output_path = frame_out
-                yield send(log=f"[Bước 6/6] ✅ Khung video: {frame_out.name}", level="success",
-                           file_path=str(frame_out.resolve()), overall=99, overall_lbl="Khung video xong")
-            else:
-                yield send(log=f"[Bước 6/6] ✗ Tạo khung thất bại: {err_f}", level="error")
-        except Exception as exc:
-            yield send(log=f"[Bước 6/6] ✗ Lỗi: {exc}", level="error")
 
     yield send(log="✅ Hoàn tất!", level="success")
     yield send(overall=100, overall_lbl="Hoàn tất")

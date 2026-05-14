@@ -48,8 +48,15 @@ client_secrets.json
 youtube_token.json
 .youtube_tokens/
 .tiktok_tokens/
+.tiktok_profile/
+.tiktok_sessions/
+.facebook_token.json
+.accounts/
 
 # Frontend build artifacts
 node_modules/
 static/dist/
 *.local
+
+# Temporary uploads (AI/publish file buffer)
+temp_uploads/

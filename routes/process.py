@@ -123,66 +123,142 @@ def video_frame():
 
 @bp.route("/api/video_frame_from_url", methods=["POST"])
 def video_frame_from_url():
-    """Find the most recently downloaded mp4 in Downloaded folder and extract a frame."""
-    import base64
-    import subprocess
-    from core.video_processor import find_ffmpeg
-
+    """Fetch thumbnail/cover from video URL via Douyin API."""
     data = request.json or {}
-    timestamp = float(data.get("timestamp") or 0.0)
+    url = str(data.get("url") or "").strip()
 
-    cfg = load_cfg()
-    dl_dir = Path(cfg.get("path") or "./Downloaded").expanduser()
-    if not dl_dir.is_absolute():
-        dl_dir = ROOT / dl_dir
+    if not url:
+        return jsonify({"ok": False, "error": "Chưa nhập URL video"}), 400
 
-    if not dl_dir.exists():
-        return jsonify({"ok": False, "error": "Thư mục Downloaded không tồn tại"}), 404
+    # Fetch thumbnail/cover from URL via Douyin API
+    thumb_result = _fetch_thumbnail_from_url(url)
+    if thumb_result:
+        return jsonify(thumb_result)
 
-    # Find the most recently modified mp4 file
-    mp4_files = sorted(
-        [f for f in dl_dir.iterdir() if f.is_file() and f.suffix.lower() == ".mp4"],
-        key=lambda f: f.stat().st_mtime,
-        reverse=True
-    )
+    return jsonify({"ok": False, "error": "Không lấy được thumbnail từ URL"}), 404
 
-    if not mp4_files:
-        return jsonify({"ok": False, "error": "Chưa có file video nào trong thư mục Downloaded"}), 404
 
-    vp = mp4_files[0]
-
-    ffmpeg = find_ffmpeg()
-    if not ffmpeg:
-        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
+def _fetch_thumbnail_from_url(url: str) -> dict | None:
+    """Fetch video thumbnail/cover image from Douyin API given a video URL."""
+    import re
+    import base64
+    import httpx
+    from urllib.parse import urlparse, parse_qs
 
     try:
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            tmp_path = tmp.name
+        from config import ConfigLoader
+        from auth import CookieManager
+        from core import DouyinAPIClient, URLParser
 
-        subprocess.run([
-            ffmpeg, "-ss", str(timestamp),
-            "-i", str(vp),
-            "-vframes", "1",
-            "-q:v", "3",
-            "-vf", "scale=640:-1",
-            tmp_path, "-y", "-loglevel", "error"
-        ], capture_output=True, timeout=15)
+        cfg_loader = ConfigLoader(str(CONFIG_FILE))
+        cm = CookieManager()
+        cm.set_cookies(get_cookies_with_fallback())
 
-        if not Path(tmp_path).exists() or Path(tmp_path).stat().st_size == 0:
-            return jsonify({"ok": False, "error": f"Không thể extract frame từ {vp.name}"}), 500
+        def _pick_url(raw: str) -> str:
+            text = str(raw or "").strip()
+            if not text:
+                return ""
+            m = re.search(r"https?://[^\s]+", text)
+            if m:
+                return m.group(0).rstrip("\"'.,;)")
+            if text.startswith("v.douyin.com/") or text.startswith("www.douyin.com/"):
+                return "https://" + text
+            return text
 
-        with open(tmp_path, "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode()
+        def _extract_aweme_id(u: str, parsed: dict | None) -> str:
+            if parsed:
+                aid = str(parsed.get("aweme_id") or "").strip()
+                if aid:
+                    return aid
+            qs = parse_qs(urlparse(u).query or "")
+            for key in ("modal_id", "item_id", "group_id", "aweme_id"):
+                val = str((qs.get(key) or [""])[0]).strip()
+                if val.isdigit():
+                    return val
+            m = re.search(r"/(?:video|note|gallery|slides|share/video)/(\d{15,20})", u)
+            if m:
+                return m.group(1)
+            return ""
 
-        Path(tmp_path).unlink(missing_ok=True)
-        return jsonify({
-            "ok": True,
-            "image": f"data:image/jpeg;base64,{img_b64}",
-            "video_name": vp.name,
-        })
+        async def _do_fetch():
+            async with DouyinAPIClient(cm.get_cookies(), proxy=cfg_loader.get("proxy")) as api:
+                normalized_url = _pick_url(url)
+                if not normalized_url:
+                    return None
 
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+                resolved_url = normalized_url
+                if "v.douyin.com" in resolved_url:
+                    redirected = await api.resolve_short_url(resolved_url)
+                    if redirected:
+                        resolved_url = redirected
+
+                parsed = URLParser.parse(resolved_url)
+                aweme_id = _extract_aweme_id(resolved_url, parsed)
+                if not aweme_id:
+                    aweme_id = _extract_aweme_id(normalized_url, URLParser.parse(normalized_url))
+                if not aweme_id:
+                    return None
+
+                detail = await api.get_video_detail(aweme_id)
+                if not detail:
+                    return None
+
+                # Extract cover URL — prefer static images (origin_cover, cover) over animated (dynamic_cover)
+                video_info = detail.get("video") or {}
+                cover_url = ""
+                for field in ("origin_cover", "cover"):
+                    ul = (video_info.get(field) or {}).get("url_list") or []
+                    if ul:
+                        cover_url = ul[0]
+                        break
+
+                if not cover_url:
+                    # Try images (gallery post)
+                    imgs = detail.get("images") or []
+                    if imgs:
+                        ul = (imgs[0].get("url_list") or [])
+                        if ul:
+                            cover_url = ul[0]
+
+                if not cover_url:
+                    return None
+
+                return cover_url, detail.get("desc") or "video"
+
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(_do_fetch())
+        finally:
+            loop.close()
+
+        if not result:
+            return None
+
+        cover_url, title = result
+
+        # Download the cover image and convert to base64
+        with httpx.Client(timeout=10, follow_redirects=True) as client:
+            resp = client.get(cover_url)
+            if resp.status_code == 200 and len(resp.content) > 0:
+                content_type = resp.headers.get("content-type", "image/jpeg")
+                if "webp" in content_type:
+                    mime = "image/webp"
+                elif "png" in content_type:
+                    mime = "image/png"
+                else:
+                    mime = "image/jpeg"
+                img_b64 = base64.b64encode(resp.content).decode()
+                return {
+                    "ok": True,
+                    "image": f"data:{mime};base64,{img_b64}",
+                    "video_name": title,
+                    "source": "thumbnail",
+                }
+
+    except Exception:
+        pass
+
+    return None
 
 
 @bp.route("/api/upload_anti_fp_image", methods=["POST"])
@@ -490,7 +566,7 @@ def make_vertical_video_route():
         ffmpeg=ffmpeg,
         title=str(data.get("title") or ""),
         title_size_pct=float(data.get("title_size_pct") or 5.0),
-        title_color=str(data.get("title_color") or "#ff0000"),
+        title_color=str(data.get("title_color") or "#000000"),
         blur_w_pct=float(data.get("blur_w_pct") or 15.0),
         blur_opacity=float(data.get("blur_opacity") or 0.6),
         blur_mode=str(data.get("blur_mode") or "overlay"),
@@ -520,3 +596,150 @@ def _preload_whisper_model():
             _whisper_model_cache[model_name] = WhisperModel(model_name, device="cpu", compute_type="int8")
     except Exception:
         pass
+
+
+@bp.route("/api/video_frame_upload", methods=["POST"])
+def video_frame_upload():
+    """Extract a frame from an uploaded video file at a given timestamp."""
+    import base64
+    import subprocess
+    from core.video_processor import find_ffmpeg
+
+    video_file = request.files.get("video_file")
+    timestamp = float(request.form.get("timestamp") or 0.0)
+
+    if not video_file:
+        return jsonify({"ok": False, "error": "Chưa chọn file video"}), 400
+
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
+
+    try:
+        # Save uploaded video to temp
+        upload_dir = ROOT / "temp_uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        tmp_video = upload_dir / f"_frame_tmp_{video_file.filename}"
+        video_file.save(str(tmp_video))
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        subprocess.run([
+            ffmpeg, "-ss", str(timestamp),
+            "-i", str(tmp_video),
+            "-vframes", "1",
+            "-q:v", "3",
+            "-vf", "scale=640:-1",
+            tmp_path, "-y", "-loglevel", "error"
+        ], capture_output=True, timeout=15)
+
+        if not Path(tmp_path).exists() or Path(tmp_path).stat().st_size == 0:
+            tmp_video.unlink(missing_ok=True)
+            return jsonify({"ok": False, "error": "Không thể extract frame"}), 500
+
+        with open(tmp_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode()
+
+        Path(tmp_path).unlink(missing_ok=True)
+        # Keep tmp_video for later processing
+        return jsonify({"ok": True, "image": f"data:image/jpeg;base64,{img_b64}", "tmp_path": str(tmp_video)})
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/burn_subtitle_only", methods=["POST"])
+def burn_subtitle_only():
+    """Burn subtitle + optional frame into video (upload-based, streaming progress)."""
+    import shutil
+    import json as _json
+    from core.video_processor import burn_subtitles, find_ffmpeg
+
+    video_file = request.files.get("video_file")
+    ass_file = request.files.get("ass_file")
+
+    if not video_file:
+        return jsonify({"ok": False, "error": "Chưa chọn file video"}), 400
+    if not ass_file:
+        return jsonify({"ok": False, "error": "Chưa chọn file phụ đề"}), 400
+
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
+
+    # Save uploads
+    upload_dir = ROOT / "temp_uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    tmp_video = upload_dir / f"_burn_{video_file.filename}"
+    tmp_ass = upload_dir / f"_burn_{ass_file.filename}"
+    video_file.save(str(tmp_video))
+    ass_file.save(str(tmp_ass))
+
+    # Parse params
+    font_size_pct = float(request.form.get("font_size") or 5)
+    font_size_px = max(8, int(720 * font_size_pct / 100))
+    font_color = request.form.get("font_color") or "yellow"
+    margin_v_pct = float(request.form.get("margin_v") or 7)
+    margin_v_px = max(0, int(720 * margin_v_pct / 100))
+    subtitle_position = request.form.get("subtitle_position") or "bottom"
+    blur_original = request.form.get("blur_original") == "1"
+    frame_enabled = request.form.get("frame_enabled") == "1"
+    frame_title = request.form.get("frame_title") or ""
+    frame_title_size_pct = float(request.form.get("frame_title_size_pct") or 5)
+    frame_title_color = request.form.get("frame_title_color") or "#000000"
+    frame_blur_w_pct = float(request.form.get("frame_blur_w_pct") or 15)
+    frame_blur_opacity = float(request.form.get("frame_blur_opacity") or 0.6)
+
+    out_dir_str = request.form.get("out_dir") or ""
+    if out_dir_str:
+        out_dir = Path(out_dir_str).expanduser()
+    else:
+        out_dir = tmp_video.parent
+
+    stem = tmp_video.stem.replace("_burn_", "")
+    output_name = f"{stem}_subbed.mp4" if not frame_enabled else f"{stem}_subbed_framed.mp4"
+    output_path = out_dir / output_name
+
+    def generate():
+        logs = []
+
+        def _log_cb(msg, level="info"):
+            logs.append(_json.dumps({"log": msg, "level": level}) + "\n")
+
+        yield _json.dumps({"log": "🚀 Bắt đầu xử lý...", "level": "info", "overall": 5, "overall_lbl": "Chuẩn bị..."}) + "\n"
+
+        ok, err = burn_subtitles(
+            video_path=tmp_video,
+            srt_path=tmp_ass,
+            output_path=output_path,
+            ffmpeg=ffmpeg,
+            blur_original=blur_original,
+            font_size=font_size_px,
+            font_color=font_color,
+            margin_v=margin_v_px,
+            subtitle_position=subtitle_position,
+            subtitle_format="ass",
+            frame_enabled=frame_enabled,
+            frame_title=frame_title,
+            frame_title_size_pct=frame_title_size_pct,
+            frame_title_color=frame_title_color,
+            frame_blur_w_pct=frame_blur_w_pct,
+            frame_blur_opacity=frame_blur_opacity,
+            log_callback=_log_cb,
+        )
+
+        # Flush all collected logs
+        for log_line in logs:
+            yield log_line
+
+        if ok:
+            yield _json.dumps({"log": f"✅ Hoàn tất: {output_path.name}", "level": "success", "overall": 100, "overall_lbl": "Hoàn tất!"}) + "\n"
+        else:
+            yield _json.dumps({"log": f"❌ Lỗi: {err}", "level": "error", "overall": 100, "overall_lbl": "Thất bại"}) + "\n"
+
+        # Cleanup temp files
+        tmp_video.unlink(missing_ok=True)
+        tmp_ass.unlink(missing_ok=True)
+
+    return Response(stream_with_context(generate()), mimetype="text/plain")

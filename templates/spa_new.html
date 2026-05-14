@@ -433,6 +433,50 @@ tr:hover td{background:var(--accent-light)}
 <!-- Toast container -->
 <div id="toasts"></div>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     Facebook Token Refresh Modal (shown when upload fails due to
+     expired/invalid token; user can paste new token + retry, or skip)
+═══════════════════════════════════════════════════════════════ -->
+<div id="fb-token-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:12px;max-width:520px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,0.3);padding:24px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="width:36px;height:36px;border-radius:50%;background:#fef3cd;color:#b7791f;display:flex;align-items:center;justify-content:center;font-size:18px">🔑</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:15px;color:#1a2332">Token Facebook cần cập nhật</div>
+        <div style="font-size:11px;color:#6b8cba">Token hiện tại thiếu quyền hoặc hết hạn. Paste User Access Token mới đủ 3 scope bên dưới.</div>
+      </div>
+    </div>
+    <div id="fb-token-modal-error" style="background:#fdecea;border:1px solid rgba(192,57,43,0.2);border-radius:6px;padding:8px 12px;font-size:12px;color:#c0392b;margin-bottom:12px;display:none"></div>
+    <div class="alert-info" style="font-size:11px;margin-bottom:12px;padding:8px 12px">
+      Lấy User Access Token từ
+      <a href="https://developers.facebook.com/tools/explorer/" target="_blank" style="color:var(--accent)">Graph API Explorer</a>
+      — cần permissions: <b>pages_manage_posts</b>, <b>pages_read_engagement</b>, <b>pages_show_list</b>.
+      <br><br>
+      <b>Lưu ý quan trọng:</b>
+      <ul style="margin:4px 0 0 16px;padding:0;list-style:disc">
+        <li>Phải dùng <b>USER TOKEN</b> (không phải PAGE TOKEN), code sẽ tự đổi sang Page Token khi đăng.</li>
+        <li>Bạn phải là <b>admin</b> của Page (không phải editor).</li>
+        <li>App của bạn phải được cấp <b>Advanced Access</b> cho 3 permission trên (nếu Live).</li>
+      </ul>
+    </div>
+    <div id="fb-token-modal-warnings" style="display:none;background:#fef3cd;border:1px solid rgba(183,121,31,0.2);border-radius:6px;padding:8px 12px;font-size:11px;color:#7a5a1a;margin-bottom:12px"></div>
+    <div id="fb-token-modal-diag" style="display:none;background:#f0f7ff;border:1px solid rgba(26,115,232,0.2);border-radius:6px;padding:8px 12px;font-size:11px;color:#1a2332;margin-bottom:12px"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <input type="password" id="fb-token-modal-input" placeholder="EAAxxxxxxx..."
+        style="flex:1;font-family:monospace;font-size:11px;padding:8px 12px;border:1.5px solid var(--border);border-radius:6px;background:#fff">
+      <button class="btn btn-secondary btn-sm" onclick="fbTokenModalTogglePw()">👁</button>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="fbTokenModalDiagnose()">🔍 Chẩn đoán</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="fbTokenModalSkip()">⏭ Bỏ qua video này</button>
+        <button class="btn btn-secondary" onclick="fbTokenModalCancel()">Hủy</button>
+        <button class="btn btn-primary" id="btn-fb-token-modal-save" onclick="fbTokenModalSave()">🔄 Lưu &amp; Thử lại</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="app" style="display:flex;height:100vh;overflow:hidden">
 
   <!-- SIDEBAR (desktop) -->
@@ -450,6 +494,9 @@ tr:hover td{background:var(--accent-light)}
       </a>
       <a class="nav-item" data-page="transcribe" onclick="switchPage('transcribe')">
         <span class="nav-icon">🎙</span><span class="nav-label">Phiên âm</span>
+      </a>
+      <a class="nav-item" data-page="subtitle" onclick="switchPage('subtitle')">
+        <span class="nav-icon">🖼</span><span class="nav-label">Phụ đề & Khung</span>
       </a>
       <a class="nav-item" data-page="publish" onclick="switchPage('publish')">
         <span class="nav-icon">📤</span><span class="nav-label">Đăng video</span>
@@ -486,6 +533,7 @@ tr:hover td{background:var(--accent-light)}
       {% include 'components/page_user.html' %}
       {% include 'components/page_process.html' %}
       {% include 'components/page_transcribe.html' %}
+      {% include 'components/page_subtitle.html' %}
       {% include 'components/page_publish.html' %}
       {% include 'components/page_content.html' %}
       {% include 'components/page_history.html' %}
@@ -534,6 +582,8 @@ tr:hover td{background:var(--accent-light)}
 <script src="/static/js/content.js?v={{ jsv }}"></script>
 <script src="/static/js/app.js?v={{ jsv }}"></script>
 <script src="/static/js/publish.js?v={{ jsv }}"></script>
+<script src="/static/js/accounts.js?v={{ jsv }}"></script>
+<script src="/static/js/proc_publish.js?v={{ jsv }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   switchPage('user');

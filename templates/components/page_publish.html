@@ -17,7 +17,7 @@
             <div class="field">
               <label>🎬 File video <span class="text-red">*</span></label>
               <div class="input-with-button">
-                <input type="text" id="pub-video-path" placeholder="Chọn file video hoặc nhập đường dẫn..." readonly>
+                <input type="text" id="pub-video-path" placeholder="Chọn file video hoặc nhập đường dẫn...">
                 <button class="btn btn-secondary" onclick="document.getElementById('pub-video-file').click()">📂 Duyệt</button>
                 <input type="file" id="pub-video-file" accept="video/*" style="display:none" onchange="_pubSetVideoFile(this)">
               </div>
@@ -81,6 +81,14 @@
         <div class="platform-content">
           <!-- YouTube Panel -->
           <div id="pub-panel-youtube" class="platform-panel active">
+            <!-- Account Selector -->
+            <div class="field" style="margin-bottom:8px">
+              <label style="font-size:11px;color:var(--text-muted)">📺 Tài khoản YouTube</label>
+              <select id="yt-account-select" class="pub-select-sm" onchange="onAccountSelectChange('youtube', this)" style="width:100%">
+                <option value="">Chưa có tài khoản</option>
+              </select>
+            </div>
+
             <!-- YouTube Auth Status Bar -->
             <div id="yt-auth-bar" class="yt-auth-bar">
 
@@ -208,13 +216,38 @@
               </select>
             </div>
 
+            <!-- Lịch đăng (tuỳ chọn) -->
+            <div class="field" style="margin-top:8px">
+              <label class="check-item" style="margin:0">
+                <input type="checkbox" id="pub-tt-use-schedule" onchange="pubTtToggleSchedule()">
+                <span>📅 Đặt lịch đăng (trên TikTok Studio)</span>
+              </label>
+            </div>
+            <div id="pub-tt-schedule-fields" style="display:none;margin-top:6px">
+              <input type="datetime-local" id="pub-tt-schedule-dt" style="width:100%">
+              <div class="text-xs text-muted mt-4">
+                TikTok yêu cầu lịch ít nhất 15 phút và nhiều nhất 10 ngày kể từ bây giờ (giờ máy của bạn).
+              </div>
+            </div>
+
             <button class="btn btn-lg btn-tt w-full mt-8" onclick="pubOpenTikTok()">
-              🎵 Mở TikTok & Copy nội dung
+              🎵 Mở TikTok Studio & tự điền nội dung
             </button>
+            <div class="text-xs text-muted mt-4">
+              💡 Mở trình duyệt đã đăng nhập, gắn sẵn file và caption. Bạn chỉ việc kiểm tra rồi nhấn Post.
+            </div>
           </div>
 
           <!-- Facebook Panel -->
           <div id="pub-panel-facebook" class="platform-panel">
+
+            <!-- Account Selector -->
+            <div class="field" style="margin-bottom:8px">
+              <label style="font-size:11px;color:var(--text-muted)">📘 Tài khoản Facebook</label>
+              <select id="fb-account-select" class="pub-select-sm" onchange="onAccountSelectChange('facebook', this)" style="width:100%">
+                <option value="">Chưa có tài khoản</option>
+              </select>
+            </div>
 
             <!-- Chưa kết nối -->
             <div id="pub-fb-disconnected">
@@ -270,14 +303,14 @@
                 <textarea id="fb-desc" rows="4" placeholder="Nội dung bài đăng, hashtag..."></textarea>
               </div>
 
-              <!-- Chế độ + Lịch đăng -->
+              <!-- Định dạng + Lịch đăng -->
               <div class="settings-grid" style="margin-top:8px">
                 <div class="field">
-                  <label>🔒 Chế độ đăng</label>
-                  <select id="pub-fb-privacy">
-                    <option value="EVERYONE" selected>🌐 Công khai</option>
-                    <option value="FRIENDS">👥 Bạn bè</option>
-                    <option value="ONLY_ME">🔒 Chỉ mình tôi</option>
+                  <label>Định dạng</label>
+                  <select id="pub-fb-post-type">
+                    <option value="auto" selected>Tự động (9:16 → Reel)</option>
+                    <option value="reel">🎬 Reel (yêu cầu 9:16, 540x960+)</option>
+                    <option value="video">📹 Video thường</option>
                   </select>
                 </div>
                 <div class="field">
@@ -287,6 +320,9 @@
                     <span>📅 Đặt lịch đăng</span>
                   </label>
                 </div>
+              </div>
+              <div class="text-xs text-muted mt-4">
+                💡 Bài đăng trên Page luôn công khai. Reel yêu cầu MP4, 9:16, tối thiểu 540x960, 3-90 giây.
               </div>
               <div id="pub-fb-schedule-fields" style="display:none;margin-top:8px">
                 <input type="datetime-local" id="pub-fb-schedule-dt" style="width:100%">

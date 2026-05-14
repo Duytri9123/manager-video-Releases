@@ -65,7 +65,7 @@ function switchPage(name) {
   navs.forEach(n => n.classList.add('active'));
   const el = document.getElementById('topbar-title');
   const titles = {
-    user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm',
+    user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
@@ -164,7 +164,45 @@ function startProcessVideo() {
   const videoPath = document.getElementById('proc-video')?.value?.trim();
   const videoUrl = document.getElementById('proc-url')?.value?.trim();
   const selectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
-  if (!videoPath && !videoUrl) { alert('Vui lòng nhập đường dẫn file video hoặc URL video'); return; }
+  if (!videoPath && !videoUrl) {
+    alert('Vui lòng nhập đường dẫn file video hoặc URL video');
+    // Notify batch queue so _procRunning resets and queue can continue
+    if (typeof window._onProcTaskFinished === 'function') {
+      window._onProcTaskFinished(false);
+    }
+    return;
+  }
+
+  // Preflight: nếu user bật tự-động-đăng, check trạng thái các nền tảng trước khi
+  // bắt đầu pipeline xử lý dài. Người dùng có thể tắt nền tảng lỗi hoặc hủy.
+  (async () => {
+    if (typeof window.pPubPreflightCheck === 'function'
+        && document.getElementById('p-autopub-enabled')?.checked) {
+      const ok = await window.pPubPreflightCheck({ interactive: true });
+      if (!ok) {
+        // User chose to cancel — stop the queue, revert task to pending.
+        // Queue will only resume when user manually clicks "Xử lý hàng chờ" again.
+        window._procAutoDrain = false;
+        const drainCb = document.getElementById('batch-auto-drain');
+        if (drainCb) drainCb.checked = false;
+        const drainStatus = document.getElementById('batch-drain-status');
+        if (drainStatus) drainStatus.textContent = '';
+        // Revert current task back to pending so it can be retried
+        if (window._procCurrentTaskId) {
+          const t = (window._batchQueue || []).find(x => x.id === window._procCurrentTaskId);
+          if (t && t.status === 'processing') t.status = 'pending';
+        }
+        window._procCurrentTaskId = null;
+        window._procRunning = false;
+        if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
+        return;
+      }
+    }
+    _startProcessVideoInternal(videoPath, videoUrl, selectedFile);
+  })();
+}
+
+function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
 
   const btn = document.getElementById('btn-proc');
   if (btn) { btn.disabled = true; btn.textContent = 'Đang xử lý...'; }
@@ -238,7 +276,9 @@ function startProcessVideo() {
     frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
     frame_title:          document.getElementById('frame-title')?.value || '',
     frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
-    frame_title_color:    document.getElementById('frame-title-color')?.value || '#ff0000',
+    frame_title_color:    document.getElementById('frame-title-color')?.value || '#000000',
+    frame_title_color_2:  document.getElementById('frame-title-color-2')?.value || '#ff0000',
+    frame_title_split_color: document.getElementById('frame-title-split-color')?.checked ?? true,
     frame_blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
     frame_blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
     frame_blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
@@ -275,9 +315,27 @@ function startProcessVideo() {
           // Frame video now runs inside the pipeline (step 6) — no need to trigger separately
           _setProcProgress(100, 'Hoàn thành!');
 
-          if (window._publishLastOutputPath && document.getElementById('publish-auto-upload')?.checked) {
+          // ── Auto-publish after processing ──
+          const autoPubPromise = (typeof pPubAutoUploadAll === 'function'
+              && document.getElementById('p-autopub-enabled')?.checked
+              && window._publishLastOutputPath)
+            ? pPubAutoUploadAll(window._publishLastOutputPath).catch(() => {})
+            : Promise.resolve();
+
+          // Legacy auto-upload path (different checkbox id)
+          if (window._publishLastOutputPath
+              && document.getElementById('publish-auto-upload')?.checked
+              && !document.getElementById('p-autopub-enabled')?.checked) {
             publishSelectedPlatform();
           }
+
+          // Notify batch queue this task finished (after auto-publish completes
+          // so scheduled uploads use the correct index)
+          autoPubPromise.finally(() => {
+            if (typeof window._onProcTaskFinished === 'function') {
+              window._onProcTaskFinished(true);
+            }
+          });
           return;
         }
         const text = decoder.decode(value, { stream: true });
@@ -305,8 +363,7 @@ function startProcessVideo() {
 
             // ── ASS Review event ──
             if (d.review_ass && d.ass_path) {
-              const skipReview = window._procSkipReview ||
-                localStorage.getItem('proc_skip_review') === '1';
+              const skipReview = window._procSkipReviewSession === true;
               if (!skipReview) {
                 // Load ASS content and show review panel
                 fetch('/api/proc_read_ass', {
@@ -324,6 +381,16 @@ function startProcessVideo() {
                 });
               } else {
                 // Auto-continue without review — frame video runs after pipeline done
+                // Still trigger AI auto-fill (reading ASS content) for auto-publish
+                if (typeof pPubOnAssConfirmed === 'function') {
+                  fetch('/api/proc_read_ass', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: d.ass_path })
+                  }).then(r => r.json()).then(rd => {
+                    pPubOnAssConfirmed(d.ass_path, rd.content || '').catch(() => {});
+                  }).catch(() => {});
+                }
                 fetch('/api/proc_resume', { method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ action: 'continue' })
@@ -340,6 +407,9 @@ function startProcessVideo() {
     _appendProcLog('Lỗi kết nối: ' + err, 'error');
     if (btn) { btn.disabled = false; btn.textContent = 'Xử lý Video'; }
     if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(false);
+    if (typeof window._onProcTaskFinished === 'function') {
+      window._onProcTaskFinished(false);
+    }
   });
 
   if (selectedFile) {

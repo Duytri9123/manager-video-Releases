@@ -34,34 +34,158 @@ def _llm_translate(
     api_url: str,
     api_key: str,
     model: str,
-    timeout: int = 30,
+    timeout: int = 60,
     batch_size: int = 30,
+    context: str = "",
 ) -> List[str]:
-    """Translate texts in batches to avoid token limits."""
+    """Translate texts in batches to avoid token limits.
+    
+    Step 1: AI reads ALL subtitles to fully understand the video content,
+            identifies ASR errors, and builds a correction/terminology map.
+    Step 2: AI translates each batch using the correction map for consistency.
+    """
     if not texts:
         return []
 
     all_results: List[str] = [""] * len(texts)
 
-    # Split into batches
+    # Load translation style guide from file
+    style_guide = ""
+    style_paths = [
+        Path(__file__).parent.parent / "config" / "translation_style.txt",
+        Path("config/translation_style.txt"),
+    ]
+    for sp in style_paths:
+        if sp.exists():
+            try:
+                style_guide = sp.read_text(encoding="utf-8").strip()
+            except Exception:
+                pass
+            break
+
+    # ── Step 1: Full content analysis ──────────────────────────────────────────
+    # Send ALL subtitles so AI fully understands the video before translating.
+    # This ensures consistent terminology and accurate ASR error correction.
+    all_text = "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts) if t.strip())
+    # Limit to ~3000 chars to stay within token limits, but use as much as possible
+    max_analysis_chars = 4000
+    if len(all_text) > max_analysis_chars:
+        # Take first half + last quarter for better coverage
+        half = max_analysis_chars * 2 // 3
+        quarter = max_analysis_chars // 3
+        all_text = all_text[:half] + "\n...\n" + all_text[-quarter:]
+
+    analysis_system = (
+        "You are a Chinese video content analyst. Your job is to read auto-transcribed "
+        "subtitles (ASR output from Douyin/TikTok) and figure out what the video is ACTUALLY about. "
+        "ASR makes MANY errors — words that sound similar get mixed up. You must use context "
+        "to determine the correct words."
+    )
+
+    analysis_prompt = (
+        f"VIDEO TITLE: {context or '(unknown)'}\n\n"
+        f"FULL SUBTITLES (auto-transcribed, contains errors):\n{all_text}\n\n"
+        "TASK — Analyze this video thoroughly:\n\n"
+        "1. SUMMARY: What is this video about? Describe the content in 2-3 sentences.\n"
+        "   Include: topic, what happens, key subjects/objects mentioned.\n\n"
+        "2. ASR CORRECTIONS: List ALL words that are likely misheard by ASR.\n"
+        "   These are words that SOUND similar in Chinese but don't make sense in context.\n"
+        "   Format: 错误词 → 正确词 (explanation)\n\n"
+        "3. TERMINOLOGY: List key terms that appear repeatedly and their correct Vietnamese translations.\n"
+        "   These MUST be used consistently throughout all subtitle translations.\n"
+        "   Format: 中文 = Tiếng Việt\n\n"
+        "4. TONE: What tone/style should the Vietnamese translation use?\n"
+        "   (e.g., educational, entertaining, dramatic, casual narration)\n\n"
+        "OUTPUT FORMAT (strict):\n"
+        "SUMMARY: <2-3 sentences describing the video>\n"
+        "CORRECTIONS:\n"
+        "- <wrong> → <correct> (<why>)\n"
+        "TERMS:\n"
+        "- <Chinese> = <Vietnamese>\n"
+        "TONE: <style description>\n"
+    )
+
+    correction_map = ""
+    try:
+        analysis_payload = json.dumps({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": analysis_system},
+                {"role": "user", "content": analysis_prompt},
+            ],
+            "temperature": 0.1,
+            "max_tokens": 1500,
+        }).encode()
+        analysis_req = urllib.request.Request(
+            api_url, data=analysis_payload, method="POST",
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        )
+        with urllib.request.urlopen(analysis_req, timeout=timeout) as response:
+            analysis_data = json.loads(response.read())
+        correction_map = analysis_data["choices"][0]["message"]["content"].strip()
+    except Exception:
+        correction_map = ""
+
+    # ── Step 2: Translate in batches using the analysis ────────────────────────
+    system_msg = (
+        "You are an expert Vietnamese subtitle translator for Chinese social media videos. "
+        "You produce natural, engaging Vietnamese subtitles that sound like a native Vietnamese "
+        "content creator is narrating. You ALWAYS fix ASR errors before translating."
+    )
+
     for batch_start in range(0, len(texts), batch_size):
         batch = texts[batch_start: batch_start + batch_size]
         numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(batch))
-        prompt = (
-            "You are a professional Vietnamese translator. "
-            "Translate each line from Chinese to natural Vietnamese. "
-            "Rules: 第X集->Tập X, preserve names/hashtags, keep it concise. "
-            "Return ONLY the numbered list in the same order, no explanations.\n\n"
-            + numbered
+
+        # Add surrounding lines for continuity between batches
+        prev_context = ""
+        next_context = ""
+        if batch_start > 0:
+            prev_lines = texts[max(0, batch_start - 3): batch_start]
+            prev_context = "\n".join(f"  {t}" for t in prev_lines if t.strip())
+        if batch_start + batch_size < len(texts):
+            next_lines = texts[batch_start + batch_size: batch_start + batch_size + 3]
+            next_context = "\n".join(f"  {t}" for t in next_lines if t.strip())
+
+        # Build the translation prompt
+        parts = []
+        parts.append(f"VIDEO: {context or '(unknown)'}")
+
+        if correction_map:
+            parts.append(f"\nVIDEO ANALYSIS (use this to fix errors and maintain consistency):\n{correction_map}")
+
+        if style_guide:
+            parts.append(f"\nSTYLE GUIDE:\n{style_guide}")
+
+        if prev_context:
+            parts.append(f"\nPREVIOUS LINES (already translated, for continuity):\n{prev_context}")
+
+        parts.append(f"\nLINES TO TRANSLATE:\n{numbered}")
+
+        if next_context:
+            parts.append(f"\nNEXT LINES (coming up, for context):\n{next_context}")
+
+        parts.append(
+            "\nRULES:\n"
+            "1. Fix ALL ASR errors using the ANALYSIS above before translating.\n"
+            "2. Use TERMS list for consistent translations — same word = same translation everywhere.\n"
+            "3. Each line must be a complete, natural Vietnamese sentence.\n"
+            "4. Match the TONE described in the analysis.\n"
+            "5. Keep translations concise (subtitle-friendly, not too long).\n"
+            "6. OUTPUT: Return ONLY numbered lines (1. ..., 2. ...). No explanations, no extra text."
         )
-        payload = json.dumps(
-            {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1,
-                "max_tokens": min(4000, len(batch) * 80),
-            }
-        ).encode()
+
+        prompt = "\n".join(parts)
+
+        payload = json.dumps({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.3,
+            "max_tokens": min(4000, len(batch) * 120),
+        }).encode()
         req = urllib.request.Request(
             api_url,
             data=payload,
@@ -108,6 +232,7 @@ def translate_texts(
     texts: List[str],
     trans_cfg: Dict,
     preferred_provider: str = "auto",
+    context: str = "",
 ) -> Tuple[List[str], str]:
     if not texts:
         return [], "none"
@@ -147,6 +272,7 @@ def translate_texts(
                     "https://api.deepseek.com/v1/chat/completions",
                     deepseek_key,
                     "deepseek-chat",
+                    context=context,
                 )
                 if any(result):
                     return _rebuild(result), "deepseek"
@@ -158,6 +284,7 @@ def translate_texts(
                     "https://api.openai.com/v1/chat/completions",
                     openai_key,
                     "gpt-4o-mini",
+                    context=context,
                 )
                 if any(result):
                     return _rebuild(result), "openai"
@@ -169,6 +296,7 @@ def translate_texts(
                     "https://api.groq.com/openai/v1/chat/completions",
                     groq_key,
                     groq_model,
+                    context=context,
                 )
                 if any(result):
                     return _rebuild(result), "groq"
@@ -194,7 +322,7 @@ def translate_texts(
                     ),
                 ]
                 for hf_url, hf_model in hf_endpoints:
-                    result = _llm_translate(source_texts, hf_url, hf_token, hf_model)
+                    result = _llm_translate(source_texts, hf_url, hf_token, hf_model, context=context)
                     if any(result):
                         return _rebuild(result), "huggingface"
 
@@ -257,13 +385,14 @@ class BatchTranslator:
         self,
         texts: List[str],
         preferred_provider: str = "auto",
+        context: str = "",
     ) -> Tuple[List[str], str]:
         """Translate a list of texts in a single batch call.
 
         Returns (translated_texts, provider_used).
         If all providers fail, returns (original_texts, "fallback").
         """
-        return translate_texts(texts, self._cfg, preferred_provider)
+        return translate_texts(texts, self._cfg, preferred_provider, context=context)
 
     def write_vi_srt(
         self,

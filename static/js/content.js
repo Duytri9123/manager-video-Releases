@@ -414,7 +414,7 @@ async function fbMgrPostVideo() {
 
   const title    = document.getElementById('fb-post-title')?.value?.trim() || '';
   const desc     = document.getElementById('fb-post-desc')?.value?.trim()  || '';
-  const privacy  = document.getElementById('fb-post-privacy')?.value || 'EVERYONE';
+  const postTypeRaw = document.getElementById('fb-post-post-type')?.value || 'auto';
   const schedVal = document.getElementById('fb-post-schedule')?.value;
   let scheduledTime = '';
   if (schedVal) {
@@ -425,29 +425,119 @@ async function fbMgrPostVideo() {
   }
 
   const btn = document.getElementById('btn-fb-post-video');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang đăng...'; }
+  const setBusy = (busy) => {
+    if (btn) { btn.disabled = busy; btn.textContent = busy ? '⏳ Đang đăng...' : '🚀 Đăng Video lên Facebook'; }
+  };
   const logBox = document.getElementById('fb-post-log');
   if (logBox) { logBox.style.display = 'block'; logBox.innerHTML = ''; }
 
-  try {
+  setBusy(true);
+
+  // ── Auto-detect Reel vs Video ──
+  let postType = postTypeRaw;
+  if (postType === 'auto') {
+    if (videoFile) {
+      _fbLog('ℹ Dùng file upload trực tiếp — mặc định video thường (không auto-detect 9:16).', 'info');
+      postType = 'video';
+    } else if (videoPath) {
+      try {
+        const r = await fetch('/api/facebook/validate_reel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_path: videoPath })
+        });
+        const d = await r.json();
+        if (d.is_vertical_9_16 && d.ok) {
+          postType = 'reel';
+          _fbLog(`🎬 Video ${d.width}x${d.height} → đăng dạng Reel`, 'info');
+        } else {
+          postType = 'video';
+          if (d.error) _fbLog(`ℹ ${d.error} → đăng video thường`, 'info');
+        }
+      } catch (_) {
+        postType = 'video';
+      }
+    } else {
+      postType = 'video';
+    }
+  }
+
+  const endpoint = postType === 'reel'
+    ? '/api/facebook/post_reel'
+    : '/api/facebook/post_video';
+
+  const buildForm = () => {
     const form = new FormData();
     form.append('page_id', page.id);
-    form.append('title', title);
     form.append('description', desc);
-    form.append('privacy', privacy);
     if (scheduledTime) form.append('scheduled_time', scheduledTime);
-    if (videoFile) {
-      form.append('video_file', videoFile);
+    if (postType !== 'reel') {
+      form.append('title', title);
+      if (videoFile) form.append('video_file', videoFile);
+      else           form.append('video_path', videoPath);
     } else {
+      if (!videoPath) {
+        throw new Error('Reel cần file trên đĩa — hãy xử lý video trước rồi điền đường dẫn.');
+      }
       form.append('video_path', videoPath);
     }
+    return form;
+  };
 
-    const res = await fetch('/api/facebook/post_video', { method: 'POST', body: form });
-    if (!res.ok || !res.body) throw new Error('Không thể kết nối server');
+  _fbLog(`🚀 Đang đăng lên Facebook (${postType === 'reel' ? 'Reel' : 'Video'})...`, 'info');
+
+  try {
+    let form;
+    try { form = buildForm(); }
+    catch (e) { toast(e.message, 'error'); return; }
+
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const result = await _fbMgrUploadOnce(endpoint, form);
+      if (result.success) { toast('✅ Đăng Facebook thành công!', 'success', 6000); return; }
+      if (result.tokenError) {
+        if (typeof _pFbShowTokenModal === 'function') {
+          const action = await _pFbShowTokenModal(result.errorMsg || '');
+          if (action === 'retry')  { form = buildForm(); attempt--; continue; }
+          if (action === 'skip')   { _fbLog('⏭ Bỏ qua video này', 'warning'); return; }
+          return; // cancel
+        } else {
+          _fbLog('❌ Token hết hạn — kết nối lại Facebook', 'error');
+          toast('⚠ Token Facebook hết hạn — kết nối lại', 'warning', 6000);
+          return;
+        }
+      }
+      if (result.errorMsg) toast('Lỗi: ' + result.errorMsg, 'error');
+      return;
+    }
+    _fbLog('❌ Đã thử lại 5 lần nhưng không thành công', 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function _fbMgrUploadOnce(endpoint, form) {
+  const out = { success: false, tokenError: false, errorMsg: '' };
+  try {
+    const res = await fetch(endpoint, { method: 'POST', body: form });
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      let tokenError = false;
+      try {
+        const errData = await res.json();
+        errMsg = errData.error || errMsg;
+        tokenError = !!errData.token_error;
+      } catch (_) {}
+      if (res.status === 401) tokenError = true;
+      _fbLog('❌ ' + errMsg, 'error');
+      out.errorMsg = errMsg; out.tokenError = tokenError;
+      return out;
+    }
+    if (!res.body) { out.errorMsg = 'Server không trả về stream'; return out; }
 
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
+    let gotOk = false;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -458,15 +548,19 @@ async function fbMgrPostVideo() {
         try {
           const d = JSON.parse(t);
           if (d.log) _fbLog(d.log, d.level || 'info');
-          if (d.url) { _fbLog('🔗 ' + d.url, 'success'); toast('✅ Đăng Facebook thành công!', 'success', 6000); }
+          if (d.url) _fbLog('🔗 ' + d.url, 'success');
+          if (d.ok)  gotOk = true;
+          if (d.token_error) { out.tokenError = true; out.errorMsg = d.error || d.log || 'Token hết hạn'; }
+          else if (d.error)  { out.errorMsg = d.error; }
         } catch (_) { _fbLog(t, 'info'); }
       }
     }
+    out.success = gotOk;
+    return out;
   } catch (e) {
     _fbLog('❌ ' + e.message, 'error');
-    toast('Lỗi: ' + e.message, 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🚀 Đăng Video lên Facebook'; }
+    out.errorMsg = e.message;
+    return out;
   }
 }
 
@@ -476,7 +570,6 @@ async function fbMgrPostText() {
 
   const message = document.getElementById('fb-post-text-msg')?.value?.trim();
   const link    = document.getElementById('fb-post-text-link')?.value?.trim() || '';
-  const privacy = document.getElementById('fb-post-text-privacy')?.value || 'EVERYONE';
   if (!message) { toast('Vui lòng nhập nội dung bài viết', 'warning'); return; }
 
   const btn = document.getElementById('btn-fb-post-text');
@@ -486,7 +579,7 @@ async function fbMgrPostText() {
     const res  = await fetch('/api/facebook/post_text', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ page_id: page.id, message, link, privacy })
+      body: JSON.stringify({ page_id: page.id, message, link })
     });
     const data = await res.json();
     if (data.ok) {
@@ -881,4 +974,42 @@ document.addEventListener('click', e => {
 ════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
   // Will be triggered by switchPage('content') → cptSwitch('files')
+});
+
+
+/* ════════════════════════════════════════════════════════════
+   TIKTOK MANAGER — no API access; just saves username + opens links
+════════════════════════════════════════════════════════════ */
+const _TT_MGR_KEY = 'tiktok.manager.username';
+
+function ttMgrLoadUsername() {
+  try {
+    const v = localStorage.getItem(_TT_MGR_KEY) || '';
+    const el = document.getElementById('tt-mgr-username');
+    if (el) el.value = v;
+  } catch (_) {}
+}
+
+function ttMgrSaveUsername() {
+  const el = document.getElementById('tt-mgr-username');
+  const username = (el?.value || '').trim().replace(/^@/, '');
+  try {
+    localStorage.setItem(_TT_MGR_KEY, username);
+    if (username) toast(`💾 Đã lưu username: @${username}`, 'success', 3000);
+  } catch (_) {}
+}
+
+function ttMgrOpenProfile() {
+  const el = document.getElementById('tt-mgr-username');
+  const username = (el?.value || '').trim().replace(/^@/, '');
+  if (!username) {
+    toast('Vui lòng nhập username TikTok trước', 'warning');
+    return;
+  }
+  window.open(`https://www.tiktok.com/@${encodeURIComponent(username)}`, '_blank');
+}
+
+// Auto-load saved username on page load
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(ttMgrLoadUsername, 300);
 });

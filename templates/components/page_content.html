@@ -161,17 +161,17 @@
                 </div>
                 <div class="grid-2">
                   <div class="field">
-                    <label>🔒 Chế độ đăng</label>
-                    <select id="fb-post-privacy">
-                      <option value="EVERYONE" selected>🌐 Công khai</option>
-                      <option value="FRIENDS">👥 Bạn bè</option>
-                      <option value="ONLY_ME">🔒 Chỉ mình tôi</option>
+                    <label>Định dạng</label>
+                    <select id="fb-post-post-type">
+                      <option value="auto" selected>Tự động (9:16 → Reel)</option>
+                      <option value="reel">🎬 Reel (9:16, 540x960+)</option>
+                      <option value="video">📹 Video thường</option>
                     </select>
                   </div>
                   <div class="field">
                     <label>📅 Đặt lịch đăng</label>
                     <input type="datetime-local" id="fb-post-schedule">
-                    <div class="text-xs text-muted mt-4">Để trống = đăng ngay</div>
+                    <div class="text-xs text-muted mt-4">Để trống = đăng ngay (Page luôn công khai).</div>
                   </div>
                 </div>
                 <button class="btn btn-primary w-full mt-8" id="btn-fb-post-video" onclick="fbMgrPostVideo()">
@@ -210,13 +210,8 @@
                   <label>Link đính kèm (tùy chọn)</label>
                   <input type="text" id="fb-post-text-link" placeholder="https://...">
                 </div>
-                <div class="field">
-                  <label>🔒 Chế độ đăng</label>
-                  <select id="fb-post-text-privacy">
-                    <option value="EVERYONE" selected>🌐 Công khai</option>
-                    <option value="FRIENDS">👥 Bạn bè</option>
-                    <option value="ONLY_ME">🔒 Chỉ mình tôi</option>
-                  </select>
+                <div class="text-xs text-muted mb-8">
+                  💡 Bài đăng trên Page luôn công khai theo cấu hình Page.
                 </div>
                 <button class="btn btn-primary w-full mt-8" id="btn-fb-post-text" onclick="fbMgrPostText()">
                   📝 Đăng bài viết
@@ -236,7 +231,7 @@
             <span class="card-title">📰 Bài đăng gần đây</span>
             <button class="btn btn-secondary btn-sm" onclick="fbMgrLoadPosts()">🔄</button>
           </div>
-          <div class="card-body" id="fb-mgr-posts-list">
+          <div class="card-body fb-posts-grid" id="fb-mgr-posts-list">
             <div class="text-muted text-sm" style="text-align:center;padding:20px">Chưa tải bài đăng</div>
           </div>
         </div>
@@ -365,12 +360,39 @@
         <span class="card-title">🎵 TikTok — Quản lý</span>
       </div>
       <div class="card-body">
-        <div class="alert-info mb-12">
-          TikTok không hỗ trợ upload API trực tiếp. Dùng tab <b>📤 Đăng video</b> để copy nội dung và đăng thủ công.
+        <div class="alert-info mb-12" style="font-size:12px">
+          💡 TikTok không mở API đọc bài đăng, nên tab này chỉ quản lý <b>tài khoản người dùng</b> và mở nhanh tới các trang Studio/Inbox/Analytics.
         </div>
-        <button class="btn btn-secondary" onclick="switchPage('publish');pubSwitchTab('tiktok')">
-          🎵 Đến trang Đăng TikTok
-        </button>
+
+        <div class="field">
+          <label>🎵 Tên người dùng TikTok (không có @)</label>
+          <div class="input-with-button">
+            <input type="text" id="tt-mgr-username" placeholder="ví dụ: tiktok" onchange="ttMgrSaveUsername()">
+            <button class="btn btn-secondary" onclick="ttMgrSaveUsername()">💾 Lưu</button>
+          </div>
+          <div class="text-xs text-muted mt-4">Username sẽ được lưu để dùng lại.</div>
+        </div>
+
+        <div class="grid-2" style="margin-top:12px">
+          <button class="btn btn-primary" onclick="ttMgrOpenProfile()">
+            👤 Mở trang cá nhân
+          </button>
+          <button class="btn btn-secondary" onclick="window.open('https://www.tiktok.com/tiktokstudio/upload','_blank')">
+            📤 TikTok Studio — Đăng video
+          </button>
+          <button class="btn btn-secondary" onclick="window.open('https://www.tiktok.com/tiktokstudio/content','_blank')">
+            📋 Studio — Quản lý bài đăng
+          </button>
+          <button class="btn btn-secondary" onclick="window.open('https://www.tiktok.com/tiktokstudio/analytics','_blank')">
+            📊 Studio — Analytics
+          </button>
+          <button class="btn btn-secondary" onclick="window.open('https://www.tiktok.com/messages','_blank')">
+            💬 Hộp thư
+          </button>
+          <button class="btn btn-secondary" onclick="switchPage('publish');pubSwitchTab('tiktok')">
+            🚀 Đến trang Đăng video
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -427,20 +449,27 @@
 .fb-page-cat  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
 /* ── Recent posts ── */
-.fb-post-item {
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  margin-bottom: 8px;
-  font-size: 12px;
+.fb-posts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
 }
-.fb-post-msg { color: var(--text); line-height: 1.5; margin-bottom: 6px; }
-.fb-post-meta { color: var(--text-muted); font-size: 11px; display: flex; gap: 12px; }
+.fb-post-item {
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+  background: var(--bg2);
+  transition: all .15s;
+}
+.fb-post-item:hover { border-color: var(--accent2); box-shadow: var(--shadow-md); }
+.fb-post-msg { color: var(--text); line-height: 1.5; margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.fb-post-meta { color: var(--text-muted); font-size: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ── YouTube video grid ── */
 .yt-mgr-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
 }
 .yt-video-card {
@@ -473,7 +502,8 @@
 .yt-video-actions { display: flex; gap: 6px; }
 .yt-privacy-badge {
   display: inline-flex; align-items: center; gap: 3px;
-  padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px; font-size: 10px !important; font-weight: 700;
+  white-space: nowrap; line-height: 1.4;
 }
 .yt-privacy-public   { background: var(--success-bg); color: var(--success); }
 .yt-privacy-unlisted { background: var(--warning-bg); color: var(--warning); }
@@ -481,6 +511,7 @@
 
 @media (max-width: 600px) {
   .yt-mgr-grid { grid-template-columns: repeat(2, 1fr); }
+  .fb-posts-grid { grid-template-columns: repeat(2, 1fr); }
 }
 .content-table { width:100%; border-collapse:collapse; font-size:13px; }
 .content-table th { text-align:left; padding:12px 16px; background:var(--bg2); border-bottom:1px solid var(--border); color:var(--text2); font-weight:600; position:sticky; top:0; }
