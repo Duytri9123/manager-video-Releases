@@ -185,6 +185,158 @@ print(json.dumps({'path': path or ''}))
     except Exception as e:
         return jsonify({"path": "", "error": str(e)})
 
+# ── /api/test_api_key ─────────────────────────────────────────────────────────
+@bp.route("/api/test_api_key", methods=["POST"])
+def test_api_key():
+    """Test an API key and return status + quota info where available."""
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    data = request.json or {}
+    provider = str(data.get("provider") or "").strip().lower()
+    key = str(data.get("key") or "").strip()
+
+    if not key:
+        return jsonify({"ok": False, "error": "Key trống"}), 400
+
+    # ── DeepSeek ──────────────────────────────────────────────────────────────
+    if provider == "deepseek":
+        try:
+            payload = _json.dumps({
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 1,
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.deepseek.com/v1/chat/completions",
+                data=payload, method="POST",
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                resp = _json.loads(r.read())
+            # Try to get balance
+            balance_info = ""
+            try:
+                bal_req = urllib.request.Request(
+                    "https://api.deepseek.com/user/balance",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                with urllib.request.urlopen(bal_req, timeout=8) as br:
+                    bal = _json.loads(br.read())
+                balances = bal.get("balance_infos") or []
+                if balances:
+                    b = balances[0]
+                    balance_info = f"Balance: {b.get('total_balance', '?')} {b.get('currency', '')}"
+            except Exception:
+                pass
+            return jsonify({"ok": True, "model": "deepseek-chat", "quota": balance_info or "OK"})
+        except urllib.error.HTTPError as e:
+            body = ""
+            try: body = _json.loads(e.read()).get("error", {}).get("message", "")
+            except Exception: pass
+            return jsonify({"ok": False, "error": f"HTTP {e.code}: {body or e.reason}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    # ── Groq (Whisper + LLM) ──────────────────────────────────────────────────
+    elif provider == "groq":
+        try:
+            payload = _json.dumps({
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 1,
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/chat/completions",
+                data=payload, method="POST",
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                resp = _json.loads(r.read())
+            # Check Whisper model availability
+            whisper_ok = False
+            try:
+                models_req = urllib.request.Request(
+                    "https://api.groq.com/openai/v1/models",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                with urllib.request.urlopen(models_req, timeout=8) as mr:
+                    models_data = _json.loads(mr.read())
+                model_ids = [m.get("id", "") for m in models_data.get("data", [])]
+                whisper_ok = any("whisper" in m for m in model_ids)
+            except Exception:
+                pass
+            quota = f"Whisper: {'✓' if whisper_ok else '✗'} | LLM: ✓"
+            return jsonify({"ok": True, "model": "llama-3.1-8b-instant", "quota": quota})
+        except urllib.error.HTTPError as e:
+            body = ""
+            try: body = _json.loads(e.read()).get("error", {}).get("message", "")
+            except Exception: pass
+            return jsonify({"ok": False, "error": f"HTTP {e.code}: {body or e.reason}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    # ── OpenAI ────────────────────────────────────────────────────────────────
+    elif provider == "openai":
+        try:
+            payload = _json.dumps({
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": "hi"}],
+                "max_tokens": 1,
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=payload, method="POST",
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                resp = _json.loads(r.read())
+            return jsonify({"ok": True, "model": "gpt-4o-mini", "quota": "OK"})
+        except urllib.error.HTTPError as e:
+            body = ""
+            try: body = _json.loads(e.read()).get("error", {}).get("message", "")
+            except Exception: pass
+            return jsonify({"ok": False, "error": f"HTTP {e.code}: {body or e.reason}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    # ── HuggingFace ───────────────────────────────────────────────────────────
+    elif provider == "huggingface":
+        try:
+            req = urllib.request.Request(
+                "https://huggingface.co/api/whoami-v2",
+                headers={"Authorization": f"Bearer {key}"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                resp = _json.loads(r.read())
+            name = resp.get("name") or resp.get("fullname") or "?"
+            plan = (resp.get("plan") or {}).get("type") or "free"
+            return jsonify({"ok": True, "model": name, "quota": f"Plan: {plan}"})
+        except urllib.error.HTTPError as e:
+            return jsonify({"ok": False, "error": f"HTTP {e.code}: Token không hợp lệ"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    # ── FPT AI TTS ────────────────────────────────────────────────────────────
+    elif provider == "fpt":
+        try:
+            import asyncio
+            from core.video_processor import _tts_fpt_ai
+            import tempfile
+            from pathlib import Path as _Path
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out = _Path(tmpdir) / "test.mp3"
+                ok = asyncio.run(_tts_fpt_ai("xin chào", "banmai", out, key, 0))
+            if ok:
+                return jsonify({"ok": True, "model": "banmai", "quota": "TTS hoạt động"})
+            return jsonify({"ok": False, "error": "TTS thất bại — kiểm tra key"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    return jsonify({"ok": False, "error": f"Provider không hỗ trợ: {provider}"}), 400
+
+
 # ── /api/upload_client_secrets ────────────────────────────────────────────────
 @bp.route("/api/upload_client_secrets", methods=["POST"])
 def upload_client_secrets():

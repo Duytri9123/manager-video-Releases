@@ -141,6 +141,16 @@ def api_analyze_video_content():
     data = request.json or {}
     content = (data.get("content") or "").strip()
     provider = (data.get("provider") or "deepseek").strip().lower()
+    target_lang = (data.get("target_language") or "vi").strip().lower()
+
+    # Language name mapping for prompt
+    _LANG_NAMES_PROMPT = {
+        "vi": "tiếng Việt", "en": "English", "ja": "日本語 (Japanese)", "ko": "한국어 (Korean)",
+        "th": "ภาษาไทย (Thai)", "id": "Bahasa Indonesia", "es": "Español (Spanish)",
+        "pt": "Português (Portuguese)", "fr": "Français (French)", "de": "Deutsch (German)",
+        "ru": "Русский (Russian)", "ar": "العربية (Arabic)", "hi": "हिन्दी (Hindi)",
+    }
+    target_lang_name = _LANG_NAMES_PROMPT.get(target_lang, "tiếng Việt")
 
     if not content:
         return jsonify({"ok": False, "error": "Nội dung trống"}), 400
@@ -157,7 +167,8 @@ def api_analyze_video_content():
     # Try requested provider first, then fallback
     order = [provider] + [p for p in ["deepseek", "openai", "groq"] if p != provider]
 
-    prompt = f"""Bạn là chuyên gia marketing video trên mạng xã hội Việt Nam. Phân tích nội dung video sau và tạo thông tin đăng cho 3 nền tảng.
+    prompt = f"""Bạn là chuyên gia marketing video trên mạng xã hội. Phân tích nội dung video sau và tạo thông tin đăng cho 3 nền tảng.
+NGÔN NGỮ ĐẦU RA: {target_lang_name} — Tất cả title, description, caption PHẢI viết bằng {target_lang_name}.
 
 NỘI DUNG VIDEO:
 {content[:2000]}
@@ -185,19 +196,19 @@ QUY TẮC QUAN TRỌNG VỀ CHỐNG TRÙNG LẶP:
 Hãy trả về JSON với cấu trúc sau (không có markdown, chỉ JSON thuần):
 {{
   "youtube": {{
-    "title": "Tiêu đề hấp dẫn cho YouTube (tối đa 100 ký tự, tiếng Việt, KHÔNG hashtag)",
-    "description": "Mô tả chi tiết cho YouTube (200-500 ký tự, có emoji, KHÔNG được nhúng hashtag)",
-    "tags": ["xuhuong", "viral", "tag tiếng Việt không dấu", "english tag", "thêm 10-15 tags nữa"]
+    "title": "Tiêu đề hấp dẫn cho YouTube (tối đa 100 ký tự, bằng {target_lang_name}, KHÔNG hashtag)",
+    "description": "Mô tả chi tiết cho YouTube (200-500 ký tự, có emoji, bằng {target_lang_name}, KHÔNG được nhúng hashtag)",
+    "tags": ["xuhuong", "viral", "tag không dấu phù hợp ngôn ngữ", "english tag", "thêm 10-15 tags nữa"]
   }},
   "tiktok": {{
-    "caption": "Caption ngắn gọn cho TikTok (tối đa 150 ký tự, tiếng Việt, KHÔNG hashtag)",
-    "description": "Mô tả thêm cho TikTok (KHÔNG hashtag)",
-    "hashtags": ["#xuhuong", "#fyp", "#viral", "#tag_khong_dau", "#english_tag"]
+    "caption": "Caption ngắn gọn cho TikTok (tối đa 150 ký tự, bằng {target_lang_name}, KHÔNG hashtag)",
+    "description": "Mô tả thêm cho TikTok (bằng {target_lang_name}, KHÔNG hashtag)",
+    "hashtags": ["#xuhuong", "#fyp", "#viral", "#tag_phù_hợp", "#english_tag"]
   }},
   "facebook": {{
-    "title": "Tiêu đề bài đăng Facebook (tiếng Việt, hấp dẫn, KHÔNG hashtag)",
-    "description": "Nội dung bài đăng Facebook (150-300 ký tự, thân thiện, có emoji, KHÔNG hashtag)",
-    "hashtags": ["#xuhuong", "#viral", "#tag_khong_dau", "#english_tag", "thêm 3-5 hashtags"]
+    "title": "Tiêu đề bài đăng Facebook (bằng {target_lang_name}, hấp dẫn, KHÔNG hashtag)",
+    "description": "Nội dung bài đăng Facebook (150-300 ký tự, thân thiện, có emoji, bằng {target_lang_name}, KHÔNG hashtag)",
+    "hashtags": ["#xuhuong", "#viral", "#tag_phù_hợp", "#english_tag", "thêm 3-5 hashtags"]
   }}
 }}"""
 

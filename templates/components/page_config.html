@@ -95,126 +95,6 @@
 
     <div class="card">
       <div class="card-header">
-        <span class="card-title">🎬 Xử lý video tự động</span>
-        <div class="card-actions">
-          <label class="toggle-wrap">
-            <input type="checkbox" class="toggle-input" id="vp-enabled" checked>
-            <div class="toggle"></div>
-            <span class="toggle-label text-sm">Bật</span>
-          </label>
-        </div>
-      </div>
-      <div class="grid-2">
-        <div class="field">
-          <label>Mô hình Whisper</label>
-          <select id="vp-model">
-            <option value="tiny">tiny (nhanh nhất)</option>
-            <option value="base" selected>base</option>
-            <option value="small">small</option>
-            <option value="medium">medium</option>
-            <option value="large">large (tốt nhất)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Ngôn ngữ gốc</label>
-          <select id="vp-lang">
-            <option value="zh" selected>Tiếng Trung</option>
-            <option value="en">Tiếng Anh</option>
-            <option value="ja">Tiếng Nhật</option>
-            <option value="ko">Tiếng Hàn</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Chế độ xử lý</label>
-          <select id="vp-process-mode">
-            <option value="ai" selected>AI (Groq API)</option>
-            <option value="model">Model local</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Vùng che phụ đề gốc</label>
-          <select id="vp-blur-zone">
-            <option value="bottom" selected>Dưới</option>
-            <option value="top">Trên</option>
-            <option value="none">Không che</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Cỡ chữ phụ đề</label>
-          <input type="number" id="vp-font-size" min="10" max="72" value="22">
-        </div>
-      </div>
-      <div class="check-grid mt-8">
-        <label class="check-item"><input type="checkbox" id="vp-burn"><span>Ghi phụ đề vào video</span></label>
-        <label class="check-item"><input type="checkbox" id="vp-blur-original" checked><span>Che phụ đề gốc</span></label>
-        <label class="check-item"><input type="checkbox" id="vp-translate" checked><span>Dịch sang tiếng Việt</span></label>
-        <label class="check-item"><input type="checkbox" id="vp-burn-vi" checked><span>Ghi phụ đề VI</span></label>
-        <label class="check-item"><input type="checkbox" id="vp-voice" checked><span>Đổi giọng tiếng Việt</span></label>
-        <label class="check-item"><input type="checkbox" id="vp-keep-bg"><span>Giữ nhạc nền</span></label>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">🔊 Cài đặt TTS (Text-to-Speech)</span>
-      </div>
-      <div class="grid-2">
-        <div class="field">
-          <label>TTS Engine</label>
-          <select id="vp-tts-engine">
-            <option value="fpt-ai" selected>FPT AI TTS</option>
-            <option value="edge-tts">Edge TTS (Microsoft)</option>
-            <option value="minimax">MiniMax TTS</option>
-            <option value="gtts">gTTS (Google)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Giọng đọc</label>
-          <select id="vp-tts-voice"></select>
-        </div>
-        <div class="field">
-          <label>Cao độ</label>
-          <input type="text" id="vp-tts-pitch" placeholder="+0Hz" value="+0Hz">
-        </div>
-        <div class="field">
-          <label>Tốc độ đọc</label>
-          <input type="text" id="vp-tts-rate" placeholder="+0%" value="+0%">
-        </div>
-        <div class="field">
-          <label>Cảm xúc</label>
-          <select id="vp-tts-emotion">
-            <option value="default" selected>Mặc định</option>
-            <option value="cheerful">Vui vẻ</option>
-            <option value="sad">Buồn</option>
-            <option value="angry">Giận dữ</option>
-            <option value="excited">Hào hứng</option>
-            <option value="friendly">Thân thiện</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Âm lượng nhạc nền (0–1)</label>
-          <input type="number" id="vp-bg-volume" min="0" max="1" step="0.05" value="0.15">
-        </div>
-      </div>
-      <div class="field mt-8">
-        <label>Tốc độ TTS</label>
-        <div class="flex-center gap-8">
-          <input type="range" id="vp-tts-speed" min="0.5" max="2.0" step="0.1" value="1.0"
-            oninput="document.getElementById('vp-tts-speed-val').textContent=parseFloat(this.value).toFixed(1)+'x'" style="flex:1">
-          <span class="text-xs text-muted" id="vp-tts-speed-val" style="min-width:36px">1.0x</span>
-        </div>
-      </div>
-      <div class="check-grid mt-8">
-        <label class="check-item"><input type="checkbox" id="vp-auto-speed" checked><span>Tự động tốc độ</span></label>
-      </div>
-      <div class="flex-center gap-8 mt-12">
-        <button class="btn btn-secondary btn-sm" id="btn-tts-test">▶ Thử giọng đọc</button>
-        <audio id="vp-preview-audio" controls style="display:none;height:32px;flex:1"></audio>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
         <span class="card-title">🔑 API Keys &amp; Dịch thuật</span>
       </div>
       <div class="field">
@@ -228,20 +108,92 @@
           <option value="google">Google Translate</option>
         </select>
       </div>
-      <div class="grid-2">
-        <div class="field"><label>DeepSeek API Key</label><input type="password" id="cfg-deepseek-key" placeholder="sk-..."></div>
-        <div class="field"><label>Groq API Key</label><input type="password" id="cfg-groq-key" placeholder="gsk_..."></div>
-        <div class="field"><label>Groq Model</label><input type="text" id="cfg-groq-model" placeholder="llama-3.1-8b-instant"></div>
-        <div class="field"><label>OpenAI API Key</label><input type="password" id="cfg-openai-key" placeholder="sk-..."></div>
-        <div class="field"><label>HuggingFace Token</label><input type="password" id="cfg-hf-token" placeholder="hf_..."></div>
+
+      <!-- DeepSeek -->
+      <div class="field mt-12">
+        <label>DeepSeek API Key</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="cfg-deepseek-key" placeholder="sk-..." style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="testApiKey('deepseek')">🧪 Test</button>
+        </div>
+        <div class="text-xs mt-4" id="cfg-deepseek-status"></div>
       </div>
-      <div class="check-grid mt-8">
+
+      <!-- Groq (dùng cho cả Whisper + Dịch) -->
+      <div class="field mt-8">
+        <label>Groq API Key <span class="text-xs text-muted">(Whisper phiên âm + Dịch thuật)</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="cfg-groq-key" placeholder="gsk_..." style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="testApiKey('groq')">🧪 Test</button>
+        </div>
+        <div class="text-xs mt-4" id="cfg-groq-status"></div>
+      </div>
+      <div class="field mt-8">
+        <label>Groq Model (dịch thuật)</label>
+        <input type="text" id="cfg-groq-model" placeholder="llama-3.1-8b-instant">
+      </div>
+
+      <!-- OpenAI -->
+      <div class="field mt-8">
+        <label>OpenAI API Key</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="cfg-openai-key" placeholder="sk-..." style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="testApiKey('openai')">🧪 Test</button>
+        </div>
+        <div class="text-xs mt-4" id="cfg-openai-status"></div>
+      </div>
+
+      <!-- HuggingFace -->
+      <div class="field mt-8">
+        <label>HuggingFace Token</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="cfg-hf-token" placeholder="hf_..." style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="testApiKey('huggingface')">🧪 Test</button>
+        </div>
+        <div class="text-xs mt-4" id="cfg-hf-status"></div>
+      </div>
+
+      <!-- FPT AI -->
+      <div class="field mt-8">
+        <label>FPT AI API Key <span class="text-xs text-muted">(TTS giọng Việt)</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="cfg-fpt-key" placeholder="..." style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="testApiKey('fpt')">🧪 Test</button>
+        </div>
+        <div class="text-xs mt-4" id="cfg-fpt-status"></div>
+      </div>
+
+      <div class="check-grid mt-12">
         <label class="check-item"><input type="checkbox" id="cfg-naming-enabled" checked><span>Đặt tên file tự động (AI)</span></label>
+      </div>
+
+      <div class="mt-12">
+        <button class="btn btn-secondary w-full" onclick="testAllApiKeys()">🧪 Test tất cả API Keys</button>
       </div>
     </div>
 
-    <!-- Hidden AFP fields (kept for config save/load compatibility) -->
+    <!-- Hidden fields (kept for config save/load compatibility) -->
     <div style="display:none" aria-hidden="true">
+      <input type="checkbox" id="vp-enabled" checked>
+      <select id="vp-model"><option value="base" selected>base</option></select>
+      <select id="vp-lang"><option value="zh" selected>zh</option></select>
+      <select id="vp-process-mode"><option value="ai" selected>ai</option></select>
+      <select id="vp-blur-zone"><option value="bottom" selected>bottom</option></select>
+      <input type="number" id="vp-font-size" value="22">
+      <input type="checkbox" id="vp-burn">
+      <input type="checkbox" id="vp-blur-original" checked>
+      <input type="checkbox" id="vp-translate" checked>
+      <input type="checkbox" id="vp-burn-vi" checked>
+      <input type="checkbox" id="vp-voice" checked>
+      <input type="checkbox" id="vp-keep-bg">
+      <select id="vp-tts-engine"><option value="fpt-ai" selected>fpt-ai</option></select>
+      <select id="vp-tts-voice"><option value="banmai">banmai</option></select>
+      <input type="text" id="vp-tts-pitch" value="+0Hz">
+      <input type="text" id="vp-tts-rate" value="+0%">
+      <select id="vp-tts-emotion"><option value="default" selected>default</option></select>
+      <input type="number" id="vp-bg-volume" value="0.15">
+      <input type="range" id="vp-tts-speed" value="1.0">
+      <input type="checkbox" id="vp-auto-speed" checked>
       <input type="checkbox" id="vp-afp-enabled">
       <input type="checkbox" id="vp-afp-flip">
       <input type="checkbox" id="vp-afp-vignette">

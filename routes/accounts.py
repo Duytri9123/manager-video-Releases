@@ -66,6 +66,39 @@ def youtube_migrate():
     return jsonify({"ok": True, "accounts": accounts})
 
 
+@bp.route("/api/accounts/youtube/refresh_info", methods=["POST"])
+def youtube_refresh_info():
+    """Fetch real channel name/thumbnail from YouTube API and update accounts registry.
+    Call this after OAuth login to replace 'YouTube (default)' with the real channel name.
+    """
+    from core_app import _get_youtube_uploader
+    try:
+        uploader = _get_youtube_uploader()
+        if not uploader.authenticate():
+            return jsonify({"ok": False, "error": "Chưa đăng nhập YouTube"}), 401
+
+        channel = uploader.get_channel_info()
+        if not channel or not channel.get("title"):
+            return jsonify({"ok": False, "error": "Không lấy được thông tin kênh"}), 500
+
+        mgr = get_youtube_account_manager()
+        account_id = getattr(uploader, "_account_id", None) or channel.get("id") or "default"
+        account = mgr.add_account(
+            account_id=account_id,
+            name=channel["title"],
+            channel_id=channel.get("id", ""),
+            channel_title=channel["title"],
+            thumbnail=channel.get("thumbnail", ""),
+        )
+        return jsonify({
+            "ok": True,
+            "account": account,
+            "channel": channel,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ── Facebook Accounts ─────────────────────────────────────────────────────────
 
 @bp.route("/api/accounts/facebook", methods=["GET"])

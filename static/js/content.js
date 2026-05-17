@@ -355,7 +355,7 @@ async function fbMgrGenerateAI(mode) {
     const res  = await fetch('/api/analyze_video_content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, provider })
+      body: JSON.stringify({ content, provider, target_language: document.getElementById('proc-target-lang')?.value || 'vi' })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'AI thất bại');
@@ -612,12 +612,22 @@ async function fbMgrLoadPosts() {
     });
     const data = await res.json();
     if (!data.ok) {
-      // Show detailed error for debugging
       const errMsg = data.error || 'Lỗi không xác định';
-      list.innerHTML = `<div style="padding:12px;font-size:11px;color:var(--error);word-break:break-word">
-        ❌ ${errMsg}
-        ${data.debug_errors ? '<br><br><b>Chi tiết:</b><br>' + data.debug_errors.map(e => `• ${JSON.stringify(e)}`).join('<br>') : ''}
-      </div>`;
+      // Detect token expiry (code 190 / subcode 463)
+      const isTokenErr = /190|463|expired|OAuthException/i.test(errMsg);
+      if (isTokenErr) {
+        list.innerHTML = `<div style="padding:12px;font-size:12px;text-align:center">
+          <div style="color:var(--warning,#f39c12);font-size:20px;margin-bottom:8px">⚠️</div>
+          <div style="font-weight:600;margin-bottom:4px">Token Facebook đã hết hạn</div>
+          <div style="color:var(--text-muted);font-size:11px;margin-bottom:12px">Cần gia hạn hoặc kết nối lại để xem bài đăng</div>
+          <button class="btn btn-primary btn-sm" onclick="fbMgrRefreshToken()" style="font-size:11px">🔄 Gia hạn token</button>
+        </div>`;
+      } else {
+        list.innerHTML = `<div style="padding:12px;font-size:11px;color:var(--error,#e74c3c);word-break:break-word">
+          ❌ ${errMsg}
+          ${data.debug_errors ? '<br><br><b>Chi tiết:</b><br>' + data.debug_errors.map(e => `• ${JSON.stringify(e)}`).join('<br>') : ''}
+        </div>`;
+      }
       return;
     }
 
@@ -643,6 +653,31 @@ async function fbMgrLoadPosts() {
     }).join('');
   } catch (e) {
     list.innerHTML = `<div class="text-muted text-sm" style="padding:12px">Lỗi: ${e.message}</div>`;
+  }
+}
+
+async function fbMgrRefreshToken() {
+  const list = document.getElementById('fb-mgr-posts-list');
+  if (list) list.innerHTML = '<div class="text-muted text-sm" style="text-align:center;padding:16px">⏳ Đang gia hạn token...</div>';
+  try {
+    const res  = await fetch('/api/facebook/refresh_token', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.message || '✅ Token đã được gia hạn!', 'success', 5000);
+      fbMgrLoadPosts();
+    } else if (data.need_reauth) {
+      if (list) list.innerHTML = `<div style="padding:12px;font-size:12px;text-align:center">
+        <div style="color:var(--danger,#e74c3c);font-size:20px;margin-bottom:8px">❌</div>
+        <div style="font-weight:600;margin-bottom:4px">Token hết hạn hoàn toàn</div>
+        <div style="color:var(--text-muted);font-size:11px;margin-bottom:12px">Cần nhập token mới từ Graph API Explorer</div>
+        <a href="https://developers.facebook.com/tools/explorer/" target="_blank" class="btn btn-primary btn-sm" style="font-size:11px">🔗 Mở Graph API Explorer</a>
+      </div>`;
+    } else {
+      toast('❌ ' + (data.error || 'Gia hạn thất bại'), 'error', 6000);
+      if (list) list.innerHTML = `<div style="padding:12px;font-size:11px;color:var(--error,#e74c3c)">${data.error || 'Gia hạn thất bại'}</div>`;
+    }
+  } catch (e) {
+    toast('Lỗi: ' + e.message, 'error');
   }
 }
 

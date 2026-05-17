@@ -1,11 +1,21 @@
 <!-- PAGE: PROCESS VIDEO -->
 <div id="page-process" class="page">
   <!-- Save defaults bar -->
-  <div style="display:flex;justify-content:flex-end;margin-bottom:10px;gap:8px">
-    <button class="btn btn-secondary btn-sm" onclick="procRestoreDefaults()" title="Khôi phục về mặc định đã lưu">
+  <div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+    <span id="proc-active-aspect-badge"
+      style="display:none;font-size:12px;font-weight:600;padding:4px 10px;border-radius:12px;background:var(--card-bg, #1f2937);border:1px solid var(--border, #374151);color:var(--text2, #d1d5db)"
+      title="Bộ cài đặt phụ đề đang áp dụng theo tỉ lệ video gốc">📐 ...</span>
+    <select id="proc-aspect-override" onchange="_onAspectOverrideChange()"
+      title="Buộc dùng preset cho tỉ lệ cụ thể (mặc định: tự nhận diện theo video)"
+      style="font-size:12px;padding:4px 8px">
+      <option value="auto" selected>Tự nhận diện</option>
+      <option value="9x16">📱 Dùng preset 9:16</option>
+      <option value="16x9">🖥 Dùng preset 16:9</option>
+    </select>
+    <button class="btn btn-secondary btn-sm" onclick="procRestoreDefaults()" title="Khôi phục cài đặt mặc định đã lưu cho tỉ lệ hiện tại">
       ↩ Khôi phục
     </button>
-    <button class="btn btn-primary btn-sm" onclick="procSaveDefaults()">
+    <button class="btn btn-primary btn-sm" onclick="procSaveDefaults()" title="Lưu mặc định cho tỉ lệ hiện tại (9:16 hoặc 16:9)">
       💾 Lưu mặc định
     </button>
   </div>
@@ -70,6 +80,24 @@
               </select>
             </div>
             <div class="field">
+              <label>🌐 Ngôn ngữ đầu ra</label>
+              <select id="proc-target-lang" onchange="_onTargetLangChange()">
+                <option value="vi" selected>🇻🇳 Tiếng Việt</option>
+                <option value="en">🇺🇸 English</option>
+                <option value="ja">🇯🇵 日本語</option>
+                <option value="ko">🇰🇷 한국어</option>
+                <option value="th">🇹🇭 ภาษาไทย</option>
+                <option value="id">🇮🇩 Bahasa Indonesia</option>
+                <option value="es">🇪🇸 Español</option>
+                <option value="pt">🇧🇷 Português</option>
+                <option value="fr">🇫🇷 Français</option>
+                <option value="de">🇩🇪 Deutsch</option>
+                <option value="ru">🇷🇺 Русский</option>
+                <option value="ar">🇸🇦 العربية</option>
+                <option value="hi">🇮🇳 हिन्दी</option>
+              </select>
+            </div>
+            <div class="field">
               <label>Phiên âm bằng</label>
               <select id="proc-transcribe-provider-model">
                 <option value="groq" selected>Groq Whisper API</option>
@@ -114,8 +142,8 @@
         </div>
         <div class="card-body">
           <div class="check-grid mb-12">
-            <label class="check-item"><input type="checkbox" id="proc-translate-subs" checked><span>Dịch tiếng Việt</span></label>
-            <label class="check-item"><input type="checkbox" id="proc-burn-vi" checked><span>Ghi phụ đề VI</span></label>
+            <label class="check-item"><input type="checkbox" id="proc-translate-subs" checked><span>Dịch tiếng</span></label>
+            <label class="check-item"><input type="checkbox" id="proc-burn-vi" checked><span>Ghi phụ đề</span></label>
             <label class="check-item"><input type="checkbox" id="proc-blur-original" checked><span>Che phụ đề gốc</span></label>
           </div>
           <div class="grid-2">
@@ -300,7 +328,7 @@
       <!-- Voice -->
       <div class="card card-collapsible collapsed">
         <div class="card-header" onclick="toggleCard(this)">
-          <span class="card-title">🎙 Đổi giọng tiếng Việt</span>
+          <span class="card-title">🎙 Đổi giọng theo ngôn ngữ</span>
           <div class="card-actions" onclick="event.stopPropagation()">
             <label class="toggle-wrap">
               <input type="checkbox" class="toggle-input" id="proc-voice" checked>
@@ -636,7 +664,7 @@
         </div>
         <div class="card-body">
           <div class="alert-info mb-8" style="font-size:12px">
-            File phụ đề tiếng Việt đã được tạo. Kiểm tra và chỉnh sửa nếu cần, sau đó bấm <b>Tiếp tục</b>.
+            File phụ đề đã được tạo. Kiểm tra và chỉnh sửa nếu cần, sau đó bấm <b>Tiếp tục</b>.
           </div>
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px" id="proc-ass-review-path"></div>
           <textarea id="proc-ass-review-content" rows="10"
@@ -784,6 +812,8 @@
     // Reset batch schedule counter only at the start of a fresh batch
     // (auto-drain keeps counter incremented across videos for consistent scheduling)
     if (window._pBschedCounter == null) window._pBschedCounter = 0;
+    // Reset cancel flag at start of each batch — user can cancel via upload error modal
+    window._pPubCancelled = false;
 
     next.status = 'processing';
     window._procCurrentTaskId = next.id;
@@ -1212,6 +1242,25 @@
       if (data.ok && data.image) {
         if (img) {
           img.onload = () => {
+            // ── Detect aspect ratio of source video and auto-apply preset ──
+            try {
+              const w = img.naturalWidth || 0;
+              const h = img.naturalHeight || 0;
+              if (w && h) {
+                const detected = _classifyAspect(w, h);
+                const override = (typeof _getAspectOverride === 'function') ? _getAspectOverride() : 'auto';
+                const target   = (override === 'auto') ? detected : override;
+                if (target !== window._procActiveAspect) {
+                  window._procActiveAspect = target;
+                  // Auto-apply matching preset (silent if not yet saved)
+                  if (typeof _applyPresetForActiveAspect === 'function') {
+                    _applyPresetForActiveAspect({ silent: true });
+                  }
+                }
+                if (typeof _updateAspectBadge === 'function') _updateAspectBadge();
+              }
+            } catch (_) {}
+
             const frameOn = document.getElementById('frame-enabled')?.checked;
             const cv = document.getElementById('frame-preview-canvas');
             if (frameOn) {
@@ -1633,9 +1682,106 @@
   }
 
   /* ════════════════════════════════════════════════════════
-     SAVE / RESTORE DEFAULTS
+     SAVE / RESTORE DEFAULTS — per aspect ratio (9:16 / 16:9)
   ════════════════════════════════════════════════════════ */
-  const _PROC_DEFAULTS_KEY = 'proc_settings_defaults_v1';
+  const _PROC_DEFAULTS_KEY      = 'proc_settings_defaults_v1';      // legacy single preset
+  const _PROC_DEFAULTS_KEY_V2   = 'proc_settings_defaults_v2';      // { '9x16': {...}, '16x9': {...} }
+  const _PROC_ASPECT_OVERRIDE_K = 'proc_aspect_override_v1';        // 'auto' | '9x16' | '16x9'
+
+  // Currently active aspect ratio for save/restore. Set by:
+  //  - aspect override dropdown
+  //  - subPreviewFetchFrame() once it knows video dims
+  // Defaults to '16x9' until a video is detected.
+  window._procActiveAspect = '16x9';
+
+  /** Classify width/height into '9x16' (vertical) or '16x9' (horizontal/square). */
+  function _classifyAspect(w, h) {
+    if (!w || !h) return '16x9';
+    return (w / h) < 1.0 ? '9x16' : '16x9';
+  }
+
+  function _getAspectOverride() {
+    return document.getElementById('proc-aspect-override')?.value || 'auto';
+  }
+
+  function _updateAspectBadge() {
+    const badge = document.getElementById('proc-active-aspect-badge');
+    if (!badge) return;
+    const a = window._procActiveAspect;
+    const override = _getAspectOverride();
+    const label = a === '9x16' ? '📱 9:16 (dọc)' : '🖥 16:9 (ngang)';
+    badge.textContent = override === 'auto' ? `📐 ${label} • tự nhận diện` : `📐 ${label} • thủ công`;
+    badge.style.display = 'inline-block';
+  }
+
+  /** Read all preset map from storage (v2). Migrates from v1 if needed. */
+  function _loadPresetsMap() {
+    try {
+      const rawV2 = localStorage.getItem(_PROC_DEFAULTS_KEY_V2);
+      if (rawV2) return JSON.parse(rawV2) || {};
+    } catch (_) {}
+    // Migrate from v1: copy single preset to both aspects
+    try {
+      const rawV1 = localStorage.getItem(_PROC_DEFAULTS_KEY);
+      if (rawV1) {
+        const data = JSON.parse(rawV1);
+        const map = { '9x16': data, '16x9': data };
+        localStorage.setItem(_PROC_DEFAULTS_KEY_V2, JSON.stringify(map));
+        return map;
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  function _savePresetsMap(map) {
+    try { localStorage.setItem(_PROC_DEFAULTS_KEY_V2, JSON.stringify(map || {})); } catch (_) {}
+  }
+
+  function _onAspectOverrideChange() {
+    const override = _getAspectOverride();
+    try { localStorage.setItem(_PROC_ASPECT_OVERRIDE_K, override); } catch (_) {}
+    if (override !== 'auto') {
+      window._procActiveAspect = override;
+      _applyPresetForActiveAspect({ silent: true });
+    } else {
+      // Re-detect from current frame if available
+      const img = document.getElementById('sub-preview-img');
+      if (img && img.naturalWidth) {
+        window._procActiveAspect = _classifyAspect(img.naturalWidth, img.naturalHeight);
+        _applyPresetForActiveAspect({ silent: true });
+      }
+    }
+    _updateAspectBadge();
+  }
+
+  /** Apply the saved preset for window._procActiveAspect to the form. */
+  function _applyPresetForActiveAspect(opts) {
+    opts = opts || {};
+    const map = _loadPresetsMap();
+    const data = map[window._procActiveAspect];
+    if (!data) {
+      if (!opts.silent) toast(`Chưa có cài đặt mặc định cho ${window._procActiveAspect.replace('x', ':')}`, 'warning');
+      return false;
+    }
+    _PROC_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el || !(f.id in data)) return;
+      if (f.type === 'checkbox') el.checked = data[f.id];
+      else el.value = data[f.id];
+      el.dispatchEvent(new Event('change'));
+      el.dispatchEvent(new Event('input'));
+    });
+    if (data['frame-blur-mode']) {
+      const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
+      if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+    }
+    if (typeof _syncVoiceOptions === 'function') {
+      _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+    }
+    if (typeof _syncColorPicker === 'function') _syncColorPicker();
+    if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    return true;
+  }
 
   // All field IDs to save (id → type)
   const _PROC_FIELDS = [
@@ -1697,8 +1843,14 @@
     if (blurMode) data['frame-blur-mode'] = blurMode;
 
     try {
-      localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data));
-      toast('✅ Đã lưu cài đặt mặc định', 'success');
+      const map = _loadPresetsMap();
+      const aspect = window._procActiveAspect || '16x9';
+      map[aspect] = data;
+      _savePresetsMap(map);
+      // Keep legacy v1 in sync with the most recently saved preset for backward compat
+      try { localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data)); } catch (_) {}
+      toast(`✅ Đã lưu cài đặt mặc định cho ${aspect.replace('x', ':')}`, 'success');
+      _updateAspectBadge();
     } catch (e) {
       toast('Lỗi lưu: ' + e.message, 'error');
     }
@@ -1706,9 +1858,13 @@
 
   function procRestoreDefaults() {
     try {
-      const raw = localStorage.getItem(_PROC_DEFAULTS_KEY);
-      if (!raw) { toast('Chưa có cài đặt mặc định nào được lưu', 'warning'); return; }
-      const data = JSON.parse(raw);
+      const map = _loadPresetsMap();
+      const aspect = window._procActiveAspect || '16x9';
+      const data = map[aspect];
+      if (!data) {
+        toast(`Chưa có cài đặt mặc định cho tỉ lệ ${aspect.replace('x', ':')}`, 'warning');
+        return;
+      }
       _PROC_FIELDS.forEach(f => {
         const el = document.getElementById(f.id);
         if (!el || !(f.id in data)) return;
@@ -1727,7 +1883,7 @@
       if (typeof _syncVoiceOptions === 'function') {
         _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
       }
-      toast('✅ Đã khôi phục cài đặt mặc định', 'success');
+      toast(`✅ Đã khôi phục cài đặt cho tỉ lệ ${aspect.replace('x', ':')}`, 'success');
     } catch (e) {
       toast('Lỗi khôi phục: ' + e.message, 'error');
     }
@@ -1736,9 +1892,20 @@
   // Auto-restore on page load
   document.addEventListener('DOMContentLoaded', () => {
     try {
-      const raw = localStorage.getItem(_PROC_DEFAULTS_KEY);
-      if (raw) {
-        const data = JSON.parse(raw);
+      // Restore aspect override selector
+      const savedOverride = localStorage.getItem(_PROC_ASPECT_OVERRIDE_K) || 'auto';
+      const ovEl = document.getElementById('proc-aspect-override');
+      if (ovEl) ovEl.value = savedOverride;
+
+      // Pick initial preset to apply on first load:
+      //   - if override is forced (9x16/16x9) → use that
+      //   - otherwise default to 16x9 (will be replaced once a frame is loaded)
+      const map = _loadPresetsMap();
+      const initialAspect = (savedOverride !== 'auto') ? savedOverride : '16x9';
+      window._procActiveAspect = initialAspect;
+      const data = map[initialAspect];
+
+      if (data) {
         _PROC_FIELDS.forEach(f => {
           const el = document.getElementById(f.id);
           if (!el || !(f.id in data)) return;
@@ -1754,6 +1921,7 @@
         }
         if (typeof _syncColorPicker === 'function') _syncColorPicker();
       }
+      _updateAspectBadge();
     } catch (_) {}
   });
 

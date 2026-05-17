@@ -37,6 +37,7 @@ def _llm_translate(
     timeout: int = 60,
     batch_size: int = 30,
     context: str = "",
+    target_lang: str = "vi",
 ) -> List[str]:
     """Translate texts in batches to avoid token limits.
     
@@ -46,6 +47,15 @@ def _llm_translate(
     """
     if not texts:
         return []
+
+    # Language name mapping for prompts
+    _LANG_FULL = {
+        "vi": "Vietnamese", "en": "English", "ja": "Japanese", "ko": "Korean",
+        "th": "Thai", "id": "Indonesian", "es": "Spanish", "pt": "Portuguese",
+        "fr": "French", "de": "German", "ru": "Russian", "ar": "Arabic",
+        "hi": "Hindi", "zh": "Chinese",
+    }
+    target_lang_name = _LANG_FULL.get(target_lang, "Vietnamese")
 
     all_results: List[str] = [""] * len(texts)
 
@@ -101,7 +111,7 @@ def _llm_translate(
         "CORRECTIONS:\n"
         "- <wrong> → <correct> (<why>)\n"
         "TERMS:\n"
-        "- <Chinese> = <Vietnamese>\n"
+        f"- <Chinese> = <{target_lang_name}>\n"
         "TONE: <style description>\n"
     )
 
@@ -128,9 +138,9 @@ def _llm_translate(
 
     # ── Step 2: Translate in batches using the analysis ────────────────────────
     system_msg = (
-        "You are an expert Vietnamese subtitle translator for Chinese social media videos. "
-        "You produce natural, engaging Vietnamese subtitles that sound like a native Vietnamese "
-        "content creator is narrating. You ALWAYS fix ASR errors before translating."
+        f"You are an expert {target_lang_name} subtitle translator for Chinese social media videos. "
+        f"You produce natural, engaging {target_lang_name} subtitles that sound like a native "
+        f"{target_lang_name} content creator is narrating. You ALWAYS fix ASR errors before translating."
     )
 
     for batch_start in range(0, len(texts), batch_size):
@@ -169,7 +179,7 @@ def _llm_translate(
             "\nRULES:\n"
             "1. Fix ALL ASR errors using the ANALYSIS above before translating.\n"
             "2. Use TERMS list for consistent translations — same word = same translation everywhere.\n"
-            "3. Each line must be a complete, natural Vietnamese sentence.\n"
+            f"3. Each line must be a complete, natural {target_lang_name} sentence.\n"
             "4. Match the TONE described in the analysis.\n"
             "5. Keep translations concise (subtitle-friendly, not too long).\n"
             "6. OUTPUT: Return ONLY numbered lines (1. ..., 2. ...). No explanations, no extra text."
@@ -233,6 +243,7 @@ def translate_texts(
     trans_cfg: Dict,
     preferred_provider: str = "auto",
     context: str = "",
+    target_lang: str = "vi",
 ) -> Tuple[List[str], str]:
     if not texts:
         return [], "none"
@@ -273,6 +284,7 @@ def translate_texts(
                     deepseek_key,
                     "deepseek-chat",
                     context=context,
+                    target_lang=target_lang,
                 )
                 if any(result):
                     return _rebuild(result), "deepseek"
@@ -285,6 +297,7 @@ def translate_texts(
                     openai_key,
                     "gpt-4o-mini",
                     context=context,
+                    target_lang=target_lang,
                 )
                 if any(result):
                     return _rebuild(result), "openai"
@@ -297,6 +310,7 @@ def translate_texts(
                     groq_key,
                     groq_model,
                     context=context,
+                    target_lang=target_lang,
                 )
                 if any(result):
                     return _rebuild(result), "groq"
@@ -322,7 +336,7 @@ def translate_texts(
                     ),
                 ]
                 for hf_url, hf_model in hf_endpoints:
-                    result = _llm_translate(source_texts, hf_url, hf_token, hf_model, context=context)
+                    result = _llm_translate(source_texts, hf_url, hf_token, hf_model, context=context, target_lang=target_lang)
                     if any(result):
                         return _rebuild(result), "huggingface"
 
@@ -332,7 +346,7 @@ def translate_texts(
                     query = urllib.parse.quote(text[:500])
                     url = (
                         "https://translate.googleapis.com/translate_a/single"
-                        f"?client=gtx&sl=zh-CN&tl=vi&dt=t&dj=1&q={query}"
+                        f"?client=gtx&sl=auto&tl={target_lang}&dt=t&dj=1&q={query}"
                     )
                     req = urllib.request.Request(
                         url,
@@ -386,13 +400,14 @@ class BatchTranslator:
         texts: List[str],
         preferred_provider: str = "auto",
         context: str = "",
+        target_lang: str = "vi",
     ) -> Tuple[List[str], str]:
         """Translate a list of texts in a single batch call.
 
         Returns (translated_texts, provider_used).
         If all providers fail, returns (original_texts, "fallback").
         """
-        return translate_texts(texts, self._cfg, preferred_provider, context=context)
+        return translate_texts(texts, self._cfg, preferred_provider, context=context, target_lang=target_lang)
 
     def write_vi_srt(
         self,

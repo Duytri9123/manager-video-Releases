@@ -149,11 +149,12 @@ async function pubAnalyzeContent() {
   if (status) status.textContent = 'Đang gọi AI...';
 
   const provider = document.getElementById('pub-ai-provider')?.value || 'deepseek';
+  const targetLang = document.getElementById('proc-target-lang')?.value || 'vi';
   try {
     const res  = await fetch('/api/analyze_video_content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, provider })
+      body: JSON.stringify({ content, provider, target_language: targetLang })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'AI phân tích thất bại');
@@ -414,6 +415,7 @@ async function pubFbInit() {
     const data = await res.json();
     if (data.connected && data.user) {
       _pubFbShowConnected(data.user, data.pages || []);
+      _pubFbUpdateTokenStatus(data);
     } else {
       _pubFbShowDisconnected();
     }
@@ -447,6 +449,68 @@ function _pubFbShowConnected(user, pages) {
     });
     // Auto-select first page
     if (pages && pages.length === 1) sel.value = pages[0].id;
+  }
+}
+
+function _pubFbUpdateTokenStatus(data) {
+  const el = document.getElementById('pub-fb-token-status');
+  const btn = document.getElementById('btn-pub-fb-refresh');
+  if (!el) return;
+
+  const daysLeft = data.days_left;
+  const isLongLived = data.is_long_lived;
+  const isExpired = data.is_expired;
+  const hasAppCreds = data.has_app_credentials;
+
+  if (isExpired) {
+    el.innerHTML = '❌ Token đã hết hạn — cần nhập token mới';
+    el.style.color = 'var(--danger, #e74c3c)';
+    if (btn) btn.style.display = 'none';
+  } else if (daysLeft !== null && daysLeft !== undefined) {
+    const color = daysLeft <= 7 ? 'var(--warning, #f39c12)' : 'var(--success, #27ae60)';
+    const icon = daysLeft <= 7 ? '⚠️' : '✅';
+    const typeLabel = isLongLived ? 'Long-lived' : 'Short-lived';
+    el.innerHTML = `${icon} Token ${typeLabel} — còn <b>${daysLeft}</b> ngày`;
+    el.style.color = color;
+    if (btn) btn.style.display = hasAppCreds ? 'inline-block' : 'none';
+  } else if (!isLongLived) {
+    el.innerHTML = '⚠️ Short-lived token — hết hạn sớm';
+    el.style.color = 'var(--warning, #f39c12)';
+    if (btn) btn.style.display = hasAppCreds ? 'inline-block' : 'none';
+  } else {
+    el.innerHTML = '✅ Token hợp lệ';
+    el.style.color = 'var(--success, #27ae60)';
+    if (btn) btn.style.display = hasAppCreds ? 'inline-block' : 'none';
+  }
+}
+
+async function pubFbRefreshToken() {
+  const btn = document.getElementById('btn-pub-fb-refresh');
+  const el  = document.getElementById('pub-fb-token-status');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+  try {
+    const res  = await fetch('/api/facebook/refresh_token', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.message || '✅ Token đã được gia hạn!', 'success', 5000);
+      // Refresh status display
+      const status = await fetch('/api/facebook/status').then(r => r.json());
+      if (status.connected) {
+        _pubFbShowConnected(status.user, status.pages || []);
+        _pubFbUpdateTokenStatus(status);
+      }
+    } else {
+      const msg = data.error || 'Gia hạn thất bại';
+      toast('❌ ' + msg, 'error', 8000);
+      if (data.need_reauth) {
+        // Token expired completely — show reconnect UI
+        if (el) { el.innerHTML = '❌ Token hết hạn — cần nhập token mới'; el.style.color = 'var(--danger, #e74c3c)'; }
+      }
+    }
+  } catch (e) {
+    toast('Lỗi: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Gia hạn'; }
   }
 }
 
@@ -506,7 +570,7 @@ async function pubFbGenerateAI() {
     const res  = await fetch('/api/analyze_video_content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, provider })
+      body: JSON.stringify({ content, provider, target_language: document.getElementById('proc-target-lang')?.value || 'vi' })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'AI thất bại');
@@ -552,8 +616,15 @@ async function pubFbConnect() {
     });
     const data = await res.json();
     if (data.ok) {
-      toast(`✅ Kết nối thành công! ${data.pages.length} Page`, 'success');
+      const pageCount = data.pages.length;
+      const longLived = data.is_long_lived ? ' (Long-lived token ✅)' : '';
+      toast(`✅ Kết nối thành công! ${pageCount} Page${longLived}`, 'success', 5000);
       _pubFbShowConnected(data.user, data.pages);
+      _pubFbUpdateTokenStatus(data);
+      // Show warnings (e.g. missing perms, exchange info)
+      if (data.warnings && data.warnings.length) {
+        data.warnings.forEach(w => toast(w, w.startsWith('✅') ? 'success' : 'warning', 7000));
+      }
     } else {
       toast('❌ ' + (data.error || 'Kết nối thất bại'), 'error');
     }

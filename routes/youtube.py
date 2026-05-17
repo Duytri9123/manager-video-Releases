@@ -75,6 +75,23 @@ def youtube_oauth2_callback():
     state = str(request.args.get("state") or "")
     ok = uploader.complete_auth_callback(request.url, state=state)
     if ok:
+        # After successful auth, fetch channel info and update account registry
+        try:
+            channel = uploader.get_channel_info()
+            if channel and channel.get("title"):
+                from auth.account_manager import get_youtube_account_manager
+                mgr = get_youtube_account_manager()
+                account_id = uploader._account_id or channel.get("id") or "default"
+                mgr.add_account(
+                    account_id=account_id,
+                    name=channel["title"],
+                    channel_id=channel.get("id", ""),
+                    channel_title=channel["title"],
+                    thumbnail=channel.get("thumbnail", ""),
+                )
+        except Exception:
+            pass
+
         return """
 <!doctype html>
 <html><head><meta charset="utf-8"><title>YouTube Connected</title></head>

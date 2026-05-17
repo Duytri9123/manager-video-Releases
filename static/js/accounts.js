@@ -19,8 +19,38 @@ async function loadAccounts() {
       window._activeAccounts.facebook = fbRes.active_id;
     }
     renderAccountSelectors();
+
+    // Auto-refresh YouTube channel info if any account has empty channel_title
+    const needsRefresh = (window._accounts.youtube || []).some(
+      a => !a.channel_title && !a.thumbnail
+    );
+    if (needsRefresh) {
+      _refreshYouTubeChannelInfo();
+    }
   } catch (e) {
     console.warn('Failed to load accounts:', e);
+  }
+}
+
+/* ── Silently fetch real channel name from YouTube API and update registry ── */
+async function _refreshYouTubeChannelInfo() {
+  try {
+    const res = await fetch('/api/accounts/youtube/refresh_info', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok && data.account) {
+      // Update local cache
+      const idx = window._accounts.youtube.findIndex(a => a.id === data.account.id);
+      if (idx >= 0) {
+        window._accounts.youtube[idx] = data.account;
+      } else {
+        window._accounts.youtube = window._accounts.youtube.map(a =>
+          (!a.channel_title && !a.thumbnail) ? data.account : a
+        );
+      }
+      renderAccountSelectors();
+    }
+  } catch (e) {
+    // Silently ignore — user may not be authenticated yet
   }
 }
 

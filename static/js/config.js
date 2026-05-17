@@ -88,6 +88,8 @@ async function loadConfig() {
   set('cfg-openai-key', tr.openai_key || '');
   set('cfg-hf-token', tr.hf_token || '');
   setChk('cfg-naming-enabled', tr.naming_enabled !== false);
+  // FPT AI key (stored in video_process)
+  set('cfg-fpt-key', cfg.video_process?.fpt_api_key || '');
 
   // Upload defaults
   const upload = cfg.upload || {};
@@ -156,6 +158,14 @@ async function loadConfig() {
   if (typeof syncProcessConfigFromLoaded === 'function') {
     syncProcessConfigFromLoaded();
   }
+
+  // Auto-test all keys that are already saved
+  setTimeout(() => {
+    for (const [provider, cfg] of Object.entries(_API_KEY_IDS)) {
+      const key = document.getElementById(cfg.inputId)?.value?.trim();
+      if (key && key.length > 8) testApiKey(provider);
+    }
+  }, 500);
 }
 
 async function saveConfig() {
@@ -239,6 +249,7 @@ async function saveConfig() {
       tts_pitch: get('vp-tts-pitch') || '+0Hz',
       tts_rate: get('vp-tts-rate') || '+0%',
       tts_emotion: get('vp-tts-emotion') || 'default',
+      fpt_api_key: get('cfg-fpt-key') || '',
       subtitle_format: 'ass',
       anti_fingerprint: {
         enabled: getChk('vp-afp-enabled'),
@@ -257,6 +268,81 @@ async function saveConfig() {
   await API.post('/api/config', data);
   toast(t('toast_config_saved'), 'success');
 }
+
+/* ── API Key Test ─────────────────────────────────────────────────────────── */
+const _API_KEY_IDS = {
+  deepseek:    { inputId: 'cfg-deepseek-key',  statusId: 'cfg-deepseek-status' },
+  groq:        { inputId: 'cfg-groq-key',       statusId: 'cfg-groq-status' },
+  openai:      { inputId: 'cfg-openai-key',     statusId: 'cfg-openai-status' },
+  huggingface: { inputId: 'cfg-hf-token',       statusId: 'cfg-hf-status' },
+  fpt:         { inputId: 'cfg-fpt-key',        statusId: 'cfg-fpt-status' },
+};
+
+function _setKeyStatus(statusId, state, msg) {
+  const el = document.getElementById(statusId);
+  if (!el) return;
+  const colors = { ok: '#0d7a4e', error: '#c0392b', loading: '#888', warn: '#b7770d' };
+  const icons  = { ok: '✅', error: '❌', loading: '⏳', warn: '⚠' };
+  el.style.color = colors[state] || '#888';
+  el.textContent = (icons[state] || '') + ' ' + msg;
+}
+
+async function testApiKey(provider) {
+  const cfg = _API_KEY_IDS[provider];
+  if (!cfg) return;
+  const key = document.getElementById(cfg.inputId)?.value?.trim();
+  if (!key) {
+    _setKeyStatus(cfg.statusId, 'warn', 'Chưa nhập key');
+    return;
+  }
+  _setKeyStatus(cfg.statusId, 'loading', 'Đang kiểm tra...');
+  try {
+    const res = await fetch('/api/test_api_key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, key })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const quota = data.quota ? ` | ${data.quota}` : '';
+      const model = data.model ? ` (${data.model})` : '';
+      _setKeyStatus(cfg.statusId, 'ok', `Key hợp lệ${model}${quota}`);
+    } else {
+      _setKeyStatus(cfg.statusId, 'error', data.error || 'Key không hợp lệ');
+    }
+  } catch (e) {
+    _setKeyStatus(cfg.statusId, 'error', 'Lỗi kết nối: ' + e.message);
+  }
+}
+
+async function testAllApiKeys() {
+  const btn = document.querySelector('[onclick="testAllApiKeys()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang test...'; }
+  for (const provider of Object.keys(_API_KEY_IDS)) {
+    const key = document.getElementById(_API_KEY_IDS[provider].inputId)?.value?.trim();
+    if (key) await testApiKey(provider);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🧪 Test tất cả API Keys'; }
+}
+
+// Auto-test when user finishes typing in a key field (on blur)
+document.addEventListener('DOMContentLoaded', () => {
+  for (const [provider, cfg] of Object.entries(_API_KEY_IDS)) {
+    const input = document.getElementById(cfg.inputId);
+    if (!input) continue;
+    let _testTimer = null;
+    input.addEventListener('blur', () => {
+      clearTimeout(_testTimer);
+      const key = input.value.trim();
+      if (key.length > 8) {
+        // Small delay so user can see the loading state
+        _testTimer = setTimeout(() => testApiKey(provider), 300);
+      } else if (!key) {
+        _setKeyStatus(cfg.statusId, '', '');
+      }
+    });
+  }
+});
 
 async function uploadClientSecrets(input) {
   const file = input.files?.[0];

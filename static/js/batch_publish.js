@@ -192,7 +192,7 @@ async function _batchPubAnalyzeAll() {
       const res = await fetch('/api/analyze_video_content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: plain.slice(0, 3000), provider })
+        body: JSON.stringify({ content: plain.slice(0, 3000), provider, target_language: document.getElementById('proc-target-lang')?.value || 'vi' })
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'AI thất bại');
@@ -267,6 +267,7 @@ async function _batchPubStartAll() {
   const btn = document.getElementById('btn-batch-pub-start');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang đăng...'; }
   window._batchPubRunning = true;
+  window._batchPubCancelled = false;
 
   // ── Bước 2: Đăng tuần tự — mỗi video: AI phân tích → upload → đăng ──
   _batchPubLog(`🚀 Bắt đầu đăng ${pending.length} video (phân tích + đăng từng cặp)...`, 'info');
@@ -303,7 +304,7 @@ async function _batchPubStartAll() {
             const res = await fetch('/api/analyze_video_content', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: plain.slice(0, 3000), provider })
+              body: JSON.stringify({ content: plain.slice(0, 3000), provider, target_language: document.getElementById('proc-target-lang')?.value || 'vi' })
             });
             const data = await res.json();
             if (data.ok) {
@@ -340,15 +341,21 @@ async function _batchPubStartAll() {
         facebook: { title: item.videoName.replace(/\.[^.]+$/, '').replace(/_/g, ' '), description: '', hashtags: [] },
       };
 
-      // Upload to each platform
-      if (platforms.includes('youtube')) {
-        await _batchPubUploadYT(videoPath, ai.youtube, scheduledDate);
+      // Upload to each platform — wrap with retry/skip/cancel modal on error
+      for (const plat of platforms) {
+        if (window._batchPubCancelled) break;
+        const result = await _batchPubUploadWithRetry(plat, videoPath, ai, scheduledDate, item.videoName);
+        if (result === 'cancel') {
+          window._batchPubCancelled = true;
+          throw new Error('User cancelled upload');
+        }
+        // 'skip' or 'ok' → continue with next platform
       }
-      if (platforms.includes('facebook')) {
-        await _batchPubUploadFB(videoPath, ai.facebook, scheduledDate);
-      }
-      if (platforms.includes('tiktok')) {
-        await _batchPubUploadTT(videoPath, ai.tiktok);
+
+      if (window._batchPubCancelled) {
+        item.status = 'cancelled';
+        _batchPubLog(`🛑 [${i + 1}/${pending.length}] Đã huỷ: ${item.videoName}`, 'warning');
+        break;
       }
 
       item.status = 'done';
@@ -373,7 +380,68 @@ async function _batchPubStartAll() {
   toast(`Đăng hàng loạt xong: ${uploaded}/${pending.length}`, uploaded === pending.length ? 'success' : 'warning');
 }
 
-/* ── Platform upload helpers ── */
+/* ── Platform upload helpers — return {ok, error, errorCode, tokenError} ── */
+
+/**
+ * Upload to a single platform with retry/skip/cancel modal on error.
+ * Returns: 'ok' | 'skip' | 'cancel'
+ */
+async function _batchPubUploadWithRetry(platform, videoPath, aiResult, scheduledDate, videoName) {
+  const PLATFORM_FNS = {
+    youtube:  () => _batchPubUploadYT(videoPath, aiResult.youtube, scheduledDate),
+    facebook: () => _batchPubUploadFB(videoPath, aiResult.facebook, scheduledDate),
+    tiktok:   () => _batchPubUploadTT(videoPath, aiResult.tiktok),
+  };
+  const uploadFn = PLATFORM_FNS[platform];
+  if (!uploadFn) return 'skip';
+
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    if (window._batchPubCancelled) return 'cancel';
+    let result;
+    try {
+      result = await uploadFn();
+    } catch (e) {
+      result = { ok: false, error: e.message };
+    }
+
+    if (result.ok) {
+      return 'ok';
+    }
+    if (result.skip) {
+      // Hard skip — e.g. preflight missing config
+      _batchPubLog(`  [${platform.toUpperCase()}] ⏭ ${result.error}`, 'warning');
+      return 'skip';
+    }
+
+    _batchPubLog(`  [${platform.toUpperCase()}] ❌ ${result.error}`, 'error');
+
+    // Show modal and wait for user action
+    const action = await window.showUploadErrorModal({
+      platform,
+      title: `Upload ${platform} thất bại (lần ${attempt})`,
+      video: videoName || (videoPath || '').split(/[\\/]/).pop(),
+      error: result.error,
+      errorCode: result.errorCode || '',
+      tokenError: !!result.tokenError,
+      diagnostic: JSON.stringify(result, null, 2),
+    });
+
+    if (action === 'retry') {
+      _batchPubLog(`  [${platform.toUpperCase()}] 🔄 Thử lại lần ${attempt + 1}...`, 'info');
+      continue;
+    }
+    if (action === 'skip') {
+      _batchPubLog(`  [${platform.toUpperCase()}] ⏭ Bỏ qua video này`, 'warning');
+      return 'skip';
+    }
+    // cancel
+    _batchPubLog(`  [${platform.toUpperCase()}] 🛑 Huỷ toàn bộ`, 'error');
+    return 'cancel';
+  }
+}
+
 async function _batchPubUploadYT(videoPath, ytInfo, scheduledDate) {
   const accountId = document.getElementById('yt-account-select')?.value || '';
   const payload = {
@@ -388,16 +456,33 @@ async function _batchPubUploadYT(videoPath, ytInfo, scheduledDate) {
   };
 
   _batchPubLog(`  [YT] Đăng: "${payload.title.slice(0, 40)}..."`, 'info');
-  const res = await fetch('/api/youtube_upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  let res;
+  try {
+    res = await fetch('/api/youtube_upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    return { ok: false, error: 'Lỗi mạng: ' + e.message };
+  }
+
+  if (!res.ok) {
+    let errMsg = `HTTP ${res.status}`;
+    let tokenErr = res.status === 401;
+    try {
+      const j = await res.json();
+      errMsg = j.error || errMsg;
+      tokenErr = tokenErr || /not authenticated|token|expired|oauth/i.test(errMsg);
+    } catch (_) {}
+    return { ok: false, error: errMsg, tokenError: tokenErr, errorCode: res.status };
+  }
 
   // Stream response
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let lastResult = null;
+  let lastErrLog = '';
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -405,20 +490,25 @@ async function _batchPubUploadYT(videoPath, ytInfo, scheduledDate) {
     for (const line of text.split('\n').filter(Boolean)) {
       try {
         const d = JSON.parse(line);
-        if (d.log) _batchPubLog(`  [YT] ${d.log}`, d.level || 'info');
+        if (d.log) {
+          _batchPubLog(`  [YT] ${d.log}`, d.level || 'info');
+          if (d.level === 'error') lastErrLog = d.log;
+        }
         if (d.ok !== undefined) lastResult = d;
       } catch (_) {}
     }
   }
-  if (lastResult && !lastResult.ok) throw new Error('YouTube upload failed');
+  if (lastResult && lastResult.ok) return { ok: true, ...lastResult };
+  const errMsg = lastErrLog || 'YouTube upload failed';
+  const tokenErr = /token|oauth|expired|not authenticated|invalid_grant/i.test(errMsg);
+  return { ok: false, error: errMsg, tokenError: tokenErr };
 }
 
 async function _batchPubUploadFB(videoPath, fbInfo, scheduledDate) {
   const accountId = document.getElementById('pub-fb-account-select')?.value || '';
   const pageId = document.getElementById('pub-fb-page-select')?.value || '';
   if (!pageId) {
-    _batchPubLog('  [FB] Bỏ qua — chưa chọn Page', 'warning');
-    return;
+    return { ok: false, error: 'Chưa chọn Facebook Page', skip: true };
   }
 
   const form = new FormData();
@@ -436,11 +526,29 @@ async function _batchPubUploadFB(videoPath, fbInfo, scheduledDate) {
   if (accountId) form.append('account_id', accountId);
 
   _batchPubLog(`  [FB] Đăng: "${(fbInfo?.title || '').slice(0, 40)}..."`, 'info');
-  const res = await fetch('/api/facebook/post_video', { method: 'POST', body: form });
+  let res;
+  try {
+    res = await fetch('/api/facebook/post_video', { method: 'POST', body: form });
+  } catch (e) {
+    return { ok: false, error: 'Lỗi mạng: ' + e.message };
+  }
+
+  if (!res.ok) {
+    let errMsg = `HTTP ${res.status}`;
+    let tokenErr = false;
+    try {
+      const j = await res.json();
+      errMsg = j.error || errMsg;
+      tokenErr = !!j.token_error || res.status === 401;
+    } catch (_) {}
+    return { ok: false, error: errMsg, tokenError: tokenErr, errorCode: res.status };
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let lastResult = null;
+  let lastErrLog = '';
+  let tokenErr = false;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -448,12 +556,18 @@ async function _batchPubUploadFB(videoPath, fbInfo, scheduledDate) {
     for (const line of text.split('\n').filter(Boolean)) {
       try {
         const d = JSON.parse(line);
-        if (d.log) _batchPubLog(`  [FB] ${d.log}`, d.level || 'info');
+        if (d.log) {
+          _batchPubLog(`  [FB] ${d.log}`, d.level || 'info');
+          if (d.level === 'error') lastErrLog = d.log;
+        }
+        if (d.token_error) tokenErr = true;
         if (d.ok !== undefined) lastResult = d;
       } catch (_) {}
     }
   }
-  if (lastResult && !lastResult.ok) throw new Error('Facebook upload failed');
+  if (lastResult && lastResult.ok) return { ok: true, ...lastResult };
+  const errMsg = lastErrLog || 'Facebook upload failed';
+  return { ok: false, error: errMsg, tokenError: tokenErr || /token|expired|oauth|190|463/i.test(errMsg) };
 }
 
 async function _batchPubUploadTT(videoPath, ttInfo) {
@@ -462,17 +576,25 @@ async function _batchPubUploadTT(videoPath, ttInfo) {
   const caption = buildCap(ttInfo?.caption || '', ttHashStr);
 
   _batchPubLog(`  [TT] Mở TikTok Studio: "${caption.slice(0, 40)}..."`, 'info');
-  const res = await fetch('/api/tiktok/prepare_upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ video_path: videoPath, caption: caption.trim() }),
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    _batchPubLog(`  [TT] ⚠ ${data.error || 'Lỗi mở TikTok'}`, 'warning');
-  } else {
-    _batchPubLog(`  [TT] ✅ Đã mở TikTok Studio`, 'success');
+  let res;
+  try {
+    res = await fetch('/api/tiktok/prepare_upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_path: videoPath, caption: caption.trim() }),
+    });
+  } catch (e) {
+    return { ok: false, error: 'Lỗi mạng: ' + e.message };
   }
+  let data = {};
+  try { data = await res.json(); } catch (_) {}
+  if (!data.ok) {
+    const errMsg = data.error || `HTTP ${res.status}`;
+    const tokenErr = /login|session|expired|not.*logged/i.test(errMsg);
+    return { ok: false, error: errMsg, tokenError: tokenErr };
+  }
+  _batchPubLog(`  [TT] ✅ Đã mở TikTok Studio`, 'success');
+  return { ok: true };
 }
 
 

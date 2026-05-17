@@ -4,6 +4,7 @@ import os
 import tempfile
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from flask import Blueprint, jsonify, request, Response, stream_with_context
 from core_app import ROOT, load_cfg, save_cfg
@@ -12,6 +13,62 @@ bp = Blueprint("facebook", __name__)
 
 FB_API_BASE = "https://graph.facebook.com/v25.0"
 FB_TOKEN_FILE = ROOT / ".facebook_token.json"
+
+
+def _get_fb_app_credentials() -> tuple[str, str]:
+    """Return (app_id, app_secret) from config.yml, env vars, or empty strings."""
+    cfg = load_cfg()
+    fb_cfg = dict(cfg.get("facebook") or {})
+    app_id = str(
+        os.getenv("FB_APP_ID") or fb_cfg.get("app_id") or ""
+    ).strip()
+    app_secret = str(
+        os.getenv("FB_APP_SECRET") or fb_cfg.get("app_secret") or ""
+    ).strip()
+    return app_id, app_secret
+
+
+def _fb_exchange_long_lived_token(short_token: str) -> tuple[str, str]:
+    """Exchange a short-lived User token for a long-lived one (60 days).
+    Returns (long_lived_token, error_message).
+    Requires app_id + app_secret in config.
+    """
+    app_id, app_secret = _get_fb_app_credentials()
+    if not app_id or not app_secret:
+        return "", "Chưa cấu hình App ID / App Secret trong config.yml"
+
+    import urllib.request, urllib.parse, urllib.error
+    params = urllib.parse.urlencode({
+        "grant_type": "fb_exchange_token",
+        "client_id": app_id,
+        "client_secret": app_secret,
+        "fb_exchange_token": short_token,
+    })
+    url = f"{FB_API_BASE}/oauth/access_token?{params}"
+    try:
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = _j.loads(r.read().decode())
+        token = data.get("access_token", "")
+        if not token:
+            return "", f"Facebook không trả về token: {data}"
+        return token, ""
+    except urllib.error.HTTPError as e:
+        try:
+            body = _j.loads(e.read().decode())
+            msg = (body.get("error") or {}).get("message", str(e))
+        except Exception:
+            msg = str(e)
+        return "", msg
+    except Exception as e:
+        return "", str(e)
+
+
+def _fb_get_permanent_page_tokens(long_lived_user_token: str) -> list[dict]:
+    """Fetch pages with their permanent (never-expiring) page tokens.
+    Page tokens derived from a long-lived user token never expire.
+    """
+    resp = _fb_get("me/accounts", long_lived_user_token)
+    return resp.get("data", []) or []
 
 # Facebook error codes that indicate the user must re-authenticate OR
 # re-request permissions (which also requires a new token with those scopes).
@@ -131,7 +188,7 @@ def _fb_get(path: str, token: str, params: dict = None) -> dict:
         return {"error": {"message": str(e)}}
 
 
-def _fb_post(path: str, token: str, data: dict = None, files: dict = None) -> dict:
+def _fb_post(path: str, token: str, data: dict = None, files: dict = None, timeout: int = 120) -> dict:
     """Make a POST request to Facebook Graph API."""
     import urllib.request
     import urllib.parse
@@ -144,14 +201,18 @@ def _fb_post(path: str, token: str, data: dict = None, files: dict = None) -> di
     try:
         req = urllib.request.Request(url, data=encoded, method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return _j.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         try:
             body = _j.loads(e.read().decode())
-            return {"error": body.get("error", {"message": str(e), "code": e.code})}
+            err = body.get("error", {"message": str(e), "code": e.code})
+            # Attach raw HTTP status for easier debugging
+            if isinstance(err, dict) and "http_status" not in err:
+                err["http_status"] = e.code
+            return {"error": err}
         except Exception:
-            return {"error": {"message": str(e), "code": e.code}}
+            return {"error": {"message": str(e), "code": e.code, "http_status": e.code}}
     except Exception as e:
         return {"error": {"message": str(e)}}
 
@@ -197,7 +258,11 @@ def _fb_debug_token(token: str) -> dict:
 
 @bp.route("/api/facebook/connect", methods=["POST"])
 def fb_connect():
-    """Connect with a User Access Token and fetch pages."""
+    """Connect with a User Access Token and fetch pages.
+    If app_id + app_secret are configured, automatically exchanges the
+    short-lived token for a long-lived one (60 days) and fetches permanent
+    page tokens (never expire).
+    """
     data = request.json or {}
     token = str(data.get("token") or "").strip()
     if not token:
@@ -215,10 +280,27 @@ def fb_connect():
     # ── Inspect token type (USER vs PAGE) ──
     debug = _fb_debug_token(token)
     token_type = debug.get("type", "")
+
+    # ── Try to exchange for long-lived token (if app credentials configured) ──
+    app_id, app_secret = _get_fb_app_credentials()
+    long_lived_token = ""
+    exchange_info = ""
+    token_expires_at = debug.get("expires_at")  # unix timestamp or 0 = never
+
+    if token_type != "PAGE" and app_id and app_secret:
+        ll_token, ll_err = _fb_exchange_long_lived_token(token)
+        if ll_token:
+            long_lived_token = ll_token
+            token = ll_token  # use long-lived from now on
+            exchange_info = "✅ Đã đổi sang Long-lived Token (60 ngày)"
+            # Re-check expiry on the new token
+            debug2 = _fb_debug_token(ll_token)
+            token_expires_at = debug2.get("expires_at")
+        else:
+            exchange_info = f"⚠ Không thể đổi long-lived token: {ll_err}"
+
     # Accept either USER token (recommended) or a direct PAGE token
     if token_type == "PAGE":
-        # User pasted a PAGE token directly — treat it as a single-page account
-        # and skip me/accounts call.
         pages = [{
             "id": me.get("id"),
             "name": me.get("name") or "Page",
@@ -229,7 +311,7 @@ def fb_connect():
         pages_warning = ("Bạn đang dùng PAGE TOKEN — chỉ đăng được cho đúng Page này. "
                          "Khuyên dùng USER TOKEN để quản lý nhiều Page.")
     else:
-        # USER token (or unknown type) — fetch the user's pages
+        # USER token — fetch pages (permanent page tokens if using long-lived user token)
         pages_resp = _fb_get("me/accounts", token)
         pages = pages_resp.get("data", []) or []
         pages_warning = ""
@@ -240,6 +322,9 @@ def fb_connect():
         "user_id": me.get("id"),
         "user_name": me.get("name"),
         "token_type": token_type,
+        "is_long_lived": bool(long_lived_token),
+        "token_expires_at": token_expires_at,
+        "token_saved_at": int(time.time()),
         "granted_perms": sorted(granted),
         "missing_perms": sorted(missing),
         "pages": [
@@ -257,6 +342,8 @@ def fb_connect():
 
     # Build a warning list so the client can show actionable hints
     warnings = []
+    if exchange_info:
+        warnings.append(exchange_info)
     if missing:
         warnings.append(
             "Thiếu quyền: " + ", ".join(sorted(missing))
@@ -269,12 +356,19 @@ def fb_connect():
         )
     if pages_warning:
         warnings.append(pages_warning)
+    if not app_id:
+        warnings.append(
+            "💡 Cấu hình App ID + App Secret trong config.yml (mục facebook:) "
+            "để token tự động gia hạn, không cần nhập lại."
+        )
 
     return jsonify({
         "ok": True,
         "user": {"id": me.get("id"), "name": me.get("name")},
         "pages": token_data["pages"],
         "token_type": token_type,
+        "is_long_lived": bool(long_lived_token),
+        "token_expires_at": token_expires_at,
         "granted_perms": sorted(granted),
         "missing_perms": sorted(missing),
         "warnings": warnings,
@@ -283,15 +377,110 @@ def fb_connect():
 
 @bp.route("/api/facebook/status", methods=["GET"])
 def fb_status():
-    """Get current Facebook connection status."""
+    """Get current Facebook connection status, including token expiry info."""
     td = _load_fb_token()
     if not td or not td.get("user_token"):
         return jsonify({"ok": True, "connected": False})
+
+    # Compute days until expiry
+    expires_at = td.get("token_expires_at")
+    days_left = None
+    is_expired = False
+    if expires_at:
+        try:
+            secs_left = int(expires_at) - int(time.time())
+            days_left = max(0, secs_left // 86400)
+            is_expired = secs_left <= 0
+        except Exception:
+            pass
+
+    app_id, _ = _get_fb_app_credentials()
+
     return jsonify({
         "ok": True,
         "connected": True,
         "user": {"id": td.get("user_id"), "name": td.get("user_name")},
         "pages": td.get("pages", []),
+        "is_long_lived": td.get("is_long_lived", False),
+        "token_expires_at": expires_at,
+        "days_left": days_left,
+        "is_expired": is_expired,
+        "has_app_credentials": bool(app_id),
+    })
+
+
+@bp.route("/api/facebook/refresh_token", methods=["POST"])
+def fb_refresh_token():
+    """Re-exchange the saved user token for a fresh long-lived token.
+    Works as long as the current token is still valid (not yet expired).
+    Requires app_id + app_secret in config.yml.
+    """
+    td = _load_fb_token()
+    if not td or not td.get("user_token"):
+        return jsonify({"ok": False, "error": "Chưa kết nối Facebook"}), 401
+
+    app_id, app_secret = _get_fb_app_credentials()
+    if not app_id or not app_secret:
+        return jsonify({
+            "ok": False,
+            "error": "Chưa cấu hình App ID / App Secret. Thêm vào config.yml:\n\nfacebook:\n  app_id: \"YOUR_APP_ID\"\n  app_secret: \"YOUR_APP_SECRET\""
+        }), 400
+
+    current_token = td["user_token"]
+
+    # Verify current token is still usable
+    me = _fb_get("me", current_token, {"fields": "id,name"})
+    if "error" in me:
+        return jsonify({
+            "ok": False,
+            "error": "Token hiện tại đã hết hạn hoàn toàn — cần nhập token mới từ Graph API Explorer.",
+            "need_reauth": True,
+        }), 400
+
+    # Exchange for fresh long-lived token
+    ll_token, ll_err = _fb_exchange_long_lived_token(current_token)
+    if not ll_token:
+        return jsonify({"ok": False, "error": ll_err}), 400
+
+    # Fetch fresh page tokens (permanent)
+    pages_resp = _fb_get("me/accounts", ll_token)
+    pages = pages_resp.get("data", []) or []
+
+    # Get new expiry
+    debug = _fb_debug_token(ll_token)
+    token_expires_at = debug.get("expires_at")
+
+    # Update saved token data
+    td["user_token"] = ll_token
+    td["is_long_lived"] = True
+    td["token_expires_at"] = token_expires_at
+    td["token_saved_at"] = int(time.time())
+    if pages:
+        td["pages"] = [
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "access_token": p["access_token"],
+                "category": p.get("category", ""),
+                "tasks": p.get("tasks", []),
+            }
+            for p in pages
+        ]
+    _save_fb_token(td)
+
+    days_left = None
+    if token_expires_at:
+        try:
+            days_left = max(0, (int(token_expires_at) - int(time.time())) // 86400)
+        except Exception:
+            pass
+
+    return jsonify({
+        "ok": True,
+        "message": f"✅ Token đã được gia hạn thành công! Còn {days_left} ngày." if days_left else "✅ Token đã được gia hạn.",
+        "days_left": days_left,
+        "token_expires_at": token_expires_at,
+        "pages": td["pages"],
     })
 
 
@@ -375,100 +564,80 @@ def fb_post_video():
             yield send(log=f"📤 Bắt đầu upload lên Facebook Page...", level="info", overall=5)
             yield send(log=f"📁 File: {video_path.name} ({video_path.stat().st_size // 1024 // 1024} MB)", level="info", overall=10)
 
-            # Use requests for multipart upload if available, else urllib
+            # Use requests for multipart upload (streaming — no full file in RAM)
             try:
                 import requests as _req
-                files_data = {"source": (video_path.name, open(str(video_path), "rb"), "video/mp4")}
-                post_data = {"access_token": page_token}
-                if title:
-                    post_data["title"] = title
-                if description:
-                    post_data["description"] = description
-                if scheduled_time:
-                    # Scheduled posts must be unpublished until the scheduled time
-                    post_data["scheduled_publish_time"] = scheduled_time
-                    post_data["published"] = "false"
-                else:
-                    post_data["published"] = "true"
-                # NOTE: no "privacy" field — Page posts inherit the Page's
-                # public visibility; sending user-timeline privacy values
-                # causes Graph API to return #100.
-
-                yield send(log="🔗 Đang gửi video lên Facebook...", level="info", overall=30)
-                resp = _req.post(
-                    f"{FB_API_BASE}/{page_id}/videos",
-                    data=post_data,
-                    files=files_data,
-                    timeout=300,
-                )
-                # Handle empty or non-JSON responses
-                if not resp.text or not resp.text.strip():
-                    err_reasons = {
-                        413: "Video quá lớn — Facebook giới hạn 10GB cho video thường, 1GB cho Reel.",
-                        400: "Yêu cầu không hợp lệ — kiểm tra lại thông tin video.",
-                        401: "Token hết hạn hoặc không hợp lệ — cần kết nối lại Facebook.",
-                        403: "Không có quyền đăng — kiểm tra quyền pages_manage_posts.",
-                    }
-                    reason = err_reasons.get(resp.status_code, f"Facebook trả về HTTP {resp.status_code} với body rỗng.")
-                    yield send(
-                        log=f"❌ {reason}",
-                        level="error", overall=0, token_error=(resp.status_code in (401, 403)),
-                    )
-                    return
-                try:
-                    result = resp.json()
-                except Exception as _je:
-                    yield send(
-                        log=f"❌ Facebook trả về dữ liệu không hợp lệ (HTTP {resp.status_code}): {resp.text[:200]}",
-                        level="error", overall=0,
-                    )
-                    return
             except ImportError:
-                # Fallback: urllib multipart
-                import urllib.request
-                import urllib.parse
-                import uuid
+                yield send(log="❌ Thiếu thư viện 'requests'. Chạy: pip install requests", level="error", overall=0)
+                return
 
-                boundary = uuid.uuid4().hex
-                body_parts = []
-                published_value = "false" if scheduled_time else "true"
-                fields = [
-                    ("access_token", page_token),
-                    ("title", title),
-                    ("description", description),
-                    ("published", published_value),
-                ]
-                if scheduled_time:
-                    fields.append(("scheduled_publish_time", scheduled_time))
-                for k, v in fields:
-                    if v:
-                        body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}'.encode())
+            post_data = {"access_token": page_token}
+            if title:
+                post_data["title"] = title
+            if description:
+                post_data["description"] = description
+            if scheduled_time:
+                # Scheduled posts must be unpublished until the scheduled time
+                post_data["scheduled_publish_time"] = scheduled_time
+                post_data["published"] = "false"
+            else:
+                post_data["published"] = "true"
+            # NOTE: no "privacy" field — Page posts inherit the Page's
+            # public visibility; sending user-timeline privacy values
+            # causes Graph API to return #100.
 
-                with open(str(video_path), "rb") as vf:
-                    video_bytes = vf.read()
-                body_parts.append(
-                    f'--{boundary}\r\nContent-Disposition: form-data; name="source"; filename="{video_path.name}"\r\nContent-Type: video/mp4\r\n\r\n'.encode()
-                    + video_bytes
+            file_size_mb = video_path.stat().st_size / 1024 / 1024
+            yield send(log=f"🔗 Đang gửi video lên Facebook ({file_size_mb:.1f} MB)...", level="info", overall=30)
+            try:
+                with open(str(video_path), "rb") as _vf:
+                    files_data = {"source": (video_path.name, _vf, "video/mp4")}
+                    resp = _req.post(
+                        f"{FB_API_BASE}/{page_id}/videos",
+                        data=post_data,
+                        files=files_data,
+                        timeout=600,
+                    )
+            except _req.exceptions.Timeout:
+                yield send(log="❌ Timeout khi upload — Facebook không phản hồi sau 10 phút. Thử lại sau.", level="error", overall=0)
+                return
+            except _req.exceptions.ConnectionError as _ce:
+                yield send(log=f"❌ Lỗi kết nối: {_ce}", level="error", overall=0)
+                return
+
+            # Handle empty or non-JSON responses
+            if not resp.text or not resp.text.strip():
+                err_reasons = {
+                    413: "Video quá lớn — Facebook giới hạn 10GB cho video thường, 1GB cho Reel.",
+                    400: "Token hết hạn hoặc yêu cầu không hợp lệ — thử gia hạn token rồi đăng lại.",
+                    401: "Token hết hạn hoặc không hợp lệ — cần kết nối lại Facebook.",
+                    403: "Không có quyền đăng — kiểm tra quyền pages_manage_posts.",
+                }
+                reason = err_reasons.get(resp.status_code, f"Facebook trả về HTTP {resp.status_code} với body rỗng.")
+                is_token_err = resp.status_code in (400, 401, 403)
+                yield send(
+                    log=f"❌ {reason} (HTTP {resp.status_code})",
+                    level="error", overall=0, token_error=is_token_err,
                 )
-                body_parts.append(f'--{boundary}--'.encode())
-                body = b'\r\n'.join(body_parts)
-
-                yield send(log="🔗 Đang gửi video lên Facebook...", level="info", overall=30)
-                req = urllib.request.Request(
-                    f"{FB_API_BASE}/{page_id}/videos",
-                    data=body,
-                    method="POST",
+                return
+            try:
+                result = resp.json()
+            except Exception as _je:
+                yield send(
+                    log=f"❌ Facebook trả về dữ liệu không hợp lệ (HTTP {resp.status_code}): {resp.text[:300]}",
+                    level="error", overall=0,
                 )
-                req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
-                with urllib.request.urlopen(req, timeout=300) as r:
-                    result = _j.loads(r.read().decode())
+                return
 
             if "error" in result:
                 err = result["error"]
                 err_msg = err.get("message", "Upload thất bại")
+                err_code = err.get("code", "")
+                err_subcode = err.get("error_subcode", "")
+                err_type = err.get("type", "")
+                code_info = f" [code={err_code}" + (f", subcode={err_subcode}" if err_subcode else "") + (f", type={err_type}" if err_type else "") + "]"
                 is_token = _is_token_error(err)
                 yield send(
-                    log=f"❌ Lỗi Facebook: {err_msg}",
+                    log=f"❌ Lỗi Facebook: {err_msg}{code_info}",
                     level="error",
                     overall=0,
                     token_error=is_token,
@@ -483,6 +652,20 @@ def fb_post_video():
                 yield send(log=f"🔗 {page_url}", level="success", url=page_url)
             yield send(ok=True, video_id=video_id, url=page_url)
 
+        except (ConnectionResetError, ConnectionAbortedError) as exc:
+            yield send(
+                log=f"❌ Kết nối bị đóng bởi Facebook — token có thể đã hết hạn. Hãy gia hạn token rồi thử lại.",
+                level="error", overall=0, token_error=True,
+            )
+        except OSError as exc:
+            # WinError 10054 = WSAECONNRESET (connection forcibly closed by remote)
+            if getattr(exc, 'winerror', None) in (10054, 10053) or '10054' in str(exc) or '10053' in str(exc):
+                yield send(
+                    log=f"❌ Facebook đóng kết nối (WinError {getattr(exc, 'winerror', '')}) — token hết hạn. Hãy gia hạn token rồi thử lại.",
+                    level="error", overall=0, token_error=True,
+                )
+            else:
+                yield send(log=f"❌ Lỗi mạng: {exc}", level="error", overall=0)
         except Exception as exc:
             yield send(log=f"❌ Lỗi: {exc}", level="error", overall=0)
         finally:
@@ -712,33 +895,83 @@ def fb_post_reel():
 
             # ── Phase 2: upload binary to upload_url ──
             yield send(log="⬆ Phase 2/3: Đang upload file video...", level="info", overall=30)
-            with open(str(video_path), "rb") as vf:
-                video_bytes = vf.read()
-
-            upload_req = urllib.request.Request(upload_url, data=video_bytes, method="POST")
-            upload_req.add_header("Authorization", f"OAuth {page_token}")
-            upload_req.add_header("offset", "0")
-            upload_req.add_header("file_size", str(file_size))
-            upload_req.add_header("Content-Type", "application/octet-stream")
 
             try:
-                with urllib.request.urlopen(upload_req, timeout=600) as r:
-                    upload_resp = _j.loads(r.read().decode())
-            except urllib.error.HTTPError as e:
+                import requests as _req
+                with open(str(video_path), "rb") as vf:
+                    upload_resp_r = _req.post(
+                        upload_url,
+                        data=vf,
+                        headers={
+                            "Authorization": f"OAuth {page_token}",
+                            "offset": "0",
+                            "file_size": str(file_size),
+                            "Content-Type": "application/octet-stream",
+                        },
+                        timeout=600,
+                    )
+                # Parse response
+                if not upload_resp_r.text or not upload_resp_r.text.strip():
+                    # Empty body — likely token error
+                    if upload_resp_r.status_code in (400, 401, 403):
+                        yield send(
+                            log=f"❌ Token hết hạn hoặc không hợp lệ (HTTP {upload_resp_r.status_code}) — cần gia hạn token",
+                            level="error", overall=0, token_error=True,
+                        )
+                    else:
+                        yield send(
+                            log=f"❌ Facebook trả về HTTP {upload_resp_r.status_code} với body rỗng",
+                            level="error", overall=0,
+                        )
+                    return
                 try:
-                    body = _j.loads(e.read().decode())
-                    err = body.get("error", {"message": str(e), "code": e.code})
+                    upload_resp = upload_resp_r.json()
                 except Exception:
-                    err = {"message": str(e), "code": e.code}
-                is_token = _is_token_error(err)
-                yield send(
-                    log=f"❌ Phase upload: {err.get('message')}",
-                    level="error",
-                    overall=0,
-                    token_error=is_token,
-                    error=err.get("message"),
-                )
-                return
+                    yield send(
+                        log=f"❌ Phản hồi không hợp lệ (HTTP {upload_resp_r.status_code}): {upload_resp_r.text[:200]}",
+                        level="error", overall=0,
+                    )
+                    return
+                if "error" in upload_resp:
+                    err = upload_resp["error"]
+                    is_token = _is_token_error(err)
+                    yield send(
+                        log=f"❌ Phase upload: {err.get('message')} [code={err.get('code')}]",
+                        level="error", overall=0, token_error=is_token,
+                        error=err.get("message"),
+                    )
+                    return
+            except ImportError:
+                # Fallback: urllib (reads full file into RAM — only for small files)
+                with open(str(video_path), "rb") as vf:
+                    video_bytes = vf.read()
+                upload_req = urllib.request.Request(upload_url, data=video_bytes, method="POST")
+                upload_req.add_header("Authorization", f"OAuth {page_token}")
+                upload_req.add_header("offset", "0")
+                upload_req.add_header("file_size", str(file_size))
+                upload_req.add_header("Content-Type", "application/octet-stream")
+                try:
+                    with urllib.request.urlopen(upload_req, timeout=600) as r:
+                        upload_resp = _j.loads(r.read().decode())
+                except urllib.error.HTTPError as e:
+                    try:
+                        body = _j.loads(e.read().decode())
+                        err = body.get("error", {"message": str(e), "code": e.code})
+                    except Exception:
+                        err = {"message": str(e), "code": e.code}
+                    is_token = _is_token_error(err)
+                    yield send(
+                        log=f"❌ Phase upload: {err.get('message')}",
+                        level="error", overall=0, token_error=is_token,
+                        error=err.get("message"),
+                    )
+                    return
+                except (ConnectionResetError, OSError) as e:
+                    yield send(
+                        log=f"❌ Kết nối bị đóng bởi Facebook — token có thể đã hết hạn. Chi tiết: {e}",
+                        level="error", overall=0, token_error=True,
+                    )
+                    return
 
             if not upload_resp.get("success"):
                 yield send(log=f"❌ Upload không thành công: {upload_resp}",
@@ -762,9 +995,13 @@ def fb_post_reel():
             finish_result = _fb_post(f"{page_id}/video_reels", page_token, finish_data)
             if "error" in finish_result:
                 err = finish_result["error"]
+                err_code = err.get("code", "")
+                err_subcode = err.get("error_subcode", "")
+                err_type = err.get("type", "")
+                code_info = f" [code={err_code}" + (f", subcode={err_subcode}" if err_subcode else "") + (f", type={err_type}" if err_type else "") + "]"
                 is_token = _is_token_error(err)
                 yield send(
-                    log=f"❌ Phase finish: {err.get('message')}",
+                    log=f"❌ Phase finish: {err.get('message')}{code_info}",
                     level="error",
                     overall=0,
                     token_error=is_token,
@@ -783,6 +1020,19 @@ def fb_post_reel():
             yield send(log=f"🔗 {page_url}", level="success", url=page_url)
             yield send(ok=True, video_id=video_id, url=page_url)
 
+        except (ConnectionResetError, ConnectionAbortedError) as exc:
+            yield send(
+                log="❌ Kết nối bị đóng bởi Facebook — token có thể đã hết hạn. Hãy gia hạn token rồi thử lại.",
+                level="error", overall=0, token_error=True,
+            )
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) in (10054, 10053) or '10054' in str(exc) or '10053' in str(exc):
+                yield send(
+                    log=f"❌ Facebook đóng kết nối (WinError {getattr(exc, 'winerror', '')}) — token hết hạn. Hãy gia hạn token rồi thử lại.",
+                    level="error", overall=0, token_error=True,
+                )
+            else:
+                yield send(log=f"❌ Lỗi mạng: {exc}", level="error", overall=0)
         except Exception as exc:
             yield send(log=f"❌ Lỗi: {exc}", level="error", overall=0)
         finally:

@@ -133,4 +133,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "capcut_path": "",
         "auto_open": False,
     },
+    "facebook": {
+        "app_id": "",
+        "app_secret": "",
+    },
 }

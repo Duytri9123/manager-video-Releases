@@ -341,7 +341,8 @@ class BaseDownloader(ABC):
                 aweme_id,
                 publish_date,
             )
-        file_stem = sanitize_filename(f"{publish_date}_{desc}_{aweme_id}")
+        # File stem: tên_video_id (không có ngày) — dễ check trùng khi tải lại
+        file_stem = sanitize_filename(f"{desc}_{aweme_id}")
 
         save_dir = self.file_manager.get_save_path(
             author_name=author_name,
@@ -349,7 +350,7 @@ class BaseDownloader(ABC):
             aweme_title=desc,
             aweme_id=aweme_id,
             folderstyle=self.config.get("folderstyle", True),
-            download_date=publish_date,
+            download_date="",  # Không dùng ngày trong tên thư mục
         )
         downloaded_files: List[Path] = []
 

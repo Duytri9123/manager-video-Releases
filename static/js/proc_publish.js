@@ -159,13 +159,14 @@ async function pPubAnalyzeFromAss(assContent) {
   }
 
   const provider = document.getElementById('p-pub-ai-provider')?.value || 'deepseek';
+  const targetLang = document.getElementById('proc-target-lang')?.value || 'vi';
   _appendProcLog?.('🤖 AI đang phân tích nội dung ASS để tạo tiêu đề/hashtag...', 'info');
 
   try {
     const res = await fetch('/api/analyze_video_content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: plain.slice(0, 3000), provider })
+      body: JSON.stringify({ content: plain.slice(0, 3000), provider, target_language: targetLang })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'AI thất bại');
@@ -348,17 +349,88 @@ async function pPubAutoUploadAll(videoPath) {
     await pPubPreflightCheck({ interactive: false });
   }
 
-  const tasks = [];
-  if (window._pPubEnabled.youtube)  tasks.push(pPubUploadYouTube(videoPath, scheduledDate));
-  if (window._pPubEnabled.facebook) tasks.push(pPubUploadFacebook(videoPath, scheduledDate));
-  if (window._pPubEnabled.tiktok)   tasks.push(pPubUploadTikTok(videoPath, scheduledDate));
+  // Upload tuần tự lên các platform — nếu lỗi thì hiện modal retry/skip/cancel
+  const platforms = [];
+  if (window._pPubEnabled.youtube)  platforms.push('youtube');
+  if (window._pPubEnabled.facebook) platforms.push('facebook');
+  if (window._pPubEnabled.tiktok)   platforms.push('tiktok');
 
-  if (!tasks.length) {
+  if (!platforms.length) {
     _appendProcLog?.('ℹ Không có nền tảng nào được bật để đăng', 'info');
     return;
   }
 
-  await Promise.allSettled(tasks);
+  const videoName = (videoPath || '').split(/[\\/]/).pop();
+
+  for (const plat of platforms) {
+    if (window._pPubCancelled) break;
+    const action = await _pPubUploadWithRetry(plat, videoPath, scheduledDate, videoName);
+    if (action === 'cancel') {
+      window._pPubCancelled = true;
+      _appendProcLog?.('🛑 User đã huỷ pipeline đăng video', 'error');
+      break;
+    }
+  }
+}
+
+/**
+ * Upload to a single platform with retry/skip/cancel modal.
+ * Returns: 'ok' | 'skip' | 'cancel'
+ */
+async function _pPubUploadWithRetry(platform, videoPath, scheduledDate, videoName) {
+  const PLATFORM_FNS = {
+    youtube:  () => pPubUploadYouTube(videoPath, scheduledDate),
+    facebook: () => pPubUploadFacebook(videoPath, scheduledDate),
+    tiktok:   () => pPubUploadTikTok(videoPath, scheduledDate),
+  };
+  const PLATFORM_LABELS = { youtube: 'YT', facebook: 'FB', tiktok: 'TT' };
+  const fn = PLATFORM_FNS[platform];
+  if (!fn) return 'skip';
+
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
+    if (window._pPubCancelled) return 'cancel';
+
+    let ok = false;
+    let errorInfo = null;
+    try {
+      // Each pPubUploadXxx logs its own progress & toasts on success.
+      // We track failures via a global flag set by those functions.
+      window._pPubLastError = null;
+      await fn();
+      // If no error tracker was set, treat as success
+      if (!window._pPubLastError) {
+        ok = true;
+      } else {
+        errorInfo = window._pPubLastError;
+      }
+    } catch (e) {
+      errorInfo = { error: e.message };
+    }
+
+    if (ok) return 'ok';
+
+    const action = await window.showUploadErrorModal({
+      platform,
+      title: `Upload ${platform} thất bại (lần ${attempt})`,
+      video: videoName,
+      error: errorInfo?.error || 'Lỗi không xác định',
+      errorCode: errorInfo?.errorCode || '',
+      tokenError: !!errorInfo?.tokenError,
+      diagnostic: errorInfo ? JSON.stringify(errorInfo, null, 2) : '',
+    });
+
+    if (action === 'retry') {
+      _appendProcLog?.(`  [${PLATFORM_LABELS[platform]}] 🔄 Thử lại lần ${attempt + 1}...`, 'info');
+      continue;
+    }
+    if (action === 'skip') {
+      _appendProcLog?.(`  [${PLATFORM_LABELS[platform]}] ⏭ Bỏ qua video này`, 'warning');
+      return 'skip';
+    }
+    return 'cancel';
+  }
 }
 
 
@@ -404,6 +476,24 @@ async function pPubPreflightCheck({ interactive = true } = {}) {
           fix: 'Vào tab "Đăng video" → "Kết nối Facebook" rồi paste User Access Token.',
         });
       } else {
+        // Check token expiry
+        if (d.is_expired) {
+          issues.push({
+            platform: 'facebook', label: 'Facebook', severity: 'blocker',
+            message: 'Token Facebook đã hết hạn.',
+            fix: d.has_app_credentials
+              ? 'Nhấn nút "🔄 Gia hạn token" trong tab Đăng video → Facebook.'
+              : 'Vào Graph API Explorer lấy token mới rồi kết nối lại.',
+          });
+        } else if (d.days_left !== null && d.days_left !== undefined && d.days_left <= 7) {
+          issues.push({
+            platform: 'facebook', label: 'Facebook', severity: 'warning',
+            message: `Token Facebook sắp hết hạn (còn ${d.days_left} ngày).`,
+            fix: d.has_app_credentials
+              ? 'Nhấn "🔄 Gia hạn token" để gia hạn thêm 60 ngày.'
+              : 'Lấy token mới từ Graph API Explorer trước khi hết hạn.',
+          });
+        }
         let pageId = document.getElementById('p-fb-page-select')?.value
                     || document.getElementById('pub-fb-page-select')?.value;
         const pages = d.pages || [];
@@ -675,19 +765,25 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
         const errData = await res.json();
         errMsg = errData.error || errMsg;
       } catch (_) {}
-      if (res.status === 401) {
+      const tokenErr = res.status === 401 || /not authenticated|token|expired|oauth/i.test(errMsg);
+      window._pPubLastError = { error: errMsg, errorCode: res.status, tokenError: tokenErr };
+      if (tokenErr) {
         _appendProcLog?.('❌ YouTube: chưa đăng nhập. Vào tab Đăng video → Đăng nhập YouTube', 'error');
-        toast('⚠ Chưa đăng nhập YouTube — hãy đăng nhập trước', 'warning', 6000);
       } else {
         _appendProcLog?.('❌ YouTube: ' + errMsg, 'error');
       }
       return;
     }
-    if (!res.body) throw new Error('Server không trả về stream');
+    if (!res.body) {
+      window._pPubLastError = { error: 'Server không trả về stream' };
+      throw new Error('Server không trả về stream');
+    }
 
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
+    let uploadOk = false;
+    let lastErrLog = '';
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -697,12 +793,22 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
         const t = line.trim(); if (!t) continue;
         try {
           const d = JSON.parse(t);
-          if (d.log) _appendProcLog?.('[YT] ' + d.log, d.level || 'info');
-          if (d.url) _appendProcLog?.('🎉 [YT] ' + d.url, 'success');
+          if (d.log) {
+            _appendProcLog?.('[YT] ' + d.log, d.level || 'info');
+            if (d.level === 'error') lastErrLog = d.log;
+          }
+          if (d.url) { _appendProcLog?.('🎉 [YT] ' + d.url, 'success'); uploadOk = true; }
+          if (d.video_id) uploadOk = true;
         } catch (_) { _appendProcLog?.('[YT] ' + t, 'info'); }
       }
     }
+    if (!uploadOk) {
+      const errMsg = lastErrLog || 'YouTube upload không thành công';
+      const tokenErr = /token|oauth|expired|not authenticated|invalid_grant|401/i.test(errMsg);
+      window._pPubLastError = { error: errMsg, tokenError: tokenErr };
+    }
   } catch (e) {
+    window._pPubLastError = { error: e.message };
     _appendProcLog?.('❌ YouTube: ' + e.message, 'error');
   }
 }
@@ -792,20 +898,29 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
     const result = await _pFbUploadOnce(endpoint, buildForm());
 
     if (result.success) return;
-    if (result.skip)    return; // user chose to skip this video
-
-    if (result.tokenError) {
-      // Show modal for user to paste new token
-      const action = await _pFbShowTokenModal(result.errorMsg || '');
-      if (action === 'retry')   { attempt--; continue; } // refresh & try again (same attempt count)
-      if (action === 'skip')    { _appendProcLog?.('⏭ Bỏ qua video này', 'warning'); return; }
-      // cancel: exit loop
+    if (result.skip) {
+      window._pPubLastError = { error: 'User skipped Facebook upload' };
       return;
     }
 
-    // Non-token error: stop retrying
+    if (result.tokenError) {
+      // Bubble up to wrapper modal — let caller handle retry/skip/cancel
+      window._pPubLastError = {
+        error: result.errorMsg || 'Token Facebook hết hạn',
+        tokenError: true,
+      };
+      return;
+    }
+
+    // Non-token error — stop retrying and let wrapper modal show
+    window._pPubLastError = {
+      error: result.errorMsg || 'Facebook upload thất bại',
+      tokenError: false,
+    };
     return;
   }
+  // Hit max retries
+  window._pPubLastError = { error: 'Đã thử 5 lần nhưng không thành công' };
 }
 
 /**
@@ -1088,9 +1203,10 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
     startResp = await r.json();
     if (!startResp.ok) throw new Error(startResp.error || 'Không start được session');
   } catch (e) {
-    _appendProcLog?.('❌ TikTok: ' + e.message, 'error');
-    _appendProcLog?.('ℹ Mở tab TikTok upload thủ công thay thế...', 'info');
-    try { window.open('https://www.tiktok.com/tiktokstudio/upload', '_blank'); } catch (_) {}
+    const msg = e.message || 'TikTok lỗi';
+    const tokenErr = /login|session|expired|not.*logged/i.test(msg);
+    window._pPubLastError = { error: msg, tokenError: tokenErr };
+    _appendProcLog?.('❌ TikTok: ' + msg, 'error');
     return;
   }
 

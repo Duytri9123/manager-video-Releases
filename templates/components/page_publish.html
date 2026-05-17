@@ -254,6 +254,7 @@
                 Nhập <b>User Access Token</b> từ
                 <a href="https://developers.facebook.com/tools/explorer/" target="_blank" style="color:var(--accent)">Graph API Explorer</a>
                 để kết nối và đăng video lên Pages.
+                <br><span style="color:var(--text-muted)">💡 Cấu hình App ID + Secret trong config.yml để token tự động gia hạn.</span>
               </div>
               <div class="field">
                 <label>User Access Token</label>
@@ -277,6 +278,14 @@
                   <span class="badge badge-green">✓ <span id="pub-fb-user-name">--</span></span>
                   <button class="btn btn-sm btn-danger" onclick="pubFbDisconnect()">Ngắt</button>
                 </div>
+              </div>
+
+              <!-- Token expiry info -->
+              <div id="pub-fb-token-info" style="font-size:11px;margin-bottom:8px;padding:6px 8px;border-radius:6px;background:var(--bg-secondary)">
+                <span id="pub-fb-token-status">⏳ Đang kiểm tra token...</span>
+                <button id="btn-pub-fb-refresh" class="btn btn-sm btn-secondary" onclick="pubFbRefreshToken()" style="float:right;padding:2px 8px;font-size:11px">
+                  🔄 Gia hạn
+                </button>
               </div>
 
               <!-- Chọn Page -->

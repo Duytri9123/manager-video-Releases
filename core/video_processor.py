@@ -1584,16 +1584,22 @@ def generate_frame_title(
     trans_cfg: dict = None,
     preferred_provider: str = "deepseek",
     video_title: str = "",
+    target_lang: str = "vi",
 ) -> str:
     """
-    Use AI to generate a short, catchy Vietnamese title for the frame bar.
+    Use AI to generate a short, catchy title for the frame bar in the target language.
     Based on the translated subtitle content.
-
-    Returns a short title string (max ~30 chars), e.g.:
-    "Đưa 8888 con kiến lửa vào ốc táo!"
     """
     import json
     import urllib.request
+
+    _LANG_FULL = {
+        "vi": "Vietnamese", "en": "English", "ja": "Japanese", "ko": "Korean",
+        "th": "Thai", "id": "Indonesian", "es": "Spanish", "pt": "Portuguese",
+        "fr": "French", "de": "German", "ru": "Russian", "ar": "Arabic",
+        "hi": "Hindi", "zh": "Chinese",
+    }
+    target_lang_name = _LANG_FULL.get(target_lang, "Vietnamese")
 
     if not translated_texts:
         return video_title[:30] if video_title else ""
@@ -1643,25 +1649,24 @@ def generate_frame_title(
 
     prompt = (
         f"Video title: {video_title or '(unknown)'}\n"
-        f"Content (Vietnamese subtitles): {content_sample}\n\n"
-        "Tạo MỘT tiêu đề ngắn gọn, hấp dẫn bằng tiếng Việt cho video này.\n"
-        "Yêu cầu:\n"
-        "- Tối đa 30-40 ký tự\n"
-        "- Gây tò mò, thu hút click\n"
-        "- Kiểu: 'Cho kiến lửa đỏ vào bột ngứa rồi hút chân không lại!'\n"
-        "- Nếu có số liệu cụ thể (số con vật, số lượng) thì giữ lại\n"
-        "- Dùng dấu | để đánh dấu phần NHẤN MẠNH (sẽ đổi màu vàng)\n"
-        "  Ví dụ: 'Cho kiến lửa đỏ vào|bột ngứa rồi hút chân không lại!'\n"
-        "  Phần sau dấu | là phần nhấn mạnh (gây shock/tò mò)\n"
-        "- Chỉ trả về tiêu đề, không giải thích\n\n"
-        "Tiêu đề:"
+        f"Content ({target_lang_name} subtitles): {content_sample}\n\n"
+        f"Create ONE short, catchy title in {target_lang_name} for this video.\n"
+        "Requirements:\n"
+        "- Maximum 30-40 characters\n"
+        "- Curiosity-inducing, click-worthy\n"
+        "- Keep specific numbers if present\n"
+        "- Use | to mark the EMPHASIS part (will be highlighted in yellow)\n"
+        "  Example: 'Fire ants vs|vacuum sealed powder!'\n"
+        "  The part after | is the shocking/curious part\n"
+        "- Return ONLY the title, no explanation\n\n"
+        "Title:"
     )
 
     try:
         payload = json.dumps({
             "model": model,
             "messages": [
-                {"role": "system", "content": "Bạn tạo tiêu đề video ngắn gọn, hấp dẫn bằng tiếng Việt. Dùng | để đánh dấu phần nhấn mạnh."},
+                {"role": "system", "content": f"You create short, catchy video titles in {target_lang_name}. Use | to mark the emphasis part."},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.7,
@@ -1948,6 +1953,7 @@ class MultiProviderTTS:
         fpt_speed: int = 0,
         openai_api_key: str = "",
         openai_model: str = "tts-1",
+        tts_lang: str = "vi",
     ):
         self.voice = voice
         self.engine = engine
@@ -1955,6 +1961,7 @@ class MultiProviderTTS:
         self.fpt_speed = int(fpt_speed)
         self.openai_api_key = (openai_api_key or "").strip()
         self.openai_model = openai_model or "tts-1"
+        self.tts_lang = tts_lang or "vi"
 
     async def generate(self, text: str, out_path: Path) -> bool:
         """Generate TTS audio. Returns False if all providers fail."""
@@ -1987,7 +1994,7 @@ class MultiProviderTTS:
 
         elif engine == "gtts":
             try:
-                ok = _tts_gtts(text, "vi", out_path)
+                ok = _tts_gtts(text, self.tts_lang, out_path)
                 if ok:
                     return True
             except Exception:
@@ -2561,6 +2568,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     do_burn_vi = _as_bool(data.get("burn_vi_subs", True), True)
     model_name = data.get("model", "base")
     language = data.get("language", "zh")
+    target_language = str(data.get("target_language", "vi") or "vi").strip().lower()
+    _LANG_NAMES = {
+        "vi": "tiếng Việt", "en": "English", "ja": "日本語", "ko": "한국어",
+        "th": "ภาษาไทย", "id": "Bahasa Indonesia", "es": "Español",
+        "pt": "Português", "fr": "Français", "de": "Deutsch",
+        "ru": "Русский", "ar": "العربية", "hi": "हिन्दी", "zh": "中文",
+    }
+    target_lang_name = _LANG_NAMES.get(target_language, target_language)
     process_mode = str(data.get("process_mode", "ai") or "ai").strip().lower()
     transcribe_provider = str(data.get("transcribe_provider", "") or "").strip().lower()
     if not transcribe_provider:
@@ -2612,9 +2627,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     transcribe_failed = False
 
     # ── Resume: kiểm tra file cache từ lần chạy trước ─────────────────────────
-    vi_ass_path_cached   = out_dir / f"{stem}_vi.ass"
+    vi_ass_path_cached   = out_dir / f"{stem}_{target_language}.ass"
     burned_path_cached   = out_dir / f"{stem}_subbed.mp4"
-    voice_path_cached    = out_dir / f"{stem}_vi_voice.mp4"
+    voice_path_cached    = out_dir / f"{stem}_{target_language}_voice.mp4"
 
     # Bước 2: nếu SRT đã có → load lại, skip transcribe
     if source_srt_path.exists() and source_srt_path.stat().st_size > 0:
@@ -2742,7 +2757,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             n_segs = len(segments)
             batch_sz = 30
             n_batches = (n_segs + batch_sz - 1) // batch_sz
-            yield send(log=f"[Bước 3/5] 🌐 Dịch {n_segs} đoạn sang tiếng Việt ({n_batches} batch)...", level="info")
+            yield send(log=f"[Bước 3/5] 🌐 Dịch {n_segs} đoạn sang {target_lang_name} ({n_batches} batch)...", level="info")
             yield send(overall=45, overall_lbl=f"Đang dịch {n_segs} đoạn...")
             try:
                 from utils.translation import BatchTranslator
@@ -2772,14 +2787,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 has_groq = bool(trans_cfg.get("groq_key"))
                 yield send(log=f"[Bước 3/5] Provider: {provider} | deepseek={'✓' if has_ds else '✗'} | groq={'✓' if has_groq else '✗'}", level="info")
                 translator = BatchTranslator(trans_cfg)
-                translated_texts, used = translator.translate(texts, provider, context=stem_source)
+                translated_texts, used = translator.translate(texts, provider, context=stem_source, target_lang=target_language)
                 yield send(log=f"[Bước 3/5] ✓ Dịch xong {len(translated_texts)} đoạn (provider: {used})", level="success")
                 yield send(overall=55, overall_lbl="Dịch xong")
 
                 if translated_texts:
                     # Luôn dùng ASS — không dùng SRT
                     alignment = 8 if str(data.get("subtitle_position", "bottom")).lower() == "top" else 2
-                    vi_ass_path = out_dir / f"{stem}_vi.ass"
+                    vi_ass_path = out_dir / f"{stem}_{target_language}.ass"
                     vi_segs = [{"start": s["start"], "end": s["end"], "text": t}
                                for s, t in zip(segments, translated_texts) if t]
 
@@ -2811,6 +2826,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                     trans_cfg=trans_cfg,
                                     preferred_provider=provider,
                                     video_title=stem_source,
+                                    target_lang=target_language,
                                 )
                                 yield send(log=f"[Bước 3/5] ✓ Tiêu đề AI: \"{_frame_title}\"", level="success")
                             except Exception as _e:
@@ -2853,7 +2869,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             logo_radius_pct=_as_float(data.get("frame_logo_radius_pct"), 50.0),
                             logo_position=str(data.get("frame_logo_position") or "top-left"),
                         )
-                        yield send(log=f"[Bước 3/5] ✓ ASS (có khung) tiếng Việt: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
+                        yield send(log=f"[Bước 3/5] ✓ ASS (có khung) {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                         yield send(log=f"[Bước 3/5] 🎞 Khung: title=\"{_frame_title[:25]}\", blur={_as_float(data.get('frame_blur_w_pct'), 15.0)}%, logo={'✓' if _logo_path else '✗'}", level="info")
                     else:
                         write_ass(vi_segs, vi_ass_path,
@@ -2863,7 +2879,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                   outline_width=_as_int(data.get("outline_width", 2), 2),
                                   margin_v=effective_margin_v,
                                   alignment=alignment)
-                        yield send(log=f"[Bước 3/5] ✓ ASS tiếng Việt: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
+                        yield send(log=f"[Bước 3/5] ✓ ASS {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                     # Signal frontend to review the ASS file before continuing
                     yield send(
                         review_ass=True,
@@ -2950,17 +2966,17 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     else:
         yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề", level="info")
 
-    # ── Bước 5/5: Tạo giọng tiếng Việt (TTS) ───────────────────────────────────
+    # ── Bước 5/5: Tạo giọng đọc (TTS) ───────────────────────────────────
     # Resume: nếu file voice đã có → dùng lại
     if do_voice and voice_path_cached.exists() and voice_path_cached.stat().st_size > 0:
         final_output_path = voice_path_cached
-        yield send(log=f"[Bước 5/5] ♻ Dùng lại giọng tiếng Việt cũ: {voice_path_cached.name}", level="info")
+        yield send(log=f"[Bước 5/5] ♻ Dùng lại giọng {target_lang_name} cũ: {voice_path_cached.name}", level="info")
         yield send(overall=92, overall_lbl="Dùng lại giọng cũ")
     elif do_voice and translated_texts:
-        yield send(log="[Bước 5/5] 🗣 Đang tạo giọng tiếng Việt...", level="info")
+        yield send(log=f"[Bước 5/5] 🗣 Đang tạo giọng {target_lang_name}...", level="info")
         yield send(overall=85, overall_lbl="Đang tạo giọng nói...")
         source_for_voice = burned_path if burned_path else video_path
-        voice_path = out_dir / f"{stem}_vi_voice.mp4"
+        voice_path = out_dir / f"{stem}_{target_language}_voice.mp4"
         try:
             with tempfile.TemporaryDirectory(prefix="tts_") as tts_tmpdir:
                 tts = MultiProviderTTS(
@@ -2980,6 +2996,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         or os.getenv("OPENAI_API_KEY", "").strip()
                     ),
                     openai_model=str(data.get("openai_tts_model") or "tts-1"),
+                    tts_lang=target_language,
                 )
                 tts_clips = asyncio.run(
                     tts.generate_all(
@@ -3029,7 +3046,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     tts_volume=_as_float(data.get("tts_volume", 1.8), 1.8),
                 )
             if ok:
-                yield send(log=f"[Bước 5/5] ✓ Giọng tiếng Việt: {voice_path.name}", level="success")
+                yield send(log=f"[Bước 5/5] ✓ Giọng {target_lang_name}: {voice_path.name}", level="success")
                 yield send(overall=92, overall_lbl="Tạo giọng xong")
                 final_output_path = voice_path
             else:
@@ -3045,11 +3062,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if cleanup_outputs and final_output_path and final_output_path.exists():
         # Giữ lại SRT/ASS để resume lần sau, chỉ xóa file trung gian không cần thiết
         intermediates_to_clean = []
-        # Xóa _subbed nếu đã có _vi_voice hoặc _framed (bước sau đã dùng xong)
+        # Xóa _subbed nếu đã có _voice hoặc _framed (bước sau đã dùng xong)
         if burned_path and burned_path != final_output_path:
             intermediates_to_clean.append(burned_path)
-        # Xóa _vi_voice nếu đã có _framed
-        voice_p = out_dir / f"{stem}_vi_voice.mp4"
+        # Xóa _voice nếu đã có _framed
+        voice_p = out_dir / f"{stem}_{target_language}_voice.mp4"
         if voice_p.exists() and voice_p != final_output_path:
             intermediates_to_clean.append(voice_p)
 
@@ -3080,7 +3097,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         title = str(data.get("video_title") or final_output_path.stem)
         # Clean title same way as frontend
         import re as _re
-        title = _re.sub(r'_(vi_voice|voice|vi)$', '', title, flags=_re.IGNORECASE)
+        title = _re.sub(r'_([a-z]{2})_(voice|voice)$', '', title, flags=_re.IGNORECASE)
+        title = _re.sub(r'_(vi_voice|voice|vi|en_voice|en|ja_voice|ja|ko_voice|ko)$', '', title, flags=_re.IGNORECASE)
         title = _re.sub(r'^\d{4}-\d{2}-\d{2}_', '', title)
         title = _re.sub(r'_\d{15,}$', '', title)
         title = title.replace('_', ' ').strip()

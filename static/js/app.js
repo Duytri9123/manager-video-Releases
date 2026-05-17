@@ -35,12 +35,130 @@ const TTS_DEFAULT_VOICE = {
   gtts: 'vi',
 };
 
+/* ── Edge TTS voices per target language ── */
+const EDGE_TTS_BY_LANG = {
+  vi: [
+    { value: 'vi-VN-HoaiMyNeural', label: 'Hoài My (Nữ - VN)' },
+    { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Nam - VN)' },
+  ],
+  en: [
+    { value: 'en-US-JennyNeural', label: 'Jenny (Female - US)' },
+    { value: 'en-US-GuyNeural', label: 'Guy (Male - US)' },
+    { value: 'en-US-AriaNeural', label: 'Aria (Female - US)' },
+    { value: 'en-GB-SoniaNeural', label: 'Sonia (Female - UK)' },
+  ],
+  ja: [
+    { value: 'ja-JP-NanamiNeural', label: 'Nanami (女性 - JP)' },
+    { value: 'ja-JP-KeitaNeural', label: 'Keita (男性 - JP)' },
+  ],
+  ko: [
+    { value: 'ko-KR-SunHiNeural', label: 'Sun-Hi (여성 - KR)' },
+    { value: 'ko-KR-InJoonNeural', label: 'InJoon (남성 - KR)' },
+  ],
+  th: [
+    { value: 'th-TH-PremwadeeNeural', label: 'Premwadee (หญิง - TH)' },
+    { value: 'th-TH-NiwatNeural', label: 'Niwat (ชาย - TH)' },
+  ],
+  id: [
+    { value: 'id-ID-GadisNeural', label: 'Gadis (Wanita - ID)' },
+    { value: 'id-ID-ArdiNeural', label: 'Ardi (Pria - ID)' },
+  ],
+  es: [
+    { value: 'es-ES-ElviraNeural', label: 'Elvira (Mujer - ES)' },
+    { value: 'es-ES-AlvaroNeural', label: 'Alvaro (Hombre - ES)' },
+    { value: 'es-MX-DaliaNeural', label: 'Dalia (Mujer - MX)' },
+  ],
+  pt: [
+    { value: 'pt-BR-FranciscaNeural', label: 'Francisca (Feminino - BR)' },
+    { value: 'pt-BR-AntonioNeural', label: 'Antonio (Masculino - BR)' },
+  ],
+  fr: [
+    { value: 'fr-FR-DeniseNeural', label: 'Denise (Femme - FR)' },
+    { value: 'fr-FR-HenriNeural', label: 'Henri (Homme - FR)' },
+  ],
+  de: [
+    { value: 'de-DE-KatjaNeural', label: 'Katja (Weiblich - DE)' },
+    { value: 'de-DE-ConradNeural', label: 'Conrad (Männlich - DE)' },
+  ],
+  ru: [
+    { value: 'ru-RU-SvetlanaNeural', label: 'Svetlana (Жен - RU)' },
+    { value: 'ru-RU-DmitryNeural', label: 'Dmitry (Муж - RU)' },
+  ],
+  ar: [
+    { value: 'ar-SA-ZariyahNeural', label: 'Zariyah (أنثى - SA)' },
+    { value: 'ar-SA-HamedNeural', label: 'Hamed (ذكر - SA)' },
+  ],
+  hi: [
+    { value: 'hi-IN-SwaraNeural', label: 'Swara (महिला - IN)' },
+    { value: 'hi-IN-MadhurNeural', label: 'Madhur (पुरुष - IN)' },
+  ],
+  zh: [
+    { value: 'zh-CN-XiaoxiaoNeural', label: 'Xiaoxiao (女 - CN)' },
+    { value: 'zh-CN-YunxiNeural', label: 'Yunxi (男 - CN)' },
+  ],
+};
+
+/* ── gTTS language codes ── */
+const GTTS_BY_LANG = {
+  vi: 'vi', en: 'en', ja: 'ja', ko: 'ko', th: 'th', id: 'id',
+  es: 'es', pt: 'pt', fr: 'fr', de: 'de', ru: 'ru', ar: 'ar', hi: 'hi', zh: 'zh',
+};
+
+/**
+ * When user changes "Ngôn ngữ đầu ra", auto-switch TTS engine to Edge TTS
+ * and populate voice list with voices for that language.
+ */
+function _onTargetLangChange() {
+  const lang = document.getElementById('proc-target-lang')?.value || 'vi';
+
+  // If target is Vietnamese, keep current engine (FPT AI works for vi)
+  if (lang === 'vi') {
+    _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+    return;
+  }
+
+  // For non-Vietnamese: force Edge TTS (best multilingual support)
+  const engineEl = document.getElementById('proc-tts-engine');
+  if (engineEl) engineEl.value = 'edge-tts';
+
+  // Populate voice list for the target language
+  const voiceEl = document.getElementById('proc-tts-voice');
+  if (!voiceEl) return;
+  const voices = EDGE_TTS_BY_LANG[lang] || EDGE_TTS_BY_LANG['en'];
+  voiceEl.innerHTML = '';
+  voices.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.value;
+    opt.textContent = v.label;
+    voiceEl.appendChild(opt);
+  });
+  voiceEl.value = voices[0]?.value || '';
+}
+
 function _syncVoiceOptions(engineSelectId, voiceSelectId) {
   const engineEl = document.getElementById(engineSelectId);
   const voiceEl = document.getElementById(voiceSelectId);
   if (!engineEl || !voiceEl) return;
 
   const engine = (engineEl.value || 'fpt-ai').toLowerCase();
+  const targetLang = document.getElementById('proc-target-lang')?.value || 'vi';
+
+  // For non-Vietnamese target: always use Edge TTS voices for that language
+  if (targetLang !== 'vi' && engine === 'edge-tts') {
+    const voices = EDGE_TTS_BY_LANG[targetLang] || EDGE_TTS_BY_LANG['en'];
+    const current = voiceEl.value || '';
+    voiceEl.innerHTML = '';
+    voices.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      voiceEl.appendChild(opt);
+    });
+    const keep = voices.some(item => item.value === current);
+    voiceEl.value = keep ? current : voices[0].value;
+    return;
+  }
+
   const preset = TTS_VOICE_PRESETS[engine] || TTS_VOICE_PRESETS['fpt-ai'];
   const current = voiceEl.value || '';
 
@@ -216,6 +334,11 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     video_path:       videoPath,
     video_url:        videoUrl || '',
     out_dir:          document.getElementById('proc-out')?.value?.trim() || '',
+    model:            document.getElementById('proc-model')?.value || 'base',
+    language:         document.getElementById('proc-lang')?.value || 'zh',
+    target_language:  document.getElementById('proc-target-lang')?.value || 'vi',
+    transcribe_provider: _getProcessProvider('transcribe'),
+    translate_provider:  _getProcessProvider('translate'),
     burn_subs:        document.getElementById('proc-burn')?.checked ?? true,
     blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
     translate_subs:   document.getElementById('proc-translate-subs')?.checked ?? true,
@@ -1355,6 +1478,11 @@ function _setYouTubeAuthenticated(authenticated, channel) {
     } else {
       if (avatarImg) avatarImg.style.display = 'none';
       if (avatarPh)  avatarPh.style.display  = 'flex';
+    }
+
+    // Sync channel info into accounts registry so dropdowns show real name
+    if (channel.title && typeof _refreshYouTubeChannelInfo === 'function') {
+      _refreshYouTubeChannelInfo();
     }
   } else {
     if (disconnected) disconnected.style.display = 'flex';

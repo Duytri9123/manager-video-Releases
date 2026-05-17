@@ -129,3 +129,10 @@ cookies:
   odin_tt: YOUR_ODIN_TT
   passport_csrf_token: YOUR_CSRF_TOKEN
   sid_guard: YOUR_SID_GUARD
+
+# Facebook Integration — cấu hình App ID + Secret để token tự động gia hạn
+# Tạo app tại: https://developers.facebook.com/apps/
+# Không cần cấu hình nếu bạn chỉ dùng token thủ công (hết hạn sau 60 ngày)
+facebook:
+  app_id: ""        # App ID từ Facebook Developers
+  app_secret: ""    # App Secret từ Facebook Developers (giữ bí mật)
