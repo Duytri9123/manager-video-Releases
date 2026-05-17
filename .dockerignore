@@ -1,16 +1,54 @@
-.git
-.gitignore
-.github
-.omx
-__pycache__
-*.pyc
-*.pyo
-*.egg-info
-dist
-build
-.pytest_cache
-.ruff_cache
-Downloaded
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual envs
+.venv/
+venv/
+
+# Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Outputs
+Downloaded/
+Transcripts/
 *.db
+*.sqlite
+*.sqlite3
+
+# Local secrets
 .cookies.json
+.facebook_token.json
 config.yml
+.youtube_tokens/
+.tiktok_tokens/
+.tiktok_profile/
+.tiktok_sessions/
+.accounts/
+.state/
+client_secrets.json
+youtube_token.json
+youtube_token.pickle
+*.token
+*.token.json
+
+# Editor / VCS
+.git/
+.idea/
+.vscode/
+.kiro/
+
+# Frontend build
+node_modules/
+static/dist/
+
+# Logs
+logs/
+*.log
+
+# Temp
+temp_uploads/
+*.tmp

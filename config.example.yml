@@ -1,94 +1,31 @@
-link:
-  - https://www.douyin.com/user/MS4wLjABAAAA6O7EZyfDRYXxJrUTpf91K3tmB4rBROkAw-nYMfld8ss
+# DuyTris Downloader — example config (sao chép thành config.yml và điền giá trị thật)
+# Mật khẩu/secret KHÔNG nên đặt trong file này. Hãy dùng biến môi trường:
+#   FLASK_SECRET_KEY, WEBAPP_PASSWORD, NGROK_AUTHTOKEN, OPENAI_API_KEY,
+#   GROQ_API_KEY, DEEPSEEK_API_KEY, HUGGINGFACE_TOKEN, FPT_TTS_API_KEY,
+#   TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, FB_APP_ID, FB_APP_SECRET, TMDB_API_KEY.
+
+auth:
+  enabled: false
+  cors_origins: []   # empty = local-only mặc định
 
 path: ./Downloaded/
-
-music: false
-cover: false
-avatar: false
-json: false
-
-start_time: ""
-end_time: ""
-
-folderstyle: false
-
-mode:
-  - post
-
-number:
-  post: 1
-  like: 0
-  allmix: 0
-  mix: 0
-  music: 0
-  collect: 0
-  collectmix: 0
-
-increase:
-  post: false
-  like: false
-  allmix: false
-  mix: false
-  music: false
+mode: [post]
+number: { post: 1, like: 0, allmix: 0, mix: 0, music: 0, collect: 0, collectmix: 0 }
+increase: { post: false, like: false, allmix: false, mix: false, music: false }
 
 thread: 5
-rate_limit: 5
 retry_times: 3
-proxy: ""
+proxy: ''
 database: true
 database_path: dy_downloader.db
 
+cookies: {}   # đặt trong .cookies.json (gitignored) hoặc qua UI
+
+link:
+  - https://www.douyin.com/user/MS4wLjABAAAA6O7EZyfDRYXxJrUTpf91K3tmB4rBROkAw-nYMfld8ss
+
 progress:
   quiet_logs: true
-
-transcript:
-  enabled: false
-  model: gpt-4o-mini-transcribe
-  groq_api_key: ""
-  groq_model: whisper-large-v3-turbo
-  groq_max_mb: 25
-  output_dir: ""
-  response_formats:
-    - txt
-    - json
-  api_url: https://api.openai.com/v1/audio/transcriptions
-  api_key_env: OPENAI_API_KEY
-  api_key: ""
-
-translation:
-  deepseek_key: ""
-  openai_key: ""
-  hf_token: ""
-  preferred_provider: deepseek
-
-upload:
-  platform: youtube
-  auto_upload: false
-  youtube:
-    title_template: "{title}"
-    description_template: "{title}"
-    privacy_status: private
-    short: false
-  tiktok:
-    title_template: "{title}"
-    caption_template: "{title}"
-    privacy_status: private
-    scopes:
-      - user.info.basic
-      - video.publish
-    client_key: ""
-    client_secret: ""
-    client_key_env: TIKTOK_CLIENT_KEY
-    client_secret_env: TIKTOK_CLIENT_SECRET
-    redirect_uri: ""
-
-ngrok:
-  enabled: false
-  authtoken: ""
-  domain: ""
-  bind_tls: true
-  public_url: ""
 
 browser_fallback:
   enabled: true
@@ -97,42 +34,92 @@ browser_fallback:
   idle_rounds: 8
   wait_timeout_seconds: 600
 
+ngrok:
+  enabled: false
+  authtoken: ''
+  domain: ''
+  bind_tls: true
+  public_url: ''
+
+# Proxy pool / 4G router rotation
+proxies:
+  enabled: false
+  rotation: { mode: round_robin, per_request: false }
+  health_check: { enabled: true, test_url: https://ifconfig.me/ip, timeout_sec: 8 }
+  list: []
+
+routers:
+  enabled: false
+  list: []
+  cooldown_sec: 30
+
+# Translation / TTS / Transcript
+translation:
+  preferred_provider: deepseek
+  deepseek_key: ''
+  groq_key: ''
+  groq_model: llama-3.1-8b-instant
+  hf_token: ''
+  openai_key: ''
+  naming_enabled: true
+
+transcript:
+  enabled: false
+  api_key: ''
+  api_key_env: OPENAI_API_KEY
+  api_url: https://api.openai.com/v1/audio/transcriptions
+  groq_api_key: ''
+  groq_max_mb: 25
+  groq_model: whisper-large-v3-turbo
+  model: gpt-4o-mini-transcribe
+  output_dir: ''
+  response_formats: [txt, json]
+
 video_process:
-  enabled: true
+  enabled: false
   model: small
   language: zh
-  burn_subs: true
-  blur_original: true
-  translate: true
-  burn_vi_subs: true
-  voice_convert: true
-  keep_bg_music: true
-  keep_bg: true
-  blur_zone: bottom
-  tts_voice: banmai
-  tts_engine: fpt-ai
-  fpt_api_key: ssMeU5l89LMLfg8jhDzTBWV7D22s1xOy
+  fpt_api_key: ''   # đặt trong env FPT_TTS_API_KEY
+  tts_engine: edge-tts
+  tts_voice: vi-VN-HoaiMyNeural
   bg_volume: 0.15
   font_size: 18
   blur_height: 15
 
-# CapCut Integration - Tự động import video và subtitle vào CapCut
-capcut:
-  enabled: false           # Bật/tắt tính năng CapCut
-  auto_import: false       # Tự động import sau khi xử lý video
-  capcut_path: ""          # Đường dẫn CapCut (để trống để tự động tìm)
-  auto_open: false         # Tự động mở CapCut sau khi import
+upload:
+  auto_upload: false
+  platform: tiktok
+  tiktok:
+    title_template: '{title}'
+    caption_template: '{title}'
+    privacy_status: private
+    scopes: [user.info.basic, video.publish]
+    client_key: ''
+    client_secret: ''
+    redirect_uri: http://localhost:5000/api/tiktok/callback
+  youtube:
+    title_template: '{title}'
+    description_template: '{title}'
+    privacy_status: private
+    short: true
 
-cookies:
-  msToken: YOUR_MS_TOKEN
-  ttwid: YOUR_TTWID
-  odin_tt: YOUR_ODIN_TT
-  passport_csrf_token: YOUR_CSRF_TOKEN
-  sid_guard: YOUR_SID_GUARD
-
-# Facebook Integration — cấu hình App ID + Secret để token tự động gia hạn
-# Tạo app tại: https://developers.facebook.com/apps/
-# Không cần cấu hình nếu bạn chỉ dùng token thủ công (hết hạn sau 60 ngày)
 facebook:
-  app_id: ""        # App ID từ Facebook Developers
-  app_secret: ""    # App Secret từ Facebook Developers (giữ bí mật)
+  app_id: ''
+  app_secret: ''
+
+# Movie review (TMDb)
+movie:
+  tmdb_api_key: ''        # v3 API key (TMDB Settings → API → API Key)
+  tmdb_read_token: ''     # v4 Read Access Token (TMDB Settings → API → API Read Access Token)
+  default_language: vi
+  default_provider: deepseek
+  cache_ttl_hours: 24
+  default_template: cinematic
+
+# Novel / Comic → Video
+storywriter:
+  default_provider: deepseek
+  default_target_lang: vi
+  chunk: { target_chars_per_segment: 350, max_chars_per_segment: 600, overlap_sentences: 0 }
+  comic: { ocr_enabled: false, ocr_provider: tesseract }
+  output_dir: ./Downloaded/scripts

@@ -1,11 +1,27 @@
 #!/usr/bin/env python3
-"""Douyin Downloader — Flask app factory + shared state"""
-import asyncio, sys, time, threading, json, logging, io, os, re
+"""Douyin Downloader — Flask app factory + shared state.
+
+Security-hardened:
+  * SECRET_KEY pulled from FLASK_SECRET_KEY env or persisted random key.
+  * CORS origins restricted (defaults to local-only; allow ngrok URL automatically).
+  * No hardcoded API keys / cookies — fall back to user config only.
+  * ngrok errors redacted to never leak the authtoken.
+"""
+import asyncio
 import collections
-from pathlib import Path
+import io
+import json
+import logging
+import os
+import re
+import sys
+import threading
+import time
 from datetime import datetime
+from pathlib import Path
+
 import yaml
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, jsonify, render_template, request, send_file
 from flask_socketio import SocketIO, emit
 
 try:
@@ -16,46 +32,86 @@ except Exception:
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 CONFIG_FILE = ROOT / "config.yml"
+STATE_DIR = ROOT / ".state"
+STATE_DIR.mkdir(parents=True, exist_ok=True)
+
 LOGGER = logging.getLogger("douyin-webui")
+if not LOGGER.handlers:
+    LOGGER.setLevel(logging.INFO)
+    _h = logging.StreamHandler(sys.stderr)
+    _h.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    LOGGER.addHandler(_h)
 
 _NGROK_LOCK = threading.Lock()
 _NGROK_PUBLIC_URL = ""
 _NGROK_ERROR = ""
 
-# ── default fallback cookies (not exposed to UI) ──────────────────────────────
-_DEFAULT_COOKIES = {
-    "ttwid": "1%7C0uxogqfezTrhN1YJ0i35KZv9fgo1yu6HYbmZuT-KVvw%7C1775052558%7C62485d542a14be7db9eb638974ae41e51276e62d045af80583fc7c123370707c",
-    "odin_tt": "ded429e2000523eab758a3be8ab56d096d58a49e60bdbda955d2fe18d2cc4ba88289489964496c9f024646821417f688dcc9d23aa4ffb052321893beabe83d12b7af8feaf0409fb4786ae05783eea0ca",
-    "passport_csrf_token": "60e588651b39d0a24d59e5981c4bf3ee",
-    "s_v_web_id": "verify_mlml38zd_b7a50e45_9212_0298_a304_a911c914f42d",
-    "__ac_nonce": "069cd375500a473596e",
-    "__ac_signature": "_02B4Z6wo00f01dncC0AAAIDBu8IPB3sd.TnZ.A.AAB-87c",
-    "UIFID": "164c22db5016193fd69c8bfb0b166ea3a563c2c88054b8eae8759946ea9753ce30fbd9414fde0e3bb8edf6ef3b15e498bb370dcbcae9f48ec0468161bb4bb9c7c36dd402b45c21a2c7c07bd0c8823022cb3eed3271b937879d8845056c80013921d8054aeb0756c78b55b25f5918e4171c63194f0ec22776be556fdf02d846f5b0688b4a38d7b0277ebc1c075101c71be9b1ec2c1d9249da5ff4be78f35b07ec79f57e0cafee3babb082d75b834e72a3",
-    "bd_ticket_guard_client_web_domain": "2",
-}
+# ── Security helpers ─────────────────────────────────────────────────────────
+from utils.security import load_or_create_app_secret, parse_origin_list, redact
+
+SECRET_KEY = load_or_create_app_secret(STATE_DIR)
+
+
+def _resolve_cors_origins(cfg: dict) -> list:
+    """Build a CORS origins list from config (auth.cors_origins) + ngrok URL."""
+    auth_cfg = (cfg or {}).get("auth") or {}
+    raw = auth_cfg.get("cors_origins")
+    origins = parse_origin_list(raw, default=[])
+    if not origins:
+        # Sensible defaults: local dev + LAN
+        origins = [
+            "http://localhost:5000",
+            "http://127.0.0.1:5000",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+    if _NGROK_PUBLIC_URL and _NGROK_PUBLIC_URL not in origins and "*" not in origins:
+        origins.append(_NGROK_PUBLIC_URL)
+    public_cfg = ((cfg or {}).get("ngrok") or {}).get("public_url") or ""
+    if public_cfg and public_cfg not in origins and "*" not in origins:
+        origins.append(public_cfg)
+    return origins
+
 
 # ── Flask app + SocketIO ──────────────────────────────────────────────────────
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "douyin-dl-secret"
+app.config["SECRET_KEY"] = SECRET_KEY
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 GB max upload
+# Reduced from 2 GB → 512 MB; raise via WEBAPP_MAX_UPLOAD_MB if needed
+_max_upload_mb = int(os.getenv("WEBAPP_MAX_UPLOAD_MB", "512"))
+app.config["MAX_CONTENT_LENGTH"] = _max_upload_mb * 1024 * 1024
+
+
+def _initial_load_cfg():
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+_initial_cfg = _initial_load_cfg()
+_initial_origins = _resolve_cors_origins(_initial_cfg)
+
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*",
+    cors_allowed_origins=_initial_origins if _initial_origins != ["*"] else "*",
     async_mode="threading",
-    ping_timeout=120,       # wait 2 min before declaring client dead
-    ping_interval=30,       # ping every 30s to keep connection alive
+    ping_timeout=120,
+    ping_interval=30,
 )
 
 # ── Download Queue globals ────────────────────────────────────────────────────
-_dl_queue   = collections.deque()
+_dl_queue = collections.deque()
 _queue_lock = threading.Lock()
 _dl_running = False
 _tr_running = False
 
-# ── VOICES_DIR ────────────────────────────────────────────────────────────────
+# ── Shared dirs ──────────────────────────────────────────────────────────────
 VOICES_DIR = ROOT / "voices"
 VOICES_DIR.mkdir(parents=True, exist_ok=True)
+TEMP_UPLOADS_DIR = ROOT / "temp_uploads"
+TEMP_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
 
 # ── Helper functions ──────────────────────────────────────────────────────────
 def load_cfg():
@@ -90,7 +146,6 @@ def _extract_cover(item: dict) -> str:
         ul = (video.get(field) or {}).get("url_list") or []
         if ul:
             return ul[0]
-    # gallery / image post
     imgs = item.get("images") or []
     if imgs:
         ul = (imgs[0].get("url_list") or [])
@@ -100,18 +155,24 @@ def _extract_cover(item: dict) -> str:
 
 
 def get_cookies_with_fallback():
-    """Load cookies from config, fallback to default if missing or incomplete."""
+    """Load cookies from config. Hard-coded cookies removed for security:
+    user must configure their own cookies via the UI / `.cookies.json`."""
     try:
         cfg = load_cfg()
-        if cfg.get("cookie_mode", "default") == "default":
-            return _DEFAULT_COOKIES
         ck = cfg.get("cookies") or {}
+        # Also support cookies in a separate .cookies.json file (gitignored)
+        cookies_file = ROOT / ".cookies.json"
+        if (not ck) and cookies_file.exists():
+            try:
+                ck = json.loads(cookies_file.read_text(encoding="utf-8")) or {}
+            except Exception:
+                ck = {}
         required = {"ttwid", "odin_tt", "passport_csrf_token"}
         if required.issubset({k for k, v in ck.items() if v}):
             return ck
     except Exception:
         pass
-    return _DEFAULT_COOKIES
+    return {}
 
 
 def _deep_merge_dict(base, updates):
@@ -144,7 +205,9 @@ def _resolve_naming_title(raw_title: str) -> str:
     try:
         from utils.translation import translate_texts
 
-        translated, _provider = translate_texts([raw_title], tr_cfg, tr_cfg.get("preferred_provider", "auto"))
+        translated, _provider = translate_texts(
+            [raw_title], tr_cfg, tr_cfg.get("preferred_provider", "auto")
+        )
         resolved = (translated[0] if translated else "").strip() or raw_title
     except Exception:
         resolved = raw_title
@@ -201,13 +264,9 @@ def _start_ngrok_tunnel(port: int):
             return
 
         try:
-            if settings["authtoken"]:
-                ngrok.set_auth_token(settings["authtoken"])
+            ngrok.set_auth_token(settings["authtoken"])
 
-            options = {
-                "addr": str(port),
-                "bind_tls": settings["bind_tls"],
-            }
+            options = {"addr": str(port), "bind_tls": settings["bind_tls"]}
             if settings["domain"]:
                 options["domain"] = settings["domain"]
 
@@ -218,12 +277,7 @@ def _start_ngrok_tunnel(port: int):
                 _save_ngrok_public_url(_NGROK_PUBLIC_URL)
                 LOGGER.info("Ngrok tunnel started: %s", _NGROK_PUBLIC_URL)
         except Exception as exc:
-            raw_err = str(exc)
-            token = settings.get("authtoken") or ""
-            if token:
-                raw_err = raw_err.replace(token, "***REDACTED***")
-            raw_err = re.sub(r"(Your authtoken:\s*)(\S+)", r"\1***REDACTED***", raw_err)
-            _NGROK_ERROR = raw_err
+            _NGROK_ERROR = redact(str(exc), settings.get("authtoken") or "")
             LOGGER.error("Failed to start ngrok tunnel: %s", _NGROK_ERROR)
 
 
@@ -344,16 +398,17 @@ def _render_spa(active_tab="user"):
 def _preload_whisper_model():
     """Preload faster-whisper model in background so first video processes faster."""
     try:
-        import os
         os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
         cfg = load_cfg()
         model_name = (cfg.get("video_process") or {}).get("model", "base")
         from core.video_processor import _whisper_model_cache
         if model_name not in _whisper_model_cache:
             from faster_whisper import WhisperModel
-            _whisper_model_cache[model_name] = WhisperModel(model_name, device="cpu", compute_type="int8")
-    except Exception:
-        pass
+            _whisper_model_cache[model_name] = WhisperModel(
+                model_name, device="cpu", compute_type="int8"
+            )
+    except Exception as e:
+        LOGGER.debug("Whisper preload skipped: %s", e)
 
 
 # ── YouTube uploader singleton ────────────────────────────────────────────────
@@ -363,7 +418,6 @@ _youtube_uploader = None
 def _get_youtube_uploader(account_id: str = None):
     global _youtube_uploader
     if account_id:
-        # Create a new uploader for specific account (not cached as singleton)
         from tools.youtube_uploader import YouTubeUploader
         return YouTubeUploader(client_secrets_file="client_secrets.json", account_id=account_id)
     if _youtube_uploader is None:

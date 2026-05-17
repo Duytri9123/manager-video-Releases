@@ -48,6 +48,7 @@ def user_videos_page():
         from config import ConfigLoader
         from auth import CookieManager
         from core import DouyinAPIClient, URLParser
+        from core.proxy_resolver import resolve_proxy
         config = ConfigLoader(str(CONFIG_FILE))
         cm = CookieManager()
         cm.set_cookies(get_cookies_with_fallback())
@@ -55,7 +56,7 @@ def user_videos_page():
         if not parsed or parsed.get("type") != "user":
             return {"error": "Invalid user URL"}
         sec_uid = parsed.get("sec_uid", "")
-        async with DouyinAPIClient(cm.get_cookies(), proxy=config.get("proxy")) as api:
+        async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(config)) as api:
             if cursor == 0 and offset > 0:
                 all_items = []
                 cur = 0
@@ -114,6 +115,7 @@ def user_videos():
             from config import ConfigLoader
             from auth import CookieManager
             from core import DouyinAPIClient, URLParser
+            from core.proxy_resolver import resolve_proxy
             config = ConfigLoader(str(CONFIG_FILE))
             cm = CookieManager()
             cm.set_cookies(get_cookies_with_fallback())
@@ -126,7 +128,7 @@ def user_videos():
             page = 0
             total = 0
 
-            async with DouyinAPIClient(cm.get_cookies(), proxy=config.get("proxy")) as api:
+            async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(config)) as api:
                 while True:
                     page += 1
                     result = await api.get_user_post(sec_uid, max_cursor=cursor, count=20)
@@ -252,6 +254,7 @@ def user_videos_all():
         from config import ConfigLoader
         from auth import CookieManager
         from core import DouyinAPIClient, URLParser
+        from core.proxy_resolver import resolve_proxy
         config = ConfigLoader(str(CONFIG_FILE))
         cm = CookieManager()
         cm.set_cookies(get_cookies_with_fallback())
@@ -267,7 +270,7 @@ def user_videos_all():
         idle_rounds = int(browser_cfg.get("idle_rounds", 8) or 8)
         wait_timeout_seconds = int(browser_cfg.get("wait_timeout_seconds", 600) or 600)
 
-        async with DouyinAPIClient(cm.get_cookies(), proxy=config.get("proxy")) as api:
+        async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(config)) as api:
             _emit("status", message="Mở trình duyệt để lấy danh sách video...")
             try:
                 aweme_ids = await api.collect_user_post_ids_via_browser(
@@ -396,6 +399,7 @@ def user_info():
         from config import ConfigLoader
         from auth import CookieManager
         from core import DouyinAPIClient, URLParser
+        from core.proxy_resolver import resolve_proxy
         config = ConfigLoader(str(CONFIG_FILE))
         cm = CookieManager()
         cm.set_cookies(get_cookies_with_fallback())
@@ -403,7 +407,7 @@ def user_info():
         if not parsed or parsed.get("type") != "user":
             return None, [], False
         sec_uid = parsed.get("sec_uid", "")
-        async with DouyinAPIClient(cm.get_cookies(), proxy=config.get("proxy")) as api:
+        async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(config)) as api:
             info = await api.get_user_info(sec_uid)
             if not info:
                 return None, [], False

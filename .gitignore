@@ -46,12 +46,14 @@ config/cookies.json
 .omx/
 client_secrets.json
 youtube_token.json
+youtube_token.pickle
 .youtube_tokens/
 .tiktok_tokens/
 .tiktok_profile/
 .tiktok_sessions/
 .facebook_token.json
 .accounts/
+.state/
 
 # Frontend build artifacts
 node_modules/

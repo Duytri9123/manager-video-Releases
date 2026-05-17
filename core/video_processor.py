@@ -22,7 +22,9 @@ from typing import Generator, Optional
 
 
 FPT_TTS_ENDPOINT = "https://api.fpt.ai/hmi/tts/v5"
-FPT_TTS_DEFAULT_KEY = "ssMeU5l89LMLfg8jhDzTBWV7D22s1xOy"
+# FPT key must come from env (FPT_TTS_API_KEY) or config (video_process.fpt_api_key).
+# Hard-coded keys removed for security.
+FPT_TTS_DEFAULT_KEY = ""
 
 
 # ── ffmpeg helper ─────────────────────────────────────────────────────────────
@@ -2134,12 +2136,27 @@ def _apply_atempo(ffmpeg: str, src: Path, dst: Path, speed: float) -> bool:
     return ok
 
 
-async def _tts_edge(text: str, voice: str, out_path: Path, rate: str = "+0%") -> bool:
-    """Generate TTS audio using edge-tts."""
+async def _tts_edge(text: str, voice: str, out_path: Path, rate: str = "+0%",
+                    pitch: str = "+0Hz", style: str = "default") -> bool:
+    """Generate TTS audio using edge-tts.
+
+    `pitch` accepts a string like "+0Hz", "-2Hz", "+2Hz" and is passed through
+    to edge-tts. `style` is accepted for compatibility but not all voices
+    support SSML express-as styles via edge-tts; if the underlying call fails
+    with the style we silently retry without it.
+    """
     try:
         import edge_tts
-        communicate = edge_tts.Communicate(text, voice, rate=rate)
-        await communicate.save(str(out_path))
+        kwargs = {"rate": rate}
+        if pitch and pitch.strip() and pitch.strip().lower() not in ("+0hz", "0hz", "default"):
+            kwargs["pitch"] = pitch
+        try:
+            communicate = edge_tts.Communicate(text, voice, **kwargs)
+            await communicate.save(str(out_path))
+        except TypeError:
+            # Older edge-tts that doesn't support `pitch`
+            communicate = edge_tts.Communicate(text, voice, rate=rate)
+            await communicate.save(str(out_path))
         return out_path.exists() and out_path.stat().st_size > 0
     except Exception as e:
         raise RuntimeError(f"edge-tts failed: {e}")

@@ -3,11 +3,12 @@ import json as _j
 import os
 import tempfile
 import shutil
-import subprocess
 import time
 from pathlib import Path
-from flask import Blueprint, jsonify, request, Response, stream_with_context
+from flask import Blueprint, jsonify, request
 from core_app import ROOT, load_cfg, save_cfg
+from utils.ffprobe import probe_video
+from utils.streaming import ndjson_line, ndjson_response
 
 bp = Blueprint("facebook", __name__)
 
@@ -672,7 +673,7 @@ def fb_post_video():
             if tmp_dir:
                 shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
-    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+    return ndjson_response(generate())
 
 
 # ── /api/facebook/post_text ───────────────────────────────────────────────────
@@ -762,26 +763,8 @@ def fb_page_posts():
 # ── /api/facebook/post_reel ───────────────────────────────────────────────────
 
 def _probe_video_dims(path: Path) -> tuple[int, int, float]:
-    """Return (width, height, duration_sec) via ffprobe. Falls back to (0,0,0)."""
-    try:
-        out = subprocess.check_output(
-            [
-                "ffprobe", "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "stream=width,height:format=duration",
-                "-of", "json",
-                str(path),
-            ],
-            stderr=subprocess.DEVNULL,
-            timeout=20,
-        )
-        data = _j.loads(out.decode("utf-8", errors="ignore"))
-        w = int((data.get("streams") or [{}])[0].get("width") or 0)
-        h = int((data.get("streams") or [{}])[0].get("height") or 0)
-        dur = float((data.get("format") or {}).get("duration") or 0)
-        return w, h, dur
-    except Exception:
-        return 0, 0, 0.0
+    """Return (width, height, duration_sec) via shared ffprobe helper."""
+    return probe_video(path)
 
 
 def _validate_reel(path: Path) -> tuple[bool, str]:
@@ -1039,7 +1022,7 @@ def fb_post_reel():
             if tmp_dir:
                 shutil.rmtree(str(tmp_dir), ignore_errors=True)
 
-    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+    return ndjson_response(generate())
 
 
 # ── /api/facebook/validate_reel ───────────────────────────────────────────────

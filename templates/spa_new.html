@@ -504,6 +504,15 @@ tr:hover td{background:var(--accent-light)}
       <a class="nav-item" data-page="content" onclick="switchPage('content')">
         <span class="nav-icon">📋</span><span class="nav-label">Quản lý bài đăng</span>
       </a>
+      <a class="nav-item" data-page="movie" onclick="switchPage('movie')">
+        <span class="nav-icon">🎬</span><span class="nav-label">Review phim</span>
+      </a>
+      <a class="nav-item" data-page="story" onclick="switchPage('story')">
+        <span class="nav-icon">📖</span><span class="nav-label">Truyện → Video</span>
+      </a>
+      <a class="nav-item" data-page="proxies" onclick="switchPage('proxies')">
+        <span class="nav-icon">🌐</span><span class="nav-label">Proxy & Router</span>
+      </a>
       <a class="nav-item" data-page="history" onclick="switchPage('history')">
         <span class="nav-icon">🗃</span><span class="nav-label">Lịch sử</span>
       </a>
@@ -537,6 +546,9 @@ tr:hover td{background:var(--accent-light)}
       {% include 'components/page_publish.html' %}
       {% include 'components/page_content.html' %}
       {% include 'components/page_history.html' %}
+      {% include 'components/page_movie.html' %}
+      {% include 'components/page_story.html' %}
+      {% include 'components/page_proxies.html' %}
       {% include 'components/page_config.html' %}
       {% include 'components/page_cookies.html' %}
 
@@ -586,6 +598,10 @@ tr:hover td{background:var(--accent-light)}
 <script src="/static/js/batch_publish.js?v={{ jsv }}"></script>
 <script src="/static/js/accounts.js?v={{ jsv }}"></script>
 <script src="/static/js/proc_publish.js?v={{ jsv }}"></script>
+<script src="/static/js/auth.js?v={{ jsv }}"></script>
+<script src="/static/js/proxies.js?v={{ jsv }}"></script>
+<script src="/static/js/movie.js?v={{ jsv }}"></script>
+<script src="/static/js/story.js?v={{ jsv }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   switchPage('user');

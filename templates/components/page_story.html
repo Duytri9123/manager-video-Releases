@@ -1,0 +1,140 @@
+<!-- ═══════════════════════════════════════════════════════════════
+     Story / Novel / Comic → Video Script
+═══════════════════════════════════════════════════════════════ -->
+<div class="page" id="page-story" data-page="story">
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📖 Nguồn truyện</span>
+    </div>
+    <div class="card-body">
+      <div class="platform-tabs">
+        <div class="platform-tab active" data-source="text" onclick="storySwitchSource('text')">📝 Văn bản</div>
+        <div class="platform-tab" data-source="url" onclick="storySwitchSource('url')">🔗 URL bài viết</div>
+        <div class="platform-tab" data-source="comic" onclick="storySwitchSource('comic')">🖼 Truyện tranh (zip)</div>
+      </div>
+
+      <div class="story-source" data-source="text">
+        <div class="field">
+          <label>Tựa (tuỳ chọn)</label>
+          <input id="sw-title" type="text" placeholder="VD: Chương 1 - Khởi đầu...">
+        </div>
+        <div class="field">
+          <label>Văn bản truyện</label>
+          <textarea id="sw-text" rows="10" placeholder="Dán nội dung truyện ở đây..."></textarea>
+        </div>
+      </div>
+
+      <div class="story-source hidden" data-source="url">
+        <div class="field">
+          <label>URL bài viết / chương truyện</label>
+          <input id="sw-url" type="text" placeholder="https://...">
+        </div>
+        <div class="field">
+          <label>Proxy (tuỳ chọn)</label>
+          <input id="sw-proxy" type="text" placeholder="http://user:pass@host:port (để trống = không qua proxy)">
+        </div>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyFetchUrl()">📥 Tải nội dung</button>
+        <div class="field" style="margin-top:8px">
+          <label>Văn bản đã tải</label>
+          <textarea id="sw-text-from-url" rows="10" placeholder="Bấm 'Tải nội dung' để fill..."></textarea>
+        </div>
+      </div>
+
+      <div class="story-source hidden" data-source="comic">
+        <div class="alert-info text-sm">
+          Upload file ZIP chứa các trang truyện tranh. App sẽ giải nén và OCR (cần cài
+          <code>tesseract</code> với gói <code>vie+eng</code>).
+        </div>
+        <div class="field">
+          <label>File ZIP truyện tranh</label>
+          <input id="sw-comic-file" type="file" accept=".zip">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="storyComicUpload()" style="margin-top:6px">📤 Upload</button>
+          <span id="sw-comic-status" class="text-xs text-muted" style="margin-left:8px"></span>
+        </div>
+        <div class="field">
+          <label>OCR ngôn ngữ</label>
+          <select id="sw-comic-lang">
+            <option value="vie+eng" selected>Việt + Anh</option>
+            <option value="eng">English</option>
+            <option value="chi_sim+eng">Tiếng Trung giản thể + Anh</option>
+            <option value="jpn+eng">Tiếng Nhật + Anh</option>
+            <option value="kor+eng">Tiếng Hàn + Anh</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" type="button" onclick="storyComicOcr()" style="margin-top:6px">🔤 Chạy OCR</button>
+        </div>
+        <div class="field">
+          <label>Văn bản OCR</label>
+          <textarea id="sw-comic-text" rows="8" placeholder="Kết quả OCR sẽ hiện ở đây..."></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title">⚙️ Tuỳ chỉnh chunking & dịch</span></div>
+    <div class="card-body">
+      <div class="grid-3">
+        <div class="field">
+          <label>Ký tự / đoạn (mục tiêu)</label>
+          <input id="sw-target" type="number" value="350" min="50" max="2000">
+        </div>
+        <div class="field">
+          <label>Ký tự / đoạn (tối đa)</label>
+          <input id="sw-max" type="number" value="600" min="100" max="3000">
+        </div>
+        <div class="field">
+          <label>Câu overlap</label>
+          <input id="sw-overlap" type="number" value="0" min="0" max="3">
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="field">
+          <label class="toggle-wrap">
+            <input id="sw-translate" type="checkbox" class="toggle-input">
+            <span class="toggle"></span>
+            <span class="toggle-label">Dịch sang ngôn ngữ đích</span>
+          </label>
+        </div>
+        <div class="field">
+          <label>Ngôn ngữ đích</label>
+          <select id="sw-lang">
+            <option value="vi">Tiếng Việt</option>
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="th">ไทย</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Provider</label>
+          <select id="sw-provider">
+            <option value="auto">Auto</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai">OpenAI</option>
+            <option value="groq">Groq</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" type="button" onclick="storyGenerate()">✨ Tạo kịch bản video</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyCopyAll()">📋 Copy toàn bộ</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storySendToTTS()">🎙 Gửi sang TTS</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="sw-result-card">
+    <div class="card-header">
+      <span class="card-title">📋 Kết quả</span>
+      <div class="card-actions">
+        <span id="sw-result-meta" class="text-xs text-muted"></span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="sw-segments"></div>
+    </div>
+  </div>
+
+</div>

@@ -181,7 +181,8 @@ def _fetch_thumbnail_from_url(url: str) -> dict | None:
             return ""
 
         async def _do_fetch():
-            async with DouyinAPIClient(cm.get_cookies(), proxy=cfg_loader.get("proxy")) as api:
+            from core.proxy_resolver import resolve_proxy
+            async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(cfg_loader)) as api:
                 normalized_url = _pick_url(url)
                 if not normalized_url:
                     return None
@@ -455,7 +456,8 @@ def process_video():
             if not cm.validate_cookies():
                 raise RuntimeError("Cookies may be invalid")
 
-            async with DouyinAPIClient(cm.get_cookies(), proxy=cfg.get("proxy")) as api:
+            from core.proxy_resolver import resolve_proxy as _resolve_proxy
+            async with DouyinAPIClient(cm.get_cookies(), proxy=_resolve_proxy(cfg)) as api:
                 normalized_url = _pick_url(video_url)
                 if not normalized_url:
                     raise RuntimeError("URL is empty")

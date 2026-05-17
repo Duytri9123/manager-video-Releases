@@ -115,7 +115,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "tts_speed": 1.0,
         "auto_speed": True,
         "pitch_semitones": 0.0,
-        "fpt_api_key": "ssMeU5l89LMLfg8jhDzTBWV7D22s1xOy",
+        "fpt_api_key": "",  # Set via env FPT_TTS_API_KEY or video_process.fpt_api_key in config.yml
         "bg_volume": 0.15,
         "font_size": 18,
         "font_name": "Arial",
@@ -136,5 +136,56 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "facebook": {
         "app_id": "",
         "app_secret": "",
+    },
+    # ── Web app authentication (single-user password gate) ──
+    "auth": {
+        "enabled": False,
+        "cors_origins": [],  # empty = sensible defaults; "*" = wide-open (NOT recommended)
+    },
+    # ── Proxy pool ──
+    "proxies": {
+        "enabled": False,
+        "active_id": "",
+        "rotation": {
+            "mode": "round_robin",   # round_robin | random | sticky
+            "per_request": False,
+        },
+        "health_check": {
+            "enabled": True,
+            "test_url": "https://ifconfig.me/ip",
+            "timeout_sec": 8,
+        },
+        "list": [],   # filled via UI; persisted to .state/proxies.json
+    },
+    # ── 9Router / 4G router rotation ──
+    "routers": {
+        "enabled": False,
+        "list": [],   # {id,label,type,endpoint,method,headers,body,success_check}
+        "cooldown_sec": 30,
+        "default_id": "",
+    },
+    # ── Movie review (TMDb + LLM) ──
+    "movie": {
+        "tmdb_api_key": "",
+        "tmdb_read_token": "",   # v4 Bearer token (preferred over api_key)
+        "default_language": "vi",
+        "default_provider": "deepseek",
+        "cache_ttl_hours": 24,
+        "default_template": "cinematic",
+    },
+    # ── Novel / Comic → Video script ──
+    "storywriter": {
+        "default_provider": "deepseek",
+        "default_target_lang": "vi",
+        "chunk": {
+            "target_chars_per_segment": 350,
+            "max_chars_per_segment": 600,
+            "overlap_sentences": 0,
+        },
+        "comic": {
+            "ocr_enabled": False,
+            "ocr_provider": "tesseract",
+        },
+        "output_dir": "./Downloaded/scripts",
     },
 }

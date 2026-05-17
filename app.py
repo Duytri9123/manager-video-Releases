@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Douyin Downloader — Flask entry point."""
+"""DuyTris Downloader — Flask entry point.
+
+Bind defaults:
+  • host = FLASK_HOST or 127.0.0.1 (set 0.0.0.0 explicitly to expose on LAN)
+  • port = FLASK_PORT or 5000
+"""
 import os
 import sys
 import threading
@@ -20,6 +25,7 @@ if __name__ == "__main__":
 
     APP_HOST = os.getenv("FLASK_HOST", "127.0.0.1")
     APP_PORT = int(os.getenv("FLASK_PORT", "5000"))
+    OPEN_BROWSER = os.getenv("OPEN_BROWSER", "1") not in ("0", "false", "no")
 
     _start_ngrok_tunnel(APP_PORT)
     if _ca._NGROK_PUBLIC_URL:
@@ -34,5 +40,6 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    threading.Timer(1.2, lambda: webbrowser.open(f"http://localhost:{APP_PORT}")).start()
+    if OPEN_BROWSER and APP_HOST in ("127.0.0.1", "localhost"):
+        threading.Timer(1.2, lambda: webbrowser.open(f"http://localhost:{APP_PORT}")).start()
     socketio.run(app, host=APP_HOST, port=APP_PORT, debug=False, allow_unsafe_werkzeug=True)

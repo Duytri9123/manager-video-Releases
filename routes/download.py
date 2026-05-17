@@ -306,7 +306,8 @@ def register_socketio_handlers():
                                 rl = RateLimiter(max_per_second=float(config.get("rate_limit", 5) or 5))
                                 rh = RetryHandler(max_retries=config.get("retry_times", 3))
                                 qm = QueueManager(max_workers=int(config.get("thread", 5) or 5))
-                                async with DouyinAPIClient(cm.get_cookies(), proxy=config.get("proxy")) as api:
+                                from core.proxy_resolver import resolve_proxy as _resolve_proxy
+                                async with DouyinAPIClient(cm.get_cookies(), proxy=_resolve_proxy(config)) as api:
                                     prog.advance_step("解析链接", "")
                                     if url.startswith("https://v.douyin.com"):
                                         r = await api.resolve_short_url(url)

@@ -48,3 +48,18 @@ def page_process():
 @bp.route("/publish")
 def page_publish():
     return _render_spa("publish")
+
+
+@bp.route("/movie")
+def page_movie():
+    return _render_spa("movie")
+
+
+@bp.route("/story")
+def page_story():
+    return _render_spa("story")
+
+
+@bp.route("/proxies")
+def page_proxies():
+    return _render_spa("proxies")

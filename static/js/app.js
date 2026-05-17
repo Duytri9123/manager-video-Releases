@@ -184,7 +184,8 @@ function switchPage(name) {
   const el = document.getElementById('topbar-title');
   const titles = {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
-    publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies'
+    publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
+    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
   if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
@@ -192,6 +193,7 @@ function switchPage(name) {
   if (name === 'history') { loadHistory(); if (typeof loadFiles === 'function') loadFiles(''); }
   if (name === 'content') cptSwitch('files');
   if (name === 'process') loadQueue();
+  if (name === 'proxies') { if (typeof proxyLoadList === 'function') proxyLoadList(); if (typeof routerLoadList === 'function') routerLoadList(); }
 }
 
 /* ── Content platform sub-tabs (defined here so inline onclick always works) ── */
@@ -227,6 +229,8 @@ function toggleMobileMenu() {
     ['user','🔍','Tìm người dùng'],['process','🎬','Xử lý Video'],
     ['transcribe','🎙','Phiên âm'],['publish','📤','Đăng video'],
     ['content','🗄','Quản lý nội dung'],
+    ['movie','🎬','Review phim'],['story','📖','Truyện → Video'],
+    ['proxies','🌐','Proxy & Router'],
     ['history','🗃','Lịch sử'],['config','⚙️','Cấu hình'],['cookies','🍪','Cookies']
   ];
   ov.innerHTML = `<div style="background:var(--bg2);width:240px;height:100%;padding:20px 12px;box-shadow:4px 0 20px rgba(0,0,0,.2);overflow-y:auto">
