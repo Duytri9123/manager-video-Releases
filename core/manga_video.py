@@ -184,6 +184,40 @@ ProgressCb = Callable[[int, str], None]
 class MangaVideoRenderer:
     def __init__(self, ffmpeg_path: Optional[str] = None):
         self.ffmpeg = ffmpeg_path or find_ffmpeg()
+        # Detect hardware encoder once (NVENC / QSV / AMF / libx264 fallback)
+        # This mirrors what core/video_processor.py does for the regular
+        # video pipeline — gives 3-5× speedup on machines with GPU.
+        self._hw_preset = None
+        try:
+            from core.hardware_presets import get_optimal_preset
+            self._hw_preset = get_optimal_preset(self.ffmpeg)
+        except Exception:
+            self._hw_preset = None
+
+    def _video_encode_args(self) -> list:
+        """Return ['-c:v', codec, '-preset', ..., ...] respecting detected hw."""
+        if self._hw_preset:
+            try:
+                # build_output_args() returns full output args incl. audio.
+                # We only want video portion → strip audio bits we'll add later.
+                full = self._hw_preset.build_output_args()
+                # Keep only video-side flags (codec + preset/crf + extras)
+                v_args = []
+                skip = False
+                for i, a in enumerate(full):
+                    if skip:
+                        skip = False
+                        continue
+                    if a in ("-c:a", "-b:a", "-ar", "-ac"):
+                        skip = True
+                        continue
+                    v_args.append(a)
+                return v_args
+            except Exception:
+                pass
+        # CPU fallback
+        return ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-pix_fmt", "yuv420p", "-tune", "stillimage"]
 
     def _emit(self, cb: Optional[ProgressCb], pct: int, msg: str):
         if cb:
@@ -216,14 +250,38 @@ class MangaVideoRenderer:
             tmp = Path(tmp_str)
             self._emit(progress, 2, "Chuẩn bị thư mục tạm...")
 
+            # Show which hardware encoder we're using (helps user debug speed)
+            if self._hw_preset:
+                self._emit(progress, 2,
+                           f"Hardware encoder: {self._hw_preset.video_codec} "
+                           f"(profile: {self._hw_preset.machine_profile})")
+            else:
+                self._emit(progress, 2, "Encoder: libx264 (CPU only)")
+
             # ── 1. Download panel images ───────────────────────────────
             img_paths: List[Path] = []
             n_panels = len(req.panels)
             for i, panel in enumerate(req.panels, start=1):
-                ext = Path(urllib.parse.urlparse(panel.image_url).path).suffix or ".jpg"
+                src = panel.image_url
+                # Local file path → just copy/symlink it instead of HTTP download
+                is_remote = src.startswith(("http://", "https://", "ftp://"))
+                ext = Path(urllib.parse.urlparse(src).path if is_remote else src).suffix or ".jpg"
                 dst = tmp / f"panel_{i:03d}{ext}"
-                ok = _http_download(panel.image_url, dst,
-                                    timeout=30, proxy_url=req.proxy_url or None)
+                if is_remote:
+                    ok = _http_download(src, dst,
+                                        timeout=30, proxy_url=req.proxy_url or None)
+                else:
+                    # Local file: copy bytes directly
+                    try:
+                        local = Path(src)
+                        if local.exists() and local.is_file():
+                            import shutil as _shutil
+                            _shutil.copyfile(local, dst)
+                            ok = dst.exists() and dst.stat().st_size > 0
+                        else:
+                            ok = False
+                    except Exception:
+                        ok = False
                 if ok:
                     img_paths.append(dst)
                 else:
@@ -304,6 +362,9 @@ class MangaVideoRenderer:
             # ── 4. Build per-panel video clips ─────────────────────────
             segs: List[Path] = []
             placeholder = self._make_placeholder(tmp, req)
+
+            # Build the list of segment jobs first
+            seg_jobs = []
             for i, (img, dur) in enumerate(zip(img_paths, tts_durations), start=1):
                 seg_dur = dur + (req.inter_panel_pause_sec if i < n_panels else 0.0)
                 if i == 1:
@@ -312,10 +373,34 @@ class MangaVideoRenderer:
                     seg_dur += req.outro_sec
                 seg_path = tmp / f"seg_{i:03d}.mp4"
                 src_img = img if img and img.exists() else placeholder
-                self._make_segment(src_img, seg_dur, req, seg_path)
+                seg_jobs.append((i, src_img, seg_dur, seg_path))
                 segs.append(seg_path)
-                self._emit(progress, 60 + int(20 * i / n_panels),
-                           f"Render đoạn video {i}/{n_panels}")
+
+            # Parallel ffmpeg encoding — significant speedup on multi-core CPU.
+            # Use up to min(N panels, 4) workers; hardware encoders (NVENC etc)
+            # serialize internally so going much higher doesn't help.
+            max_workers = min(len(seg_jobs), 4) if seg_jobs else 1
+            try:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                completed = 0
+                with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                    futures = {
+                        ex.submit(self._make_segment, src, dur, req, path): idx
+                        for idx, src, dur, path in seg_jobs
+                    }
+                    for fut in as_completed(futures):
+                        idx = futures[fut]
+                        # Surface any exception so the job fails fast
+                        fut.result()
+                        completed += 1
+                        self._emit(progress, 60 + int(20 * completed / n_panels),
+                                   f"Render đoạn video {completed}/{n_panels}")
+            except Exception:
+                # If parallel path had any setup issue, fall back to serial
+                for idx, src, dur, path in seg_jobs:
+                    self._make_segment(src, dur, req, path)
+                    self._emit(progress, 60 + int(20 * idx / n_panels),
+                               f"Render đoạn video {idx}/{n_panels}")
 
             # ── 5. Concat segments ─────────────────────────────────────
             concat_video = tmp / "concat.mp4"
@@ -361,14 +446,20 @@ class MangaVideoRenderer:
         req: MangaRenderRequest,
         out: Path,
     ):
-        """Render a single image → mp4 with optional Ken Burns zoom-in."""
+        """Render a single image → mp4 with optional Ken Burns zoom-in.
+
+        Uses hardware encoding when available (NVENC / QSV / AMF) — same as the
+        regular video processor does. Falls back to libx264 veryfast on plain CPU.
+        """
         d = max(0.5, float(duration))
         total_frames = max(1, int(d * req.fps))
         if req.zoom:
-            # Pre-scale to 2× to keep zoom region sharp.
+            # 1.3× pre-scale is enough for Ken Burns (was 2× → 4× more pixels
+            # to encode for almost no visible quality gain). Big speedup.
+            sw, sh = int(req.width * 1.3), int(req.height * 1.3)
             vf = (
-                f"scale={req.width * 2}:{req.height * 2}:force_original_aspect_ratio=decrease,"
-                f"pad={req.width * 2}:{req.height * 2}:(ow-iw)/2:(oh-ih)/2:black,"
+                f"scale={sw}:{sh}:force_original_aspect_ratio=decrease,"
+                f"pad={sw}:{sh}:(ow-iw)/2:(oh-ih)/2:black,"
                 f"zoompan=z='min(zoom+0.0009,1.15)':d={total_frames}:"
                 f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
                 f"s={req.width}x{req.height}:fps={req.fps},"
@@ -380,15 +471,26 @@ class MangaVideoRenderer:
                 f"pad={req.width}:{req.height}:(ow-iw)/2:(oh-ih)/2:black,"
                 f"format=yuv420p"
             )
-        cmd = [
-            self.ffmpeg, "-y", "-loop", "1", "-t", f"{d:.3f}", "-i", str(img),
-            "-vf", vf, "-r", str(req.fps),
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-            "-pix_fmt", "yuv420p", "-tune", "stillimage",
-            "-an", str(out),
-        ]
+        # Build command: hwaccel input flags first, then encode args from preset
+        cmd = [self.ffmpeg, "-y", "-loop", "1", "-t", f"{d:.3f}", "-i", str(img),
+               "-vf", vf, "-r", str(req.fps)]
+        cmd += self._video_encode_args()
+        cmd += ["-an", str(out)]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
+            # If hardware encode failed, retry with libx264 once
+            if self._hw_preset and "libx264" not in cmd:
+                cmd_fallback = [self.ffmpeg, "-y", "-loop", "1", "-t", f"{d:.3f}",
+                                "-i", str(img), "-vf", vf, "-r", str(req.fps),
+                                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                                "-pix_fmt", "yuv420p", "-an", str(out)]
+                proc2 = subprocess.run(cmd_fallback, capture_output=True, text=True)
+                if proc2.returncode == 0:
+                    return
+                raise RuntimeError(
+                    "ffmpeg segment build failed (both HW + SW): "
+                    + (proc2.stderr or proc.stderr or "")[-1500:]
+                )
             raise RuntimeError(
                 "ffmpeg segment build failed: " + (proc.stderr or "")[-1500:]
             )

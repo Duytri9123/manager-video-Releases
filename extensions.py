@@ -84,6 +84,14 @@ def create_app():
     auth.attach(app)
     app.extensions["web_auth"] = auth
 
+    # Floating chat widget — SQLite-backed session/message store.
+    try:
+        from core import chat_store
+        chat_store.init(STATE_DIR / "chat_history.db")
+        LOGGER.info("chat_store initialized at %s", STATE_DIR / "chat_history.db")
+    except Exception as exc:
+        LOGGER.warning("chat_store init failed (widget will fall back to localStorage): %s", exc)
+
     # Bootstrap password from env if not yet set
     boot_pw = os.getenv("WEBAPP_PASSWORD")
     if boot_pw and not auth.has_password():

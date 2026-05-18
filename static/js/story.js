@@ -31,6 +31,13 @@
     return e;
   }
   function _toast(m, k) { (window.toast || console.log)(m, k || 'info'); }
+  function _log(msg, level) {
+    if (typeof window.appendLog === 'function') {
+      window.appendLog('sw-log', msg, level || 'info');
+    } else {
+      console.log('[story]', msg);
+    }
+  }
   function _proxiedImg(url) {
     if (!url) return '';
     if (url.startsWith('/')) return url;
@@ -988,7 +995,7 @@
       provider: 'auto',
     };
     if (mode === 'split' && !bodyText.trim() && !translate) {
-      return _toast('Nhập văn bản truyện trong tab "📝 Văn bản thuần" rồi thử lại, hoặc chuyển sang chế độ "Tự nhập từng panel".', 'warning');
+      return _toast('Nhập văn bản truyện trong tab "🤖 Tạo truyện AI" rồi thử lại, hoặc chuyển sang chế độ "Tự nhập từng panel".', 'warning');
     }
     try {
       LoadingUI.start && LoadingUI.start('Đang tạo lời đọc cho từng panel...');
@@ -1129,9 +1136,11 @@
       bgm_volume: parseFloat(document.getElementById('sw-bgm-vol').value || '0.10'),
     };
     if (!payload.tts_voice) return _toast('Chưa chọn giọng đọc.', 'warning');
+    _log(`▶ Gửi request render: ${payload.panels.length} panels · preset=${payload.preset} · ${payload.fps}fps · TTS=${payload.tts_engine}/${payload.tts_voice}`, 'info');
     try {
       const r = await API.post('/api/story/manga/render', payload);
       if (!r.ok) throw new Error(r.error || 'render failed');
+      _log(`  ✓ Job ID: ${r.job_id} · bắt đầu polling progress...`, 'success');
       _toast('Đã bắt đầu render. Theo dõi tiến trình bên dưới.', 'info');
       const wrap = document.getElementById('sw-render-status');
       const bar = document.getElementById('sw-render-bar');
@@ -1142,11 +1151,17 @@
       res.classList.add('hidden');
       bar.style.width = '0%'; pct.textContent = '0%'; msg.textContent = 'Đang khởi tạo...';
       pollRender(r.job_id);
-    } catch (e) { _toast(String(e.message || e), 'error'); }
+    } catch (e) {
+      _log('✗ Lỗi gọi render API: ' + (e.message || e), 'error');
+      _toast(String(e.message || e), 'error');
+    }
   }
 
   function pollRender(jobId) {
     if (_renderPoll) clearInterval(_renderPoll);
+    let _lastMessage = '';
+    let _lastProgress = -1;
+    const _renderStartTime = Date.now();
     _renderPoll = setInterval(async () => {
       try {
         const r = await fetch('/api/story/manga/render_status?job_id=' + encodeURIComponent(jobId)).then(r => r.json());
@@ -1157,13 +1172,29 @@
         bar.style.width = (r.progress || 0) + '%';
         pct.textContent = (r.progress || 0) + '%';
         msg.textContent = r.message || r.status;
+
+        // Log only when message OR progress crosses a meaningful step
+        const curMsg = (r.message || '').trim();
+        const curProg = r.progress || 0;
+        if (curMsg && curMsg !== _lastMessage) {
+          _log(`  [${curProg}%] ${curMsg}`, 'info');
+          _lastMessage = curMsg;
+          _lastProgress = curProg;
+        } else if (curProg - _lastProgress >= 10) {
+          // Progress jumped by 10% but same message → still useful
+          _log(`  [${curProg}%] ...`, 'detail');
+          _lastProgress = curProg;
+        }
+
         if (r.status === 'done' || r.status === 'error') {
           clearInterval(_renderPoll); _renderPoll = null;
+          const elapsed = ((Date.now() - _renderStartTime) / 1000).toFixed(1);
           const res = document.getElementById('sw-render-result');
           const txt = document.getElementById('sw-render-result-text');
           if (r.status === 'done') {
             res.classList.remove('hidden');
             txt.textContent = '✓ Hoàn tất: ' + (r.output_video_rel || r.output_video || '');
+            txt.style.color = '';
 
             const videoName = (r.output_video_rel || r.output_video || '').replace(/^.*[\\/]/, '');
             const srtName   = (r.output_srt_rel   || r.output_srt   || '').replace(/^.*[\\/]/, '');
@@ -1179,6 +1210,7 @@
               player.classList.remove('hidden');
               try { player.load(); } catch (_) {}
               dlVideo.href = playUrl + '&download=1';
+              dlVideo.style.display = '';
             }
             if (srtName) {
               dlSrt.href = '/api/story/manga/render_video?kind=srt&download=1&name=' + encodeURIComponent(srtName);
@@ -1189,9 +1221,19 @@
               dlAss.style.display = '';
             } else { dlAss.style.display = 'none'; }
 
+            _log(`🎉 Render hoàn tất sau ${elapsed}s · file: ${videoName}`, 'banner');
             _toast('Render xong!', 'success');
           } else {
+            // status === 'error'
+            res.classList.remove('hidden');
             txt.textContent = '✗ Lỗi: ' + (r.error || 'unknown');
+            txt.style.color = 'var(--error)';
+            // Hide download buttons on error
+            ['sw-render-download-video', 'sw-render-download-srt', 'sw-render-download-ass'].forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.style.display = 'none';
+            });
+            _log(`✗ Render lỗi sau ${elapsed}s: ${r.error || 'unknown'}`, 'error');
             _toast('Render lỗi: ' + (r.error || ''), 'error');
           }
         }
@@ -1206,6 +1248,517 @@
     if (player) {
       try { player.pause(); player.removeAttribute('src'); player.load(); } catch (_) {}
       player.classList.add('hidden');
+    }
+  }
+
+  // ── AI Story Generation ─────────────────────────────────────────────────
+  let _aiScenes = []; // [{text, image_prompt, image_url}]
+  let _aiCancelled = false;  // user-controlled cancel flag
+  let _aiAbortCtrl = null;   // AbortController for in-flight fetch (optional)
+
+  function _getCharacters() {
+    const rows = document.querySelectorAll('#sw-ai-chars .sw-ai-char-row');
+    const chars = [];
+    rows.forEach(row => {
+      const name = (row.querySelector('.sw-ai-char-name')?.value || '').trim();
+      const desc = (row.querySelector('.sw-ai-char-desc')?.value || '').trim();
+      if (name) chars.push({ name, description: desc });
+    });
+    return chars;
+  }
+
+  function addChar() {
+    const wrap = document.getElementById('sw-ai-chars');
+    if (!wrap) return;
+    const row = _el('div', { class: 'sw-ai-char-row', style: 'display:grid;grid-template-columns:150px 1fr 40px;gap:8px;margin-bottom:6px;align-items:start' });
+    row.appendChild(_el('input', { type: 'text', placeholder: 'Tên nhân vật', class: 'sw-ai-char-name' }));
+    row.appendChild(_el('input', { type: 'text', placeholder: 'Mô tả ngoại hình', class: 'sw-ai-char-desc' }));
+    const btn = _el('button', { class: 'btn btn-danger btn-sm', type: 'button' }, '✕');
+    btn.addEventListener('click', () => row.remove());
+    row.appendChild(btn);
+    wrap.appendChild(row);
+  }
+
+  async function aiGenerate() {
+    const prompt = (document.getElementById('sw-ai-prompt').value || '').trim();
+    const genre = document.getElementById('sw-ai-genre')?.value || '';
+    const numPanels = parseInt(document.getElementById('sw-ai-panels')?.value || '8', 10);
+    const language = document.getElementById('sw-ai-lang')?.value || 'vi';
+    const location = (document.getElementById('sw-ai-location')?.value || '').trim();
+    const characters = _getCharacters();
+    const status = document.getElementById('sw-ai-status');
+
+    if (!prompt) return _toast('Nhập đề bài / ý tưởng truyện trước.', 'warning');
+
+    _aiSetBusy(true, 'Đang viết truyện...');
+    _log('━━━ Bắt đầu tạo truyện (chỉ text) ━━━', 'banner');
+    _log(`Đề bài: "${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"`, 'info');
+    _log(`Thể loại: ${genre || 'tự do'} · Số cảnh: ${numPanels} · Ngôn ngữ: ${language}`, 'detail');
+    if (characters.length) _log(`Nhân vật: ${characters.map(c => c.name).join(', ')}`, 'detail');
+    if (status) status.textContent = '⏳ Đang tạo truyện...';
+    try {
+      const r = await API.post('/api/story/ai_generate', {
+        prompt, genre, num_panels: numPanels, language, characters, location,
+      });
+      if (!r.ok) throw new Error(r.error || 'AI generation failed');
+      const textArea = document.getElementById('sw-text');
+      if (textArea) textArea.value = r.text || '';
+      const model = r.model || '';
+      const usage = r.usage || {};
+      const tokens = usage.total_tokens || (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+      if (status) status.textContent = `✓ Text xong · model: ${model}${tokens ? ' · ' + tokens + ' tokens' : ''}`;
+      _log(`✓ Đã sinh ${(r.text || '').length} ký tự (model: ${model}, ${tokens} tokens)`, 'success');
+      _toast('Đã tạo nội dung truyện! Bạn có thể chỉnh sửa hoặc tiếp tục sinh ảnh.', 'success');
+
+      // Auto-save text-only session
+      _autoSaveSession({
+        prompt, genre, numPanels, language, characters, location,
+        artStyle: document.getElementById('sw-ai-art-style')?.value || '',
+        imgRatio: document.getElementById('sw-ai-img-ratio')?.value || '9:16',
+        imgNote: document.getElementById('sw-ai-img-note')?.value || '',
+        imgModel: document.getElementById('sw-ai-img-model')?.value || 'cx/gpt-5.5-image',
+        imgQuality: document.getElementById('sw-ai-img-quality')?.value || 'standard',
+        storyText: r.text || '',
+        scenes: _parseScenes(r.text || '').map(t => ({ text: t, image_prompt: '', image_url: '' })),
+      });
+    } catch (e) {
+      if (status) status.textContent = '';
+      _log('✗ Lỗi tạo truyện: ' + (e.message || e), 'error');
+      _toast('Lỗi tạo truyện: ' + (e.message || e), 'error');
+    } finally { _aiSetBusy(false); }
+  }
+
+  function _parseScenes(text) {
+    // Split text into paragraphs (separated by blank lines)
+    return (text || '').split(/\n\s*\n/).map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  async function aiFullPipeline() {
+    const prompt = (document.getElementById('sw-ai-prompt').value || '').trim();
+    if (!prompt) return _toast('Nhập đề bài / ý tưởng truyện trước.', 'warning');
+
+    const status = document.getElementById('sw-ai-status');
+    const progressWrap = document.getElementById('sw-ai-progress');
+    const progressBar = document.getElementById('sw-ai-progress-bar');
+    const progressMsg = document.getElementById('sw-ai-progress-msg');
+    const progressPct = document.getElementById('sw-ai-progress-pct');
+
+    const genre = document.getElementById('sw-ai-genre')?.value || '';
+    const numPanels = parseInt(document.getElementById('sw-ai-panels')?.value || '8', 10);
+    const language = document.getElementById('sw-ai-lang')?.value || 'vi';
+    const location = (document.getElementById('sw-ai-location')?.value || '').trim();
+    const characters = _getCharacters();
+    const artStyle = document.getElementById('sw-ai-art-style')?.value || '';
+    const imgRatio = document.getElementById('sw-ai-img-ratio')?.value || '9:16';
+    const imgNote = (document.getElementById('sw-ai-img-note')?.value || '').trim();
+    const imgModel = (document.getElementById('sw-ai-img-model')?.value || 'cx/gpt-5.5-image').trim();
+    const imgQuality = document.getElementById('sw-ai-img-quality')?.value || 'standard';
+
+    // Use the SAME seed for all images of this story → keeps style consistent
+    // (deterministic seed from prompt hash so re-runs of the same prompt look similar)
+    const storySeed = _hashSeed(prompt + '|' + genre + '|' + characters.map(c => c.name).join(','));
+
+    progressWrap.classList.remove('hidden');
+    _aiScenes = [];
+    _aiCancelled = false;
+    _aiSetBusy(true);
+
+    _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'banner');
+    _log('🚀 Bắt đầu pipeline tạo truyện + sinh ảnh', 'banner');
+    _log(`Đề bài: "${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"`, 'info');
+    _log(`Cấu hình: thể loại=${genre || 'tự do'} · ${numPanels} cảnh · ${language}`, 'detail');
+    if (characters.length) _log(`Nhân vật: ${characters.map(c => c.name + ' (' + (c.description || '').slice(0, 30) + ')').join(' | ')}`, 'detail');
+    if (location) _log(`Địa điểm: ${location}`, 'detail');
+    _log(`Hình ảnh: model=${imgModel} · style=${artStyle || 'AI tự chọn'} · ratio=${imgRatio} · seed=${storySeed}`, 'detail');
+
+    const totalSteps = numPanels + 2; // 1 text + 1 prompts + N images
+    let step = 0;
+    function updateProgress(msg) {
+      step++;
+      const pct = Math.round((step / totalSteps) * 100);
+      progressBar.style.width = pct + '%';
+      progressPct.textContent = pct + '%';
+      progressMsg.textContent = msg;
+    }
+
+    try {
+      // Step 1: Generate story text
+      if (_aiCancelled) throw new Error('CANCELLED');
+      updateProgress('Đang viết truyện...');
+      if (status) status.textContent = '⏳ Bước 1: Viết truyện...';
+      _log('▶ Bước 1/3: Gọi LLM viết truyện...', 'info');
+      const t1 = Date.now();
+      const textRes = await API.post('/api/story/ai_generate', {
+        prompt, genre, num_panels: numPanels, language, characters, location,
+      });
+      if (!textRes.ok) throw new Error(textRes.error || 'Text generation failed');
+      const storyText = textRes.text || '';
+      document.getElementById('sw-text').value = storyText;
+      _log(`  ✓ Hoàn tất sau ${((Date.now() - t1) / 1000).toFixed(1)}s · ${storyText.length} ký tự · ${textRes.usage?.total_tokens || '?'} tokens`, 'success');
+
+      // Parse scenes
+      const scenes = _parseScenes(storyText);
+      if (!scenes.length) throw new Error('AI không tạo được đoạn nào.');
+      _log(`  📑 Đã chia thành ${scenes.length} cảnh`, 'detail');
+
+      // Step 2: Generate consistent image prompts (one LLM call, all scenes)
+      if (_aiCancelled) throw new Error('CANCELLED');
+      updateProgress(`Đang tạo prompt ảnh nhất quán cho ${scenes.length} cảnh...`);
+      if (status) status.textContent = '⏳ Bước 2: Tạo prompt ảnh (style nhất quán)...';
+      _log(`▶ Bước 2/3: Gọi LLM tạo ${scenes.length} image prompts (1 lượt, style nhất quán)...`, 'info');
+      const t2 = Date.now();
+      const promptRes = await API.post('/api/story/ai_image_prompts', {
+        scenes, characters, art_style: artStyle, location, img_note: imgNote, img_ratio: imgRatio, genre,
+      });
+      const imgPrompts = (promptRes.ok && promptRes.prompts) ? promptRes.prompts : scenes.map(s => `${artStyle || 'cinematic'}, ${s.slice(0, 100)}`);
+      if (promptRes.fallback) {
+        _log(`  ⚠ Dùng prompt fallback (lý do: ${promptRes.error_hint || 'LLM không trả JSON'})`, 'warning');
+        _toast('Lưu ý: dùng prompt fallback (LLM không trả JSON hợp lệ).', 'warning');
+      } else {
+        _log(`  ✓ Hoàn tất sau ${((Date.now() - t2) / 1000).toFixed(1)}s · ${imgPrompts.length} prompts`, 'success');
+      }
+      // Print first prompt as a sample so user sees the style anchor
+      if (imgPrompts[0]) {
+        _log(`  📝 Sample prompt: "${imgPrompts[0].slice(0, 150)}${imgPrompts[0].length > 150 ? '...' : ''}"`, 'detail');
+      }
+
+      // Step 3: Generate images one by one with the SAME seed for consistency
+      _aiScenes = scenes.map((text, i) => ({
+        text,
+        image_prompt: imgPrompts[i] || '',
+        image_url: '',
+      }));
+      _renderAiScenes();
+      _log(`▶ Bước 3/3: Sinh ${scenes.length} ảnh qua ${imgModel} (seed=${storySeed})...`, 'info');
+
+      let okCount = 0, failCount = 0;
+      const t3 = Date.now();
+      for (let i = 0; i < scenes.length; i++) {
+        if (_aiCancelled) throw new Error('CANCELLED');
+        updateProgress(`Đang sinh ảnh cảnh ${i + 1}/${scenes.length}...`);
+        if (status) status.textContent = `⏳ Sinh ảnh ${i + 1}/${scenes.length}...`;
+        const ti = Date.now();
+        try {
+          const imgRes = await API.post('/api/story/ai_generate_image', {
+            prompt: imgPrompts[i] || `${artStyle || 'cinematic film still'}, ${scenes[i].slice(0, 100)}`,
+            model: imgModel,
+            quality: imgQuality,
+            ratio: imgRatio,
+            scene_index: i + 1,
+            seed: storySeed,
+          });
+          if (imgRes.ok && imgRes.image_url) {
+            _aiScenes[i].image_url = imgRes.image_url;
+            okCount++;
+            _log(`  ✓ Cảnh ${i + 1}/${scenes.length}: OK trong ${((Date.now() - ti) / 1000).toFixed(1)}s · ${imgRes.size || ''}`, 'success');
+          } else {
+            failCount++;
+            _log(`  ✗ Cảnh ${i + 1}/${scenes.length}: ${imgRes.error || 'không nhận được ảnh'}`, 'error');
+          }
+        } catch (imgErr) {
+          failCount++;
+          _log(`  ✗ Cảnh ${i + 1}/${scenes.length}: ${imgErr.message || imgErr}`, 'error');
+          console.warn('Image gen failed for scene', i, imgErr);
+        }
+        _renderAiScenes();
+      }
+      _log(`  ─ Tổng kết: ${okCount} thành công, ${failCount} lỗi · tổng ${((Date.now() - t3) / 1000).toFixed(1)}s`, okCount > 0 ? 'info' : 'error');
+
+      if (_aiCancelled) throw new Error('CANCELLED');
+
+      // Done
+      progressBar.style.width = '100%';
+      progressPct.textContent = '100%';
+      progressMsg.textContent = '✓ Hoàn tất!';
+      if (status) status.textContent = `✓ Xong ${scenes.length} cảnh · ${imgModel}`;
+      _log('🎉 Pipeline hoàn tất! Bấm "Tạo video ngay" để render MP4.', 'banner');
+      _toast(`Đã tạo ${scenes.length} cảnh với ảnh AI! Bấm "Tạo video ngay" để render.`, 'success');
+
+      // Auto-save session for future reuse
+      _autoSaveSession({
+        prompt, genre, numPanels, language, characters, location,
+        artStyle, imgRatio, imgNote, imgModel, imgQuality,
+        storyText, scenes: _aiScenes,
+      });
+      _log('💾 Đã lưu session để có thể tái tạo lần sau.', 'detail');
+
+    } catch (e) {
+      if (e.message === 'CANCELLED') {
+        progressMsg.textContent = '⏹ Đã hủy';
+        if (status) status.textContent = '⏹ Đã hủy';
+        _log('⏹ Người dùng đã hủy tiến trình.', 'warning');
+        _toast('Đã hủy tiến trình.', 'info');
+      } else {
+        if (status) status.textContent = '';
+        progressMsg.textContent = 'Lỗi: ' + (e.message || e);
+        _log('✗ Pipeline thất bại: ' + (e.message || e), 'error');
+        _toast('Lỗi pipeline: ' + (e.message || e), 'error');
+      }
+    } finally {
+      _aiSetBusy(false);
+    }
+  }
+
+  // ── Helpers: busy state + cancel + deterministic seed ─────────────────
+  function _aiSetBusy(busy, _msg) {
+    const card = document.querySelector('#page-story .story-source[data-source="text"]');
+    const cancelBtn = document.getElementById('sw-ai-cancel-btn');
+    const mainBtns = document.querySelectorAll(
+      '#page-story .story-source[data-source="text"] button:not(#sw-ai-cancel-btn)'
+    );
+    if (busy) {
+      if (cancelBtn) cancelBtn.classList.remove('hidden');
+      // Disable other buttons & inputs in the AI source pane (but NOT the cancel button)
+      if (card) {
+        card.querySelectorAll('input, select, textarea, button').forEach(el => {
+          if (el.id === 'sw-ai-cancel-btn') return;
+          el.disabled = true;
+        });
+        card.classList.add('ai-busy');
+      }
+    } else {
+      if (cancelBtn) cancelBtn.classList.add('hidden');
+      if (card) {
+        card.querySelectorAll('input, select, textarea, button').forEach(el => {
+          el.disabled = false;
+        });
+        card.classList.remove('ai-busy');
+      }
+    }
+  }
+
+  function aiCancel() {
+    _aiCancelled = true;
+    _log('⏹ Đang yêu cầu hủy... đợi step hiện tại kết thúc.', 'warning');
+    _toast('Đang hủy... đợi step hiện tại kết thúc.', 'warning');
+  }
+
+  // Convert string → 32-bit positive int (deterministic seed)
+  function _hashSeed(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = ((h << 5) - h) + str.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h) || 42;
+  }
+
+  function _renderAiScenes() {
+    const card = document.getElementById('sw-ai-scenes-card');
+    const wrap = document.getElementById('sw-ai-scenes');
+    if (!card || !wrap) return;
+    card.classList.remove('hidden');
+    wrap.replaceChildren();
+    const ratio = document.getElementById('sw-ai-img-ratio')?.value || '9:16';
+    const aspectCSS = ratio.replace(':', '/');
+    _aiScenes.forEach((scene, idx) => {
+      const item = _el('div', {
+        style: 'border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg2)',
+      });
+      if (scene.image_url) {
+        const img = _el('img', {
+          src: scene.image_url,
+          style: `width:100%;aspect-ratio:${aspectCSS};object-fit:cover;display:block;background:var(--bg3)`,
+          loading: 'lazy',
+        });
+        img.onerror = () => { img.style.display = 'none'; };
+        item.appendChild(img);
+      } else {
+        item.appendChild(_el('div', {
+          style: `width:100%;aspect-ratio:${aspectCSS};background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:24px`,
+        }, '⏳'));
+      }
+      const meta = _el('div', { style: 'padding:8px' });
+      meta.appendChild(_el('div', { class: 'badge badge-accent', style: 'margin-bottom:4px' }, `Cảnh ${idx + 1}`));
+      meta.appendChild(_el('div', { style: 'font-size:11px;color:var(--text2);line-height:1.4;max-height:60px;overflow:hidden' }, scene.text.slice(0, 120) + (scene.text.length > 120 ? '...' : '')));
+      item.appendChild(meta);
+      wrap.appendChild(item);
+    });
+  }
+
+  function aiSendToPanels() {
+    if (!_aiScenes.length) return _toast('Chưa có cảnh nào.', 'warning');
+    const panels = _aiScenes.map(s => ({
+      image_url: s.image_url || '',
+      text: s.text || '',
+    }));
+    setPanels(panels);
+    _toast(`Đã gửi ${panels.length} cảnh sang Panels & Render. Cuộn xuống để render video.`, 'success');
+    document.getElementById('sw-panels-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ── One-click: send to panels + auto trigger render with sensible defaults ─
+  async function aiCreateVideo() {
+    if (!_aiScenes.length) return _toast('Chưa có cảnh nào.', 'warning');
+    const withImages = _aiScenes.filter(s => s.image_url).length;
+    if (!withImages) return _toast('Chưa có ảnh — hãy chạy "Tạo truyện + Sinh ảnh" trước.', 'warning');
+
+    _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'banner');
+    _log(`🎬 Bắt đầu render video từ ${withImages} cảnh có ảnh`, 'banner');
+
+    // Send scenes to panels
+    const panels = _aiScenes.map(s => ({
+      image_url: s.image_url || '',
+      text: s.text || '',
+    }));
+    setPanels(panels);
+    _log(`  → Đã đẩy ${panels.length} panels sang phần render`, 'detail');
+
+    // Pick render preset matching the chosen image ratio (so images aren't squashed)
+    const imgRatio = document.getElementById('sw-ai-img-ratio')?.value || '9:16';
+    const presetSel = document.getElementById('sw-render-preset');
+    if (presetSel) {
+      if (imgRatio === '16:9') presetSel.value = 'youtube';
+      else if (imgRatio === '1:1') presetSel.value = 'square';
+      else presetSel.value = 'shorts';
+    }
+    _log(`  → Preset video: ${presetSel?.value} (theo ratio ${imgRatio})`, 'detail');
+
+    // Set TTS language to match story language
+    const lang = document.getElementById('sw-ai-lang')?.value || 'vi';
+    const targetLangSel = document.getElementById('sw-target-lang');
+    if (targetLangSel) targetLangSel.value = lang;
+    refreshVoices();
+
+    // Wait one tick so voice list rebuilds
+    await new Promise(r => setTimeout(r, 100));
+
+    // Ensure a voice is picked
+    const voiceSel = document.getElementById('sw-tts-voice');
+    if (voiceSel && !voiceSel.value && voiceSel.options.length > 0) {
+      // Pick first non-disabled option
+      for (const opt of voiceSel.options) {
+        if (!opt.disabled && opt.value) { voiceSel.value = opt.value; break; }
+      }
+    }
+    _log(`  → TTS: ${document.getElementById('sw-tts-engine')?.value} · giọng ${voiceSel?.value || '(auto)'}`, 'detail');
+
+    _toast('🎬 Bắt đầu tạo video... Cuộn xuống để xem tiến trình.', 'info');
+
+    // Scroll to render section
+    document.getElementById('sw-render-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Trigger render after a small delay (so UI updates)
+    setTimeout(() => {
+      try {
+        if (typeof window.storyRender === 'function') {
+          window.storyRender();
+        } else {
+          render();
+        }
+      } catch (e) {
+        _log('✗ Lỗi gọi render: ' + (e.message || e), 'error');
+        _toast('Lỗi khi gọi render: ' + (e.message || e), 'error');
+      }
+    }, 300);
+  }
+
+  function aiClear() {
+    const textArea = document.getElementById('sw-text');
+    if (textArea) textArea.value = '';
+    const status = document.getElementById('sw-ai-status');
+    if (status) status.textContent = '';
+    _aiScenes = [];
+    document.getElementById('sw-ai-scenes-card')?.classList.add('hidden');
+    document.getElementById('sw-ai-progress')?.classList.add('hidden');
+    _toast('Đã xoá nội dung.', 'info');
+  }
+
+  // ── Session save/load ─────────────────────────────────────────────────
+  async function _autoSaveSession(data) {
+    try {
+      const payload = {
+        prompt: data.prompt || '',
+        title: (data.prompt || '').slice(0, 50),
+        genre: data.genre || '',
+        num_panels: data.numPanels || 8,
+        language: data.language || 'vi',
+        characters: data.characters || [],
+        location: data.location || '',
+        art_style: data.artStyle || '',
+        img_ratio: data.imgRatio || '9:16',
+        img_note: data.imgNote || '',
+        img_model: data.imgModel || 'cx/gpt-5.5-image',
+        img_quality: data.imgQuality || 'standard',
+        story_text: data.storyText || '',
+        scenes: (data.scenes || []).map(s => ({
+          text: s.text || '',
+          image_prompt: s.image_prompt || '',
+          image_url: s.image_url || '',
+        })),
+      };
+      await API.post('/api/story/ai_sessions/save', payload);
+    } catch (e) {
+      console.warn('Auto-save session failed:', e);
+    }
+  }
+
+  async function aiLoadSessions() {
+    try {
+      const r = await fetch('/api/story/ai_sessions').then(res => res.json());
+      if (!r.ok || !r.sessions?.length) {
+        _toast('Chưa có session nào được lưu.', 'info');
+        return;
+      }
+      // Show a simple selection
+      const items = r.sessions.slice(0, 20);
+      const msg = items.map((s, i) => `${i + 1}. [${s.created_at}] ${s.title} (${s.num_scenes} cảnh, ${s.genre || 'tự do'})`).join('\n');
+      const choice = prompt('Chọn session (nhập số):\n\n' + msg);
+      if (!choice) return;
+      const idx = parseInt(choice, 10) - 1;
+      if (idx < 0 || idx >= items.length) return _toast('Lựa chọn không hợp lệ.', 'warning');
+      const loadRes = await API.post('/api/story/ai_sessions/load', { id: items[idx].id });
+      if (!loadRes.ok) return _toast('Lỗi load: ' + (loadRes.error || ''), 'error');
+      _applySession(loadRes.session);
+      _toast('Đã load session: ' + items[idx].title, 'success');
+    } catch (e) {
+      _toast('Lỗi: ' + (e.message || e), 'error');
+    }
+  }
+
+  function _applySession(s) {
+    if (!s) return;
+    // Fill form fields
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    setVal('sw-ai-prompt', s.prompt);
+    setVal('sw-ai-genre', s.genre);
+    setVal('sw-ai-panels', s.num_panels);
+    setVal('sw-ai-lang', s.language);
+    setVal('sw-ai-location', s.location);
+    setVal('sw-ai-art-style', s.art_style);
+    setVal('sw-ai-img-ratio', s.img_ratio);
+    setVal('sw-ai-img-note', s.img_note);
+    setVal('sw-ai-img-model', s.img_model);
+    setVal('sw-ai-img-quality', s.img_quality);
+    setVal('sw-text', s.story_text);
+
+    // Restore characters
+    const charsWrap = document.getElementById('sw-ai-chars');
+    if (charsWrap && s.characters?.length) {
+      charsWrap.replaceChildren();
+      for (const c of s.characters) {
+        const row = _el('div', { class: 'sw-ai-char-row', style: 'display:grid;grid-template-columns:140px 1fr 36px;gap:6px;margin-bottom:5px;align-items:center' });
+        const nameInput = _el('input', { type: 'text', placeholder: 'Tên', class: 'sw-ai-char-name', style: 'font-size:12px;padding:6px 8px' });
+        nameInput.value = c.name || '';
+        const descInput = _el('input', { type: 'text', placeholder: 'Mô tả', class: 'sw-ai-char-desc', style: 'font-size:12px;padding:6px 8px' });
+        descInput.value = c.description || '';
+        const btn = _el('button', { class: 'btn btn-danger btn-sm', type: 'button', style: 'padding:4px 8px' }, '✕');
+        btn.addEventListener('click', () => row.remove());
+        row.appendChild(nameInput);
+        row.appendChild(descInput);
+        row.appendChild(btn);
+        charsWrap.appendChild(row);
+      }
+    }
+
+    // Restore scenes preview
+    if (s.scenes?.length) {
+      _aiScenes = s.scenes.map(sc => ({
+        text: sc.text || '',
+        image_prompt: sc.image_prompt || '',
+        image_url: sc.image_url || '',
+      }));
+      _renderAiScenes();
     }
   }
 
@@ -1229,6 +1782,15 @@
     // Comic OCR (legacy)
     storyComicUpload: comicUpload,
     storyComicOcr: comicOcr,
+    // AI Story Generation
+    storyAiGenerate: aiGenerate,
+    storyAiFullPipeline: aiFullPipeline,
+    storyAiAddChar: addChar,
+    storyAiSendToPanels: aiSendToPanels,
+    storyAiCreateVideo: aiCreateVideo,
+    storyAiClear: aiClear,
+    storyAiLoadSessions: aiLoadSessions,
+    storyAiCancel: aiCancel,
     // Panels
     storyBuildNarration: buildNarration,
     storyPanelsClearTexts: panelsClearTexts,
@@ -1240,12 +1802,80 @@
     storyCancelRender: cancelRender,
   });
 
+  // Load available image models from 9Router → populate the model dropdown.
+  // The newest model (highest version number) is auto-selected as default.
+  async function _loadAiImageModels() {
+    const sel = document.getElementById('sw-ai-img-model');
+    if (!sel) return;
+    try {
+      const r = await fetch('/api/story/ai_image_models').then(res => res.json());
+      if (!r.ok || !Array.isArray(r.models) || !r.models.length) return;
+
+      // Pick newest = highest version-like suffix (e.g. cx/gpt-5.5-image > cx/gpt-5.4-image)
+      // Falls back to first item if no version pattern detected.
+      const newestId = _pickNewestModel(r.models);
+
+      sel.replaceChildren();
+      // Group by prefix (cx/, dalle/, etc.)
+      const grouped = {};
+      for (const m of r.models) {
+        const prefix = (m.id || '').split('/')[0] || 'other';
+        (grouped[prefix] = grouped[prefix] || []).push(m);
+      }
+      for (const prefix of Object.keys(grouped)) {
+        const grp = document.createElement('optgroup');
+        grp.label = prefix;
+        for (const m of grouped[prefix]) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          // Mark newest with a star prefix in label
+          opt.textContent = (m.id === newestId ? '⭐ ' : '') + (m.label || m.id);
+          grp.appendChild(opt);
+        }
+        sel.appendChild(grp);
+      }
+      // Always default to the newest model (override any existing selection)
+      sel.value = newestId;
+      _log && _log(`📦 Đã load ${r.models.length} model · mặc định: ${newestId} (mới nhất)`, 'detail');
+    } catch (_) {
+      // Keep the static defaults from HTML
+    }
+  }
+
+  // Score a model id to find the newest. Higher score = newer.
+  // For "cx/gpt-5.5-image" → version=5.5 → score=5.5
+  // Falls back to lexical order so unknown models still rank consistently.
+  function _pickNewestModel(models) {
+    if (!models.length) return '';
+    let best = models[0].id;
+    let bestScore = -Infinity;
+    for (const m of models) {
+      const id = m.id || '';
+      // Extract first version-like number: "5.5", "4", "3.2"
+      const versionMatch = id.match(/(\d+(?:\.\d+)?)/g);
+      let score = 0;
+      if (versionMatch) {
+        // Combine all numbers in the id (newer naming usually has higher numbers throughout)
+        score = versionMatch.reduce((acc, v) => acc + parseFloat(v), 0);
+      }
+      // Prefer 'cx/' (Codex) over generic
+      if (id.startsWith('cx/')) score += 100;
+      if (id.includes('image')) score += 10;
+      if (score > bestScore) {
+        bestScore = score;
+        best = id;
+      }
+    }
+    return best;
+  }
+
   // ── Bootstrap ─────────────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('page-story')) {
       _initLangPills();
       _initSourcePills();
       loadVoices();
+      _loadAiImageModels();
     }
   });
 })();

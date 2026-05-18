@@ -168,6 +168,22 @@
       color: var(--accent);
       border-bottom-color: var(--accent);
     }
+
+    /* AI source pane busy state — fade content but keep cancel button visible */
+    #page-story .story-source[data-source="text"].ai-busy input,
+    #page-story .story-source[data-source="text"].ai-busy select,
+    #page-story .story-source[data-source="text"].ai-busy textarea {
+      opacity: .55;
+      pointer-events: none;
+    }
+    #page-story .story-source[data-source="text"].ai-busy button:not(#sw-ai-cancel-btn) {
+      opacity: .55;
+    }
+    #page-story #sw-ai-cancel-btn { animation: pulse-red 1.4s ease-in-out infinite; }
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,.4); }
+      50% { box-shadow: 0 0 0 6px rgba(192,57,43,0); }
+    }
   </style>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -182,7 +198,7 @@
         <div class="platform-tab active" data-source="mangadex" onclick="storySwitchSource('mangadex')">🌐 Tìm truyện online</div>
         <div class="platform-tab" data-source="urls"     onclick="storySwitchSource('urls')">🔗 Link chương trực tiếp</div>
         <div class="platform-tab" data-source="comic"    onclick="storySwitchSource('comic')">🗂 Upload ZIP (OCR)</div>
-        <div class="platform-tab" data-source="text"     onclick="storySwitchSource('text')">📝 Văn bản thuần</div>
+        <div class="platform-tab" data-source="text"     onclick="storySwitchSource('text')">🤖 Tạo truyện AI</div>
       </div>
 
       <!-- ── 1A. MangaPlus catalog search ─────────────────────────────
@@ -293,14 +309,177 @@
         </div>
       </div>
 
-      <!-- ── 1D. Plain text ─────────────────────────────────────────── -->
+      <!-- ── 1D. AI Story Generation — Full Pipeline ─────────────────── -->
       <div class="story-source hidden" data-source="text">
-        <div class="alert-info text-sm">
-          Dán nội dung lời thoại / lời kể của truyện. Sẽ được chia đều cho các panel ảnh.
+
+        <!-- Main: just the idea -->
+        <div class="card" style="margin-bottom:12px;border:1.5px solid var(--accent);box-shadow:none">
+          <div class="card-header" style="border-bottom-color:var(--accent-light)">
+            <span class="card-title">🤖 Tạo truyện AI</span>
+          </div>
+          <div class="card-body">
+            <div class="alert-info text-sm" style="margin-bottom:10px">
+              Chỉ cần nhập ý tưởng → AI tự viết truyện, tự tạo nhân vật, chọn bối cảnh và sinh ảnh cho từng cảnh.
+              Mở "Tuỳ chỉnh nâng cao" nếu muốn kiểm soát chi tiết hơn.
+            </div>
+            <div class="field">
+              <label>Đề bài / ý tưởng truyện</label>
+              <textarea id="sw-ai-prompt" rows="3" placeholder="Ví dụ: Một chàng trai nghèo tình cờ nhặt được chiếc nhẫn ma thuật, từ đó cuộc đời thay đổi hoàn toàn..."></textarea>
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label>Thể loại</label>
+                <select id="sw-ai-genre">
+                  <option value="">— Tự do —</option>
+                  <option value="kinh dị">👻 Kinh dị</option>
+                  <option value="tình cảm">💕 Tình cảm</option>
+                  <option value="hài hước">😂 Hài hước</option>
+                  <option value="phiêu lưu">⚔️ Phiêu lưu</option>
+                  <option value="trinh thám">🔍 Trinh thám</option>
+                  <option value="viễn tưởng">🚀 Viễn tưởng</option>
+                  <option value="cổ tích">🧚 Cổ tích</option>
+                  <option value="đời thường">🏠 Đời thường</option>
+                  <option value="huyền huyễn">🐉 Huyền huyễn</option>
+                  <option value="lịch sử">📜 Lịch sử</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Số cảnh</label>
+                <input id="sw-ai-panels" type="number" min="3" max="30" value="8" step="1">
+              </div>
+              <div class="field">
+                <label>Ngôn ngữ</label>
+                <select id="sw-ai-lang">
+                  <option value="vi" selected>Tiếng Việt</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="zh">中文</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Advanced options (collapsed by default) -->
+            <details style="margin-top:10px">
+              <summary class="text-sm" style="cursor:pointer;color:var(--accent);font-weight:600">⚙️ Tuỳ chỉnh nâng cao (nhân vật, phong cách, địa điểm...)</summary>
+              <div style="margin-top:10px;padding:12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+
+                <!-- Characters -->
+                <div style="margin-bottom:12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                    <label style="margin:0;font-weight:700">👤 Nhân vật <span class="text-xs text-muted">(để trống = AI tự tạo)</span></label>
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="storyAiAddChar()">＋ Thêm</button>
+                  </div>
+                  <div id="sw-ai-chars">
+                    <div class="sw-ai-char-row" style="display:grid;grid-template-columns:140px 1fr 36px;gap:6px;margin-bottom:5px;align-items:center">
+                      <input type="text" placeholder="Tên" class="sw-ai-char-name" style="font-size:12px;padding:6px 8px">
+                      <input type="text" placeholder="Mô tả ngoại hình (vd: nam 25t, tóc đen, áo hoodie xám)" class="sw-ai-char-desc" style="font-size:12px;padding:6px 8px">
+                      <button class="btn btn-danger btn-sm" type="button" onclick="this.closest('.sw-ai-char-row').remove()" style="padding:4px 8px">✕</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Visual style & Location -->
+                <div class="grid-2" style="margin-bottom:10px">
+                  <div class="field">
+                    <label>🎨 Phong cách hình ảnh <span class="text-xs text-muted">(để mặc định = AI tự chọn)</span></label>
+                    <select id="sw-ai-art-style">
+                      <option value="" selected>— AI tự chọn phù hợp —</option>
+                      <option value="realistic photography">📷 Ảnh thực tế</option>
+                      <option value="anime illustration">🎨 Anime / Manga</option>
+                      <option value="3D render, Pixar style">🧊 3D Cartoon (Pixar)</option>
+                      <option value="dark fantasy oil painting">🖌️ Tranh sơn dầu</option>
+                      <option value="watercolor illustration">💧 Màu nước</option>
+                      <option value="comic book style, bold lines">📰 Comic Mỹ</option>
+                      <option value="cinematic film still">🎬 Cinematic</option>
+                      <option value="cyberpunk neon digital art">🌃 Cyberpunk</option>
+                      <option value="Studio Ghibli style">🌿 Studio Ghibli</option>
+                      <option value="horror dark atmosphere">👁 Horror / Dark</option>
+                      <option value="chibi cute kawaii">🧸 Chibi / Kawaii</option>
+                      <option value="vintage retro illustration">📻 Vintage / Retro</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>📍 Địa điểm / bối cảnh <span class="text-xs text-muted">(tuỳ chọn)</span></label>
+                    <input id="sw-ai-location" type="text" placeholder="Để trống = AI tự chọn theo nội dung">
+                  </div>
+                </div>
+                <div class="field">
+                  <label>📝 Ghi chú thêm cho ảnh <span class="text-xs text-muted">(tuỳ chọn)</span></label>
+                  <input id="sw-ai-img-note" type="text" placeholder="vd: ánh sáng ấm, tone lạnh, góc nhìn cao...">
+                </div>
+
+                <!-- Image model -->
+                <div class="grid-3">
+                  <div class="field">
+                    <label>🤖 Model sinh ảnh</label>
+                    <select id="sw-ai-img-model">
+                      <option value="cx/gpt-5.5-image" selected>GPT-5.5 Image (mới nhất)</option>
+                      <option value="cx/gpt-5.4-image">GPT-5.4 Image</option>
+                      <option value="cx/gpt-5.3-image">GPT-5.3 Image</option>
+                      <option value="cx/gpt-5.2-image">GPT-5.2 Image</option>
+                    </select>
+                    <div class="text-xs text-muted mt-4">Dùng 9Router → Codex (cần Codex Plus/Pro).</div>
+                  </div>
+                  <div class="field">
+                    <label>📐 Tỷ lệ ảnh</label>
+                    <select id="sw-ai-img-ratio">
+                      <option value="9:16" selected>9:16 (Dọc)</option>
+                      <option value="16:9">16:9 (Ngang)</option>
+                      <option value="1:1">1:1 (Vuông)</option>
+                      <option value="3:4">3:4 (Dọc nhẹ)</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Chất lượng</label>
+                    <select id="sw-ai-img-quality">
+                      <option value="standard" selected>Standard</option>
+                      <option value="hd">HD</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <!-- Action buttons -->
+            <div class="btn-group" style="margin-top:12px">
+              <button class="btn btn-primary btn-lg" type="button" onclick="storyAiFullPipeline()">🚀 Tạo truyện + Sinh ảnh</button>
+              <button class="btn btn-secondary" type="button" onclick="storyAiGenerate()">📝 Chỉ tạo text</button>
+              <button class="btn btn-secondary btn-sm" type="button" onclick="storyAiLoadSessions()">📂 Load session cũ</button>
+              <button class="btn btn-secondary btn-sm" type="button" onclick="storyAiClear()">🧹 Xoá</button>
+              <button id="sw-ai-cancel-btn" class="btn btn-danger btn-sm hidden" type="button" onclick="storyAiCancel()">⏹ Hủy tiến trình</button>
+            </div>
+            <span id="sw-ai-status" class="text-xs text-muted" style="display:block;margin-top:6px"></span>
+          </div>
         </div>
+
+        <!-- Progress -->
+        <div id="sw-ai-progress" class="hidden" style="margin-bottom:12px">
+          <div class="progress-row">
+            <span class="progress-label" id="sw-ai-progress-msg">Đang tạo...</span>
+            <div class="progress-bar-wrap"><div id="sw-ai-progress-bar" class="progress-bar pb-overall"></div></div>
+            <span class="progress-pct" id="sw-ai-progress-pct">0%</span>
+          </div>
+        </div>
+
+        <!-- Result: editable story text -->
         <div class="field">
-          <label>Văn bản truyện</label>
-          <textarea id="sw-text" rows="10" placeholder="Dán nội dung lời thoại / lời kể ở đây..."></textarea>
+          <label>Nội dung truyện <span class="text-xs text-muted">(mỗi đoạn = 1 cảnh, có thể chỉnh sửa)</span></label>
+          <textarea id="sw-text" rows="10" placeholder="Truyện AI sẽ xuất hiện ở đây... Bạn cũng có thể tự nhập/dán văn bản."></textarea>
+        </div>
+
+        <!-- Scene preview (generated images + text) -->
+        <div id="sw-ai-scenes-card" class="card hidden" style="box-shadow:none;margin-top:12px">
+          <div class="card-header">
+            <span class="card-title">🎞 Preview các cảnh</span>
+            <div class="card-actions" style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" type="button" onclick="storyAiCreateVideo()">🎬 Tạo video ngay</button>
+              <button class="btn btn-secondary btn-sm" type="button" onclick="storyAiSendToPanels()">📤 Gửi sang Panels (chỉnh chi tiết)</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="sw-ai-scenes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -526,6 +705,21 @@
                  style="width:100%;max-height:540px;margin-top:10px;border-radius:6px;background:#000"></video>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       5. Log panel — visible during AI generation + render
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="card card-collapsible">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="card-title">📝 Nhật ký</span>
+      <div class="card-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-secondary btn-sm" type="button" onclick="clearLog('sw-log')">Xóa</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="log-box" id="sw-log" style="height:280px"></div>
     </div>
   </div>
 

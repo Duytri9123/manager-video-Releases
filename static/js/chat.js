@@ -431,6 +431,55 @@
     _toast('9Router OK (' + (data.model || '') + '): ' + (data.content || '(rỗng)').slice(0, 80), 'success');
   }
 
+  // ── Image generation triggered from chat input ─────────────────────────
+  async function _handleImageGenInChat(text) {
+    // Strip the trigger prefix to get the actual prompt.
+    let prompt = text.replace(/^(vẽ|tạo ảnh|tạo hình|sinh ảnh|draw|paint|imagine)\s+/i, '').trim();
+    prompt = prompt.replace(/^(generate|create|make)\s+(an?\s+)?image\s+(of\s+)?/i, '').trim();
+    if (!prompt) prompt = text; // fallback to full text if stripping removed everything
+
+    const placeholder = _appendBubble('assistant', '🎨 Đang tạo ảnh…', 'Image AI');
+    const payload = { prompt, model: 'cx/gpt-5.5-image' };
+
+    try {
+      const { data, ok } = await _post('/api/chatbot/image', payload);
+      if (!ok || data?.ok === false) {
+        const errMsg = data?.message || data?.error || 'Lỗi tạo ảnh';
+        placeholder.bubble.textContent = '❌ ' + (typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+        placeholder.bubble.style.background = 'var(--error-bg)';
+        placeholder.bubble.style.color = 'var(--error)';
+        return;
+      }
+      // Render images in the bubble.
+      placeholder.bubble.textContent = '';
+      placeholder.bubble.style.padding = '6px';
+      placeholder.bubble.style.background = 'var(--bg2)';
+      const images = data.images || [];
+      if (!images.length) {
+        placeholder.bubble.textContent = '⚠ Không có ảnh trả về.';
+        return;
+      }
+      for (const img of images) {
+        const el = document.createElement('img');
+        el.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin-bottom:6px';
+        if (img.url) el.src = img.url;
+        else if (img.b64_json) el.src = 'data:image/png;base64,' + img.b64_json;
+        placeholder.bubble.appendChild(el);
+      }
+      const meta = document.createElement('div');
+      meta.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:4px';
+      meta.textContent = '✓ ' + (data.model || 'image') + ' · prompt: ' + prompt.slice(0, 60);
+      placeholder.bubble.appendChild(meta);
+      // Add to history as a note (not replayed to LLM).
+      state.history.push({ role: 'user', content: text });
+      state.history.push({ role: 'assistant', content: '[Đã tạo ảnh: ' + prompt.slice(0, 80) + ']' });
+    } catch (e) {
+      placeholder.bubble.textContent = '❌ ' + e.message;
+      placeholder.bubble.style.background = 'var(--error-bg)';
+      placeholder.bubble.style.color = 'var(--error)';
+    }
+  }
+
   // ── Chat UI ───────────────────────────────────────────────────────────
   function _appendBubble(role, text, modelLabel) {
     const wrap = document.getElementById('chat-messages');
@@ -700,6 +749,23 @@
     if (!text) return;
     if (!state.loadedConfig) await chatLoadConfig();
     if (!state.status) await chatRefreshStatus();
+
+    // ── Auto-detect image generation intent ──────────────────────────────
+    const textL = text.toLowerCase().trim();
+    const IMAGE_TRIGGERS = [
+      /^vẽ\s/i, /^tạo ảnh\s/i, /^tạo hình\s/i, /^sinh ảnh\s/i,
+      /^draw\s/i, /^generate\s+(an?\s+)?image/i, /^create\s+(an?\s+)?image/i,
+      /^paint\s/i, /^make\s+(an?\s+)?image/i, /^imagine\s/i,
+    ];
+    const isImageRequest = IMAGE_TRIGGERS.some(rx => rx.test(textL));
+    if (isImageRequest) {
+      _appendBubble('user', text);
+      if (inp) inp.value = '';
+      _setSendBusy(true);
+      await _handleImageGenInChat(text);
+      _setSendBusy(false);
+      return;
+    }
 
     const model = document.getElementById('chat-active-model')?.value || '';
     const stream = !!document.getElementById('chat-stream-toggle')?.checked;

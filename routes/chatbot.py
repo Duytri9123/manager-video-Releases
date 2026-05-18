@@ -41,7 +41,7 @@ bp = Blueprint("chatbot", __name__)
 
 # ── Defaults pinned to 9Router conventions ─────────────────────────────────
 _DEFAULT_ENDPOINT = "http://localhost:20128/v1"
-_DEFAULT_MODEL = "duytris"  # combo present in default 9Router installs
+_DEFAULT_MODEL = "cx/gpt-5.5"  # User-preferred default — works for chat, vision, and web
 _CLI_TOKEN_HEADER = "x-9r-cli-token"
 _CLI_TOKEN_SALT = "9r-cli-auth"
 _MACHINE_ID_SALT_DEFAULT = "endpoint-proxy-salt"
@@ -717,12 +717,19 @@ def chatbot_media_models():
 def chatbot_image():
     """Generate an image via 9Router /v1/images/generations.
 
+    Supports both standard JSON responses (Gemini, OpenAI) and SSE streaming
+    responses (Codex cx/* models). The Codex provider returns Server-Sent
+    Events with progress updates and a final `partial_image` event containing
+    the base64-encoded image.
+
     Body:
       prompt (str, required)
-      model (str, optional)            — default: first image model on the install
+      model (str, optional)            — default: cx/gpt-5.5-image
       n     (int, default 1)
-      size  (str, optional)            — "1024x1024" etc.
-      response_format ("url" | "b64_json")
+      size  (str, optional)            — "1024x1024", "auto", etc.
+      quality (str, optional)          — "auto", "high", "low"
+      background (str, optional)       — "auto", "transparent", "opaque"
+      output_format (str, optional)    — "png", "jpeg", "webp"
     """
     data = request.json or {}
     prompt = str(data.get("prompt") or "").strip()
@@ -731,43 +738,150 @@ def chatbot_image():
 
     nr = _nine_router_cfg()
     api_key = (nr.get("api_key") or "").strip()
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
 
+    model = (data.get("model") or "").strip() or "cx/gpt-5.5-image"
     payload: Dict[str, Any] = {
         "prompt": prompt,
-        "model": (data.get("model") or "").strip() or "openai/dall-e-3",
+        "model": model,
         "n": int(data.get("n") or 1),
-        "response_format": (data.get("response_format") or "url"),
     }
-    if data.get("size"):
-        payload["size"] = str(data["size"])
+    # Size / quality / background / output_format — Codex models use these.
+    size = data.get("size") or "auto"
+    payload["size"] = str(size)
     if data.get("quality"):
         payload["quality"] = str(data["quality"])
+    else:
+        payload["quality"] = "auto"
+    if data.get("background"):
+        payload["background"] = str(data["background"])
+    else:
+        payload["background"] = "auto"
+    if data.get("output_format"):
+        payload["output_format"] = str(data["output_format"])
+    else:
+        payload["output_format"] = "png"
     if data.get("style"):
         payload["style"] = str(data["style"])
+    # Legacy field — only add for non-Codex models that expect it.
+    if not model.startswith("cx/"):
+        payload["response_format"] = data.get("response_format") or "b64_json"
+        # Remove Codex-specific fields that other providers don't understand.
+        payload.pop("output_format", None)
+        payload.pop("background", None)
 
     url = f"{nr['endpoint'].rstrip('/')}/images/generations"
+
+    # Use `requests` with stream=True because Codex image models return SSE.
     try:
-        status, body = _http_json(url, method="POST", headers=headers,
-                                  payload=payload, timeout=180)
+        import requests as _requests  # type: ignore
+    except Exception as exc:
+        return jsonify({"ok": False, "error": "requests_unavailable", "message": str(exc)}), 500
+
+    req_headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+    if api_key:
+        req_headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        upstream = _requests.post(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=req_headers,
+            stream=True,
+            timeout=(10, 300),  # (connect, read)
+        )
     except Exception as exc:
         return jsonify({"ok": False, "error": "unreachable", "message": str(exc)}), 502
-    if status >= 400:
-        msg = body
-        if isinstance(body, dict):
-            msg = (body.get("error") or {}).get("message") or body
-        return jsonify({"ok": False, "status": status, "error": msg}), 502
-    if not isinstance(body, dict):
-        return jsonify({"ok": False, "error": "invalid_response", "raw": body}), 502
 
-    items = body.get("data") or []
+    if upstream.status_code >= 400:
+        try:
+            err_body = upstream.text
+            err_json = json.loads(err_body) if err_body else {}
+            msg = (err_json.get("error") or {}).get("message") or err_body
+        except Exception:
+            msg = upstream.text or f"HTTP {upstream.status_code}"
+        upstream.close()
+        return jsonify({"ok": False, "status": upstream.status_code, "error": msg}), 502
+
+    # Determine if response is SSE or plain JSON.
+    content_type = (upstream.headers.get("Content-Type") or "").lower()
+    is_sse = "text/event-stream" in content_type
+
+    if not is_sse:
+        # Standard JSON response (Gemini, OpenAI native).
+        try:
+            body = upstream.json()
+        except Exception:
+            body = {}
+        upstream.close()
+        if not isinstance(body, dict):
+            return jsonify({"ok": False, "error": "invalid_response"}), 502
+        items = body.get("data") or []
+        return jsonify({
+            "ok": True,
+            "model": model,
+            "images": items,
+            "raw": {"created": body.get("created"), "model": body.get("model")},
+        })
+
+    # SSE streaming response (Codex cx/* models).
+    # Collect all b64_json images from `partial_image` events.
+    images: list = []
+    try:
+        buf = ""
+        for chunk in upstream.iter_content(chunk_size=None, decode_unicode=True):
+            if not chunk:
+                continue
+            buf += chunk
+
+        # Parse SSE events from the accumulated buffer.
+        events = buf.split("\n\n")
+        for ev in events:
+            lines = ev.strip().split("\n")
+            event_name = ""
+            data_parts = []
+            for line in lines:
+                if line.startswith("event:"):
+                    event_name = line[6:].strip()
+                elif line.startswith("data:"):
+                    data_parts.append(line[5:].strip())
+            if not data_parts:
+                continue
+            data_str = "\n".join(data_parts)
+            if event_name == "partial_image" or (not event_name and '"b64_json"' in data_str):
+                try:
+                    img_data = json.loads(data_str)
+                    if img_data.get("b64_json"):
+                        images.append({"b64_json": img_data["b64_json"]})
+                except (json.JSONDecodeError, TypeError):
+                    # The b64_json might be too large for a single data line;
+                    # try to extract it directly.
+                    pass
+            elif event_name == "result" or (not event_name and '"data"' in data_str):
+                # Some versions wrap the final result in a standard envelope.
+                try:
+                    result_data = json.loads(data_str)
+                    for item in (result_data.get("data") or []):
+                        if isinstance(item, dict) and (item.get("b64_json") or item.get("url")):
+                            images.append(item)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+    except Exception as exc:
+        LOGGER.warning("chatbot_image SSE parse error: %s", exc)
+    finally:
+        upstream.close()
+
+    if not images:
+        return jsonify({
+            "ok": False,
+            "error": "no_image_in_response",
+            "message": "9Router trả về SSE nhưng không tìm thấy ảnh. Thử lại hoặc đổi model.",
+        }), 502
+
     return jsonify({
         "ok": True,
-        "model": payload["model"],
-        "images": items,           # [{url} | {b64_json}]
-        "raw": {"created": body.get("created"), "model": body.get("model")},
+        "model": model,
+        "images": images,
+        "raw": {"model": model},
     })
 
 
@@ -964,17 +1078,14 @@ def _ensure_messages(data: Dict[str, Any]) -> Optional[Tuple[int, Dict[str, Any]
 # Words that imply the user wants real reasoning (write code, debug, plan).
 # Matched case-insensitively, word-bounded.
 _POWER_KEYWORDS = (
-    # programming / engineering
-    "code", "debug", "refactor", "algorithm", "architecture", "optimi",
-    "regression", "performance", "concurrency", "async", "race condition",
-    "memory leak", "stack trace", "exception",
-    # math / reasoning
+    # math / reasoning (heavy logic — needs sonnet/gpt-5.5)
     "prove", "derive", "calculate", "equation", "theorem",
-    # long-form
-    "essay", "summary of", "translate this article", "kế hoạch", "phân tích",
-    "viết kịch bản", "viết bài", "soạn bài",
+    # long-form planning
+    "essay", "summary of", "translate this article",
+    "kế hoạch chi tiết", "phân tích chi tiết",
+    "viết kịch bản", "viết bài dài", "soạn bài",
     # multi-step
-    "step by step", "plan", "outline", "design",
+    "step by step", "outline detailed",
 )
 _FAST_KEYWORDS = (
     # greetings / pleasantries — never need a heavy model.
@@ -983,17 +1094,57 @@ _FAST_KEYWORDS = (
     # one-shot lookups
     "what is", "định nghĩa", "viết tắt",
 )
+# Code-related signals → prefer a coder-tuned model (qwen3-coder, gpt-5.5-codex…).
+_CODE_KEYWORDS = (
+    "code", "debug", "refactor", "stack trace", "traceback", "exception",
+    "regex", "algorithm", "function", "class", "method", "variable",
+    "compile", "syntax error", "merge conflict", "pull request",
+    "lập trình", "viết hàm", "viết class", "fix bug", "sửa lỗi code",
+    "implement", "snippet",
+)
+# Realtime / current-info signals → prefer a model with web (cx/gpt-5.5 or
+# gemini-pro). These should NOT be answered from a stale text-only model.
+_WEB_KEYWORDS = (
+    "tin tức", "tin mới", "mới nhất", "hôm nay", "hôm qua",
+    "tuần này", "tháng này", "năm nay",
+    "giá vàng", "giá bitcoin", "tỷ giá", "thời tiết",
+    "lịch", "kết quả", "tỉ số", "lịch thi đấu",
+    "news", "latest", "today", "yesterday", "this week", "right now",
+    "current", "currently", "recent", "weather", "stock price", "score",
+    "tìm trên mạng", "search web", "google", "tra cứu",
+)
+
+
+def _has_image_input(messages: list) -> bool:
+    """True if any user turn contains an image_url part — needs a vision model."""
+    for m in messages:
+        if m.get("role") != "user":
+            continue
+        content = m.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                return True
+    return False
 
 
 def _classify_complexity(messages: list, thresholds: Dict[str, Any]) -> Tuple[str, str]:
     """Return (tier_name, reason) based on the trailing user turn + history.
 
-    Heuristic order (first hit wins):
-      1. very short prompt + small history  → fast
-      2. very long prompt OR power keyword  → power
-      3. enough back-and-forth in session   → balanced
-      4. fallback                           → balanced
+    Tiers (first hit wins):
+      vision    → user attached an image
+      code      → coding-related keywords
+      web       → realtime / "what's the latest" queries
+      fast      → very short prompt + small history, or greetings
+      power     → very long prompt OR power keyword
+      balanced  → default mid-range
     """
+    # 0. Vision short-circuit — image attachments need a multimodal model
+    #    regardless of how short the text part is.
+    if _has_image_input(messages):
+        return "vision", "có ảnh đính kèm → cần model vision"
+
     last_user = ""
     user_turns = 0
     for m in messages:
@@ -1017,7 +1168,15 @@ def _classify_complexity(messages: list, thresholds: Dict[str, Any]) -> Tuple[st
 
     has_power_kw = any(kw in text_l for kw in _POWER_KEYWORDS)
     has_fast_kw = any(re.search(r"\b" + re.escape(kw) + r"\b", text_l) for kw in _FAST_KEYWORDS)
+    has_code_kw = any(kw in text_l for kw in _CODE_KEYWORDS)
+    has_web_kw = any(kw in text_l for kw in _WEB_KEYWORDS)
 
+    # Code beats power because a coder model handles long code better than
+    # a generic reasoning model.
+    if has_code_kw:
+        return "code", "câu hỏi liên quan code → coder model"
+    if has_web_kw:
+        return "web", "câu hỏi cần thông tin realtime → model có web"
     if has_power_kw:
         return "power", f"keyword (≥1 trong {len(_POWER_KEYWORDS)} từ khoá nặng)"
     if n_chars >= power_min:
@@ -1031,6 +1190,62 @@ def _classify_complexity(messages: list, thresholds: Dict[str, Any]) -> Tuple[st
     return "balanced", "mặc định trung bình"
 
 
+# Built-in defaults so smart routing works out of the box, even before the
+# user opens the routing settings tab. Keys mirror _classify_complexity tiers.
+# These are used only when the corresponding tier in `nine_router.routing.tiers`
+# is empty.
+_DEFAULT_TIER_MODELS: Dict[str, Tuple[str, ...]] = {
+    # Vision: try Gemini first (cheap, fast), fall back to gpt-5.5 (also vision).
+    "vision":   ("gemini-2.5-pro", "cx/gpt-5.5", "kr/claude-sonnet-4.5"),
+    # Code:    qwen3-coder-next is purpose-built; gpt-5.3-codex is a strong fallback.
+    "code":     ("kr/qwen3-coder-next", "cx/gpt-5.3-codex", "cx/gpt-5.5"),
+    # Web/realtime: cx/gpt-5.5 has live browsing in 9Router; otherwise Gemini.
+    "web":      ("cx/gpt-5.5", "gemini-2.5-pro", "kr/claude-sonnet-4.5"),
+    # Fast:    haiku is the cheapest "good" model.
+    "fast":     ("kr/claude-haiku-4.5", "kr/glm-5", "cx/gpt-5.4"),
+    # Balanced: gpt-5.5 — user's stated preference.
+    "balanced": ("cx/gpt-5.5", "kr/claude-sonnet-4.5", "gemini-2.5-pro"),
+    # Power:   sonnet for deep reasoning, then gpt-5.5 codex-xhigh.
+    "power":    ("kr/claude-sonnet-4.5", "cx/gpt-5.3-codex-xhigh", "cx/gpt-5.5"),
+}
+
+
+def _pick_default_model(tier: str, available_ids: set) -> Optional[str]:
+    """Pick the first default model for `tier` that actually exists in
+    9Router's /v1/models list (passed in as a set of ids)."""
+    for cand in _DEFAULT_TIER_MODELS.get(tier, ()):
+        if cand in available_ids:
+            return cand
+    return None
+
+
+# Cache of the available model ids so we don't hit 9Router on every chat.
+_models_cache: Dict[str, Any] = {"ids": set(), "ts": 0.0}
+
+
+def _available_model_ids(endpoint: str, api_key: str) -> set:
+    """Return the set of model ids 9Router currently exposes. 30 s TTL."""
+    now = time.time()
+    if _models_cache["ids"] and (now - _models_cache["ts"]) < 30.0:
+        return _models_cache["ids"]
+    headers = {"Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        status, body = _http_json(
+            (endpoint or "").rstrip("/") + "/models",
+            headers=headers, timeout=_LIGHT_TIMEOUT,
+        )
+        if status == 200 and isinstance(body, dict):
+            ids = {(it or {}).get("id") for it in (body.get("data") or []) if (it or {}).get("id")}
+            _models_cache["ids"] = ids
+            _models_cache["ts"] = now
+            return ids
+    except Exception as exc:
+        LOGGER.debug("_available_model_ids: %s", exc)
+    return _models_cache["ids"]
+
+
 def _resolve_routed_model(
     data: Dict[str, Any], nr: Dict[str, Any]
 ) -> Tuple[str, Dict[str, Any]]:
@@ -1038,7 +1253,8 @@ def _resolve_routed_model(
 
     Priority:
       1. Explicit `model` in the request body — always wins.
-      2. `routing.mode == "auto"` — classify and pick the tier model.
+      2. `routing.mode == "auto"` — classify and pick the tier model from
+         user config, falling back to built-in `_DEFAULT_TIER_MODELS`.
       3. Otherwise fall back to `default_model`.
     """
     # 1. Explicit override.
@@ -1058,22 +1274,135 @@ def _resolve_routed_model(
     # 2. Auto routing.
     tier, reason = _classify_complexity(data.get("messages") or [], thresholds)
     model = (tiers.get(tier) or "").strip()
-    if not model:
-        # Tier missing in config → fall back to default but keep the reasoning trail.
-        return nr["default_model"], {
-            "mode": "auto", "tier": tier, "reason": reason + " (tier model trống → default)",
+    if model:
+        return model, {"mode": "auto", "tier": tier, "reason": reason}
+
+    # No user-configured tier model → use built-in default if it's available
+    # in the live model catalog. This is what makes routing "just work"
+    # without requiring the user to fill the routing tab.
+    available = _available_model_ids(nr.get("endpoint", _DEFAULT_ENDPOINT), nr.get("api_key", ""))
+    fallback = _pick_default_model(tier, available) if available else None
+    if fallback:
+        return fallback, {
+            "mode": "auto", "tier": tier,
+            "reason": reason + f" → built-in default cho tier {tier!r}",
         }
-    return model, {"mode": "auto", "tier": tier, "reason": reason}
+
+    # Last resort: configured default model.
+    return nr["default_model"], {
+        "mode": "auto", "tier": tier,
+        "reason": reason + " (không tìm được tier model → default)",
+    }
+
+
+_NO_TOOL_GUARDRAIL = (
+    "You are a helpful assistant inside a Vietnamese video tooling app. "
+    "You don't have live tools — never emit pseudo-tool tags like "
+    "<web_search>, <tool_use>, <invoke>, or <function_calls>. "
+    "If a system message provides web search results, use them and cite "
+    "sources as [N]. If realtime info is asked but no results were given, "
+    "say so plainly and suggest where the user could look. "
+    "Default to Vietnamese unless the user writes in another language."
+)
+
+
+def _last_user_text(messages: list) -> str:
+    """Extract the trailing user turn's text content."""
+    last = ""
+    for m in messages:
+        if m.get("role") != "user":
+            continue
+        content = m.get("content")
+        if isinstance(content, str):
+            last = content
+        elif isinstance(content, list):
+            last = " ".join(
+                p.get("text", "") for p in content
+                if isinstance(p, dict) and p.get("type") == "text"
+            )
+    return last.strip()
+
+
+def _maybe_inject_web_context(messages: list, tier: str, nr: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """If the trailing user query looks realtime, perform a real web search
+    and inject the results as a system message so the LLM has fresh facts
+    to work from. Runs whenever the routing tier is 'web' OR the user's
+    text matches realtime keywords directly — this ensures even an
+    explicit model pick (which bypasses tiering) still gets web context.
+    """
+    query = _last_user_text(messages)
+    if not query or len(query) < 4:
+        return None
+
+    # Decide whether this query needs web grounding. Tier="web" is a strong
+    # signal; otherwise fall back to keyword matching on the raw query so
+    # explicit model picks (tier="explicit") still get the boost.
+    needs_web = tier == "web"
+    if not needs_web:
+        try:
+            from utils import web_search as _ws
+            needs_web = _ws._looks_like_news(query)
+        except Exception:
+            needs_web = False
+    if not needs_web:
+        return None
+
+    try:
+        from utils import web_search as _ws
+        results = _ws.search(
+            query, kind="auto", lang="vi", region="VN", limit=6,
+            endpoint=nr.get("endpoint", _DEFAULT_ENDPOINT),
+            api_key=nr.get("api_key", ""),
+        )
+    except Exception as exc:  # pragma: no cover — never fatal
+        LOGGER.warning("web_search failed for %r: %s", query[:80], exc)
+        return None
+    if not results:
+        return None
+    block = _ws.format_for_prompt(results, max_items=6)
+    sys_msg = (
+        "Bạn vừa được cấp ngữ cảnh web mới nhất ngay bên dưới. Trả lời "
+        "câu hỏi của user dựa trên các kết quả này, trích dẫn nguồn dạng "
+        "[N] khi cần (N tương ứng số thứ tự bên dưới). Nếu kết quả không "
+        "trả lời được câu hỏi, hãy nói thẳng. Tuyệt đối KHÔNG nói rằng "
+        "bạn không có quyền truy cập Internet — vì bạn vừa được cấp dữ "
+        "liệu web bên dưới rồi.\n\nNguồn:\n\n" + block
+    )
+    messages.insert(0, {"role": "system", "content": sys_msg})
+    return {"query": query, "count": len(results),
+            "sources": [{"title": r["title"], "url": r["url"]} for r in results]}
 
 
 def _build_chat_payload(data: Dict[str, Any], nr: Dict[str, Any], stream: bool) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Build the upstream payload + return routing metadata for logging/UI."""
     messages = list(data.get("messages") or [])
     sys_prompt = (nr.get("system_prompt") or "").strip()
-    if sys_prompt and not any(m.get("role") == "system" for m in messages):
-        messages = [{"role": "system", "content": sys_prompt}, *messages]
 
     model, route_meta = _resolve_routed_model(data, nr)
+
+    # Inject realtime web context BEFORE the guardrail/system prompts. This
+    # gives the model fresh facts so it doesn't refuse with "I have no web
+    # access" — because for this turn it effectively does.
+    web_meta = _maybe_inject_web_context(messages, route_meta.get("tier") or "", nr)
+    if web_meta:
+        route_meta["web_search"] = web_meta
+
+    # Always inject the no-tools guardrail so models routed through the Kiro
+    # proxy (Sonnet/Haiku) don't hallucinate tool tags. User-provided
+    # system prompt is appended after the guardrail.
+    base_sys = _NO_TOOL_GUARDRAIL
+    if sys_prompt:
+        base_sys = base_sys + "\n\n" + sys_prompt
+    has_user_system = any(m.get("role") == "system" for m in messages)
+    if has_user_system:
+        # Prepend our guardrail to the FIRST system message.
+        for m in messages:
+            if m.get("role") == "system":
+                m["content"] = _NO_TOOL_GUARDRAIL + "\n\n" + str(m.get("content") or "")
+                break
+    else:
+        messages = [{"role": "system", "content": base_sys}, *messages]
+
     payload = {
         "model": model,
         "messages": messages,
@@ -1274,3 +1603,149 @@ def chatbot_test():
         "model": actual_model,
         "elapsed_ms": elapsed_ms,
     })
+
+
+# ─── Session persistence (SQLite) ─────────────────────────────────────────
+# The floating chat widget syncs sessions/messages to a local SQLite store
+# so conversations survive browser cache flushes and can be replayed across
+# devices that hit this same backend. Keep these endpoints tolerant: failures
+# in persistence must not break the live chat flow (the UI also keeps a
+# localStorage shadow copy).
+from core import chat_store as _chat_store  # noqa: E402  (import after blueprint setup)
+
+
+def _store_ready() -> bool:
+    return _chat_store._DB_PATH is not None  # type: ignore[attr-defined]
+
+
+@bp.route("/api/chatbot/sessions", methods=["GET"])
+def chatbot_list_sessions():
+    if not _store_ready():
+        return jsonify({"ok": False, "error": "store_unavailable"}), 503
+    try:
+        rows = _chat_store.list_sessions(limit=int(request.args.get("limit") or 200))
+    except Exception as exc:
+        LOGGER.warning("chatbot_list_sessions: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "sessions": rows})
+
+
+@bp.route("/api/chatbot/sessions", methods=["POST"])
+def chatbot_create_session():
+    """Create or upsert a session.
+
+    Body: { id, title?, model? }
+    """
+    if not _store_ready():
+        return jsonify({"ok": False, "error": "store_unavailable"}), 503
+    data = request.json or {}
+    sid = (str(data.get("id") or "")).strip()
+    if not sid:
+        return jsonify({"ok": False, "error": "id required"}), 400
+    try:
+        out = _chat_store.upsert_session(
+            sid,
+            title=(data.get("title") or None),
+            model=(data.get("model") or None),
+        )
+    except Exception as exc:
+        LOGGER.warning("chatbot_create_session: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "session": out})
+
+
+@bp.route("/api/chatbot/sessions/<sid>", methods=["GET"])
+def chatbot_get_session(sid: str):
+    if not _store_ready():
+        return jsonify({"ok": False, "error": "store_unavailable"}), 503
+    try:
+        sess = _chat_store.get_session(sid)
+        if not sess:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        msgs = _chat_store.list_messages(sid, limit=int(request.args.get("limit") or 500))
+    except Exception as exc:
+        LOGGER.warning("chatbot_get_session: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "session": sess, "messages": msgs})
+
+
+@bp.route("/api/chatbot/sessions/<sid>", methods=["PATCH"])
+def chatbot_rename_session(sid: str):
+    if not _store_ready():
+        return jsonify({"ok": False, "error": "store_unavailable"}), 503
+    data = request.json or {}
+    title = str(data.get("title") or "").strip()
+    if not title:
+        return jsonify({"ok": False, "error": "title required"}), 400
+    try:
+        ok = _chat_store.rename_session(sid, title)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": ok})
+
+
+@bp.route("/api/chatbot/sessions/<sid>", methods=["DELETE"])
+def chatbot_delete_session(sid: str):
+    if not _store_ready():
+        return jsonify({"ok": False, "error": "store_unavailable"}), 503
+    hard = (request.args.get("hard") or "").lower() in ("1", "true", "yes")
+    try:
+        ok = _chat_store.delete_session(sid, hard=hard)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": ok})
+
+
+@bp.route("/api/chatbot/sessions/<sid>/messages", methods=["POST"])
+def chatbot_add_message(sid: str):
+    """Append a single message to a session.
+
+    Body:
+      role: 'user' | 'assistant' | 'system'  (required)
+      content: str | list (multimodal parts) (required)
+      attachments: optional [{kind,name,size,mime,thumbDataUrl?}]
+      title: optional — also rename the session in the same call
+      model: optional — also save active model
+    """
+    if not _store_ready():
+        return jsonify({"ok": False, "error": "store_unavailable"}), 503
+    data = request.json or {}
+    role = str(data.get("role") or "").strip()
+    if role not in ("user", "assistant", "system"):
+        return jsonify({"ok": False, "error": "role required"}), 400
+    if "content" not in data:
+        return jsonify({"ok": False, "error": "content required"}), 400
+    try:
+        # Make sure the session exists (auto-upsert).
+        _chat_store.upsert_session(sid, title=data.get("title"), model=data.get("model"))
+        msg = _chat_store.add_message(
+            sid,
+            role,
+            data.get("content"),
+            attachments=data.get("attachments"),
+        )
+    except Exception as exc:
+        LOGGER.warning("chatbot_add_message: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "message": msg})
+
+
+@bp.route("/api/chatbot/sessions/<sid>/messages", methods=["PUT"])
+def chatbot_replace_messages(sid: str):
+    """Replace all messages in a session — for one-shot syncs after offline use.
+
+    Body: { messages: [{role,content,attachments?,ts?}, ...] }
+    """
+    if not _store_ready():
+        return jsonify({"ok": False, "error": "store_unavailable"}), 503
+    data = request.json or {}
+    msgs = data.get("messages")
+    if not isinstance(msgs, list):
+        return jsonify({"ok": False, "error": "messages must be a list"}), 400
+    try:
+        _chat_store.upsert_session(sid)
+        n = _chat_store.replace_messages(sid, msgs)
+    except Exception as exc:
+        LOGGER.warning("chatbot_replace_messages: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "count": n})

@@ -246,6 +246,565 @@ def comic_ocr():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# AI Story Generation — call 9Router / LLM to write story content
+# ══════════════════════════════════════════════════════════════════════════════
+
+@bp.route("/api/story/ai_generate", methods=["POST"])
+def ai_generate_story():
+    """Generate story text using 9Router (or compatible OpenAI endpoint).
+
+    Body:
+      prompt       (str)  — user's story idea / topic
+      genre        (str)  — genre hint (optional)
+      style        (str)  — writing style (optional)
+      num_panels   (int)  — target number of panels/paragraphs (default 10)
+      language     (str)  — output language code (default "vi")
+      characters   (list) — [{name, description}] character definitions
+      location     (str)  — setting/location description
+      model        (str)  — override model (optional)
+      max_tokens   (int)  — override max_tokens (optional)
+    """
+    import requests as _requests
+
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"ok": False, "error": "Vui lòng nhập đề bài / ý tưởng truyện."}), 400
+
+    genre = (data.get("genre") or "").strip()
+    style = (data.get("style") or "").strip()
+    num_panels = int(data.get("num_panels") or 10)
+    language = (data.get("language") or "vi").strip()
+    characters = data.get("characters") or []
+    location = (data.get("location") or "").strip()
+    override_model = (data.get("model") or "").strip()
+    override_max_tokens = data.get("max_tokens")
+
+    cfg = _cfg()
+    nr_cfg = cfg.get("nine_router") or {}
+    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+    api_key = (nr_cfg.get("api_key") or "").strip()
+    model = override_model or (nr_cfg.get("default_model") or "duytris").strip()
+    max_tokens = int(override_max_tokens or nr_cfg.get("max_tokens") or 4096)
+    temperature = float(nr_cfg.get("temperature") or 0.8)
+
+    if not api_key:
+        return jsonify({
+            "ok": False,
+            "error": "Chưa cấu hình API key cho 9Router. Vào tab 'Chat Bot · 9Router' để thiết lập.",
+        }), 400
+
+    # Build system prompt for story generation
+    lang_name = {"vi": "tiếng Việt", "en": "English", "ja": "tiếng Nhật",
+                 "ko": "tiếng Hàn", "zh": "tiếng Trung", "th": "tiếng Thái"}.get(language, language)
+
+    system_msg = (
+        f"Bạn là nhà văn sáng tạo chuyên viết truyện ngắn hấp dẫn bằng {lang_name}. "
+        f"Hãy viết một câu chuyện chia thành đúng {num_panels} đoạn (paragraph), "
+        f"mỗi đoạn tương ứng với một cảnh/panel trong video. "
+        f"Mỗi đoạn nên có 2-4 câu, mô tả sinh động để người đọc hình dung được cảnh. "
+        f"Các đoạn phân cách bằng dòng trống.\n\n"
+        f"Quy tắc:\n"
+        f"- Viết bằng {lang_name}\n"
+        f"- Đúng {num_panels} đoạn, mỗi đoạn 2-4 câu\n"
+        f"- Không đánh số đoạn, không thêm tiêu đề\n"
+        f"- Nội dung liền mạch, có mở đầu - thân - kết\n"
+        f"- Giọng văn kể chuyện cuốn hút, phù hợp làm lời đọc video\n"
+    )
+    if genre:
+        system_msg += f"- Thể loại: {genre}\n"
+    if style:
+        system_msg += f"- Phong cách viết: {style}\n"
+    if characters:
+        char_desc = "\n".join(
+            f"  • {c.get('name', 'Nhân vật')}: {c.get('description', '')}"
+            for c in characters if c.get("name")
+        )
+        if char_desc:
+            system_msg += f"\nNhân vật trong truyện:\n{char_desc}\n"
+    if location:
+        system_msg += f"\nBối cảnh / địa điểm: {location}\n"
+
+    messages = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": f"Viết truyện với đề bài: {prompt}"},
+    ]
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+
+    url = f"{endpoint}/chat/completions"
+    try:
+        resp = _requests.post(url, json=payload, headers=headers, timeout=120)
+        if resp.status_code >= 400:
+            err_body = resp.text[:300]
+            return jsonify({"ok": False, "error": f"LLM trả lỗi {resp.status_code}: {err_body}"}), 502
+        body = resp.json()
+    except _requests.exceptions.Timeout:
+        return jsonify({"ok": False, "error": "Timeout — LLM mất quá lâu để trả lời."}), 504
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Không kết nối được 9Router: {exc}"}), 502
+
+    choice = (body.get("choices") or [{}])[0]
+    content = (choice.get("message") or {}).get("content", "")
+
+    return jsonify({
+        "ok": True,
+        "text": content.strip(),
+        "model": body.get("model") or model,
+        "usage": body.get("usage") or {},
+    })
+
+
+@bp.route("/api/story/ai_image_prompts", methods=["POST"])
+def ai_image_prompts():
+    """Generate consistent image prompts for all scenes using a single LLM call.
+
+    Uses a "style bible" approach: one call returns all prompts at once,
+    each prompt prefixed with the SAME style + character descriptors so
+    the resulting images look like they belong to the same story.
+
+    Body:
+      scenes       (list[str]) — text for each scene/paragraph
+      characters   (list)      — [{name, description}]
+      art_style    (str)       — visual style (empty = AI picks one)
+      location     (str)       — general setting
+      img_note     (str)       — additional image notes
+      img_ratio    (str)       — aspect ratio
+      genre        (str)       — story genre
+    """
+    import requests as _requests
+
+    data = request.get_json(silent=True) or {}
+    scenes = data.get("scenes") or []
+    if not scenes:
+        return jsonify({"ok": False, "error": "Không có cảnh nào để tạo prompt."}), 400
+
+    characters = data.get("characters") or []
+    art_style = (data.get("art_style") or "").strip()
+    location = (data.get("location") or "").strip()
+    img_note = (data.get("img_note") or "").strip()
+    img_ratio = (data.get("img_ratio") or "9:16").strip()
+    genre = (data.get("genre") or "").strip()
+
+    cfg = _cfg()
+    nr_cfg = cfg.get("nine_router") or {}
+    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+    api_key = (nr_cfg.get("api_key") or "").strip()
+    model = (nr_cfg.get("default_model") or "duytris").strip()
+
+    if not api_key:
+        return jsonify({"ok": False, "error": "Chưa cấu hình API key 9Router."}), 400
+
+    # Step 1: Build a "style bible" — one consistent description block
+    # that will be prepended to every scene prompt for visual continuity.
+    char_block = ""
+    if characters:
+        lines = []
+        for c in characters:
+            if c.get("name"):
+                lines.append(f"  - {c['name']}: {c.get('description', '')}")
+        if lines:
+            char_block = "Recurring characters (must look IDENTICAL in every image):\n" + "\n".join(lines)
+
+    # Build the master scene list for the LLM
+    scene_list = "\n".join(f"SCENE {i+1}: {s}" for i, s in enumerate(scenes))
+
+    # System instruction: produce one prompt per scene, all sharing same style anchor
+    style_anchor_instr = (
+        f"Use this exact art style for EVERY scene: {art_style}"
+        if art_style else
+        "Choose ONE art style that fits the story mood, then USE THAT SAME STYLE for every scene "
+        "(do not switch styles between scenes)."
+    )
+
+    system_msg = f"""You are an expert image-prompt engineer for AI image generation (DALL-E / Stable Diffusion / Midjourney).
+
+Your task: given a list of {len(scenes)} story scenes, produce {len(scenes)} image prompts that share visual continuity — same character appearance, same art style, same color palette, same lighting language across all scenes.
+
+CRITICAL RULES:
+1. {style_anchor_instr}
+2. Every prompt MUST start with the same style descriptor (e.g. "cinematic film still, warm tones, shallow depth of field, ...")
+3. When a character from the reference appears, describe them with the EXACT SAME physical traits every time (hair, clothing, age, build) — do not vary their look
+4. Keep a consistent color palette and lighting mood matching the story genre
+5. Each prompt: 40-80 words, English only, comma-separated descriptors
+6. Output STRICTLY as a JSON array of strings, no other text, no markdown fences
+
+Story genre: {genre or 'general'}
+Aspect ratio: {img_ratio}
+{f'Setting/location anchor: {location}' if location else ''}
+{f'Extra notes: {img_note}' if img_note else ''}
+
+{char_block}
+
+Output format (exactly):
+["prompt for scene 1", "prompt for scene 2", ..., "prompt for scene {len(scenes)}"]
+"""
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": f"Here are the {len(scenes)} scenes:\n\n{scene_list}\n\nReturn the JSON array of {len(scenes)} prompts now."},
+        ],
+        "temperature": 0.5,  # lower = more consistent
+        "max_tokens": min(4000, 200 * len(scenes) + 500),
+        "stream": False,
+    }
+
+    fallback_style = art_style or "cinematic film still, dramatic lighting, detailed"
+    fallback = []
+    char_summary = ", ".join(f"{c.get('name', '')} ({c.get('description', '')[:60]})" for c in characters if c.get("name"))
+    for s in scenes:
+        bits = [fallback_style]
+        if char_summary:
+            bits.append(char_summary)
+        if location:
+            bits.append(location)
+        bits.append(s[:120])
+        fallback.append(", ".join(b for b in bits if b))
+
+    url = f"{endpoint}/chat/completions"
+    try:
+        resp = _requests.post(url, json=payload, headers=headers, timeout=180)
+        if resp.status_code >= 400:
+            return jsonify({"ok": True, "prompts": fallback, "fallback": True,
+                            "error_hint": f"LLM lỗi {resp.status_code}, dùng fallback prompts"})
+        body = resp.json()
+        content = ((body.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
+    except Exception as exc:
+        return jsonify({"ok": True, "prompts": fallback, "fallback": True,
+                        "error_hint": f"Không gọi được LLM: {exc}"})
+
+    # Parse the JSON array out of the response (be tolerant of code fences)
+    parsed = None
+    try:
+        # Try direct JSON
+        parsed = json.loads(content)
+    except Exception:
+        # Strip code fences and try again
+        cleaned = content
+        if "```" in cleaned:
+            # Extract content between first ``` and last ```
+            import re
+            m = re.search(r"```(?:json)?\s*(\[.*?\])\s*```", cleaned, re.DOTALL)
+            if m:
+                cleaned = m.group(1)
+        # Find first [ and last ]
+        s_idx = cleaned.find("[")
+        e_idx = cleaned.rfind("]")
+        if s_idx >= 0 and e_idx > s_idx:
+            cleaned = cleaned[s_idx:e_idx + 1]
+        try:
+            parsed = json.loads(cleaned)
+        except Exception:
+            parsed = None
+
+    if not isinstance(parsed, list) or not parsed:
+        return jsonify({"ok": True, "prompts": fallback, "fallback": True,
+                        "error_hint": "LLM không trả JSON hợp lệ, dùng fallback"})
+
+    # Pad / truncate to match scene count
+    prompts = [str(p).strip() for p in parsed[:len(scenes)]]
+    while len(prompts) < len(scenes):
+        prompts.append(fallback[len(prompts)])
+
+    return jsonify({"ok": True, "prompts": prompts, "fallback": False})
+
+
+@bp.route("/api/story/ai_generate_image", methods=["POST"])
+def ai_generate_image():
+    """Generate a single image via 9Router (Codex GPT image models).
+
+    Body:
+      prompt       (str)  — image generation prompt
+      model        (str)  — 9Router model id (default: cx/gpt-5.5-image)
+      quality      (str)  — 'standard' | 'hd'
+      ratio        (str)  — aspect ratio like '9:16'
+      scene_index  (int)  — scene number (for filename)
+      seed         (int)  — same seed across a story keeps style coherent
+    """
+    import requests as _requests
+    import base64
+    import uuid
+
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"ok": False, "error": "Thiếu prompt."}), 400
+
+    model = (data.get("model") or "cx/gpt-5.5-image").strip()
+    quality = (data.get("quality") or "standard").strip()
+    ratio = (data.get("ratio") or "9:16").strip()
+    scene_index = int(data.get("scene_index") or 0)
+    seed = data.get("seed")
+    if seed is None or seed == "":
+        seed = 42
+    try:
+        seed = int(seed)
+    except (ValueError, TypeError):
+        seed = 42
+
+    # Map ratio to pixel dimensions
+    ratio_map = {
+        "9:16": (1024, 1792),
+        "16:9": (1792, 1024),
+        "1:1": (1024, 1024),
+        "3:4": (1024, 1365),
+    }
+    width, height = ratio_map.get(ratio, (1024, 1792))
+
+    # Output directory for generated images
+    cfg = _cfg()
+    out_dir = _manga_output_dir(cfg) / "ai_images"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"scene_{scene_index:03d}_{uuid.uuid4().hex[:8]}.png"
+    out_path = out_dir / filename
+
+    nr_cfg = cfg.get("nine_router") or {}
+    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+    api_key = (nr_cfg.get("api_key") or "").strip()
+    if not api_key:
+        return jsonify({
+            "ok": False,
+            "error": "Chưa cấu hình API key 9Router. Mở tab 'Chat Bot · 9Router' để thiết lập.",
+        }), 400
+
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    payload = {
+        "model": model,
+        "prompt": prompt[:2000],
+        "n": 1,
+        "size": f"{width}x{height}",
+        "quality": quality,
+        "response_format": "b64_json",
+    }
+    # Some models accept seed; pass it when supported (server may ignore).
+    payload["seed"] = seed
+
+    url = f"{endpoint}/images/generations"
+    try:
+        resp = _requests.post(url, json=payload, headers=headers, timeout=180)
+    except _requests.exceptions.Timeout:
+        return jsonify({"ok": False, "error": "Timeout khi gọi 9Router (model có thể đang quá tải)."}), 504
+    except _requests.exceptions.ConnectionError as exc:
+        return jsonify({"ok": False, "error": f"Không kết nối được 9Router tại {endpoint}: {exc}"}), 502
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)[:300]}), 500
+
+    if resp.status_code >= 400:
+        try:
+            err_body = resp.json()
+            err_msg = (err_body.get("error") or {}).get("message") or str(err_body)
+        except Exception:
+            err_msg = resp.text[:300]
+        return jsonify({
+            "ok": False,
+            "error": f"9Router lỗi {resp.status_code}: {err_msg}",
+            "model": model,
+        }), 502
+
+    try:
+        body = resp.json()
+        img_data = (body.get("data") or [{}])[0]
+        if img_data.get("b64_json"):
+            with open(out_path, "wb") as f:
+                f.write(base64.b64decode(img_data["b64_json"]))
+        elif img_data.get("url"):
+            dl = _requests.get(img_data["url"], timeout=120)
+            with open(out_path, "wb") as f:
+                f.write(dl.content)
+        else:
+            return jsonify({"ok": False, "error": "9Router không trả ảnh (data trống)."}), 502
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Lỗi xử lý response: {exc}"}), 500
+
+    if not out_path.exists() or out_path.stat().st_size < 1024:
+        return jsonify({"ok": False, "error": "File ảnh tải về bị rỗng."}), 502
+
+    rel_path = str(out_path.relative_to(ROOT)).replace("\\", "/")
+    serve_url = f"/api/story/ai_image/{filename}"
+    return jsonify({
+        "ok": True,
+        "image_url": serve_url,
+        "filename": filename,
+        "path": rel_path,
+        "model": model,
+        "size": f"{width}x{height}",
+    })
+
+
+@bp.route("/api/story/ai_image_models", methods=["GET"])
+def ai_image_models():
+    """Return list of available image-generation models from 9Router.
+
+    Tries /v1/models first; if that fails or doesn't list image models,
+    returns a curated default list of Codex GPT image models.
+    """
+    import requests as _requests
+
+    cfg = _cfg()
+    nr_cfg = cfg.get("nine_router") or {}
+    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+    api_key = (nr_cfg.get("api_key") or "").strip()
+
+    # Curated default — Codex GPT image models, newest first
+    defaults = [
+        {"id": "cx/gpt-5.5-image", "label": "GPT-5.5 Image (Codex, mới nhất)"},
+        {"id": "cx/gpt-5.4-image", "label": "GPT-5.4 Image (Codex)"},
+        {"id": "cx/gpt-5.3-image", "label": "GPT-5.3 Image (Codex)"},
+        {"id": "cx/gpt-5.2-image", "label": "GPT-5.2 Image (Codex)"},
+    ]
+
+    if not api_key:
+        return jsonify({"ok": True, "models": defaults, "source": "default"})
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        resp = _requests.get(f"{endpoint}/models", headers=headers, timeout=10)
+        if resp.status_code == 200:
+            body = resp.json()
+            items = body.get("data") or body.get("models") or []
+            # Keep only image-capable models (heuristic: id contains 'image' or 'dalle')
+            img_models = []
+            for it in items:
+                mid = it.get("id") or it.get("name") or ""
+                if any(k in mid.lower() for k in ("image", "dalle", "dall-e", "sd-", "flux", "imagen", "midjourney")):
+                    img_models.append({
+                        "id": mid,
+                        "label": mid + (f" · {it['owned_by']}" if it.get("owned_by") else ""),
+                    })
+            if img_models:
+                # Sort newest-first by extracted version score
+                import re as _re
+                def _score(m):
+                    mid = m["id"]
+                    versions = _re.findall(r"\d+(?:\.\d+)?", mid)
+                    v_sum = sum(float(v) for v in versions) if versions else 0
+                    # Bonus for cx/ (Codex) and image-specific models
+                    bonus = 0
+                    if mid.startswith("cx/"):
+                        bonus += 100
+                    if "image" in mid.lower():
+                        bonus += 10
+                    return v_sum + bonus
+                img_models.sort(key=_score, reverse=True)
+                return jsonify({"ok": True, "models": img_models, "source": "9router"})
+    except Exception:
+        pass
+
+    return jsonify({"ok": True, "models": defaults, "source": "default"})
+
+
+@bp.route("/api/story/ai_image/<filename>", methods=["GET"])
+def serve_ai_image(filename):
+    """Serve a generated AI image."""
+    cfg = _cfg()
+    out_dir = _manga_output_dir(cfg) / "ai_images"
+    safe_name = secure_filename(filename)
+    if not safe_name:
+        abort(400)
+    fpath = out_dir / safe_name
+    if not fpath.exists():
+        abort(404)
+    return send_file(str(fpath), mimetype="image/png")
+
+
+# ── AI Story Sessions — save & load for consistency ─────────────────────────
+
+def _ai_sessions_dir() -> Path:
+    p = STATE_DIR / "ai_story_sessions"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+@bp.route("/api/story/ai_sessions", methods=["GET"])
+def ai_sessions_list():
+    """List saved AI story sessions."""
+    sessions_dir = _ai_sessions_dir()
+    sessions = []
+    for f in sorted(sessions_dir.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            sessions.append({
+                "id": f.stem,
+                "title": data.get("title") or data.get("prompt", "")[:50] or f.stem,
+                "created_at": data.get("created_at", ""),
+                "num_scenes": len(data.get("scenes", [])),
+                "genre": data.get("genre", ""),
+            })
+        except Exception:
+            continue
+    return jsonify({"ok": True, "sessions": sessions})
+
+
+@bp.route("/api/story/ai_sessions/save", methods=["POST"])
+def ai_session_save():
+    """Save current AI story session for future reuse.
+
+    Body: full session data (prompt, characters, scenes, image_prompts, etc.)
+    """
+    data = request.get_json(silent=True) or {}
+    if not data.get("prompt") and not data.get("scenes"):
+        return jsonify({"ok": False, "error": "Không có dữ liệu để lưu."}), 400
+
+    sessions_dir = _ai_sessions_dir()
+    # Generate session ID from timestamp
+    session_id = data.get("id") or time.strftime("%Y%m%d_%H%M%S")
+    data["created_at"] = data.get("created_at") or time.strftime("%Y-%m-%d %H:%M:%S")
+    data["id"] = session_id
+
+    fpath = sessions_dir / f"{session_id}.json"
+    fpath.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return jsonify({"ok": True, "id": session_id, "message": "Đã lưu session."})
+
+
+@bp.route("/api/story/ai_sessions/load", methods=["POST"])
+def ai_session_load():
+    """Load a saved AI story session."""
+    data = request.get_json(silent=True) or {}
+    session_id = (data.get("id") or "").strip()
+    if not session_id:
+        return jsonify({"ok": False, "error": "Thiếu session ID."}), 400
+
+    sessions_dir = _ai_sessions_dir()
+    fpath = sessions_dir / f"{safe_filename(session_id)}.json"
+    if not fpath.exists():
+        return jsonify({"ok": False, "error": "Session không tồn tại."}), 404
+
+    session_data = json.loads(fpath.read_text(encoding="utf-8"))
+    return jsonify({"ok": True, "session": session_data})
+
+
+@bp.route("/api/story/ai_sessions/delete", methods=["POST"])
+def ai_session_delete():
+    """Delete a saved session."""
+    data = request.get_json(silent=True) or {}
+    session_id = (data.get("id") or "").strip()
+    if not session_id:
+        return jsonify({"ok": False, "error": "Thiếu session ID."}), 400
+
+    sessions_dir = _ai_sessions_dir()
+    fpath = sessions_dir / f"{safe_filename(session_id)}.json"
+    if fpath.exists():
+        fpath.unlink()
+    return jsonify({"ok": True, "message": "Đã xoá."})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # MangaDex integration — search → chapters → pages → render
 # ══════════════════════════════════════════════════════════════════════════════
 @bp.route("/api/story/manga/search", methods=["POST", "GET"])
@@ -612,10 +1171,30 @@ def manga_render():
         return jsonify({"ok": False, "error": "Thiếu danh sách panels."}), 400
 
     panels = []
+    ai_image_dir = _manga_output_dir(cfg) / "ai_images"
+    # Build absolute base URL once: prefer the request's host, fall back to localhost.
+    try:
+        base_url = request.host_url.rstrip("/")
+    except Exception:
+        base_url = "http://127.0.0.1:5000"
+
     for p in raw_panels:
         url = (p.get("image_url") or p.get("url") or "").strip()
         if not url:
             continue
+        # Resolve relative URLs (incl. AI-generated images) to absolute paths.
+        # For AI images we know the local file path → pass it directly to the
+        # renderer (which falls back to local-file copy when given a non-http
+        # path). Saves a round-trip and avoids any localhost/proxy weirdness.
+        if url.startswith("/api/story/ai_image/"):
+            fname = url.rsplit("/", 1)[-1]
+            local_file = ai_image_dir / secure_filename(fname)
+            if local_file.exists():
+                url = str(local_file.resolve())
+            else:
+                url = base_url + url
+        elif url.startswith("/"):
+            url = base_url + url
         panels.append(PanelInput(
             image_url=url,
             text=(p.get("text") or "").strip(),
