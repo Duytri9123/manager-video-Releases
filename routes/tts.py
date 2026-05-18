@@ -13,6 +13,60 @@ from core_app import load_cfg, LOGGER, ROOT, VOICES_DIR
 bp = Blueprint("tts", __name__)
 
 
+def _build_fx_filter(p: dict) -> str:
+    """Build ffmpeg audio filter chain from FX params dict.
+    Returns empty string if all defaults (no real change)."""
+    if not p:
+        return ""
+    parts = []
+    try:
+        # Pitch shift (semitones) using rubberband if available, else asetrate+atempo
+        pitch = float(p.get("pitch") or 0.0)
+        if abs(pitch) > 0.05:
+            # rubberband filter requires libsamplerate; use asetrate+aresample fallback
+            factor = 2 ** (pitch / 12.0)
+            new_rate = int(44100 * factor)
+            tempo = 1.0 / factor
+            tempo_chain = []
+            t = tempo
+            while t < 0.5:
+                tempo_chain.append("atempo=0.5"); t *= 2.0
+            while t > 2.0:
+                tempo_chain.append("atempo=2.0"); t /= 2.0
+            tempo_chain.append(f"atempo={t:.6f}")
+            parts.append(f"asetrate={new_rate}")
+            parts.extend(tempo_chain)
+            parts.append("aresample=44100")
+        speed = float(p.get("speed") or 1.0)
+        if abs(speed - 1.0) > 0.02:
+            s = max(0.5, min(2.0, speed))
+            parts.append(f"atempo={s:.4f}")
+        # 3-band EQ
+        bass = int(p.get("bass") or 0)
+        mid = int(p.get("mid") or 0)
+        treble = int(p.get("treble") or 0)
+        if bass:
+            parts.append(f"bass=g={bass}")
+        if mid:
+            parts.append(f"equalizer=f=1000:t=q:w=1.0:g={mid}")
+        if treble:
+            parts.append(f"treble=g={treble}")
+        # Compression
+        comp = str(p.get("compression") or "none").lower()
+        if comp == "light":
+            parts.append("acompressor=threshold=-20dB:ratio=3:attack=20:release=250")
+        elif comp == "heavy":
+            parts.append("acompressor=threshold=-24dB:ratio=6:attack=10:release=200")
+        # Reverb (very simple aecho approximation)
+        reverb = int(p.get("reverb") or 0)
+        if reverb > 0:
+            decay = max(0.05, min(0.95, reverb / 100.0))
+            parts.append(f"aecho=0.8:0.88:60:{decay:.2f}")
+    except Exception:
+        return ""
+    return ",".join(parts)
+
+
 # ── /api/tts_preview ─────────────────────────────────────────────────────────
 @bp.route("/api/tts_preview", methods=["POST"])
 def tts_preview():
@@ -197,7 +251,6 @@ def tts_from_ass():
                 tts = MultiProviderTTS(
                     voice=tts_voice, engine=tts_engine,
                     fpt_api_key=fpt_api_key, fpt_speed=0,
-                    pitch=tts_pitch, rate=tts_rate, style=tts_emotion,
                 )
                 translations = [s.get("text", "") for s in segments]
 
@@ -207,7 +260,6 @@ def tts_from_ass():
                     segments, translations, tmpdir,
                     max_concurrency=2, retries=2,
                     tts_speed=1.0, auto_speed=False, ffmpeg=ffmpeg,
-                    fx_enabled=fx_enabled, fx_params=fx_params,
                 ))
 
                 if not clips:
@@ -216,25 +268,42 @@ def tts_from_ass():
 
                 yield _emit(log_lines, f"✅ Tổng hợp xong {len(clips)} clip", "info", 70)
 
-                if fx_enabled:
-                    yield _emit(log_lines, "🎛 Đã áp dụng hiệu ứng FX vào từng clip", "info", 75)
-
                 yield _emit(log_lines, "🔗 Đang ghép các clip thành file MP3...", "info", 80)
                 concat_list = tmpdir / "concat.txt"
                 with open(str(concat_list), "w", encoding="utf-8") as f:
                     for c in clips:
                         f.write(f"file '{str(c['path']).replace(chr(92), '/')}'\n")
 
+                concat_target = (tmpdir / "concat.mp3") if fx_enabled else out_mp3
                 ok, err = _run_ffmpeg([
                     ffmpeg, "-f", "concat", "-safe", "0",
                     "-i", str(concat_list),
                     "-c:a", "libmp3lame", "-b:a", "128k",
-                    str(out_mp3), "-y", "-loglevel", "error"
+                    str(concat_target), "-y", "-loglevel", "error"
                 ])
 
                 if not ok:
                     yield _emit(log_lines, f"❌ Ghép MP3 thất bại: {err}", "error", 0)
                     return
+
+                if fx_enabled:
+                    yield _emit(log_lines, "🎛 Đang áp dụng hiệu ứng FX...", "info", 90)
+                    fx_chain = _build_fx_filter(fx_params)
+                    if not fx_chain:
+                        # fx all default → just rename
+                        import shutil as _sh
+                        _sh.copyfile(str(concat_target), str(out_mp3))
+                    else:
+                        ok, err = _run_ffmpeg([
+                            ffmpeg, "-i", str(concat_target),
+                            "-filter:a", fx_chain,
+                            "-c:a", "libmp3lame", "-b:a", "128k",
+                            str(out_mp3), "-y", "-loglevel", "error"
+                        ])
+                        if not ok:
+                            yield _emit(log_lines, f"⚠ FX thất bại, dùng bản chưa FX: {err}", "warning", 92)
+                            import shutil as _sh
+                            _sh.copyfile(str(concat_target), str(out_mp3))
 
             yield _emit(log_lines, f"✅ Hoàn thành! File MP3: {out_mp3}", "success", 100)
             yield json.dumps({"ok": True, "output_path": str(out_mp3), "clips": len(clips)}, ensure_ascii=False) + "\n"

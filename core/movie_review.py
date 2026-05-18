@@ -506,21 +506,57 @@ def build_prompt(req: ReviewRequest) -> tuple[str, str]:
 
 
 def _call_llm(provider: str, cfg: dict, system: str, user: str) -> Optional[str]:
-    """Try DeepSeek → OpenAI → Groq based on `provider` and available keys."""
+    """Try the requested provider, falling back through the available list.
+
+    Supports: "9router" | "deepseek" | "openai" | "groq" | "auto".
+    9Router is the local OpenAI-compatible gateway (https://9router.com).
+    When selected, this routes through `nine_router.endpoint` using the
+    cached API key from `nine_router.api_key` and the configured tier model
+    (defaults to `nine_router.default_model`).
+    """
     tr = cfg.get("translation") or {}
+    nr = cfg.get("nine_router") or {}
     movie_cfg = cfg.get("movie") or {}
-    candidates = []
+
+    candidates: list[tuple[str, str]] = []
+    # 9Router gets first dibs when explicitly chosen, or in auto mode if a
+    # key is cached. We don't push it ahead of paid keys in auto unless the
+    # user has nothing else configured.
+    if provider == "9router" and (nr.get("api_key") or "").strip():
+        candidates.append(("9router", nr["api_key"]))
     if provider in ("auto", "deepseek") and tr.get("deepseek_key"):
         candidates.append(("deepseek", tr["deepseek_key"]))
     if provider in ("auto", "openai") and tr.get("openai_key"):
         candidates.append(("openai", tr["openai_key"]))
     if provider in ("auto", "groq") and tr.get("groq_key"):
         candidates.append(("groq", tr["groq_key"]))
-    if not candidates and provider not in ("auto", "deepseek", "openai", "groq"):
+    # Auto-mode last-resort: 9Router when nothing else is configured.
+    if provider == "auto" and not candidates and (nr.get("api_key") or "").strip():
+        candidates.append(("9router", nr["api_key"]))
+    if not candidates and provider not in ("auto", "9router", "deepseek", "openai", "groq"):
         return None
 
     for prov, key in candidates:
         try:
+            if prov == "9router":
+                endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+                model = (nr.get("default_model") or "duytris").strip()
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    "temperature": 0.6,
+                    "max_tokens": int(nr.get("max_tokens") or 4096),
+                    "stream": False,
+                }
+                data = _post_json(
+                    f"{endpoint}/chat/completions",
+                    payload,
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                return ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
             if prov == "deepseek":
                 payload = {
                     "model": "deepseek-chat",

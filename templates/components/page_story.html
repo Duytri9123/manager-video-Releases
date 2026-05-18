@@ -1,50 +1,257 @@
 <!-- ═══════════════════════════════════════════════════════════════
-     Story / Novel / Comic → Video Script
+     Truyện → Video — MangaDex search + AI narration + render
 ═══════════════════════════════════════════════════════════════ -->
 <div class="page" id="page-story" data-page="story">
 
+  <style>
+    #page-story .manga-card {
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg2);
+      transition: border-color .15s, transform .15s;
+    }
+    #page-story .manga-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    #page-story .manga-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+    #page-story .manga-thumb {
+      width: 100%;
+      aspect-ratio: 2/3;
+      object-fit: cover;
+      border-radius: 4px;
+      background: var(--bg3);
+    }
+    #page-story .manga-title { font-size: 12px; font-weight: 600; line-height: 1.3; color: var(--text); }
+    #page-story .manga-meta  { font-size: 10px; color: var(--text-muted); }
+
+    #page-story .panel-row {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 10px;
+      padding: 8px;
+      margin-bottom: 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg2);
+    }
+    #page-story .panel-thumb {
+      width: 90px;
+      aspect-ratio: 2/3;
+      object-fit: cover;
+      border-radius: 4px;
+      background: var(--bg3);
+    }
+    #page-story .panel-text {
+      width: 100%;
+      min-height: 70px;
+      resize: vertical;
+      font-size: 12px;
+      font-family: inherit;
+    }
+
+    /* Chapter row — collapse to mobile-friendly layout when narrow */
+    #page-story .chapter-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 60px 60px 100px;
+      gap: 8px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    @media (max-width: 700px) {
+      #page-story .chapter-row {
+        grid-template-columns: 50px 1fr 50px 50px;
+      }
+      #page-story .chapter-row > :nth-child(5) { display: none; }
+    }
+    #page-story .chapter-row:hover { background: var(--bg3); }
+    #page-story .chapter-row.selected { background: var(--accent-light); }
+    #page-story .chapter-row.chapter-external {
+      opacity: 0.55;
+      cursor: not-allowed;
+      background: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--bg3) 6px, var(--bg3) 8px);
+    }
+
+    #page-story .source-pill {
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    #page-story .source-pill.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    /* Language pill toggles (replace ugly <select multiple>) */
+    #page-story .lang-pills {
+      display: inline-flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #page-story .lang-pill {
+      padding: 5px 10px;
+      font-size: 11px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--bg2);
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+      transition: all .12s;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    #page-story .lang-pill:hover { border-color: var(--accent); }
+    /* Manga search results grid */
+    #page-story .lang-pill.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    /* Manga detail layout — collapse to single column on narrow screens */
+    @media (max-width: 720px) {
+      #page-story #md-detail-body {
+        grid-template-columns: 1fr !important;
+      }
+      #page-story #md-detail-body img {
+        max-width: 200px;
+        margin: 0 auto;
+      }
+    }
+    #page-story .detail-meta-row { font-size: 13px; line-height: 1.5; margin-bottom: 4px; }
+    #page-story .detail-meta-key { color: var(--text-muted); margin-right: 6px; }
+    #page-story .detail-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    #page-story .detail-tag {
+      font-size: 10px; padding: 2px 7px; border-radius: 10px;
+      background: var(--bg3); color: var(--text-muted); border: 1px solid var(--border);
+    }
+    #page-story .detail-cover {
+      width: 200px; max-width: 100%; aspect-ratio: 2/3;
+      border-radius: 8px; object-fit: cover;
+      box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      background: var(--bg3);
+    }
+    #page-story .detail-desc {
+      margin-top: 12px; font-size: 13px; line-height: 1.55;
+      background: var(--bg3); border: 1px solid var(--border);
+      padding: 10px 12px; border-radius: 6px;
+      max-height: 220px; overflow-y: auto;
+    }
+
+    /* Catalog tabs (NetTruyen / MangaDex) */
+    #page-story .catalog-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    #page-story .catalog-tab {
+      padding: 8px 16px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-muted);
+      transition: all .15s;
+    }
+    #page-story .catalog-tab:hover { color: var(--text); }
+    #page-story .catalog-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+  </style>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       1. Source: MangaDex search OR custom (URL list / OCR / text)
+  ═══════════════════════════════════════════════════════════════ -->
   <div class="card">
     <div class="card-header">
-      <span class="card-title">📖 Nguồn truyện</span>
+      <span class="card-title">📖 Nguồn truyện tranh</span>
     </div>
     <div class="card-body">
       <div class="platform-tabs">
-        <div class="platform-tab active" data-source="text" onclick="storySwitchSource('text')">📝 Văn bản</div>
-        <div class="platform-tab" data-source="url" onclick="storySwitchSource('url')">🔗 URL bài viết</div>
-        <div class="platform-tab" data-source="comic" onclick="storySwitchSource('comic')">🖼 Truyện tranh (zip)</div>
+        <div class="platform-tab active" data-source="mangadex" onclick="storySwitchSource('mangadex')">🌐 Tìm truyện online</div>
+        <div class="platform-tab" data-source="urls"     onclick="storySwitchSource('urls')">🔗 Link chương trực tiếp</div>
+        <div class="platform-tab" data-source="comic"    onclick="storySwitchSource('comic')">🗂 Upload ZIP (OCR)</div>
+        <div class="platform-tab" data-source="text"     onclick="storySwitchSource('text')">📝 Văn bản thuần</div>
       </div>
 
-      <div class="story-source" data-source="text">
-        <div class="field">
-          <label>Tựa (tuỳ chọn)</label>
-          <input id="sw-title" type="text" placeholder="VD: Chương 1 - Khởi đầu...">
+      <!-- ── 1A. MangaPlus catalog search ─────────────────────────────
+           Single-source: chỉ MangaPlus (bản quyền chính chủ Shueisha,
+           không bị block ở Việt Nam, có sẵn One Piece / Naruto / JJK
+           / Spy x Family / ...).
+      -->
+      <div class="story-source" data-source="mangadex">
+        <div class="provider-bar" style="align-items:center;flex-wrap:wrap;gap:8px">
+          <input id="mc-query" type="text"
+                 placeholder="Tên truyện (vd: One Piece, Naruto, Spy x Family, Jujutsu Kaisen...)"
+                 style="flex:1;min-width:240px"
+                 onkeydown="if(event.key==='Enter')storyMultiSearch()">
+          <button class="btn btn-primary btn-sm" type="button" onclick="storyMultiSearch()">🔎 Tìm</button>
+          <span id="mc-search-meta" class="text-xs text-muted"></span>
         </div>
-        <div class="field">
-          <label>Văn bản truyện</label>
-          <textarea id="sw-text" rows="10" placeholder="Dán nội dung truyện ở đây..."></textarea>
+
+        <div class="alert-info text-sm" style="margin-top:8px">
+          Đọc trực tiếp từ <strong>MangaPlus by Shueisha</strong> — kho truyện chính thức,
+          tải toàn bộ ảnh chương, không bị chặn bản quyền ở Việt Nam.
+          <a href="https://mangaplus.shueisha.co.jp/" target="_blank" rel="noopener">Mở MangaPlus ↗</a>
+        </div>
+
+        <div id="mc-results"
+             style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px;max-height:560px;overflow-y:auto">
+          <div class="empty-state" style="grid-column:1/-1">Nhập tên truyện rồi bấm "Tìm".</div>
+        </div>
+
+        <!-- Hidden legacy element kept so language-pill init code from older
+             story.js doesn't crash; we no longer use it. -->
+        <div id="md-lang" class="lang-pills" style="display:none">
+          <button type="button" class="lang-pill active" data-code="en"></button>
         </div>
       </div>
 
-      <div class="story-source hidden" data-source="url">
-        <div class="field">
-          <label>URL bài viết / chương truyện</label>
-          <input id="sw-url" type="text" placeholder="https://...">
+      <!-- ── 1B. Smart chapter URL extractor ─────────────────────────── -->
+      <div class="story-source hidden" data-source="urls">
+        <div class="alert-info text-sm">
+          <strong>Cách dùng:</strong> Mở trang đọc chương 1 của truyện trên trình duyệt, copy URL, paste vào đây →
+          tool tự đọc HTML và rút danh sách ảnh.<br>
+          Hỗ trợ sẵn: <strong>NetTruyen, BlogTruyen, TruyenQQ, TruyenTranh, MangaBuddy</strong>. Trang khác sẽ thử fallback generic.
         </div>
-        <div class="field">
-          <label>Proxy (tuỳ chọn)</label>
-          <input id="sw-proxy" type="text" placeholder="http://user:pass@host:port (để trống = không qua proxy)">
+        <div class="provider-bar" style="align-items:center;flex-wrap:wrap;gap:8px;margin-top:6px">
+          <input id="sw-chapter-url" type="text"
+                 placeholder="https://www.nettruyenvio.com/.../chuong-1/..."
+                 style="flex:1;min-width:280px"
+                 onkeydown="if(event.key==='Enter')storyExtractChapter()">
+          <button class="btn btn-primary btn-sm" type="button" onclick="storyExtractChapter()">📥 Rút ảnh từ URL</button>
         </div>
-        <button class="btn btn-secondary btn-sm" type="button" onclick="storyFetchUrl()">📥 Tải nội dung</button>
-        <div class="field" style="margin-top:8px">
-          <label>Văn bản đã tải</label>
-          <textarea id="sw-text-from-url" rows="10" placeholder="Bấm 'Tải nội dung' để fill..."></textarea>
-        </div>
+        <div id="sw-chapter-extract-meta" class="text-xs text-muted" style="margin-top:6px"></div>
+
+        <details style="margin-top:10px">
+          <summary class="text-sm" style="cursor:pointer">⚙️ Tuỳ chọn nâng cao — paste danh sách URL ảnh thủ công</summary>
+          <div class="field" style="margin-top:8px">
+            <label>Mỗi dòng 1 URL ảnh (theo thứ tự trang)</label>
+            <textarea id="sw-url-list" rows="6"
+                      placeholder="https://example.com/page-001.jpg&#10;https://example.com/page-002.jpg"></textarea>
+          </div>
+          <button class="btn btn-secondary btn-sm" type="button" onclick="storyUrlsLoad()">📥 Nạp danh sách thủ công</button>
+          <span id="sw-urls-status" class="text-xs text-muted" style="margin-left:8px"></span>
+        </details>
       </div>
 
+      <!-- ── 1C. ZIP upload + OCR (legacy) ───────────────────────────── -->
       <div class="story-source hidden" data-source="comic">
         <div class="alert-info text-sm">
-          Upload file ZIP chứa các trang truyện tranh. App sẽ giải nén và OCR (cần cài
-          <code>tesseract</code> với gói <code>vie+eng</code>).
+          Upload file ZIP chứa các trang truyện tranh. Có 2 cách OCR:
+          <b>tesseract</b> (free, nhanh, kém với CJK stylised) hoặc
+          <b>9Router Vision</b> (gọi Claude/Gemini multimodal qua local 9Router → đọc cực tốt manga raw, manhua, manhwa).
         </div>
         <div class="field">
           <label>File ZIP truyện tranh</label>
@@ -52,88 +259,273 @@
           <button class="btn btn-secondary btn-sm" type="button" onclick="storyComicUpload()" style="margin-top:6px">📤 Upload</button>
           <span id="sw-comic-status" class="text-xs text-muted" style="margin-left:8px"></span>
         </div>
+        <div class="grid-3">
+          <div class="field">
+            <label>OCR provider</label>
+            <select id="sw-comic-ocr-provider">
+              <option value="tesseract" selected>Tesseract (free, local)</option>
+              <option value="9router">🔀 9Router Vision (Claude/Gemini)</option>
+            </select>
+            <div class="text-xs text-muted mt-4">9Router cần API key (lấy ở tab Chat Bot).</div>
+          </div>
+          <div class="field">
+            <label>OCR ngôn ngữ (tesseract) / hint (9router)</label>
+            <select id="sw-comic-lang">
+              <option value="vie+eng" selected>Việt + Anh</option>
+              <option value="eng">English</option>
+              <option value="chi_sim+eng">Tiếng Trung giản thể + Anh</option>
+              <option value="jpn+eng">Tiếng Nhật + Anh</option>
+              <option value="kor+eng">Tiếng Hàn + Anh</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Vision model (9router)</label>
+            <input id="sw-comic-vision-model" type="text" placeholder="Để trống → dùng default_model">
+          </div>
+        </div>
         <div class="field">
-          <label>OCR ngôn ngữ</label>
-          <select id="sw-comic-lang">
-            <option value="vie+eng" selected>Việt + Anh</option>
-            <option value="eng">English</option>
-            <option value="chi_sim+eng">Tiếng Trung giản thể + Anh</option>
-            <option value="jpn+eng">Tiếng Nhật + Anh</option>
-            <option value="kor+eng">Tiếng Hàn + Anh</option>
-          </select>
           <button class="btn btn-secondary btn-sm" type="button" onclick="storyComicOcr()" style="margin-top:6px">🔤 Chạy OCR</button>
+          <span id="sw-comic-ocr-status" class="text-xs text-muted" style="margin-left:8px"></span>
         </div>
         <div class="field">
           <label>Văn bản OCR</label>
-          <textarea id="sw-comic-text" rows="8" placeholder="Kết quả OCR sẽ hiện ở đây..."></textarea>
+          <textarea id="sw-comic-text" rows="6" placeholder="Kết quả OCR sẽ hiện ở đây..."></textarea>
+        </div>
+      </div>
+
+      <!-- ── 1D. Plain text ─────────────────────────────────────────── -->
+      <div class="story-source hidden" data-source="text">
+        <div class="alert-info text-sm">
+          Dán nội dung lời thoại / lời kể của truyện. Sẽ được chia đều cho các panel ảnh.
+        </div>
+        <div class="field">
+          <label>Văn bản truyện</label>
+          <textarea id="sw-text" rows="10" placeholder="Dán nội dung lời thoại / lời kể ở đây..."></textarea>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-header"><span class="card-title">⚙️ Tuỳ chỉnh chunking & dịch</span></div>
-    <div class="card-body">
-      <div class="grid-3">
-        <div class="field">
-          <label>Ký tự / đoạn (mục tiêu)</label>
-          <input id="sw-target" type="number" value="350" min="50" max="2000">
-        </div>
-        <div class="field">
-          <label>Ký tự / đoạn (tối đa)</label>
-          <input id="sw-max" type="number" value="600" min="100" max="3000">
-        </div>
-        <div class="field">
-          <label>Câu overlap</label>
-          <input id="sw-overlap" type="number" value="0" min="0" max="3">
-        </div>
+  <!-- ═══════════════════════════════════════════════════════════════
+       2. Manga detail (cover + description + authors)
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="card hidden" id="md-detail-card">
+    <div class="card-header">
+      <span class="card-title" id="md-detail-title">📘 Chi tiết truyện</span>
+      <div class="card-actions">
+        <a id="md-detail-source-link" href="#" target="_blank" rel="noopener"
+           class="btn btn-secondary btn-sm hidden">🔗 Mở trang gốc</a>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyMangaClearSelection()">✕</button>
       </div>
-      <div class="grid-3">
+    </div>
+    <div class="card-body">
+      <div id="md-detail-body"
+           style="display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:start"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       3. MangaDex chapter list (only visible after picking a manga)
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="card hidden" id="md-chapters-card">
+    <div class="card-header">
+      <span class="card-title" id="md-chapters-title">📚 Danh sách chương</span>
+      <div class="card-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap;white-space:nowrap">
+        <label id="md-hide-external-wrap" class="toggle-wrap hidden"
+               title="Chương 'ngoài' do nhà phát hành chính thức (MangaPlus, Comikey...) host — MangaDex không có ảnh">
+          <input id="md-hide-external" type="checkbox" class="toggle-input" onchange="storyMangaReloadChapters()">
+          <span class="toggle"></span>
+          <span class="toggle-label text-sm">Ẩn ngoài</span>
+        </label>
+        <select id="md-chapter-order" onchange="storyMangaReloadChapters()" class="btn-sm" style="min-width:110px;height:30px">
+          <option value="asc" selected>Cũ → mới</option>
+          <option value="desc">Mới → cũ</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyMangaClearSelection()">✕</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="md-chapter-banner" class="alert-info text-sm hidden" style="margin-bottom:10px"></div>
+      <div class="chapter-row" style="font-weight:700;border-bottom:2px solid var(--border)">
+        <span>Chương</span>
+        <span>Tiêu đề</span>
+        <span>NN</span>
+        <span>Trang</span>
+        <span>Nhóm dịch</span>
+      </div>
+      <div id="md-chapter-list" style="max-height:420px;overflow-y:auto"></div>
+      <div id="md-chapter-empty" class="empty-state hidden">Manga này chưa có chương dịch trong các ngôn ngữ đã chọn.</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       3. Panel editor — pair each manga page with narration text
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="card hidden" id="sw-panels-card">
+    <div class="card-header">
+      <span class="card-title">🖼 Panels &amp; lời đọc</span>
+      <div class="card-actions">
+        <span id="sw-panels-meta" class="text-xs text-muted"></span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="alert-info text-sm" style="margin-bottom:8px">
+        Mỗi dòng dưới đây là một trang truyện. Lời đọc bên cạnh sẽ được TTS đọc khi panel xuất hiện.
+        Bạn có thể chỉnh sửa, hoán đổi, hoặc xóa từng panel trước khi render.
+      </div>
+      <div class="grid-3" style="margin-bottom:10px">
         <div class="field">
-          <label class="toggle-wrap">
-            <input id="sw-translate" type="checkbox" class="toggle-input">
-            <span class="toggle"></span>
-            <span class="toggle-label">Dịch sang ngôn ngữ đích</span>
-          </label>
+          <label>Chế độ chia lời</label>
+          <select id="sw-narration-mode">
+            <option value="split" selected>Chia đều một văn bản cho tất cả panel</option>
+            <option value="manual">Tự nhập lời cho từng panel</option>
+          </select>
         </div>
         <div class="field">
           <label>Ngôn ngữ đích</label>
-          <select id="sw-lang">
-            <option value="vi">Tiếng Việt</option>
+          <select id="sw-target-lang">
+            <option value="vi" selected>Tiếng Việt</option>
             <option value="en">English</option>
-            <option value="zh">中文</option>
             <option value="ja">日本語</option>
             <option value="ko">한국어</option>
+            <option value="zh">中文</option>
             <option value="th">ไทย</option>
           </select>
         </div>
         <div class="field">
-          <label>Provider</label>
-          <select id="sw-provider">
-            <option value="auto">Auto</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="openai">OpenAI</option>
-            <option value="groq">Groq</option>
-          </select>
+          <label class="toggle-wrap">
+            <input id="sw-translate" type="checkbox" class="toggle-input">
+            <span class="toggle"></span>
+            <span class="toggle-label">Dịch lời sang ngôn ngữ đích</span>
+          </label>
         </div>
       </div>
-      <div class="btn-group">
-        <button class="btn btn-primary" type="button" onclick="storyGenerate()">✨ Tạo kịch bản video</button>
-        <button class="btn btn-secondary btn-sm" type="button" onclick="storyCopyAll()">📋 Copy toàn bộ</button>
-        <button class="btn btn-secondary btn-sm" type="button" onclick="storySendToTTS()">🎙 Gửi sang TTS</button>
+      <div class="btn-group" style="margin-bottom:10px">
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyBuildNarration()">📝 Tạo / cập nhật lời đọc</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyDownloadZip()">📦 Tải ảnh về (ZIP)</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyPanelsClearTexts()">🧹 Xoá tất cả lời</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyPanelsReverse()">↕ Đảo thứ tự</button>
       </div>
+      <div id="sw-panels"></div>
     </div>
   </div>
 
-  <div class="card hidden" id="sw-result-card">
-    <div class="card-header">
-      <span class="card-title">📋 Kết quả</span>
-      <div class="card-actions">
-        <span id="sw-result-meta" class="text-xs text-muted"></span>
-      </div>
-    </div>
+  <!-- ═══════════════════════════════════════════════════════════════
+       4. Render video — TTS / preset / subtitle / BGM
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="card hidden" id="sw-render-card">
+    <div class="card-header"><span class="card-title">🎬 Render video truyện</span></div>
     <div class="card-body">
-      <div id="sw-segments"></div>
+      <div class="alert-info text-sm" style="margin-bottom:10px">
+        TTS sẽ đọc lời từng panel, kèm hiệu ứng Ken Burns (zoom chậm) và ASS/SRT phụ đề.
+        Xuất ra <code>Downloaded/manga_videos/</code>.
+      </div>
+
+      <div class="grid-3">
+        <div class="field">
+          <label>Tỷ lệ video</label>
+          <select id="sw-render-preset">
+            <option value="shorts" selected>Shorts/TikTok dọc 1080×1920</option>
+            <option value="youtube">YouTube ngang 1920×1080</option>
+            <option value="square">Vuông 1080×1080</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>FPS</label>
+          <select id="sw-render-fps">
+            <option value="24">24</option>
+            <option value="30" selected>30</option>
+            <option value="60">60</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Định dạng phụ đề</label>
+          <select id="sw-sub-format">
+            <option value="ass" selected>ASS (kèm khung tiêu đề)</option>
+            <option value="srt">SRT (chỉ phụ đề)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="field">
+          <label>TTS Engine</label>
+          <select id="sw-tts-engine"></select>
+        </div>
+        <div class="field">
+          <label>Giọng đọc</label>
+          <select id="sw-tts-voice"></select>
+        </div>
+        <div class="field">
+          <label>Tốc độ đọc</label>
+          <input id="sw-tts-rate" type="text" value="+0%" placeholder="+0%">
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="field">
+          <label>Tốc độ FPT (-3..3)</label>
+          <input id="sw-tts-fpt-speed" type="number" min="-3" max="3" step="1" value="0">
+        </div>
+        <div class="field">
+          <label>Thời gian tối thiểu / panel (s)</label>
+          <input id="sw-min-panel" type="number" step="0.5" min="0.5" max="20" value="2.5">
+        </div>
+        <div class="field">
+          <label>Khoảng nghỉ giữa panel (s)</label>
+          <input id="sw-pause" type="number" step="0.05" min="0" max="2" value="0.25">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label>Nhạc nền (URL hoặc đường dẫn local — để trống = không có)</label>
+          <input id="sw-bgm" type="text" placeholder="https://... hoặc voices/bgm.mp3">
+        </div>
+        <div class="field">
+          <label>Âm lượng nhạc nền</label>
+          <input id="sw-bgm-vol" type="number" step="0.05" min="0" max="1" value="0.10">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <label class="check-item" style="margin:6px 0">
+          <input id="sw-zoom" type="checkbox" checked>
+          <span>Hiệu ứng Ken Burns (zoom chậm)</span>
+        </label>
+        <label class="check-item" style="margin:6px 0">
+          <input id="sw-burn-subs" type="checkbox" checked>
+          <span>Burn phụ đề vào video (ASS)</span>
+        </label>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyTtsPreview()">▶ Nghe thử giọng</button>
+        <button class="btn btn-primary" type="button" onclick="storyRender()">🎬 Render video</button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="storyCancelRender()">Đóng tiến trình</button>
+      </div>
+
+      <div id="sw-render-status" class="hidden" style="margin-top:14px">
+        <div class="progress-row">
+          <span class="progress-label" id="sw-render-msg">Đang chuẩn bị...</span>
+          <div class="progress-bar-wrap"><div id="sw-render-bar" class="progress-bar pb-overall"></div></div>
+          <span class="progress-pct" id="sw-render-pct">0%</span>
+        </div>
+        <div id="sw-render-result" class="hidden mt-8">
+          <div class="alert-info text-sm" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <span id="sw-render-result-text">✓ Hoàn tất</span>
+            <span class="btn-group">
+              <a id="sw-render-download-video" class="btn btn-primary btn-sm">📥 Tải MP4</a>
+              <a id="sw-render-download-srt" class="btn btn-secondary btn-sm">📥 Tải SRT</a>
+              <a id="sw-render-download-ass" class="btn btn-secondary btn-sm">📥 Tải ASS</a>
+            </span>
+          </div>
+          <video id="sw-render-player"
+                 class="hidden"
+                 controls preload="metadata"
+                 style="width:100%;max-height:540px;margin-top:10px;border-radius:6px;background:#000"></video>
+        </div>
+      </div>
     </div>
   </div>
 

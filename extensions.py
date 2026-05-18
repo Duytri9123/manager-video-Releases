@@ -40,6 +40,7 @@ _BLUEPRINTS: List[Tuple[str, str, str]] = [
     ("routes.proxies",    "bp", "proxies"),
     ("routes.movie",      "bp", "movie"),
     ("routes.story",      "bp", "story"),
+    ("routes.chatbot",    "bp", "chatbot"),
 ]
 
 _REGISTERED: List[str] = []

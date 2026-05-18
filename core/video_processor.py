@@ -1587,6 +1587,7 @@ def generate_frame_title(
     preferred_provider: str = "deepseek",
     video_title: str = "",
     target_lang: str = "vi",
+    nine_router_cfg: dict | None = None,
 ) -> str:
     """
     Use AI to generate a short, catchy title for the frame bar in the target language.
@@ -1607,6 +1608,7 @@ def generate_frame_title(
         return video_title[:30] if video_title else ""
 
     cfg = trans_cfg or {}
+    nr = nine_router_cfg or {}
     # Pick the best available API key
     api_key = ""
     api_url = ""
@@ -1615,8 +1617,15 @@ def generate_frame_title(
     deepseek_key = cfg.get("deepseek_key", "")
     groq_key = cfg.get("groq_key", "")
     openai_key = cfg.get("openai_key", "")
+    nine_key = (nr.get("api_key") or "").strip() if isinstance(nr, dict) else ""
+    nine_endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/") if isinstance(nr, dict) else "http://localhost:20128/v1"
+    nine_model = (nr.get("default_model") or "duytris").strip() if isinstance(nr, dict) else "duytris"
 
-    if preferred_provider == "deepseek" and deepseek_key:
+    if preferred_provider == "9router" and nine_key:
+        api_key = nine_key
+        api_url = f"{nine_endpoint}/chat/completions"
+        model = nine_model
+    elif preferred_provider == "deepseek" and deepseek_key:
         api_key = deepseek_key
         api_url = "https://api.deepseek.com/v1/chat/completions"
         model = "deepseek-chat"
@@ -1636,6 +1645,11 @@ def generate_frame_title(
         api_key = openai_key
         api_url = "https://api.openai.com/v1/chat/completions"
         model = "gpt-4o-mini"
+    elif nine_key:
+        # Last-resort fallback: use 9Router if it's the only thing available.
+        api_key = nine_key
+        api_url = f"{nine_endpoint}/chat/completions"
+        model = nine_model
 
     if not api_key:
         # Fallback: use first 30 chars of first translated text
@@ -2802,8 +2816,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 texts = [seg.get("text", "").strip() for seg in segments]
                 has_ds = bool(trans_cfg.get("deepseek_key"))
                 has_groq = bool(trans_cfg.get("groq_key"))
-                yield send(log=f"[Bước 3/5] Provider: {provider} | deepseek={'✓' if has_ds else '✗'} | groq={'✓' if has_groq else '✗'}", level="info")
-                translator = BatchTranslator(trans_cfg)
+                nr_cfg = cfg_raw.get("nine_router") or {}
+                has_9r = bool((nr_cfg.get("api_key") or "").strip())
+                yield send(log=f"[Bước 3/5] Provider: {provider} | deepseek={'✓' if has_ds else '✗'} | groq={'✓' if has_groq else '✗'} | 9router={'✓' if has_9r else '✗'}", level="info")
+                translator = BatchTranslator(trans_cfg, nine_router_cfg=nr_cfg)
                 translated_texts, used = translator.translate(texts, provider, context=stem_source, target_lang=target_language)
                 yield send(log=f"[Bước 3/5] ✓ Dịch xong {len(translated_texts)} đoạn (provider: {used})", level="success")
                 yield send(overall=55, overall_lbl="Dịch xong")
@@ -2844,6 +2860,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                     preferred_provider=provider,
                                     video_title=stem_source,
                                     target_lang=target_language,
+                                    nine_router_cfg=cfg_raw.get("nine_router") or {},
                                 )
                                 yield send(log=f"[Bước 3/5] ✓ Tiêu đề AI: \"{_frame_title}\"", level="success")
                             except Exception as _e:

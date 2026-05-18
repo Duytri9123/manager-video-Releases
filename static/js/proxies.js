@@ -139,13 +139,24 @@ async function routerLoadList() {
   try {
     const r = await API.get('/api/routers/list');
     const tbody = document.querySelector('#router-list tbody');
+    const summary = document.getElementById('router-summary');
     if (!tbody) return;
     tbody.replaceChildren();
-    if (!r.items || !r.items.length) {
+    const items = r.items || [];
+    if (summary) {
+      const ok = items.filter(it => it.last_status === 'ok').length;
+      const err = items.filter(it => it.last_status?.startsWith('err')).length;
+      const off = items.filter(it => !it.active).length;
+      summary.className = 'badge ' + (items.length === 0 ? 'badge-gray'
+        : err > 0 ? 'badge-yellow' : 'badge-green');
+      summary.style.marginRight = '8px';
+      summary.textContent = `${items.length} router · ${ok} OK · ${err} lỗi${off ? ' · ' + off + ' tắt' : ''}`;
+    }
+    if (!items.length) {
       tbody.appendChild(_el('tr', null, _el('td', { colspan: 6, class: 'empty-state' }, 'Chưa có router.')));
       return;
     }
-    for (const it of r.items) {
+    for (const it of items) {
       const status = !it.active ? _badge('Tắt', 'gray')
         : (it.last_status === 'ok' ? _badge('OK', 'green')
           : (it.last_status?.startsWith('err') ? _badge('Lỗi', 'red') : _badge('Chưa rotate', 'yellow')));
@@ -157,6 +168,8 @@ async function routerLoadList() {
         _el('td', null, it.last_ip || '—'),
         _el('td', null,
           _el('button', { class: 'btn btn-primary btn-sm', onclick: () => routerRotate(it.id) }, '🔄 Rotate'),
+          ' ',
+          _el('button', { class: 'btn btn-secondary btn-sm', onclick: () => routerTestOne(it.id) }, '⚡ Test'),
           ' ',
           _el('button', { class: 'btn btn-secondary btn-sm', onclick: () => routerToggleActive(it) }, it.active ? 'Tắt' : 'Bật'),
           ' ',
@@ -170,6 +183,122 @@ async function routerLoadList() {
 
 function routerShowAdd() { document.getElementById('router-add-form')?.classList.remove('hidden'); }
 function routerHideAdd() { document.getElementById('router-add-form')?.classList.add('hidden'); }
+function routerShowBulk() {
+  const wrap = document.getElementById('router-bulk-form');
+  if (!wrap) return;
+  wrap.classList.remove('hidden');
+  _routerBulkLoadPresets();
+}
+function routerHideBulk() { document.getElementById('router-bulk-form')?.classList.add('hidden'); }
+
+async function _routerBulkLoadPresets() {
+  const sel = document.getElementById('rt-bulk-preset');
+  if (!sel || sel._loaded) return;
+  try {
+    const r = await API.get('/api/routers/presets');
+    sel.replaceChildren();
+    for (const p of (r.items || [])) {
+      sel.appendChild(_el('option', { value: p.id }, p.label || p.id));
+    }
+    sel._loaded = true;
+  } catch (_) {}
+}
+
+function routerBulkSampleNine() {
+  const ta = document.getElementById('rt-bulk-hosts');
+  if (!ta) return;
+  // 9 routers on the typical Huawei HiLink subnet
+  ta.value = Array.from({ length: 9 }, (_, i) => `192.168.${8 + i}.1`).join('\n');
+}
+
+async function routerBulkAdd() {
+  const presetId = document.getElementById('rt-bulk-preset').value;
+  const hostsText = document.getElementById('rt-bulk-hosts').value || '';
+  const labelPrefix = document.getElementById('rt-bulk-prefix').value.trim() || 'Router';
+  const cooldown = parseInt(document.getElementById('rt-bulk-cooldown').value || '30', 10);
+  const verifyUrl = document.getElementById('rt-bulk-verify').value.trim() || 'https://ifconfig.me/ip';
+  const hosts = hostsText.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+  if (!hosts.length) return _proxyToast('Cần ít nhất 1 host.', 'warning');
+  if (!presetId) return _proxyToast('Chưa chọn preset.', 'warning');
+  try {
+    LoadingUI.start('Đang tạo ' + hosts.length + ' router...');
+    const r = await API.post('/api/routers/bulk_add', {
+      preset_id: presetId, hosts, label_prefix: labelPrefix,
+      cooldown_sec: cooldown, verify_url: verifyUrl,
+    });
+    if (r.errors && r.errors.length) {
+      _proxyToast(`Tạo ${r.created} router; ${r.errors.length} lỗi.`, 'warning');
+    } else {
+      _proxyToast(`Đã tạo ${r.created} router.`, 'success');
+    }
+    routerHideBulk();
+    routerLoadList();
+  } catch (e) {
+    _proxyToast(String(e.message || e), 'error');
+  } finally { LoadingUI.stop(); }
+}
+
+async function routerTestOne(id) {
+  try {
+    const r = await API.post('/api/routers/test', { id });
+    if (r.reachable) _proxyToast('✓ ' + (r.message || 'Reachable'), 'success');
+    else _proxyToast('✗ ' + (r.message || 'Unreachable'), 'error');
+  } catch (e) { _proxyToast(String(e.message || e), 'error'); }
+}
+
+async function routerTestAll() {
+  try {
+    const list = await API.get('/api/routers/list');
+    const items = (list.items || []).filter(it => it.active);
+    if (!items.length) return _proxyToast('Không có router đang bật.', 'warning');
+    _routerLogReset(`⚡ Test ${items.length} router...`);
+    let ok = 0;
+    for (const it of items) {
+      try {
+        const r = await API.post('/api/routers/test', { id: it.id });
+        if (r.reachable) { ok++; _routerLog(`✓ ${it.label || it.id} — ${r.message || 'OK'}`); }
+        else _routerLog(`✗ ${it.label || it.id} — ${r.message || 'unreachable'}`, 'error');
+      } catch (e) { _routerLog(`✗ ${it.label || it.id} — ${e.message || e}`, 'error'); }
+    }
+    _routerLog(`Hoàn tất: ${ok}/${items.length} reachable.`);
+    _proxyToast(`Test xong: ${ok}/${items.length} reachable.`, 'info');
+  } catch (e) { _proxyToast(String(e.message || e), 'error'); }
+}
+
+async function routerRotateAll() {
+  const list = await API.get('/api/routers/list');
+  const items = (list.items || []).filter(it => it.active);
+  if (!items.length) return _proxyToast('Không có router đang bật.', 'warning');
+  if (!confirm(`Xoay IP cho ${items.length} router (cách nhau 1s)?`)) return;
+  _routerLogReset(`🔄 Bắt đầu rotate ${items.length} router...`);
+  try {
+    LoadingUI.start('Đang xoay IP toàn bộ...');
+    const r = await API.post('/api/routers/rotate_all', { delay_sec: 1.0 });
+    for (const res of (r.results || [])) {
+      if (res.ok) _routerLog(`✓ ${res.label || res.id} → ${res.new_ip || 'IP mới ?'}`);
+      else _routerLog(`✗ ${res.label || res.id} — ${res.message || 'lỗi'}`, 'error');
+    }
+    _routerLog(`Hoàn tất: ${r.ok_count}/${r.total} OK.`);
+    _proxyToast(`Rotate xong: ${r.ok_count}/${r.total} OK.`, r.ok_count === r.total ? 'success' : 'warning');
+    routerLoadList();
+  } catch (e) {
+    _proxyToast(String(e.message || e), 'error');
+  } finally { LoadingUI.stop(); }
+}
+
+function _routerLogReset(headline) {
+  const log = document.getElementById('router-rotate-log');
+  if (!log) return;
+  log.classList.remove('hidden');
+  log.replaceChildren(_el('div', null, headline));
+}
+function _routerLog(line, kind) {
+  const log = document.getElementById('router-rotate-log');
+  if (!log) return;
+  const colour = kind === 'error' ? '#ef4444' : 'inherit';
+  log.appendChild(_el('div', { style: 'color:' + colour }, line));
+  log.scrollTop = log.scrollHeight;
+}
 
 async function routerShowPresets() {
   const wrap = document.getElementById('router-presets-wrap');
@@ -264,4 +393,6 @@ Object.assign(window, {
   proxyAdd, proxyBulkImport, proxyTest, proxyTestAll, proxyToggleActive, proxyDelete,
   routerLoadList, routerShowAdd, routerHideAdd, routerShowPresets, routerApplyPreset,
   routerAdd, routerRotate, routerToggleActive, routerDelete,
+  routerShowBulk, routerHideBulk, routerBulkAdd, routerBulkSampleNine,
+  routerTestOne, routerTestAll, routerRotateAll,
 });

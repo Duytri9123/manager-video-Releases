@@ -6,13 +6,53 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 
+def _parse_chat_response_body(raw: bytes) -> str:
+    """Extract assistant content from a /v1/chat/completions response.
+
+    Handles both standard JSON ({choices:[{message:{content}}]}) and SSE
+    streaming bodies (data: {…}\n\n…) — some upstreams ignore
+    `stream:false` and ship SSE anyway.
+    """
+    if not raw:
+        return ""
+    # Try plain JSON first.
+    try:
+        data = json.loads(raw)
+        return ((data.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
+    except Exception:
+        pass
+    # SSE fallback: concatenate every delta.content chunk.
+    text = raw.decode("utf-8", "replace")
+    pieces: List[str] = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line.startswith("data:"):
+            continue
+        payload = line[5:].strip()
+        if not payload or payload == "[DONE]":
+            continue
+        try:
+            chunk = json.loads(payload)
+        except Exception:
+            continue
+        choice = (chunk.get("choices") or [{}])[0]
+        delta = choice.get("delta") or {}
+        if isinstance(delta.get("content"), str):
+            pieces.append(delta["content"])
+        elif isinstance((choice.get("message") or {}).get("content"), str):
+            pieces.append(choice["message"]["content"])
+    return "".join(pieces).strip()
+
+
 def _normalize_provider_name(name: str) -> str:
     if not name:
         return "auto"
     normalized = str(name).strip().lower()
     if normalized in {"hf", "huggingface"}:
         return "huggingface"
-    if normalized in {"deepseek", "openai", "google", "groq", "auto"}:
+    if normalized in {"9r", "nine_router", "ninerouter", "9router"}:
+        return "9router"
+    if normalized in {"deepseek", "openai", "google", "groq", "9router", "auto"}:
         return normalized
     return "auto"
 
@@ -125,14 +165,14 @@ def _llm_translate(
             ],
             "temperature": 0.1,
             "max_tokens": 1500,
+            "stream": False,
         }).encode()
         analysis_req = urllib.request.Request(
             api_url, data=analysis_payload, method="POST",
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
         )
         with urllib.request.urlopen(analysis_req, timeout=timeout) as response:
-            analysis_data = json.loads(response.read())
-        correction_map = analysis_data["choices"][0]["message"]["content"].strip()
+            correction_map = _parse_chat_response_body(response.read())
     except Exception:
         correction_map = ""
 
@@ -194,7 +234,8 @@ def _llm_translate(
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.3,
-            "max_tokens": min(4000, len(batch) * 120),
+            "max_tokens": max(2048, min(8000, len(batch) * 120)),
+            "stream": False,
         }).encode()
         req = urllib.request.Request(
             api_url,
@@ -205,9 +246,18 @@ def _llm_translate(
                 "Authorization": f"Bearer {api_key}",
             },
         )
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            data = json.loads(response.read())
-        content = data["choices"][0]["message"]["content"].strip()
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                raw_body = response.read()
+        except Exception:
+            raise
+        if not raw_body:
+            # 9Router occasionally streams 0 bytes when an upstream chain
+            # exhausts itself. Skip this batch instead of blowing up.
+            continue
+        content = _parse_chat_response_body(raw_body)
+        if not content:
+            continue
         batch_results = _parse_numbered_translation(content, len(batch))
         for i, result in enumerate(batch_results):
             all_results[batch_start + i] = result
@@ -215,7 +265,7 @@ def _llm_translate(
     return all_results
 
 
-def get_translation_providers(trans_cfg: Dict) -> List[str]:
+def get_translation_providers(trans_cfg: Dict, full_cfg: Dict | None = None) -> List[str]:
     providers = []
     if (trans_cfg or {}).get("deepseek_key"):
         providers.append("deepseek")
@@ -225,12 +275,18 @@ def get_translation_providers(trans_cfg: Dict) -> List[str]:
         providers.append("openai")
     if (trans_cfg or {}).get("hf_token"):
         providers.append("huggingface")
+    # 9Router is available when the chat tab has cached an API key. We pass
+    # `full_cfg` for callers that have it; for legacy callers we fall back
+    # to checking the trans_cfg-style key on full_cfg later.
+    nr = ((full_cfg or {}).get("nine_router") or {}) if isinstance(full_cfg, dict) else {}
+    if (nr.get("api_key") or "").strip():
+        providers.append("9router")
     providers.append("google")
     return providers
 
 
-def build_provider_order(trans_cfg: Dict, preferred_provider: str = "auto") -> List[str]:
-    available = get_translation_providers(trans_cfg)
+def build_provider_order(trans_cfg: Dict, preferred_provider: str = "auto", full_cfg: Dict | None = None) -> List[str]:
+    available = get_translation_providers(trans_cfg, full_cfg=full_cfg)
     preferred = _normalize_provider_name(preferred_provider)
     if preferred != "auto" and preferred in available:
         ordered = [preferred] + [p for p in available if p != preferred]
@@ -244,6 +300,7 @@ def translate_texts(
     preferred_provider: str = "auto",
     context: str = "",
     target_lang: str = "vi",
+    nine_router_cfg: Dict | None = None,
 ) -> Tuple[List[str], str]:
     if not texts:
         return [], "none"
@@ -262,8 +319,15 @@ def translate_texts(
     groq_key = cfg.get("groq_key", "") or ""
     groq_model = cfg.get("groq_model", "llama-3.1-8b-instant") or "llama-3.1-8b-instant"
     hf_token = cfg.get("hf_token", "") or ""
+    nr = nine_router_cfg or cfg.get("_nine_router") or {}  # legacy passthrough
+    nine_key = (nr.get("api_key") or "").strip() if isinstance(nr, dict) else ""
+    nine_endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/") if isinstance(nr, dict) else "http://localhost:20128/v1"
+    nine_model = (nr.get("default_model") or "duytris").strip() if isinstance(nr, dict) else "duytris"
 
-    provider_order = build_provider_order(cfg, preferred_provider)
+    # Synthesize a fake_full_cfg so build_provider_order can see 9Router
+    # availability via its existing API.
+    full_cfg_fake = {"nine_router": nr if isinstance(nr, dict) else {}}
+    provider_order = build_provider_order(cfg, preferred_provider, full_cfg=full_cfg_fake)
 
     def _rebuild(translated_active: List[str]) -> List[str]:
         """Map translated results back to original indices, preserving whitespace-only entries."""
@@ -277,7 +341,20 @@ def translate_texts(
 
     for provider in provider_order:
         try:
-            if provider == "deepseek" and deepseek_key:
+            if provider == "9router" and nine_key:
+                result = _llm_translate(
+                    source_texts,
+                    f"{nine_endpoint}/chat/completions",
+                    nine_key,
+                    nine_model,
+                    context=context,
+                    target_lang=target_lang,
+                )
+                if any(result):
+                    return _rebuild(result), "9router"
+                _errors.append("9router: empty result")
+
+            elif provider == "deepseek" and deepseek_key:
                 result = _llm_translate(
                     source_texts,
                     "https://api.deepseek.com/v1/chat/completions",
@@ -389,11 +466,12 @@ def _format_srt_time(seconds: float) -> str:
 class BatchTranslator:
     """Batch translation with multi-provider fallback.
 
-    Fallback chain: DeepSeek → OpenAI → HuggingFace → Google
+    Fallback chain: DeepSeek → OpenAI → HuggingFace → Google → 9Router
     """
 
-    def __init__(self, trans_cfg: dict):
+    def __init__(self, trans_cfg: dict, nine_router_cfg: dict | None = None):
         self._cfg = trans_cfg or {}
+        self._nine = nine_router_cfg or {}
 
     def translate(
         self,
@@ -407,7 +485,11 @@ class BatchTranslator:
         Returns (translated_texts, provider_used).
         If all providers fail, returns (original_texts, "fallback").
         """
-        return translate_texts(texts, self._cfg, preferred_provider, context=context, target_lang=target_lang)
+        return translate_texts(
+            texts, self._cfg, preferred_provider,
+            context=context, target_lang=target_lang,
+            nine_router_cfg=self._nine,
+        )
 
     def write_vi_srt(
         self,

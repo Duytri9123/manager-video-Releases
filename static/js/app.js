@@ -185,7 +185,7 @@ function switchPage(name) {
   const titles = {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
-    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router'
+    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
   if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
@@ -194,6 +194,7 @@ function switchPage(name) {
   if (name === 'content') cptSwitch('files');
   if (name === 'process') loadQueue();
   if (name === 'proxies') { if (typeof proxyLoadList === 'function') proxyLoadList(); if (typeof routerLoadList === 'function') routerLoadList(); }
+  if (name === 'chat' && typeof chatInit === 'function') chatInit();
 }
 
 /* ── Content platform sub-tabs (defined here so inline onclick always works) ── */
@@ -679,8 +680,11 @@ function startTranscribe() {
 
   const payload = {
     folder,
-    single,
+    // Khi user đã chọn file qua picker, bỏ qua giá trị "single" text input
+    // (có thể chỉ là filename do trình duyệt không cho phép biết path thật).
+    single: selectedFile ? '' : single,
     out_dir: outDir,
+    provider: document.getElementById('tr-provider')?.value || 'groq',
     model: document.getElementById('tr-model')?.value || 'base',
     lang: document.getElementById('tr-lang')?.value || 'zh',
     srt: document.getElementById('tr-srt')?.checked ?? false,

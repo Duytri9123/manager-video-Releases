@@ -8,7 +8,7 @@ const LoadingUI = (() => {
   return {
     start(label) {
       n++;
-      if (txt()) txt().textContent = label || t('lbl_translating');
+      if (txt()) txt().textContent = label || t('lbl_loading');
       if (n === 1) { t0 = Date.now(); timer = setInterval(tick, 100); root()?.classList.add('show'); }
     },
     stop() {

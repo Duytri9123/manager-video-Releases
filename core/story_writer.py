@@ -265,10 +265,129 @@ def ocr_image_tesseract(path: Path, lang: str = "vie+eng") -> str:
         return ""
 
 
-def ocr_folder(folder: Path, lang: str = "vie+eng") -> str:
+def ocr_image_9router(
+    path: Path,
+    *,
+    nine_router_cfg: dict,
+    model: str = "",
+    instruction: str = "",
+    lang_hint: str = "",
+) -> str:
+    """OCR an image by sending it to a 9Router vision-capable LLM.
+
+    Works much better than tesseract for raw manga / manhua / manhwa with
+    stylised fonts and CJK characters. Uses /v1/chat/completions with an
+    `image_url` content part containing a base64 data URL — same shape as
+    OpenAI / Anthropic vision APIs.
+
+    Returns the extracted text, or "" on any failure (caller can fall back
+    to tesseract).
+    """
+    import base64
+    import json
+    import urllib.request
+    import mimetypes
+
+    api_key = (nine_router_cfg or {}).get("api_key") or ""
+    if not api_key:
+        return ""
+    endpoint = ((nine_router_cfg or {}).get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+    chosen_model = (model or (nine_router_cfg or {}).get("vision_model")
+                    or (nine_router_cfg or {}).get("default_model") or "duytris").strip()
+
+    try:
+        raw = Path(path).read_bytes()
+    except Exception:
+        return ""
+    if not raw:
+        return ""
+
+    mime, _ = mimetypes.guess_type(str(path))
+    if not mime or not mime.startswith("image/"):
+        mime = "image/png"
+    data_url = f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+
+    base_instruction = instruction or (
+        "Extract ALL visible text from this comic / manga / manhwa page. "
+        "Read panels in natural reading order (typically right-to-left top-to-bottom for "
+        "Japanese / Korean, left-to-right top-to-bottom for Western). Preserve dialogue order, "
+        "include sound effects (SFX) in [brackets], and DO NOT translate or summarise — "
+        "transcribe verbatim in the source language."
+    )
+    if lang_hint:
+        base_instruction += f"\nThe source language is likely: {lang_hint}."
+    base_instruction += "\nReturn only the extracted text, no commentary."
+
+    payload = {
+        "model": chosen_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": base_instruction},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4096,
+        "stream": False,
+    }
+    try:
+        req = urllib.request.Request(
+            f"{endpoint}/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            body = json.loads(resp.read())
+    except Exception:
+        return ""
+    return ((body.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
+
+
+def ocr_folder(
+    folder: Path,
+    lang: str = "vie+eng",
+    *,
+    provider: str = "tesseract",
+    nine_router_cfg: dict | None = None,
+    vision_model: str = "",
+    progress_cb=None,
+) -> str:
+    """OCR all comic images in `folder`.
+
+    `provider`:
+      - "tesseract" (default): system tesseract, free, fast, but weak on stylised CJK.
+      - "9router": use a vision-capable LLM via 9Router for far better quality on
+        raw Japanese / Chinese / Korean / Vietnamese comics (fallback to tesseract
+        per-image when 9Router fails).
+    """
     out = []
-    for img in list_comic_images(folder):
-        text = ocr_image_tesseract(img, lang=lang)
+    images = list_comic_images(folder)
+    total = len(images)
+    use_9r = provider == "9router" and (nine_router_cfg or {}).get("api_key")
+
+    for idx, img in enumerate(images, start=1):
+        text = ""
+        if use_9r:
+            text = ocr_image_9router(
+                img, nine_router_cfg=nine_router_cfg or {},
+                model=vision_model, lang_hint=lang,
+            )
+            if not text:
+                text = ocr_image_tesseract(img, lang=lang)  # graceful fallback
+        else:
+            text = ocr_image_tesseract(img, lang=lang)
         if text:
             out.append(text)
+        if progress_cb:
+            try:
+                progress_cb(idx, total, img.name, bool(text))
+            except Exception:
+                pass
     return "\n\n".join(out)

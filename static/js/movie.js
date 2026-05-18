@@ -872,7 +872,8 @@
     } else if (filter === 'all') {
       url = '/api/movie/latest?per_source=12&source=' + sourceParam;
     } else if (/^\d{4}$/.test(filter)) {
-      url = '/api/movie/cinema?limit=30&pages=4&min_year=' + filter + '&source=' + sourceParam;
+      // Sweep more pages so we have enough headroom to filter to an exact year
+      url = '/api/movie/cinema?limit=60&pages=6&min_year=' + filter + '&source=' + sourceParam;
     } else {
       url = '/api/movie/cinema?limit=30&source=' + sourceParam;
     }
@@ -886,6 +887,17 @@
           const t = Date.parse(it.modified || '');
           return !isNaN(t) ? t >= cutoff : true;
         });
+      }
+      // Exact-year filter: only keep items matching that release year
+      if (/^\d{4}$/.test(filter)) {
+        const want = parseInt(filter, 10);
+        items = items.filter(it => {
+          const y = parseInt(it.year || (it.release_date || '').slice(0, 4), 10);
+          return y === want;
+        });
+        if (!items.length) {
+          _toast('Không có phim năm ' + filter + ' trong feed hiện tại.', 'info');
+        }
       }
       renderResults(items, 'movie', src);
     } catch (e) { _toast(String(e.message || e), 'error'); }

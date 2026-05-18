@@ -12,6 +12,25 @@ let _viCache = {};
 let _translationScopeUrl = '';
 let _translationProvider = 'auto';
 let _profileTranslationCache = {};
+let _isTranslating = false;
+
+// Trả về true khi tab "Tìm video người dùng" đang mở.
+// Chặn dịch nền khi user đã chuyển sang tab khác.
+function _isUserPageActive() {
+  return !!document.getElementById('page-user')?.classList.contains('active');
+}
+
+// Hiển thị trạng thái dịch âm thầm trên badge provider thay vì che cả màn hình
+function _setTranslateStatusBadge(state, providerName) {
+  const badge = document.getElementById('current-provider-badge');
+  if (!badge) return;
+  if (state === 'translating') {
+    badge.innerHTML = '<span class="dot dot-yellow"></span>' + (typeof t === 'function' ? t('lbl_translating') : 'Đang dịch...');
+  } else if (state === 'done') {
+    const name = providerName || _translationProvider || 'auto';
+    badge.innerHTML = '<span class="dot dot-green"></span>' + (typeof t === 'function' ? t('lbl_provider_badge') : 'Provider:') + ' ' + name;
+  }
+}
 
 const _PROFILE_CACHE_PREFIX = 'douyin.userProfileTranslations.v1';
 
@@ -127,9 +146,15 @@ async function _translateUserProfileAsync(info, provider, nameViEl, sigViEl) {
     if (nameViEl && !cachedProfile.name) nameViEl.textContent = t('lbl_translating');
     if (sigViEl && !cachedProfile.signature) sigViEl.textContent = t('lbl_translating');
 
-    const translated = texts.length > 1
-      ? await API.post('/api/translate_batch', { texts, provider })
-      : await API.post('/api/translate', { text: texts[0], provider });
+    // Dịch âm thầm: gọi fetch trực tiếp để tránh kích hoạt LoadingUI overlay toàn cục
+    const endpoint = texts.length > 1 ? '/api/translate_batch' : '/api/translate';
+    const body = texts.length > 1 ? { texts, provider } : { text: texts[0], provider };
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const translated = await res.json();
 
     const results = Array.isArray(translated?.results)
       ? translated.results
@@ -642,8 +667,12 @@ async function searchUser() {
 }
 
 async function _translateVisible() {
+  // Chỉ auto-dịch khi đang ở tab "Tìm video người dùng"
+  if (!_isUserPageActive()) return;
   // Không dịch khi đang load video để tránh 2 request nặng song song
   if (_isLoadingVideos) return;
+  // Tránh chồng nhiều request dịch song song
+  if (_isTranslating) return;
 
   const list = _applyFilters();
   const start = (_userPage - 1) * _userPageSize;
@@ -663,7 +692,9 @@ async function _translateVisible() {
   fromCache.forEach(v => { v.desc_vi = _getCachedTranslation(v.aweme_id); });
 
   if (needFetch.length) {
-    LoadingUI.start(t('lbl_translating'));
+    _isTranslating = true;
+    // Dịch nền: chỉ cập nhật badge nhỏ, không show overlay che màn hình
+    _setTranslateStatusBadge('translating');
     try {
       // 1 batch request cho toàn trang
       const res = await fetch('/api/translate_batch', {
@@ -680,17 +711,17 @@ async function _translateVisible() {
         _storeCachedTranslation(v.aweme_id, v.desc_vi);
       });
 
-      // Update provider badge
-      const badge = document.getElementById('current-provider-badge');
-      if (badge) badge.innerHTML = '<span class="dot dot-green"></span>' + t('lbl_provider_badge') + ' ' + usedProvider;
+      _setTranslateStatusBadge('done', usedProvider);
     } catch (e) {
       needFetch.forEach(v => { v.desc_vi = v.desc; });
+      _setTranslateStatusBadge('done');
     } finally {
-      LoadingUI.stop();
+      _isTranslating = false;
     }
   }
 
-  _renderVideos();
+  // Chỉ render lại nếu vẫn còn ở tab user (tránh re-render thừa)
+  if (_isUserPageActive()) _renderVideos();
 }
 
 // Debounced translate: chờ 800ms sau lần gọi cuối để tránh spam request
@@ -698,7 +729,7 @@ function _translateVisibleDebounced(delay = 800) {
   if (_translateDebounceTimer) clearTimeout(_translateDebounceTimer);
   _translateDebounceTimer = setTimeout(() => {
     _translateDebounceTimer = null;
-    if (_viEnabled && !_isLoadingVideos) _translateVisible();
+    if (_viEnabled && !_isLoadingVideos && _isUserPageActive()) _translateVisible();
   }, delay);
 }
 

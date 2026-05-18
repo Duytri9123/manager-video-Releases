@@ -157,12 +157,49 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         "list": [],   # filled via UI; persisted to .state/proxies.json
     },
-    # ── 9Router / 4G router rotation ──
+    # ── 4G router pool (HiLink/Huawei IP rotation) ──
+    # NOTE: This is the 4G modem pool — NOT to be confused with 9Router
+    # (the OpenAI-compatible AI gateway), which lives under "nine_router".
     "routers": {
         "enabled": False,
         "list": [],   # {id,label,type,endpoint,method,headers,body,success_check}
         "cooldown_sec": 30,
         "default_id": "",
+    },
+    # ── 9Router (local AI gateway, OpenAI-compatible) ──
+    # Used by the Chat Bot tab to talk to 60+ AI providers via one endpoint.
+    # See: https://9router.com — repo decolua/9router. The integration uses the
+    # same wire format as 9Router's own dashboard:
+    #   • Base URL `http://localhost:20128/v1` (Next.js rewrites to /api/v1).
+    #   • Auth `Authorization: Bearer sk-{machineId}-{keyId}-{crc8}`.
+    #   • Keys are managed via /api/keys, protected by the dashboard cookie or
+    #     the local `x-9r-cli-token` header (sha256(rawMachineId + "9r-cli-auth")[:16]).
+    "nine_router": {
+        "endpoint": "http://localhost:20128/v1",
+        "api_key": "",
+        "default_model": "duytris",
+        "system_prompt": "",
+        "temperature": 0.7,
+        "max_tokens": 4096,  # generous default — reasoning models eat 1k+ before producing visible content
+        # ── Smart routing by prompt complexity ────────────────────────
+        # When `routing.mode == "auto"` the chat handler classifies each
+        # prompt with a cheap heuristic and picks the matching tier so we
+        # don't waste opus-class quota on "hi". Override per-message by
+        # explicitly specifying a model in the request.
+        "routing": {
+            "mode": "auto",            # "auto" | "manual"
+            "tiers": {
+                "fast":     "gemini/gemini-2.0-flash-lite",
+                "balanced": "kr/claude-sonnet-4.5",
+                "power":    "kr/claude-opus-4.5-thinking",
+            },
+            # Heuristic thresholds — tweak in config.yml without code change.
+            "thresholds": {
+                "fast_max_chars": 80,    # short prompt → fast
+                "power_min_chars": 1500, # very long prompt → power
+                "history_balanced_after": 4,  # after N exchanges, escalate
+            },
+        },
     },
     # ── Movie review (TMDb + LLM) ──
     "movie": {
@@ -184,7 +221,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         "comic": {
             "ocr_enabled": False,
-            "ocr_provider": "tesseract",
+            "ocr_provider": "tesseract",   # "tesseract" | "9router"
+            "vision_model": "",            # blank → use nine_router.default_model
         },
         "output_dir": "./Downloaded/scripts",
     },
