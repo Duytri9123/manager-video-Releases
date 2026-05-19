@@ -1,0 +1,379 @@
+{# ═══════════════════════════════════════════════════════════════════════════
+   Canva Auto — Playwright tự mở Canva: login, mở template, click từng ô
+   text, paste nội dung, upload ảnh, đổi animation, export MP4.
+═══════════════════════════════════════════════════════════════════════════ #}
+<div class="page" id="page-canva" data-page="canva">
+
+  <style>
+    #page-canva .canva-grid { display:grid; grid-template-columns: 1.4fr 1fr; gap:14px; align-items:start; }
+    @media (max-width: 980px) { #page-canva .canva-grid { grid-template-columns: 1fr; } }
+    #page-canva .scene-row {
+      display:grid; grid-template-columns: 56px 1fr 110px 110px 84px 110px; gap:8px;
+      padding:8px; border:1px solid var(--border); border-radius:6px;
+      background: var(--bg2); margin-bottom:6px; align-items:flex-start;
+    }
+    @media (max-width: 980px) {
+      #page-canva .scene-row { grid-template-columns: 56px 1fr 100px 84px 100px; }
+      #page-canva .scene-row .scene-category { grid-column: 2; }
+    }
+    #page-canva .scene-row textarea, #page-canva .scene-row .scene-keyword,
+    #page-canva .scene-row .scene-category {
+      font-family: 'Inter', system-ui, sans-serif; font-size: 12px;
+    }
+    #page-canva .scene-row textarea { min-height: 54px; }
+    #page-canva .scene-pick {
+      width: 76px; height: 76px; border-radius: 6px;
+      border: 1.5px dashed var(--border2); background: var(--bg3);
+      display:flex; align-items:center; justify-content:center;
+      cursor: pointer; overflow: hidden; flex-shrink: 0;
+      transition: border-color .15s;
+    }
+    #page-canva .scene-pick:hover { border-color: var(--accent); }
+    #page-canva .scene-pick img { width:100%; height:100%; object-fit: contain; background:#fff; }
+    #page-canva .scene-pick.empty { color: var(--text-muted); font-size: 11px; text-align:center; padding:4px; }
+    #page-canva .lib-tile {
+      position: relative; cursor: pointer; border:2px solid transparent;
+      border-radius: 6px; overflow: hidden; aspect-ratio: 1;
+      background: #fff; transition: border-color .15s;
+    }
+    #page-canva .lib-tile:hover { border-color: var(--accent); }
+    #page-canva .lib-tile.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(26,115,232,.2); }
+    #page-canva .lib-tile img { width: 100%; height: 100%; object-fit: contain; display:block; }
+    #page-canva .scene-idx {
+      width:48px; height:32px; border-radius:6px;
+      background: var(--accent-light); color: var(--accent);
+      font-weight:700; display:flex; align-items:center; justify-content:center;
+      font-size:13px;
+    }
+    #page-canva .img-thumb {
+      width: 92px; height: 92px; object-fit: cover;
+      border-radius:6px; border:1px solid var(--border); background: var(--bg3);
+    }
+    #page-canva .img-tile {
+      position: relative; display:inline-block; margin: 4px;
+    }
+    #page-canva .img-tile button.del {
+      position:absolute; top:-6px; right:-6px;
+      width:22px; height:22px; border-radius:50%;
+      background: var(--error); color:#fff; border:none; cursor:pointer;
+      font-size:12px; display:flex; align-items:center; justify-content:center;
+    }
+    #page-canva .canva-status {
+      padding:6px 10px; border-radius: 14px; font-size: 11px; font-weight: 700;
+      display:inline-flex; align-items:center; gap:6px;
+    }
+    #page-canva .status-idle    { background: var(--bg3);       color: var(--text-muted); }
+    #page-canva .status-run     { background: var(--accent-light); color: var(--accent); }
+    #page-canva .status-done    { background: var(--success-bg);  color: var(--success); }
+    #page-canva .status-error   { background: var(--error-bg);    color: var(--error); }
+    #page-canva .status-waiting { background: var(--warning-bg);  color: var(--warning); }
+  </style>
+
+  <!-- ═══ 1. Template & Profile ═══════════════════════════════════════════ -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🎨 Canva — Tự động tạo video từ template</span>
+      <div class="card-actions">
+        <span id="canva-login-state" class="canva-status status-idle">
+          <span class="dot dot-gray"></span> Chưa kiểm tra
+        </span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="alert-info text-sm" style="margin-bottom:10px">
+        <b>Cách dùng:</b> Dán URL template Canva (ví dụ <code>https://www.canva.com/design/DAGxxxxx/edit</code>),
+        thêm các cảnh kịch bản, upload ảnh nhân vật/nền — Playwright sẽ tự mở Canva, login,
+        mở template, click từng ô text rồi paste nội dung, upload ảnh và export MP4.
+        <br>Lần đầu cần <b>đăng nhập tay</b> trong cửa sổ Chromium hiện ra; lần sau session sẽ tự nhớ.
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label>🔗 URL template Canva</label>
+          <input id="cv-template-url" type="text" autocomplete="off"
+                 placeholder="https://www.canva.com/design/DAGxxxxxxx/edit">
+          <div class="text-xs text-muted mt-4">
+            Để trống → tự động tạo design mới (Video khổ ngang 1920×1080).
+          </div>
+        </div>
+        <div class="field">
+          <label>🎬 Tỷ lệ output (gợi ý)</label>
+          <select id="cv-aspect">
+            <option value="16:9" selected>16:9 — Video khổ ngang (YouTube)</option>
+            <option value="9:16">9:16 — TikTok / Shorts / Reels</option>
+            <option value="1:1">1:1 — Vuông</option>
+            <option value="4:5">4:5 — Instagram Feed</option>
+          </select>
+          <div class="text-xs text-muted mt-4">Chỉ áp dụng khi tự tạo design mới.</div>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:6px">
+        <div class="field">
+          <label>� Tiền tố tìm kiếm (search prefix)</label>
+          <input id="cv-search-prefix" type="text" value="stickman"
+                 placeholder="stickman / chibi / cartoon / icon...">
+          <div class="text-xs text-muted mt-4">
+            Mỗi cảnh sẽ search trong Thành phần với cú pháp
+            <code>&lt;prefix&gt; &lt;keyword&gt;</code> (ví dụ
+            <code>stickman eat</code>, <code>stickman run</code>). Để trống nếu chỉ muốn dùng từ khoá.
+          </div>
+        </div>
+        <div class="field">
+          <label>⏱ Thời lượng mỗi cảnh (giây)</label>
+          <input id="cv-scene-dur" type="number" min="2" max="30" step="0.5" value="5">
+        </div>
+        <div class="field">
+          <label class="toggle-wrap">
+            <input id="cv-add-elements" type="checkbox" class="toggle-input" checked>
+            <span class="toggle"></span>
+            <span class="toggle-label">Tự thêm thành phần theo từ khoá</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:6px">
+        <div class="field">
+          <label class="toggle-wrap">
+            <input id="cv-export-mp4" type="checkbox" class="toggle-input" checked>
+            <span class="toggle"></span>
+            <span class="toggle-label">Export MP4 sau khi điền</span>
+          </label>
+        </div>
+        <div class="field">
+          <label class="toggle-wrap">
+            <input id="cv-set-animation" type="checkbox" class="toggle-input">
+            <span class="toggle"></span>
+            <span class="toggle-label">Tự đổi animation cho text</span>
+          </label>
+        </div>
+        <div class="field">
+          <label>Animation (nếu bật)</label>
+          <select id="cv-animation">
+            <option value="">— Giữ nguyên —</option>
+            <option value="Fade">Fade</option>
+            <option value="Pan">Pan</option>
+            <option value="Rise">Rise</option>
+            <option value="Pop">Pop</option>
+            <option value="Typewriter">Typewriter</option>
+            <option value="Tumble">Tumble</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ 1.5 Library — pre-scrape creator portfolio once ═══════════════════ -->
+  <div class="card card-collapsible">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="card-title">📚 Thư viện hình của creator (cache local)</span>
+      <div class="card-actions">
+        <span id="cv-lib-count" class="badge badge-gray">0 hình</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="alert-info text-sm" style="margin-bottom:8px">
+        Vào <code>https://www.canva.com/p/&lt;creator&gt;</code>, lọc <b>Đồ họa</b>, scroll cuối,
+        rồi tải tất cả thumbnails về máy. Lần sau chạy chỉ cần chọn 1 hình từ thư viện cho từng cảnh →
+        Playwright upload đúng PNG đã lưu, không phải search lại trong editor mỗi lần.
+      </div>
+      <div class="grid-3">
+        <div class="field">
+          <label>👤 Creator</label>
+          <input id="cv-lib-creator" type="text" value="zdeneksasek" placeholder="zdeneksasek">
+        </div>
+        <div class="field">
+          <label>🗂 Loại</label>
+          <select id="cv-lib-kind">
+            <option value="graphics" selected>Đồ họa (Stick figure)</option>
+            <option value="photos">Ảnh</option>
+            <option value="all">Cả hai</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>🔢 Tối đa</label>
+          <input id="cv-lib-max" type="number" min="20" max="1000" step="10" value="200">
+        </div>
+      </div>
+      <div class="btn-group" style="margin-bottom:8px">
+        <button class="btn btn-primary" type="button" onclick="canvaLibBuild()">🔄 Build / cập nhật thư viện</button>
+        <button class="btn btn-secondary" type="button" onclick="canvaLibLoad()">📥 Tải lại danh sách đã lưu</button>
+        <button class="btn btn-danger btn-sm" type="button" onclick="canvaLibClear()">🗑 Xoá</button>
+        <span id="cv-lib-status" class="text-xs text-muted"></span>
+      </div>
+      <div id="cv-lib-progress" class="progress-row hidden">
+        <span class="progress-label" id="cv-lib-progress-label">0%</span>
+        <div class="progress-bar-wrap"><div id="cv-lib-progress-bar" class="progress-bar pb-overall"></div></div>
+        <span class="progress-pct" id="cv-lib-progress-pct">0%</span>
+      </div>
+      <div id="cv-lib-grid"
+           style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;
+                  max-height:340px;overflow-y:auto;margin-top:8px;
+                  border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg3)">
+        <div class="empty-state" style="grid-column:1/-1">
+          Chưa có thư viện. Bấm "Build" để tải lần đầu.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="canva-grid">
+
+    <!-- ═══ 2. Script panel ════════════════════════════════════════════ -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📝 Kịch bản &amp; văn bản chèn vào template</span>
+        <div class="card-actions" style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="canvaLoadStickFigureSample()">
+            🎭 Mẫu Stick Figure
+          </button>
+          <button class="btn btn-secondary btn-sm" type="button" onclick="canvaAddScene()">＋ Thêm cảnh</button>
+          <button class="btn btn-secondary btn-sm" type="button" onclick="canvaParseFromBigText()">↻ Tách từ text</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert-info text-sm" style="margin-bottom:8px">
+          Mỗi cảnh tương ứng <b>1 ô text</b> trong template Canva. Số trang trong template
+          phải bằng (hoặc lớn hơn) số cảnh — script sẽ paste theo thứ tự trang.
+        </div>
+
+        <div class="field">
+          <label>📋 Toàn bộ kịch bản (paste vào đây để tách thành cảnh)</label>
+          <textarea id="cv-bulk-text" rows="6"
+                    placeholder="Paste toàn bộ script. Bấm 'Tách từ text' để cắt mỗi đoạn (ngăn cách bằng dòng trống) thành 1 cảnh."></textarea>
+          <div class="text-xs text-muted mt-4">
+            Quy ước: <b>dòng trống</b> ngăn các cảnh. Hoặc dòng <code>Cảnh 1 — ...</code>, <code>Cảnh 2 — ...</code>.
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div id="cv-scenes" style="max-height:520px;overflow-y:auto"></div>
+
+        <div class="alert-warning text-sm" style="margin-top:8px">
+          <b>Khi auto-fill không vào được ô text</b> (Canva đôi khi giấu DOM trong iframe):
+          bấm nút <b>📋</b> bên cạnh từng cảnh — text sẽ được đẩy vào clipboard của
+          Chromium. Sau đó click vào ô text trên Canva và bấm <b>Ctrl+V</b> để paste.
+        </div>
+
+        <div class="field" style="margin-top:10px">
+          <label>📜 Voice over / đoạn đọc tổng (tùy chọn)</label>
+          <textarea id="cv-voiceover" rows="3"
+                    placeholder="Đoạn text dùng để generate MP3 voiceover. Sau khi bấm 'Tạo MP3', file sẽ tự thêm vào danh sách upload Canva."></textarea>
+          <div class="grid-3" style="margin-top:6px">
+            <div class="field">
+              <label class="text-xs">Engine TTS</label>
+              <select id="cv-tts-engine">
+                <option value="edge-tts" selected>Edge TTS (miễn phí)</option>
+                <option value="gtts">Google gTTS</option>
+                <option value="fpt-ai">FPT AI (cần key)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="text-xs">Giọng đọc</label>
+              <select id="cv-tts-voice">
+                <option value="vi-VN-HoaiMyNeural" selected>vi-VN HoaiMy (nữ)</option>
+                <option value="vi-VN-NamMinhNeural">vi-VN NamMinh (nam)</option>
+                <option value="en-US-AriaNeural">en-US Aria</option>
+                <option value="en-US-GuyNeural">en-US Guy</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="text-xs">Tốc độ</label>
+              <select id="cv-tts-rate">
+                <option value="-20%">Chậm (-20%)</option>
+                <option value="-10%">Hơi chậm</option>
+                <option value="+0%" selected>Bình thường</option>
+                <option value="+10%">Hơi nhanh</option>
+                <option value="+20%">Nhanh (+20%)</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-group" style="margin-top:6px">
+            <button class="btn btn-primary btn-sm" type="button" onclick="canvaGenerateVoiceover()">
+              🎙 Tạo MP3 voiceover
+            </button>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="canvaPreviewVoiceover()">
+              ▶ Nghe thử
+            </button>
+            <span id="cv-tts-status" class="text-xs text-muted"></span>
+          </div>
+          <audio id="cv-tts-audio" controls style="display:none;width:100%;margin-top:6px"></audio>
+        </div>
+
+        <div class="field">
+          <label>🏷 Hashtag &amp; caption mạng xã hội (tùy chọn)</label>
+          <input id="cv-caption" type="text"
+                 placeholder="#stickfigure #animation #cuocsong #healing #shorts">
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 3. Images panel ════════════════════════════════════════════ -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🖼 Ảnh &amp; tài nguyên upload</span>
+        <div class="card-actions">
+          <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('cv-img-input').click()">
+            📤 Thêm ảnh
+          </button>
+          <button class="btn btn-secondary btn-sm" type="button" onclick="canvaClearImages()">🗑 Xoá hết</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <input id="cv-img-input" type="file" accept="image/*" multiple style="display:none"
+               onchange="canvaOnImageInput(event)">
+        <div class="alert-info text-sm" style="margin-bottom:8px">
+          Ảnh sẽ được Playwright kéo vào panel <b>Uploads</b> của Canva, bạn (hoặc tự động)
+          kéo thả vào template. Hỗ trợ PNG / JPG / WebP.
+        </div>
+        <div id="cv-img-list" style="display:flex;flex-wrap:wrap"></div>
+        <div id="cv-img-empty" class="empty-state">Chưa có ảnh nào — click "Thêm ảnh" để chọn.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ 4. Run / Status ═══════════════════════════════════════════ -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🚀 Chạy tự động</span>
+      <div class="card-actions">
+        <span id="cv-run-status" class="canva-status status-idle">
+          <span class="dot dot-gray"></span> Sẵn sàng
+        </span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="btn-group" style="margin-bottom:10px">
+        <button id="cv-btn-check" class="btn btn-secondary" type="button" onclick="canvaCheckLogin()">
+          🔐 Kiểm tra login Canva
+        </button>
+        <button id="cv-btn-login" class="btn btn-secondary" type="button" onclick="canvaOpenLogin()">
+          🌐 Mở Canva để login
+        </button>
+        <button id="cv-btn-run" class="btn btn-primary btn-lg" type="button" onclick="canvaRun()">
+          ▶ Bắt đầu tự động
+        </button>
+        <button id="cv-btn-stop" class="btn btn-danger hidden" type="button" onclick="canvaStop()">
+          ⏹ Dừng phiên
+        </button>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="canvaProfileReset()">
+          🔄 Reset profile
+        </button>
+      </div>
+
+      <div class="progress-row">
+        <span class="progress-label" id="cv-progress-label">Chưa chạy</span>
+        <div class="progress-bar-wrap"><div id="cv-progress-bar" class="progress-bar pb-overall"></div></div>
+        <span class="progress-pct" id="cv-progress-pct">0%</span>
+      </div>
+
+      <div class="field" style="margin-top:10px">
+        <label>📋 Log</label>
+        <div id="cv-log" class="log-box" style="height:240px"></div>
+      </div>
+    </div>
+  </div>
+
+</div>

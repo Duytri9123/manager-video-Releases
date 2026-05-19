@@ -63,3 +63,8 @@ def page_story():
 @bp.route("/proxies")
 def page_proxies():
     return _render_spa("proxies")
+
+
+@bp.route("/canva")
+def page_canva():
+    return _render_spa("canva")

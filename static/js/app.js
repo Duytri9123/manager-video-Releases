@@ -185,7 +185,8 @@ function switchPage(name) {
   const titles = {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
-    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router'
+    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router',
+    canva:'Canva Auto', stickman:'Stickman Studio'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
   if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
@@ -195,6 +196,8 @@ function switchPage(name) {
   if (name === 'process') loadQueue();
   if (name === 'proxies') { if (typeof proxyLoadList === 'function') proxyLoadList(); if (typeof routerLoadList === 'function') routerLoadList(); }
   if (name === 'chat' && typeof chatInit === 'function') chatInit();
+  if (name === 'canva' && typeof canvaInit === 'function') canvaInit();
+  if (name === 'stickman' && typeof stkInit === 'function') stkInit();
 }
 
 /* ── Content platform sub-tabs (defined here so inline onclick always works) ── */
@@ -231,6 +234,8 @@ function toggleMobileMenu() {
     ['transcribe','🎙','Phiên âm'],['publish','📤','Đăng video'],
     ['content','🗄','Quản lý nội dung'],
     ['movie','🎬','Review phim'],['story','📖','Truyện → Video'],
+    ['canva','🎨','Canva Auto'],
+    ['stickman','🦴','Stickman Studio'],
     ['proxies','🌐','Proxy & Router'],
     ['history','🗃','Lịch sử'],['config','⚙️','Cấu hình'],['cookies','🍪','Cookies']
   ];
