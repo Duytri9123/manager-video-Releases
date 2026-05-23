@@ -1450,6 +1450,7 @@ def burn_subtitles(
     frame_blur_opacity: float = 0.6,
     frame_target_w: int = 1080,
     log_callback=None,
+    blur_y_pct: Optional[float] = None,
 ) -> tuple[bool, str]:
     """
     Burn subtitles into video.
@@ -1457,9 +1458,9 @@ def burn_subtitles(
     If subtitle_format='srt': use SRT with optional blur strip.
     If frame_enabled=True: also creates 9:16 frame in same encode pass (ASS mode only).
     """
-    # Tự động căn giữa vùng che blur với phụ đề
+    # Tự động căn giữa vùng che blur với phụ đề (chỉ khi không có blur_y_pct)
     blur_lift_pct_adj = blur_lift_pct
-    if blur_original and blur_zone != "none":
+    if blur_y_pct is None and blur_original and blur_zone != "none":
         video_height = 1080
         sub_height = font_size + 2 * outline_width
         if subtitle_position == "bottom":
@@ -1489,13 +1490,15 @@ def burn_subtitles(
                          frame_blur_w_pct=frame_blur_w_pct,
                          frame_blur_opacity=frame_blur_opacity,
                          frame_target_w=frame_target_w,
-                         log_callback=log_callback)
+                         log_callback=log_callback,
+                         blur_y_pct=blur_y_pct)
 
     # SRT path (original logic — no frame support)
     return _burn_srt(video_path, srt_path, output_path, ffmpeg,
                      blur_original, blur_zone, blur_height_pct, blur_width_pct, blur_lift_pct_adj,
                      font_size, font_color, outline_color, outline_width,
-                     margin_v, subtitle_position)
+                     margin_v, subtitle_position,
+                     blur_y_pct=blur_y_pct)
 
 
 def _burn_ass(
@@ -1524,6 +1527,7 @@ def _burn_ass(
     frame_blur_opacity: float = 0.6,
     frame_target_w: int = 1080,
     log_callback=None,
+    blur_y_pct: Optional[float] = None,
 ) -> tuple[bool, str]:
     """Burn ASS subtitle file into video. Optionally blur a zone to hide burned-in original subs.
     Frame elements (title bar, blur panels) are now embedded directly in the ASS file.
@@ -1612,23 +1616,22 @@ def _burn_ass(
         if blur_original and blur_zone != "none":
             h_pct = _clamp_float(blur_height_pct, 0.08, 0.45)
             w_pct = max(0.35, min(1.0, float(blur_width_pct)))
-            lift_pct = _clamp_float(blur_lift_pct, 0.0, 0.20)
-            if blur_zone == "bottom":
-                y_start = max(0.0, 1.0 - h_pct - lift_pct)
-                _log(f"🌫 Vùng che: từ {y_start*100:.0f}% → {(y_start+h_pct)*100:.0f}%")
-                filter_complex = (
-                    f"[0:v]split[orig][copy];"
-                    f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:ih*{y_start:.4f},"
-                    f"boxblur=luma_radius=20:luma_power=3[blurred];"
-                    f"[orig][blurred]overlay=(W-w)/2:H*{y_start:.4f},ass='{ass_esc}'[subbed]"
-                )
+            if blur_y_pct is not None:
+                y_start = _clamp_float(blur_y_pct - h_pct / 2, 0.0, 1.0 - h_pct)
             else:
-                filter_complex = (
-                    f"[0:v]split[orig][copy];"
-                    f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:0,"
-                    f"boxblur=luma_radius=20:luma_power=3[blurred];"
-                    f"[orig][blurred]overlay=(W-w)/2:0,ass='{ass_esc}'[subbed]"
-                )
+                lift_pct = _clamp_float(blur_lift_pct, 0.0, 0.20)
+                if blur_zone == "bottom":
+                    y_start = max(0.0, 1.0 - h_pct - lift_pct)
+                else:
+                    y_start = 0.0
+
+            _log(f"🌫 Vùng che: từ {y_start*100:.0f}% → {(y_start+h_pct)*100:.0f}%")
+            filter_complex = (
+                f"[0:v]split[orig][copy];"
+                f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:ih*{y_start:.4f},"
+                f"boxblur=luma_radius=20:luma_power=3[blurred];"
+                f"[orig][blurred]overlay=(W-w)/2:H*{y_start:.4f},ass='{ass_esc}'[subbed]"
+            )
         else:
             filter_complex = f"[0:v]ass='{ass_esc}'[subbed]"
 
@@ -1749,6 +1752,7 @@ def _burn_srt(
     outline_width: int = 2,
     margin_v: int = 30,
     subtitle_position: str = "bottom",
+    blur_y_pct: Optional[float] = None,
 ) -> tuple[bool, str]:
     """
     Burn SRT subtitles into video.
@@ -1796,23 +1800,22 @@ def _burn_srt(
 
             h_pct = _clamp_float(blur_height_pct, 0.08, 0.45)
             w_pct = max(0.35, min(1.0, float(blur_width_pct)))
-            lift_pct = _clamp_float(blur_lift_pct, 0.0, 0.20)
-            if blur_zone == "bottom":
-                y_start = max(0.0, 1.0 - h_pct - lift_pct)
-                # crop bottom strip, blur it, pad back, overlay
-                crop_filter = (
-                    f"[0:v]split[orig][copy];"
-                    f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:ih*{y_start:.4f},"
-                    f"boxblur=luma_radius=20:luma_power=3[blurred];"
-                    f"[orig][blurred]overlay=(W-w)/2:H*{y_start:.4f}[blended]"
-                )
-            else:  # top
-                crop_filter = (
-                    f"[0:v]split[orig][copy];"
-                    f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:0,"
-                    f"boxblur=luma_radius=20:luma_power=3[blurred];"
-                    f"[orig][blurred]overlay=(W-w)/2:0[blended]"
-                )
+            if blur_y_pct is not None:
+                y_start = _clamp_float(blur_y_pct - h_pct / 2, 0.0, 1.0 - h_pct)
+            else:
+                lift_pct = _clamp_float(blur_lift_pct, 0.0, 0.20)
+                if blur_zone == "bottom":
+                    y_start = max(0.0, 1.0 - h_pct - lift_pct)
+                else:
+                    y_start = 0.0
+
+            # crop bottom strip, blur it, pad back, overlay
+            crop_filter = (
+                f"[0:v]split[orig][copy];"
+                f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:ih*{y_start:.4f},"
+                f"boxblur=luma_radius=20:luma_power=3[blurred];"
+                f"[orig][blurred]overlay=(W-w)/2:H*{y_start:.4f}[blended]"
+            )
 
             ok, err = run_ffmpeg([
                 ffmpeg, "-i", str(tmp_video),
@@ -3454,6 +3457,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         def _burn_log_cb(msg, level="info"):
             _burn_logs.append((msg, level))
 
+        _blur_y_raw = data.get("blur_y_pct")
+        _blur_y_pct = None
+        if _blur_y_raw is not None and str(_blur_y_raw).strip() != "" and str(_blur_y_raw).lower() != "null":
+            try:
+                _blur_y_pct = float(_blur_y_raw)
+            except Exception:
+                pass
+
         ok, err = burn_subtitles(
             video_path=video_path,
             srt_path=srt_path,
@@ -3473,6 +3484,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             subtitle_format="ass",  # luôn dùng ASS
             frame_enabled=False,
             log_callback=_burn_log_cb,
+            blur_y_pct=_blur_y_pct,
         )
         # Emit collected burn logs
         for _msg, _lvl in _burn_logs:

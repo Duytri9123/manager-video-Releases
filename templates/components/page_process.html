@@ -1961,10 +1961,16 @@
         const liftPx = Math.round(vidH * blurLift);
 
         let bY;
-        if (blurZone === 'top') {
-          bY = vidY + liftPx;
+        const blurYOverride = document.getElementById('proc-blur-y')?.value?.trim();
+        if (blurYOverride !== '' && blurYOverride !== undefined) {
+          const blurTopPct = Math.max(0, Math.min(1, parseFloat(blurYOverride) / 100 - blurH / 2));
+          bY = vidY + Math.round(vidH * blurTopPct);
         } else {
-          bY = vidY + vidH - bH - liftPx;
+          if (blurZone === 'top') {
+            bY = vidY + liftPx;
+          } else {
+            bY = vidY + vidH - bH - liftPx;
+          }
         }
 
         // Draw blurred region (simulate with semi-transparent dark overlay)
