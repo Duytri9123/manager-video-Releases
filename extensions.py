@@ -8,7 +8,6 @@ exposed via `/api/_routes` for quick debugging from the browser.
 from __future__ import annotations
 
 import importlib
-import os
 import time
 import traceback
 from datetime import datetime
@@ -16,8 +15,7 @@ from typing import List, Tuple
 
 from flask import jsonify, request
 
-from auth.web_auth import WebAuth
-from core_app import LOGGER, SECRET_KEY, STATE_DIR, app, load_cfg, socketio
+from core_app import LOGGER, STATE_DIR, app, socketio
 
 
 # (module_path, blueprint_attr, friendly_name)
@@ -42,7 +40,10 @@ _BLUEPRINTS: List[Tuple[str, str, str]] = [
     ("routes.story",      "bp", "story"),
     ("routes.chatbot",    "bp", "chatbot"),
     ("routes.canva",      "bp", "canva"),
+    ("routes.videogen",   "bp", "videogen"),
     ("routes.stickman",   "bp", "stickman"),
+    ("routes.idea2video", "bp", "idea2video"),
+    ("routes.ai_studio",  "bp", "ai_studio"),
 ]
 
 _REGISTERED: List[str] = []
@@ -81,10 +82,7 @@ def create_app():
         except Exception as exc:
             LOGGER.error("Failed to register socket.io handlers: %s", exc)
 
-    # Web app authentication (no-op when auth.enabled=false in config)
-    auth = WebAuth(state_dir=STATE_DIR, secret_key=SECRET_KEY, cfg_loader=load_cfg)
-    auth.attach(app)
-    app.extensions["web_auth"] = auth
+    # Web app authentication: removed — open access, no login gate.
 
     # Floating chat widget — SQLite-backed session/message store.
     try:
@@ -94,14 +92,7 @@ def create_app():
     except Exception as exc:
         LOGGER.warning("chat_store init failed (widget will fall back to localStorage): %s", exc)
 
-    # Bootstrap password from env if not yet set
-    boot_pw = os.getenv("WEBAPP_PASSWORD")
-    if boot_pw and not auth.has_password():
-        try:
-            auth.set_password(boot_pw)
-            LOGGER.info("Auth password initialized from WEBAPP_PASSWORD env.")
-        except Exception as e:
-            LOGGER.warning("Could not initialize auth password: %s", e)
+    # Bootstrap password from env: removed (auth disabled).
 
     # ── JSON 404 for API routes (no more HTML 404 leaking into the UI) ──
     @app.errorhandler(404)
@@ -134,8 +125,7 @@ def create_app():
             "routes": rules,
         })
 
-    # Make the auth gate skip the debug routes too
-    auth.public_paths.add("/api/_routes")
+    # Make the auth gate skip the debug routes too: no-op (auth removed).
 
     # Boot summary
     elapsed = (time.time() - boot_started) * 1000

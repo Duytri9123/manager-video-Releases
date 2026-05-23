@@ -5,11 +5,6 @@ DuyTris Downloader — Flask launcher (LAN-friendly).
 Usage:
   py run_flask.py
   FLASK_HOST=0.0.0.0 py run_flask.py    # share on LAN
-
-Security:
-  When binding to 0.0.0.0 you MUST enable `auth.enabled: true` in config.yml
-  (or set WEBAPP_PASSWORD on first run) to require a login. The launcher will
-  print a warning if it sees an unprotected public bind.
 """
 import os
 import socket
@@ -38,17 +33,6 @@ def _get_local_ip() -> str:
         return "127.0.0.1"
 
 
-def _warn_if_unprotected(host: str):
-    if host in ("0.0.0.0", "::"):
-        cfg = load_cfg() or {}
-        if not (cfg.get("auth") or {}).get("enabled"):
-            LOGGER.warning(
-                "Bound to %s without auth. Anyone on your LAN/ngrok can use this app. "
-                "Set auth.enabled=true in config.yml AND WEBAPP_PASSWORD on first run.",
-                host,
-            )
-
-
 if __name__ == "__main__":
     import webbrowser
     from core_app import _start_ngrok_tunnel
@@ -60,7 +44,6 @@ if __name__ == "__main__":
     OPEN_BROWSER = os.getenv("OPEN_BROWSER", "1") not in ("0", "false", "no")
 
     _start_ngrok_tunnel(PORT)
-    _warn_if_unprotected(HOST)
 
     if _ca._NGROK_PUBLIC_URL:
         print(f"[ngrok] Public URL: {_ca._NGROK_PUBLIC_URL}")

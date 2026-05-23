@@ -65,6 +65,267 @@ def _get_encoding_args(ffmpeg: Optional[str] = None) -> list[str]:
                 "-c:a", "aac", "-b:a", "128k"]
 
 
+def concat_thumbnail_with_video(
+    video_path: Path,
+    thumbnail_path: Path,
+    output_path: Path,
+    ffmpeg: str,
+    duration: float = 2.0,
+) -> tuple[bool, str]:
+    """
+    Concat a thumbnail image as the first N seconds of a video.
+
+    Approach: encode thumbnail as a short silent video clip with same
+    resolution/fps/codec as the main video, then concat with -filter_complex.
+    This avoids issues with concat demuxer requiring matching codecs.
+
+    Args:
+        video_path: source video (already burned with subs)
+        thumbnail_path: thumbnail image (jpg/png)
+        output_path: final output mp4
+        ffmpeg: path to ffmpeg
+        duration: how long to show thumbnail (default 2s)
+
+    Returns:
+        (success, error_message_or_path)
+    """
+    video_path = Path(video_path)
+    thumbnail_path = Path(thumbnail_path)
+    output_path = Path(output_path)
+
+    if not video_path.exists():
+        return False, f"Video không tồn tại: {video_path}"
+    if not thumbnail_path.exists():
+        return False, f"Thumbnail không tồn tại: {thumbnail_path}"
+
+    # Get video resolution from source
+    try:
+        r = subprocess.run(
+            [ffmpeg, "-i", str(video_path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+        m = re.search(r"(\d{2,5})x(\d{2,5})", r.stderr or "")
+        vid_w, vid_h = (int(m.group(1)), int(m.group(2))) if m else (1280, 720)
+    except Exception:
+        vid_w, vid_h = 1280, 720
+
+    enc_args = _get_encoding_args(ffmpeg)
+
+    # Use filter_complex to: scale thumbnail to video size, generate silent audio, concat
+    # [0:v] = thumbnail (image, looped), [1:v]+[1:a] = video
+    cmd = [
+        ffmpeg,
+        "-loop", "1", "-t", str(duration), "-i", str(thumbnail_path),
+        "-i", str(video_path),
+        "-f", "lavfi", "-t", str(duration), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-filter_complex",
+        (
+            f"[0:v]scale={vid_w}:{vid_h}:force_original_aspect_ratio=decrease,"
+            f"pad={vid_w}:{vid_h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[thumb];"
+            f"[1:v]scale={vid_w}:{vid_h}:force_original_aspect_ratio=decrease,"
+            f"pad={vid_w}:{vid_h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[vid];"
+            f"[thumb][2:a][vid][1:a?]concat=n=2:v=1:a=1[outv][outa]"
+        ),
+        "-map", "[outv]", "-map", "[outa]",
+    ] + enc_args + [
+        str(output_path), "-y", "-loglevel", "error"
+    ]
+
+    ok, err = run_ffmpeg(cmd, timeout=900)
+    if ok and output_path.exists() and output_path.stat().st_size > 0:
+        return True, str(output_path)
+    return False, err or "Concat thumbnail thất bại"
+
+
+def _gen_ai_thumbnail_for_pipeline(
+    video_path: Path,
+    output_path: Path,
+    ffmpeg: str,
+    timestamp: float = 5.0,
+    title: str = "",
+    subtitle_text: str = "",
+) -> Optional[Path]:
+    """Generate AI thumbnail. Priority order:
+    1. 9Router (cx/gpt-5.5-image) — uses extracted frame as reference image
+    2. Gemini 2.5 Flash Image — fallback when 9Router not configured
+
+    Returns Path to saved thumbnail, or None on failure.
+    Used by the parallel thumbnail task in process_video_full pipeline.
+    """
+    import os
+    import base64
+    import urllib.request
+    import urllib.error
+    import json as _json
+    import shutil as _shutil
+
+    # Load config once
+    try:
+        from core_app import load_cfg as _load_cfg
+        cfg = _load_cfg()
+    except Exception:
+        cfg = {}
+
+    nr_cfg = cfg.get("nine_router") or {}
+    nr_endpoint = (nr_cfg.get("endpoint") or "").strip().rstrip("/")
+    nr_key = (nr_cfg.get("api_key") or "").strip()
+    use_9router = bool(nr_endpoint and nr_key)
+
+    gemini_key = (
+        (cfg.get("gemini_video") or {}).get("api_key", "").strip()
+        or os.environ.get("GEMINI_API_KEY", "").strip()
+    )
+
+    if not use_9router and not gemini_key:
+        return None
+
+    # Step 1: extract frame from video (used as reference for both providers)
+    try:
+        with tempfile.TemporaryDirectory(prefix="ai_thumb_pipe_") as tmpdir:
+            tmp_video = Path(tmpdir) / f"input{video_path.suffix}"
+            _shutil.copy2(str(video_path), str(tmp_video))
+            tmp_jpg = Path(tmpdir) / "frame.jpg"
+
+            ok, _ = run_ffmpeg([
+                ffmpeg, "-ss", str(timestamp),
+                "-i", str(tmp_video),
+                "-vframes", "1", "-q:v", "2",
+                str(tmp_jpg), "-y", "-loglevel", "error"
+            ], timeout=60)
+
+            if not ok or not tmp_jpg.exists() or tmp_jpg.stat().st_size == 0:
+                return None
+
+            frame_b64 = base64.b64encode(tmp_jpg.read_bytes()).decode()
+
+            # Build prompt (chung cho cả 2 provider)
+            gen_prompt = (
+                f"Eye-catching YouTube thumbnail in 16:9. "
+                f"Title: {title or 'video'}. "
+                f"Content: {subtitle_text or title or 'video'}. "
+                f"Vibrant colors, high contrast, professional, sharp focus, dramatic lighting."
+            )
+
+            # ── PRIORITY 1: 9Router (cx/gpt-5.5-image) ──────────────────────
+            if use_9router:
+                model_id = (nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
+                try:
+                    payload = {
+                        "model": model_id,
+                        "prompt": gen_prompt[:2000],
+                        "n": 1,
+                        "size": "1792x1024",  # 16:9
+                        "quality": "standard",
+                        "response_format": "b64_json",
+                        # multimodal reference frame
+                        "images": [frame_b64],
+                        "image": frame_b64,
+                    }
+                    body = _json.dumps(payload).encode("utf-8")
+                    req = urllib.request.Request(
+                        f"{nr_endpoint}/images/generations",
+                        data=body,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {nr_key}",
+                        },
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(req, timeout=240) as resp:
+                        rdata = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
+                    img_data = (rdata.get("data") or [{}])[0]
+                    img_b64_data = img_data.get("b64_json")
+                    img_url_remote = img_data.get("url")
+                    if img_b64_data:
+                        output_path.write_bytes(base64.b64decode(img_b64_data))
+                        if output_path.exists() and output_path.stat().st_size > 1024:
+                            return output_path
+                    elif img_url_remote:
+                        with urllib.request.urlopen(img_url_remote, timeout=180) as dl:
+                            output_path.write_bytes(dl.read())
+                        if output_path.exists() and output_path.stat().st_size > 1024:
+                            return output_path
+                except Exception:
+                    # Fall through to Gemini
+                    pass
+
+            # ── PRIORITY 2: Gemini fallback ─────────────────────────────────
+            if not gemini_key:
+                return None
+
+            # Step 2: ask Gemini Vision to refine prompt based on frame
+            prompt_text = (
+                f"You are a YouTube thumbnail designer. Analyze this video frame and write a concise "
+                f"image-generation prompt (under 150 words) for a click-worthy 16:9 thumbnail. "
+                f"Title/Brand: {title or 'N/A'}. Content hint: {subtitle_text or 'N/A'}. "
+                f"Output ONLY the prompt text."
+            )
+            try:
+                vision_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+                vision_payload = {
+                    "contents": [{
+                        "parts": [
+                            {"text": prompt_text},
+                            {"inlineData": {"mimeType": "image/jpeg", "data": frame_b64}},
+                        ]
+                    }],
+                    "generationConfig": {"temperature": 0.8, "maxOutputTokens": 300},
+                }
+                body = _json.dumps(vision_payload).encode("utf-8")
+                req = urllib.request.Request(
+                    vision_url, data=body,
+                    headers={"Content-Type": "application/json"}, method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    vdata = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
+                refined = ""
+                for cand in (vdata.get("candidates") or []):
+                    for part in ((cand.get("content") or {}).get("parts") or []):
+                        if part.get("text"):
+                            refined = part["text"].strip()
+                            break
+                    if refined:
+                        break
+                if refined:
+                    gen_prompt = refined
+            except Exception:
+                pass
+
+            # Step 3: generate image with Gemini native image generation
+            img_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key={gemini_key}"
+            img_payload = {
+                "contents": [{
+                    "parts": [
+                        {"inlineData": {"mimeType": "image/jpeg", "data": frame_b64}},
+                        {"text": f"Based on this video frame, generate a professional thumbnail image. {gen_prompt}"},
+                    ]
+                }],
+                "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+            }
+            try:
+                body = _json.dumps(img_payload).encode("utf-8")
+                req = urllib.request.Request(
+                    img_url, data=body,
+                    headers={"Content-Type": "application/json"}, method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    idata = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
+                for cand in (idata.get("candidates") or []):
+                    for part in ((cand.get("content") or {}).get("parts") or []):
+                        inline = part.get("inlineData") or {}
+                        if inline.get("mimeType", "").startswith("image/"):
+                            img_b64_data = inline.get("data", "")
+                            if img_b64_data:
+                                output_path.write_bytes(base64.b64decode(img_b64_data))
+                                return output_path
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return None
+
+
 def get_media_duration_seconds(ffmpeg: str, media_path: Path) -> float:
     """Best-effort duration parser from ffmpeg stderr output."""
     try:
@@ -85,10 +346,49 @@ def get_media_duration_seconds(ffmpeg: str, media_path: Path) -> float:
 
 
 def _safe_stem(stem: str) -> str:
-    stem = stem.replace("\n", " ").replace("\r", " ")
-    stem = re.sub(r'[<>:"/\\|?*#]', '_', stem)
-    stem = re.sub(r'[\s_]+', '_', stem)
-    return stem.strip('_ ')[:150]
+    """Chuẩn hoá tên file/folder cho output:
+    - Bỏ dấu tiếng Việt (NFD + ASCII fallback) để tránh Unicode dài + giảm risk
+      Windows MAX_PATH (260). Đặc biệt 'đ' → 'd', 'Đ' → 'D'.
+    - Bỏ ký tự đặc biệt không hợp lệ trong tên file.
+    - Giới hạn 60 ký tự để pipeline (folder + file + suffix) không vượt MAX_PATH.
+    """
+    import unicodedata
+
+    raw = (stem or "").replace("\n", " ").replace("\r", " ")
+    # Đặc biệt cho tiếng Việt: đ/Đ không tách bằng NFD
+    raw = raw.replace("đ", "d").replace("Đ", "D")
+    # Tách dấu rồi loại bỏ combining marks
+    nfkd = unicodedata.normalize("NFD", raw)
+    ascii_str = "".join(ch for ch in nfkd if not unicodedata.combining(ch))
+    # Loại ký tự không hợp lệ cho tên file (Windows + Unix)
+    ascii_str = re.sub(r'[<>:"/\\|?*#!]', "_", ascii_str)
+    # Giữ chữ-số-_-.- và space; mọi thứ khác thành "_"
+    ascii_str = re.sub(r"[^\w.\- ]", "_", ascii_str, flags=re.ASCII)
+    ascii_str = re.sub(r"[\s_]+", "_", ascii_str).strip("_ ")
+    return ascii_str[:60] or "video"
+
+
+def _winlong(p) -> str:
+    """Convert path to Windows long-path form (\\\\?\\C:\\...) when needed.
+    Trên non-Windows hoặc path ngắn → trả str(p) như cũ.
+    Cần thiết khi path > 260 ký tự để open()/write_text() không lỗi Errno 2."""
+    import os as _os
+    s = str(p)
+    if _os.name != "nt":
+        return s
+    if s.startswith("\\\\?\\"):
+        return s
+    # Chỉ áp dụng cho absolute path
+    try:
+        abspath = _os.path.abspath(s)
+    except Exception:
+        return s
+    if len(abspath) < 200:
+        return s  # path ngắn, không cần long-prefix
+    # UNC path: \\server\share → \\?\UNC\server\share
+    if abspath.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + abspath[2:]
+    return "\\\\?\\" + abspath
 
 
 def _as_bool(value, default: bool = False) -> bool:
@@ -646,7 +946,9 @@ class GroqWhisperTranscriber:
             srt_lines.append(
                 f"{i}\n{_fmt_srt_time(seg['start'])} --> {_fmt_srt_time(seg['end'])}\n{seg['text']}\n"
             )
-        out_srt.write_text("\n".join(srt_lines), encoding="utf-8")
+        # Dùng _winlong để xử lý path > 260 ký tự trên Windows
+        with open(_winlong(out_srt), "w", encoding="utf-8") as _f:
+            _f.write("\n".join(srt_lines))
         return segments
 
 
@@ -716,7 +1018,8 @@ class FasterWhisperTranscriber:
             srt_lines.append(
                 f"{i}\n{_fmt_srt_time(seg['start'])} --> {_fmt_srt_time(seg['end'])}\n{seg['text']}\n"
             )
-        out_srt.write_text("\n".join(srt_lines), encoding="utf-8")
+        with open(_winlong(out_srt), "w", encoding="utf-8") as _f:
+            _f.write("\n".join(srt_lines))
 
         return segments
 
@@ -786,9 +1089,12 @@ def make_vertical_video(
     output_path: Path,
     ffmpeg: str,
     title: str = "",
+    title_enabled: bool = True,
     title_size_pct: float = 5.0,
     title_color: str = "#000000",
     blur_w_pct: float = 15.0,
+    blur_top_pct: float = 0.0,
+    blur_bottom_pct: float = 0.0,
     blur_opacity: float = 0.6,
     blur_mode: str = "overlay",
     logo_path: Optional[str] = None,
@@ -831,10 +1137,14 @@ def make_vertical_video(
     vid_h = int(vid_w * src_h / src_w)
     vid_h = vid_h + (vid_h % 2)
 
-    # Title bar
-    title_font_px = max(16, int(target_w * title_size_pct / 100))
-    title_bar_h   = int(title_font_px * 2.4)
-    title_bar_h   = title_bar_h + (title_bar_h % 2)
+    # Title bar (chỉ nếu enabled)
+    if title_enabled and title:
+        title_font_px = max(16, int(target_w * title_size_pct / 100))
+        title_bar_h   = int(title_font_px * 2.4)
+        title_bar_h   = title_bar_h + (title_bar_h % 2)
+    else:
+        title_font_px = 0
+        title_bar_h = 0
 
     out_h = vid_h + title_bar_h
 
@@ -890,10 +1200,9 @@ def make_vertical_video(
             filters.append(f"color=white:{target_w}x{out_h}:r=30[canvas]")
             filters.append(f"[canvas][vid]overlay=0:{title_bar_h}[c5]")
 
-        # Title bar
-        filters.append(f"[c5]drawbox=x=0:y=0:w={target_w}:h={title_bar_h}:color=white:t=fill[c6]")
-
-        if title:
+        # Title bar (chỉ vẽ nếu title_enabled)
+        if title_enabled and title:
+            filters.append(f"[c5]drawbox=x=0:y=0:w={target_w}:h={title_bar_h}:color=white:t=fill[c6]")
             safe_title = title.replace("'", "\\'").replace(":", "\\:")
             filters.append(
                 f"[c6]drawtext=text='{safe_title}':fontsize={title_font_px}:"
@@ -902,7 +1211,7 @@ def make_vertical_video(
             )
             last = "c7"
         else:
-            last = "c6"
+            last = "c5"
 
         # Get hardware-optimized encoding params
         from core.hardware_presets import get_optimal_preset
@@ -1740,6 +2049,8 @@ def write_ass_with_frame(
     title_bar_h_pct: float = 12.0,  # height of title bar as % of PlayResY
     # Frame: Side blur panels (overlay on sides of video)
     blur_w_pct: float = 15.0,
+    blur_top_pct: float = 0.0,  # Top blur strip height as % of PlayResY
+    blur_bottom_pct: float = 0.0,  # Bottom blur strip height as % of PlayResY
     blur_opacity: float = 0.6,
     blur_color: str = "#000000",
     # Logo
@@ -1776,7 +2087,8 @@ def write_ass_with_frame(
     out_path = Path(out_path)
 
     # Calculate dimensions (all overlays on the video area)
-    title_bar_h = max(40, int(play_res_y * title_bar_h_pct / 100))
+    # Khi title_bar_h_pct=0 (user tắt tiêu đề) → không có title bar (h=0)
+    title_bar_h = 0 if title_bar_h_pct <= 0 else max(40, int(play_res_y * title_bar_h_pct / 100))
     title_bar_h = title_bar_h + (title_bar_h % 2)
     title_font_px = max(16, int(play_res_x * title_size_pct / 100))
 
@@ -1856,8 +2168,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     start_time = "0:00:00.00"
 
     # 1. Title bar background (white rectangle at top, overlay on video)
+    # Chỉ vẽ khi thực sự có title — nếu user tắt "Hiện tiêu đề" thì không vẽ dải trắng
     has_title = bool(title_text and title_text.strip())
-    if has_title or title_bar_h_pct > 0:
+    if has_title:
         title_draw = f"m 0 0 l {play_res_x} 0 {play_res_x} {title_bar_h} 0 {title_bar_h}"
         lines.append(
             f"Dialogue: 3,{start_time},{end_time},TitleBar,,0,0,0,,{{\\pos(0,0)\\p1}}{title_draw}{{\\p0}}"
@@ -1925,6 +2238,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         lines.append(
             f"Dialogue: 1,{start_time},{end_time},BlurRight,,0,0,0,,"
             f"{{\\pos({right_x},0)\\p1}}{right_draw}{{\\p0}}"
+        )
+
+    # 5. Top blur strip (full width)
+    top_h = max(0, int(play_res_y * blur_top_pct / 100))
+    if top_h > 0:
+        top_draw = f"m 0 0 l {play_res_x} 0 {play_res_x} {top_h} 0 {top_h}"
+        lines.append(
+            f"Dialogue: 1,{start_time},{end_time},BlurLeft,,0,0,0,,"
+            f"{{\\pos(0,0)\\p1}}{top_draw}{{\\p0}}"
+        )
+
+    # 6. Bottom blur strip (full width)
+    bottom_h = max(0, int(play_res_y * blur_bottom_pct / 100))
+    if bottom_h > 0:
+        bottom_y = play_res_y - bottom_h
+        bottom_draw = f"m 0 0 l {play_res_x} 0 {play_res_x} {bottom_h} 0 {bottom_h}"
+        lines.append(
+            f"Dialogue: 1,{start_time},{end_time},BlurLeft,,0,0,0,,"
+            f"{{\\pos(0,{bottom_y})\\p1}}{bottom_draw}{{\\p0}}"
         )
 
     # ── Subtitle dialogue lines (layer 2 — below title bar, above blur) ──────
@@ -2159,19 +2491,56 @@ async def _tts_edge(text: str, voice: str, out_path: Path, rate: str = "+0%",
     support SSML express-as styles via edge-tts; if the underlying call fails
     with the style we silently retry without it.
     """
+    # Map FPT AI voices → edge-tts Vietnamese voices
+    _VOICE_MAP = {
+        "banmai": "vi-VN-HoaiMyNeural",
+        "leminh": "vi-VN-NamMinhNeural",
+        "thuminh": "vi-VN-HoaiMyNeural",
+        "giahuy": "vi-VN-NamMinhNeural",
+        "myan": "vi-VN-HoaiMyNeural",
+        "lannhi": "vi-VN-HoaiMyNeural",
+        "lianh": "vi-VN-HoaiMyNeural",
+    }
+    # Auto-fix voice name if it's an FPT voice or doesn't look like edge-tts format
+    if voice and "-" not in voice and "Neural" not in voice:
+        voice = _VOICE_MAP.get(voice.lower(), "vi-VN-HoaiMyNeural")
+
     try:
         import edge_tts
         kwargs = {"rate": rate}
         if pitch and pitch.strip() and pitch.strip().lower() not in ("+0hz", "0hz", "default"):
             kwargs["pitch"] = pitch
-        try:
-            communicate = edge_tts.Communicate(text, voice, **kwargs)
-            await communicate.save(str(out_path))
-        except TypeError:
-            # Older edge-tts that doesn't support `pitch`
-            communicate = edge_tts.Communicate(text, voice, rate=rate)
-            await communicate.save(str(out_path))
-        return out_path.exists() and out_path.stat().st_size > 0
+
+        # Retry up to 2 times on "No audio was received" errors
+        last_err = None
+        for _retry in range(3):
+            try:
+                communicate = edge_tts.Communicate(text, voice, **kwargs)
+                await communicate.save(str(out_path))
+                if out_path.exists() and out_path.stat().st_size > 0:
+                    return True
+            except TypeError:
+                # Older edge-tts that doesn't support `pitch`
+                communicate = edge_tts.Communicate(text, voice, rate=rate)
+                await communicate.save(str(out_path))
+                if out_path.exists() and out_path.stat().st_size > 0:
+                    return True
+            except Exception as e:
+                last_err = e
+                err_msg = str(e).lower()
+                if "no audio was received" in err_msg:
+                    # Retry after short delay — edge-tts sometimes has transient failures
+                    await asyncio.sleep(1.0 * (_retry + 1))
+                    continue
+                else:
+                    raise RuntimeError(f"edge-tts failed: {e}")
+
+        # All retries exhausted
+        if last_err:
+            raise RuntimeError(f"edge-tts failed after 3 attempts: {last_err}")
+        return False
+    except RuntimeError:
+        raise
     except Exception as e:
         raise RuntimeError(f"edge-tts failed: {e}")
 
@@ -2217,7 +2586,7 @@ async def _tts_fpt_ai(
         if not audio_url:
             raise RuntimeError(f"FPT TTS missing async URL: {data}")
 
-        # Poll async URL until audio is ready.
+        # Poll async URL until audio is ready (up to ~60s for long text).
         for attempt in range(24):
             await asyncio.sleep(0.5)
             async with session.get(audio_url) as aresp:
@@ -2584,7 +2953,43 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         yield send(log="ffmpeg not found. Install ffmpeg and add to PATH.", level="error")
         return
 
-    out_dir = Path(data.get("out_dir", "")).expanduser() if data.get("out_dir") else video_path.parent
+    # Output dir logic:
+    # - User chỉ định out_dir → dùng nó
+    # - Nếu video gốc đã nằm trong Downloaded/Process_video/<name>/ → giữ nguyên (resume)
+    # - Ngược lại → tạo Downloaded/Process_video/<safe_stem>/
+    _user_out_dir = str(data.get("out_dir") or "").strip()
+    if _user_out_dir:
+        out_dir = Path(_user_out_dir).expanduser()
+    else:
+        import yaml as _yaml_cfg
+        _cfg_path = Path(__file__).parent.parent / "config.yml"
+        _dl_path = ""
+        if _cfg_path.exists():
+            try:
+                _dl_path = str((_yaml_cfg.safe_load(_cfg_path.read_text(encoding="utf-8")) or {}).get("path") or "").strip()
+            except Exception:
+                pass
+
+        if _dl_path:
+            _base = Path(_dl_path).expanduser()
+            if not _base.is_absolute():
+                _base = Path(__file__).parent.parent / _base
+            _process_root = (_base / "Process_video").resolve()
+
+            # Nếu video gốc đã nằm trong Process_video/<x>/ thì dùng chính folder đó
+            try:
+                _vp_resolved = video_path.resolve()
+                if _process_root in _vp_resolved.parents:
+                    out_dir = _vp_resolved.parent
+                else:
+                    # Tạo thư mục riêng cho video này (theo stem an toàn)
+                    _safe_stem_for_dir = _safe_stem(video_path.stem) or "video"
+                    out_dir = _process_root / _safe_stem_for_dir
+            except Exception:
+                _safe_stem_for_dir = _safe_stem(video_path.stem) or "video"
+                out_dir = _process_root / _safe_stem_for_dir
+        else:
+            out_dir = video_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
     video_title = str(data.get("video_title") or "").strip()
     stem_source = video_title or video_path.stem
@@ -2886,14 +3291,23 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             outline_width=_as_int(data.get("outline_width", 2), 2),
                             margin_v=effective_margin_v,
                             alignment=alignment,
-                            title_text=_frame_title,
+                            title_text=_frame_title if _as_bool(data.get("frame_title_enabled", True), True) else "",
                             title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
                             title_color=str(data.get("frame_title_color") or "#000000"),
                             title_color_2=str(data.get("frame_title_color_2") or "#ff0000"),
                             title_split_color=_as_bool(data.get("frame_title_split_color", True), True),
                             title_bar_color=str(data.get("frame_title_bar_color") or "#ffffff"),
-                            title_bar_h_pct=_as_float(data.get("frame_title_bar_h_pct"), 12.0),
+                            # Khi user tắt "Hiện tiêu đề" → ép title_bar_h_pct=0 để
+                            # hoàn toàn không vẽ dải trắng (dù logic vẽ đã skip khi
+                            # title rỗng, đây là double-safe).
+                            title_bar_h_pct=(
+                                _as_float(data.get("frame_title_bar_h_pct"), 12.0)
+                                if _as_bool(data.get("frame_title_enabled", True), True)
+                                else 0.0
+                            ),
                             blur_w_pct=_as_float(data.get("frame_blur_w_pct"), 15.0),
+                            blur_top_pct=_as_float(data.get("frame_blur_top_pct"), 0.0),
+                            blur_bottom_pct=_as_float(data.get("frame_blur_bottom_pct"), 0.0),
                             blur_opacity=_as_float(data.get("frame_blur_opacity"), 0.6),
                             blur_color=str(data.get("frame_blur_color") or "#000000"),
                             logo_path=_logo_path,
@@ -2937,6 +3351,81 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             except Exception as e:
                 yield send(log=f"[Bước 3/5] ✗ Dịch thất bại: {e}", level="error")
                 translated_texts = []
+
+    # ── Parallel thumbnail generation (chạy song song với burn) ─────────
+    # Mode: 'ai' | 'import' | 'frame' | 'none'
+    # User có thể override config qua modal "Chọn thumbnail" sau khi review ASS.
+    try:
+        from routes.process import get_proc_thumb_override
+        _thumb_user_cfg = get_proc_thumb_override()
+    except Exception:
+        _thumb_user_cfg = {}
+
+    if _thumb_user_cfg:
+        _thumb_enabled = bool(_thumb_user_cfg.get("thumb_enabled"))
+        _thumb_mode = str(_thumb_user_cfg.get("thumb_mode") or "none").lower()
+        _thumb_path_input = str(_thumb_user_cfg.get("thumb_path") or "").strip()
+        _thumb_title = str(_thumb_user_cfg.get("thumb_title") or "").strip()
+        _thumb_duration = _as_float(_thumb_user_cfg.get("thumb_duration", 2.0), 2.0)
+        _thumb_timestamp = _as_float(_thumb_user_cfg.get("thumb_timestamp", 5.0), 5.0)
+    else:
+        _thumb_enabled = _as_bool(data.get("thumb_enabled", False), False)
+        _thumb_mode = str(data.get("thumb_mode") or "none").lower()
+        _thumb_path_input = str(data.get("thumb_path") or "").strip()
+        _thumb_title = str(data.get("thumb_title") or "").strip()
+        _thumb_duration = _as_float(data.get("thumb_duration", 2.0), 2.0)
+        _thumb_timestamp = _as_float(data.get("sub_preview_ts") or data.get("thumb_timestamp", 5.0), 5.0)
+
+    _thumb_future = None
+    _thumb_executor = None
+    _thumb_target_path = out_dir / f"{stem}_thumb.jpg"
+
+    if _thumb_enabled and _thumb_mode != "none" and do_burn:
+        try:
+            import concurrent.futures
+            _thumb_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+            def _gen_thumb_task():
+                """Generate thumbnail file in parallel. Returns Path or None."""
+                try:
+                    if _thumb_mode == "import" and _thumb_path_input:
+                        # Just copy the user-provided file
+                        src = Path(_thumb_path_input)
+                        if src.exists():
+                            import shutil
+                            shutil.copy2(str(src), str(_thumb_target_path))
+                            return _thumb_target_path
+                        return None
+                    elif _thumb_mode == "frame":
+                        # Extract a frame from the video at the chosen timestamp
+                        ts = _thumb_timestamp
+                        ok, _err = run_ffmpeg([
+                            ffmpeg, "-ss", str(ts),
+                            "-i", str(video_path),
+                            "-vframes", "1", "-q:v", "2",
+                            str(_thumb_target_path), "-y", "-loglevel", "error"
+                        ], timeout=60)
+                        if ok and _thumb_target_path.exists():
+                            return _thumb_target_path
+                        return None
+                    elif _thumb_mode == "ai":
+                        # Generate via Gemini (extract frame first, send to Gemini)
+                        return _gen_ai_thumbnail_for_pipeline(
+                            video_path=video_path,
+                            output_path=_thumb_target_path,
+                            ffmpeg=ffmpeg,
+                            timestamp=_thumb_timestamp,
+                            title=_thumb_title or video_title,
+                            subtitle_text=" ".join(translated_texts[:3]) if translated_texts else "",
+                        )
+                except Exception:
+                    return None
+                return None
+
+            _thumb_future = _thumb_executor.submit(_gen_thumb_task)
+            yield send(log=f"[Bước 4/5] 🖼 Đang tạo thumbnail ({_thumb_mode}) song song với burn...", level="info")
+        except Exception as e:
+            yield send(log=f"[Bước 4/5] ⚠ Không khởi tạo được thumbnail task: {e}", level="warning")
 
     # ── Bước 4/5: Burn phụ đề ────────────────────────────────────────────────
     burned_path = None
@@ -2999,6 +3488,154 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         yield send(log="[Bước 4/5] ⚠ Không có file phụ đề để burn", level="warning")
     else:
         yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề", level="info")
+
+    # ── Convert aspect ratio (sau khi burn xong, trước khi concat thumbnail) ──
+    # Nếu user chọn 9x16/16x9 mà video burned không đúng aspect đó → convert.
+    # Khi 'auto' hoặc đã đúng aspect → bỏ qua. Đảm bảo chạy TRƯỚC concat
+    # thumbnail để aspect của final khớp với thumbnail.
+    _target_aspect = str(data.get("target_aspect") or "auto").lower()
+    if _target_aspect in ("9x16", "16x9") and burned_path and burned_path.exists():
+        try:
+            _r = subprocess.run([ffmpeg, "-i", str(burned_path)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            _m = re.search(r"(\d{2,5})x(\d{2,5})", _r.stderr or "")
+            _src_w, _src_h = (int(_m.group(1)), int(_m.group(2))) if _m else (1280, 720)
+        except Exception:
+            _src_w, _src_h = 1280, 720
+
+        _src_aspect = "9x16" if (_src_w / max(1, _src_h)) < 1.0 else "16x9"
+        if _src_aspect == _target_aspect:
+            yield send(log=f"[Aspect] ℹ Video đã đúng khung {_target_aspect}, bỏ qua convert", level="info")
+        else:
+            target_w, target_h = (1080, 1920) if _target_aspect == "9x16" else (1920, 1080)
+            aspect_video = out_dir / f"{stem}_subbed_{_target_aspect}.mp4"
+            yield send(
+                log=f"[Aspect] 🔄 Đang chuyển khung hình: {_src_w}x{_src_h} → {target_w}x{target_h} ({_target_aspect})",
+                level="info",
+            )
+            vf = (
+                f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
+                f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
+            )
+            ok_a, err_a = run_ffmpeg([
+                ffmpeg, "-i", str(burned_path),
+                "-vf", vf,
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                "-c:a", "copy",
+                str(aspect_video), "-y", "-loglevel", "error",
+            ], timeout=600)
+            if ok_a and aspect_video.exists():
+                yield send(log=f"[Aspect] ✓ Khung hình đã chuyển: {aspect_video.name}", level="success")
+                burned_path = aspect_video
+                final_output_path = aspect_video
+            else:
+                yield send(log=f"[Aspect] ⚠ Convert khung hình thất bại: {err_a}", level="warning")
+
+    # ── Concat thumbnail vào đầu video (sau khi burn + convert aspect xong) ───
+    def _emit_thumb_image(thumb_path: Path):
+        """Đọc file thumbnail → base64 và emit event để frontend hiển thị."""
+        try:
+            import base64 as _b64
+            mime = "image/png" if thumb_path.suffix.lower() == ".png" else "image/jpeg"
+            data_b64 = _b64.b64encode(thumb_path.read_bytes()).decode("ascii")
+            return f"data:{mime};base64,{data_b64}"
+        except Exception:
+            return ""
+
+    if _thumb_future and burned_path and burned_path.exists():
+        try:
+            yield send(log="[Bước 4/5] ⏳ Đợi thumbnail hoàn tất để chèn vào đầu video...", level="info")
+            try:
+                thumb_result = _thumb_future.result(timeout=120)
+            except Exception as _ex:
+                thumb_result = None
+                yield send(log=f"[Bước 4/5] ⚠ Lỗi tạo thumbnail: {_ex}", level="warning")
+
+            # ── Retry loop khi AI thumbnail fail (chỉ áp dụng cho mode='ai') ──
+            if (not thumb_result or not Path(thumb_result).exists()) and _thumb_mode == "ai":
+                from routes.process import wait_thumb_retry_action
+                _max_retries = 3
+                for _attempt in range(1, _max_retries + 1):
+                    yield send(
+                        thumb_failed=True,
+                        thumb_mode=_thumb_mode,
+                        log=f"[Bước 4/5] ⚠ Thumbnail AI thất bại — chờ user xử lý (lần {_attempt}/{_max_retries})",
+                        level="warning",
+                    )
+                    action_data = wait_thumb_retry_action(timeout=600)
+                    action = action_data.get("action") or "skip"
+                    if action == "retry":
+                        yield send(log="[Bước 4/5] 🔄 Thử tạo lại thumbnail AI...", level="info")
+                        try:
+                            thumb_result = _gen_ai_thumbnail_for_pipeline(
+                                video_path=video_path,
+                                output_path=_thumb_target_path,
+                                ffmpeg=ffmpeg,
+                                timestamp=_thumb_timestamp,
+                                title=_thumb_title or video_title,
+                                subtitle_text=" ".join(translated_texts[:3]) if translated_texts else "",
+                            )
+                        except Exception as _re:
+                            thumb_result = None
+                            yield send(log=f"[Bước 4/5] ⚠ Retry lỗi: {_re}", level="warning")
+                        if thumb_result and Path(thumb_result).exists():
+                            yield send(log="[Bước 4/5] ✓ Thumbnail AI tạo lại thành công", level="success")
+                            break
+                    elif action == "upload":
+                        user_path = action_data.get("path") or ""
+                        try:
+                            import shutil as _shutil
+                            src = Path(user_path)
+                            if src.exists():
+                                _shutil.copy2(str(src), str(_thumb_target_path))
+                                thumb_result = _thumb_target_path
+                                yield send(log=f"[Bước 4/5] ✓ Đã dùng ảnh user upload: {src.name}", level="success")
+                                break
+                            else:
+                                yield send(log=f"[Bước 4/5] ⚠ File upload không tồn tại: {user_path}", level="warning")
+                        except Exception as _ue:
+                            yield send(log=f"[Bước 4/5] ⚠ Lỗi copy ảnh upload: {_ue}", level="warning")
+                    else:
+                        # skip
+                        yield send(log="[Bước 4/5] ℹ User chọn bỏ qua thumbnail", level="info")
+                        thumb_result = None
+                        break
+
+            if thumb_result and Path(thumb_result).exists():
+                # Emit ảnh thumbnail (base64) để frontend hiển thị real-time
+                _img_data = _emit_thumb_image(Path(thumb_result))
+                yield send(
+                    log=f"[Bước 4/5] 🖼 Thumbnail đã sẵn sàng: {Path(thumb_result).name}",
+                    level="info",
+                    thumbnail_path=str(Path(thumb_result).resolve()),
+                    thumbnail_image=_img_data,
+                )
+
+                concat_out = out_dir / f"{stem}_subbed_with_thumb.mp4"
+                yield send(log=f"[Bước 4/5] 🎬 Đang chèn thumbnail ({_thumb_duration}s) vào đầu video...", level="info")
+                ok_c, err_c = concat_thumbnail_with_video(
+                    video_path=burned_path,
+                    thumbnail_path=Path(thumb_result),
+                    output_path=concat_out,
+                    ffmpeg=ffmpeg,
+                    duration=_thumb_duration,
+                )
+                if ok_c and concat_out.exists():
+                    yield send(log=f"[Bước 4/5] ✓ Đã chèn thumbnail: {concat_out.name}", level="success")
+                    burned_path = concat_out
+                    final_output_path = concat_out
+                else:
+                    yield send(log=f"[Bước 4/5] ⚠ Chèn thumbnail thất bại: {err_c}", level="warning")
+            else:
+                yield send(log="[Bước 4/5] ⚠ Không có thumbnail — bỏ qua chèn vào video", level="warning")
+        except Exception as e:
+            yield send(log=f"[Bước 4/5] ⚠ Lỗi xử lý thumbnail: {e}", level="warning")
+        finally:
+            try:
+                if _thumb_executor:
+                    _thumb_executor.shutdown(wait=False)
+            except Exception:
+                pass
 
     # ── Bước 5/5: Tạo giọng đọc (TTS) ───────────────────────────────────
     # Resume: nếu file voice đã có → dùng lại
@@ -3091,6 +3728,45 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if not final_output_path:
         final_output_path = video_path.resolve()
         yield send(log="[Hoàn tất] Không có bước chỉnh sửa nào, dùng lại file gốc", level="info", file_path=str(final_output_path))
+
+    # ── Auto Thumbnail ────────────────────────────────────────────────────────
+    try:
+        thumb_path = out_dir / f"{stem}_thumbnail.jpg"
+        # Nội dung thumbnail: dùng translated_texts hoặc tên video
+        thumb_subtitle = ""
+        if translated_texts:
+            # Lấy 2-3 câu đầu làm nội dung
+            thumb_subtitle = " ".join(translated_texts[:3])[:100]
+        elif video_title:
+            thumb_subtitle = video_title
+
+        thumb_ok, thumb_result = generate_thumbnail(
+            video_path=video_path,
+            output_path=thumb_path,
+            ffmpeg=ffmpeg,
+            timestamp=2.0,
+            title="Trạm giải trí",
+            subtitle_text=thumb_subtitle,
+        )
+        if thumb_ok:
+            # Encode base64 để frontend hiển thị trực tiếp (không cần serve static)
+            thumb_b64 = ""
+            try:
+                import base64 as _b64
+                with open(thumb_path, "rb") as _f:
+                    thumb_b64 = "data:image/jpeg;base64," + _b64.b64encode(_f.read()).decode()
+            except Exception:
+                pass
+            yield send(
+                log=f"[Thumbnail] ✓ Tạo thumbnail: {thumb_path.name}",
+                level="success",
+                thumbnail_path=str(thumb_path.resolve()),
+                thumbnail_image=thumb_b64,
+            )
+        else:
+            yield send(log=f"[Thumbnail] ⚠ Không tạo được thumbnail: {thumb_result}", level="warning")
+    except Exception as _thumb_err:
+        yield send(log=f"[Thumbnail] ⚠ Lỗi tạo thumbnail: {_thumb_err}", level="warning")
 
     # ── Cleanup file trung gian ───────────────────────────────────────────────
     if cleanup_outputs and final_output_path and final_output_path.exists():
@@ -3249,3 +3925,221 @@ def preview_subtitles_in_video(
     if ok and output_path.exists():
         return True, f"Preview created: {output_path}"
     return False, err
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Thumbnail Generator — Tạo ảnh thumbnail kiểu YouTube/TikTok
+# ══════════════════════════════════════════════════════════════════════════════
+def generate_thumbnail(
+    video_path: Path,
+    output_path: Path,
+    ffmpeg: str,
+    timestamp: float = 2.0,
+    title: str = "Trạm giải trí",
+    subtitle_text: str = "",
+    width: int = 1080,
+    height: int = 1920,
+    corner_radius: int = 40,
+    title_bar_h_pct: float = 10.0,
+    content_bar_h_pct: float = 18.0,
+    title_font_size: int = 0,
+    content_font_size: int = 0,
+) -> tuple[bool, str]:
+    """
+    Tạo thumbnail cho video với layout:
+    - Trên cùng: tiêu đề kênh (VD: "Trạm giải trí") trên nền trắng
+    - Giữa: frame gốc từ video (chiếm phần lớn)
+    - Dưới: khung bo góc chứa nội dung/mô tả video
+
+    Args:
+        video_path: đường dẫn video nguồn
+        output_path: đường dẫn ảnh thumbnail output (PNG/JPG)
+        ffmpeg: đường dẫn ffmpeg
+        timestamp: thời điểm lấy frame (giây)
+        title: tiêu đề kênh hiển thị trên cùng
+        subtitle_text: nội dung hiển thị ở khung dưới (nếu rỗng sẽ lấy từ tên video)
+        width/height: kích thước thumbnail (mặc định 1080x1920 cho vertical)
+        corner_radius: bán kính bo góc khung dưới
+        title_bar_h_pct: chiều cao thanh tiêu đề (% tổng height)
+        content_bar_h_pct: chiều cao khung nội dung dưới (% tổng height)
+        title_font_size: cỡ chữ tiêu đề (0 = tự tính)
+        content_font_size: cỡ chữ nội dung (0 = tự tính)
+
+    Returns:
+        (success, error_or_path)
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        return False, "Pillow chưa cài: pip install Pillow"
+
+    video_path = Path(video_path)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not video_path.exists():
+        return False, f"Video không tồn tại: {video_path}"
+
+    # ── Bước 1: Extract frame từ video ────────────────────────────────────────
+    with tempfile.TemporaryDirectory(prefix="thumb_") as tmpdir:
+        tmp_video = Path(tmpdir) / f"input{video_path.suffix}"
+        tmp_frame = Path(tmpdir) / "frame.png"
+
+        import shutil
+        shutil.copy2(str(video_path), str(tmp_video))
+
+        ok, err = run_ffmpeg([
+            ffmpeg, "-ss", str(timestamp),
+            "-i", str(tmp_video),
+            "-vframes", "1",
+            "-q:v", "1",
+            str(tmp_frame), "-y", "-loglevel", "error"
+        ])
+
+        if not ok or not tmp_frame.exists():
+            return False, f"Không extract được frame: {err}"
+
+        frame_img = Image.open(tmp_frame).convert("RGBA")
+
+    # ── Bước 2: Tính toán layout ─────────────────────────────────────────────
+    title_bar_h = max(60, int(height * title_bar_h_pct / 100))
+    content_bar_h = max(80, int(height * content_bar_h_pct / 100))
+    frame_area_h = height - title_bar_h - content_bar_h
+
+    # Font sizes
+    if not title_font_size:
+        title_font_size = max(28, int(width * 0.055))
+    if not content_font_size:
+        content_font_size = max(22, int(width * 0.04))
+
+    # ── Bước 3: Tạo canvas ───────────────────────────────────────────────────
+    canvas = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    # ── Bước 4: Vẽ title bar (nền trắng + text) ──────────────────────────────
+    # Title bar đã là nền trắng (canvas), chỉ cần vẽ text
+    try:
+        # Thử load font hệ thống
+        font_paths = [
+            "C:/Windows/Fonts/arialbd.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/segoeui.ttf",
+            "C:/Windows/Fonts/msyh.ttc",  # Microsoft YaHei (hỗ trợ tiếng Việt)
+        ]
+        title_font = None
+        for fp in font_paths:
+            if Path(fp).exists():
+                title_font = ImageFont.truetype(fp, title_font_size)
+                break
+        if not title_font:
+            title_font = ImageFont.load_default()
+    except Exception:
+        title_font = ImageFont.load_default()
+
+    # Vẽ tiêu đề căn giữa
+    title_bbox = draw.textbbox((0, 0), title, font=title_font)
+    title_w = title_bbox[2] - title_bbox[0]
+    title_x = (width - title_w) // 2
+    title_y = (title_bar_h - (title_bbox[3] - title_bbox[1])) // 2
+    draw.text((title_x, title_y), title, fill=(220, 50, 50, 255), font=title_font)
+
+    # Vẽ đường kẻ dưới title bar
+    draw.line([(20, title_bar_h - 2), (width - 20, title_bar_h - 2)], fill=(230, 230, 230, 255), width=2)
+
+    # ── Bước 5: Resize và paste frame video ──────────────────────────────────
+    # Scale frame để fill vùng giữa (crop nếu cần)
+    frame_w, frame_h = frame_img.size
+    scale = max(width / frame_w, frame_area_h / frame_h)
+    new_w = int(frame_w * scale)
+    new_h = int(frame_h * scale)
+    frame_resized = frame_img.resize((new_w, new_h), Image.LANCZOS)
+
+    # Crop center
+    left = (new_w - width) // 2
+    top = (new_h - frame_area_h) // 2
+    frame_cropped = frame_resized.crop((left, top, left + width, top + frame_area_h))
+
+    canvas.paste(frame_cropped, (0, title_bar_h))
+
+    # ── Bước 6: Vẽ khung nội dung dưới (bo góc) ─────────────────────────────
+    content_y = title_bar_h + frame_area_h
+
+    # Tạo khung bo góc trên (rounded rectangle)
+    content_box = Image.new("RGBA", (width, content_bar_h), (0, 0, 0, 0))
+    content_draw = ImageDraw.Draw(content_box)
+
+    # Vẽ rounded rectangle nền trắng
+    content_draw.rounded_rectangle(
+        [(20, 0), (width - 20, content_bar_h - 10)],
+        radius=corner_radius,
+        fill=(255, 255, 255, 240),
+        outline=(220, 220, 220, 255),
+        width=2,
+    )
+
+    # Nội dung text
+    if not subtitle_text:
+        # Lấy từ tên video, bỏ ký tự đặc biệt
+        subtitle_text = video_path.stem
+        subtitle_text = re.sub(r'[_\-]+', ' ', subtitle_text)
+        subtitle_text = re.sub(r'\d{10,}', '', subtitle_text).strip()
+        if not subtitle_text:
+            subtitle_text = "Video giải trí"
+
+    try:
+        content_font = None
+        for fp in font_paths:
+            if Path(fp).exists():
+                content_font = ImageFont.truetype(fp, content_font_size)
+                break
+        if not content_font:
+            content_font = ImageFont.load_default()
+    except Exception:
+        content_font = ImageFont.load_default()
+
+    # Word wrap cho nội dung
+    max_text_w = width - 80
+    words = subtitle_text.split()
+    lines = []
+    current_line = ""
+    for word in words:
+        test_line = f"{current_line} {word}".strip() if current_line else word
+        bbox = content_draw.textbbox((0, 0), test_line, font=content_font)
+        if bbox[2] - bbox[0] <= max_text_w:
+            current_line = test_line
+        else:
+            if current_line:
+                lines.append(current_line)
+            current_line = word
+    if current_line:
+        lines.append(current_line)
+
+    # Nếu text quá dài, giới hạn 3 dòng
+    if len(lines) > 3:
+        lines = lines[:3]
+        lines[-1] = lines[-1][:30] + "..."
+
+    # Vẽ text nội dung căn giữa trong khung
+    line_height = content_font_size + 8
+    total_text_h = len(lines) * line_height
+    text_start_y = (content_bar_h - total_text_h) // 2
+    for i, line in enumerate(lines):
+        bbox = content_draw.textbbox((0, 0), line, font=content_font)
+        lw = bbox[2] - bbox[0]
+        lx = (width - lw) // 2
+        ly = text_start_y + i * line_height
+        content_draw.text((lx, ly), line, fill=(30, 30, 30, 255), font=content_font)
+
+    canvas.paste(content_box, (0, content_y), content_box)
+
+    # ── Bước 7: Lưu output ───────────────────────────────────────────────────
+    # Convert to RGB nếu output là JPG
+    if output_path.suffix.lower() in (".jpg", ".jpeg"):
+        canvas = canvas.convert("RGB")
+        canvas.save(str(output_path), "JPEG", quality=92)
+    else:
+        canvas.save(str(output_path), "PNG")
+
+    if output_path.exists() and output_path.stat().st_size > 0:
+        return True, str(output_path)
+    return False, "Không tạo được thumbnail"

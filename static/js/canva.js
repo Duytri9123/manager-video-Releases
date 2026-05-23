@@ -427,34 +427,62 @@ function _canvaSetProgress(pct, label) {
 /* ───────── Run pipeline ───────── */
 async function canvaRun() {
   const templateUrl = (document.getElementById('cv-template-url')?.value || '').trim();
-  const scenes = canvaGetScenes();
   const voiceover = (document.getElementById('cv-voiceover')?.value || '').trim();
-  const caption = (document.getElementById('cv-caption')?.value || '').trim();
+  const script = (document.getElementById('cv-bulk-text')?.value || '').trim();
   const exportMp4 = !!document.getElementById('cv-export-mp4')?.checked;
-  const setAnimation = !!document.getElementById('cv-set-animation')?.checked;
-  const animation = (document.getElementById('cv-animation')?.value || '').trim();
   const aspect = (document.getElementById('cv-aspect')?.value || '16:9');
   const searchPrefix = (document.getElementById('cv-search-prefix')?.value || '').trim();
-  const sceneDur = parseFloat(document.getElementById('cv-scene-dur')?.value || '5') || 5;
-  const addElements = !!document.getElementById('cv-add-elements')?.checked;
 
-  if (!scenes.length) {
-    if (typeof toast === 'function') toast('Chưa có cảnh nào', 'warning');
+  // Auto-run AI Storyboard if not done yet
+  if (!window._canvaPlan || !window._canvaPlan.length) {
+    if (script || voiceover) {
+      // Generate voiceover MP3 FIRST so we have accurate duration for planning
+      if (voiceover) {
+        const hasFreshAudio = (window._canvaImages || [])
+          .some(i => i.isAudio && (i.name || '').startsWith('voiceover_'));
+        if (!hasFreshAudio) {
+          _canvaAppendLog('🎙 Tạo MP3 voiceover từ text...', 'info');
+          _canvaSetProgress(2, 'Generate giọng đọc');
+          try {
+            await canvaGenerateVoiceover();
+          } catch (e) {
+            _canvaAppendLog('⚠ Lỗi TTS: ' + e + ' — tiếp tục không có voiceover.', 'warning');
+          }
+        }
+      }
+      _canvaAppendLog('🧠 Chưa có storyboard — tự chạy AI Storyboard...', 'info');
+      await canvaPlanScenes();
+    }
+  }
+
+  // Convert plan to scenes (each component = 1 scene)
+  const plan = window._canvaPlan || [];
+  const scenes = plan.length
+    ? plan.map(c => ({
+        text: '',                    // text comes from voiceover MP3, not per-scene
+        keyword: c.keyword || '',
+        category: c.category || 'Đồ họa',
+        x: c.x, y: c.y,
+        start_s: c.start_s, end_s: c.end_s,
+        animation: c.animation || 'Hiện lên',
+        note: c.note || '',
+      }))
+    : [];
+
+  if (!scenes.length && !voiceover) {
+    if (typeof toast === 'function') toast('Chưa có kịch bản hoặc voiceover', 'warning');
     return;
   }
 
-  // Disable Run button, show Stop
   document.getElementById('cv-btn-run')?.classList.add('hidden');
   document.getElementById('cv-btn-stop')?.classList.remove('hidden');
 
-  // Clear log
   const box = document.getElementById('cv-log');
   if (box) box.innerHTML = '';
   _canvaSetProgress(0, 'Đang khởi tạo...');
   _canvaSetRunBadge('run', 'Đang chạy');
 
   // Step 0: auto-generate voiceover MP3 if user typed text + no MP3 exists yet
-  // (skip silently if voiceover field is empty or a fresh MP3 was just generated)
   if (voiceover) {
     const hasFreshAudio = (window._canvaImages || [])
       .some(i => i.isAudio && (i.name || '').startsWith('voiceover_'));
@@ -469,10 +497,10 @@ async function canvaRun() {
     }
   }
 
-  // Step 1: upload images (and any voiceover MP3 just generated) to server
+  // Step 1: upload all assets (voiceover MP3 etc.)
   const imagePaths = [];
-  if (window._canvaImages.length) {
-    _canvaAppendLog(`📤 Upload ${window._canvaImages.length} ảnh lên server...`, 'info');
+  if ((window._canvaImages || []).length) {
+    _canvaAppendLog(`📤 Upload ${window._canvaImages.length} file lên server...`, 'info');
     for (const img of window._canvaImages) {
       try {
         const fd = new FormData();
@@ -500,15 +528,15 @@ async function canvaRun() {
         template_url: templateUrl,
         scenes,
         voiceover,
-        caption,
+        caption: '',
         image_paths: imagePaths,
         export_mp4: exportMp4,
-        set_animation: setAnimation,
-        animation,
+        set_animation: false,
+        animation: '',
         aspect,
         search_prefix: searchPrefix,
-        scene_duration: sceneDur,
-        add_elements: addElements,
+        scene_duration: 5,
+        add_elements: true,
       })
     });
     const d = await r.json();
@@ -895,6 +923,66 @@ function _canvaTtsParams() {
   };
 }
 
+/* Voice options per TTS engine */
+const _CANVA_TTS_VOICES = {
+  'edge-tts': [
+    {value: 'vi-VN-HoaiMyNeural', label: 'HoaiMy (nữ)'},
+    {value: 'vi-VN-NamMinhNeural', label: 'NamMinh (nam)'},
+  ],
+  'gtts': [
+    {value: 'vi', label: 'Tiếng Việt'},
+  ],
+  'fpt-ai': [
+    {value: 'banmai', label: 'Ban Mai (nữ)'},
+    {value: 'leminh', label: 'Lê Minh (nam)'},
+    {value: 'thuminh', label: 'Thu Minh (nữ)'},
+    {value: 'giahuy', label: 'Gia Huy (nam)'},
+    {value: 'myan', label: 'Mỹ An (nữ)'},
+    {value: 'lannhi', label: 'Lan Nhi (nữ)'},
+  ],
+};
+
+/** When user changes TTS engine, update the voice dropdown to match */
+function canvaOnTtsEngineChange() {
+  const engine = document.getElementById('cv-tts-engine')?.value || 'edge-tts';
+  const voiceSel = document.getElementById('cv-tts-voice');
+  if (!voiceSel) return;
+
+  const voices = _CANVA_TTS_VOICES[engine] || _CANVA_TTS_VOICES['edge-tts'];
+  voiceSel.innerHTML = voices.map(v =>
+    `<option value="${v.value}">${v.label}</option>`
+  ).join('');
+
+  // Clear cached voiceover since engine changed
+  _canvaClearCachedVoiceover();
+}
+
+/** When user changes voice, clear cached voiceover to force regeneration */
+function canvaOnTtsVoiceChange() {
+  _canvaClearCachedVoiceover();
+}
+
+/** Remove any previously generated voiceover MP3 from the upload list */
+function _canvaClearCachedVoiceover() {
+  const before = (window._canvaImages || []).length;
+  window._canvaImages = (window._canvaImages || []).filter(
+    i => !(i.isAudio && (i.name || '').startsWith('voiceover_'))
+  );
+  window._canvaVoiceoverDurationS = 0;
+  if (window._canvaImages.length !== before) {
+    canvaRenderImageList();
+    // Also clear the plan since duration may change
+    window._canvaPlan = null;
+    const card = document.getElementById('cv-plan-card');
+    if (card) card.style.display = 'none';
+    if (typeof toast === 'function') toast('🔄 Đã xóa voiceover cũ — sẽ tạo lại khi chạy', 'info');
+  }
+  // Hide audio player
+  const audio = document.getElementById('cv-tts-audio');
+  if (audio) { audio.src = ''; audio.style.display = 'none'; }
+  _canvaTtsStatus('');
+}
+
 function _canvaTtsStatus(text, kind = 'info') {
   const el = document.getElementById('cv-tts-status');
   if (!el) return;
@@ -956,6 +1044,15 @@ async function canvaGenerateVoiceover() {
   const fname = `voiceover_${ts}.mp3`;
   const file = new File([blob], fname, { type: 'audio/mpeg' });
 
+  // Measure duration by loading the blob into an <audio>
+  let durationS = 0;
+  try {
+    durationS = await _canvaMeasureAudioDuration(blob);
+  } catch (e) {
+    console.warn('measure duration failed', e);
+  }
+  window._canvaVoiceoverDurationS = durationS;
+
   // Read it as data URL so we can show a tiny audio waveform tile.
   const dataUrl = await new Promise(resolve => {
     const reader = new FileReader();
@@ -968,7 +1065,7 @@ async function canvaGenerateVoiceover() {
     i => !(i.name || '').startsWith('voiceover_')
   );
   const id = 'aud-' + Math.random().toString(36).slice(2, 8);
-  window._canvaImages.push({ id, name: fname, dataUrl, file, isAudio: true });
+  window._canvaImages.push({ id, name: fname, dataUrl, file, isAudio: true, durationS });
   canvaRenderImageList();
 
   // Also expose in the small audio player
@@ -977,7 +1074,105 @@ async function canvaGenerateVoiceover() {
     audio.src = URL.createObjectURL(blob);
     audio.style.display = '';
   }
-  _canvaTtsStatus(`✅ ${fname} (${(blob.size / 1024).toFixed(0)} KB) đã thêm vào upload`, 'success');
+  const durStr = durationS ? ` · ${durationS.toFixed(1)}s` : '';
+  _canvaTtsStatus(`✅ ${fname} (${(blob.size / 1024).toFixed(0)} KB${durStr})`, 'success');
   if (typeof toast === 'function')
-    toast('🎙 MP3 đã thêm vào danh sách upload Canva', 'success');
+    toast(`🎙 MP3 ${durationS.toFixed(1)}s đã thêm vào upload`, 'success');
+}
+
+/** Read MP3 blob duration by loading into an Audio element. */
+function _canvaMeasureAudioDuration(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.src = url;
+    audio.addEventListener('loadedmetadata', () => {
+      const d = audio.duration;
+      URL.revokeObjectURL(url);
+      resolve(isFinite(d) ? d : 0);
+    }, { once: true });
+    audio.addEventListener('error', e => {
+      URL.revokeObjectURL(url);
+      reject(e);
+    }, { once: true });
+    setTimeout(() => reject(new Error('timeout')), 5000);
+  });
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * AI Storyboard Planner — calls /api/canva/plan_scenes to generate
+ * components with timing, position, animation from voiceover text.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+window._canvaPlan = null; // last generated plan (array of components)
+
+async function canvaPlanScenes() {
+  // AI reads the SCRIPT (bulk text) to generate components.
+  // Voiceover is used only for timing reference (total duration).
+  const script = (document.getElementById('cv-bulk-text')?.value || '').trim();
+  const voiceover = (document.getElementById('cv-voiceover')?.value || '').trim();
+  if (!script && !voiceover) {
+    if (typeof toast === 'function') toast('Nhập kịch bản hoặc voiceover trước', 'warning');
+    return;
+  }
+  const style = (document.getElementById('cv-search-prefix')?.value || 'stickman').trim();
+  _canvaTtsStatus('🧠 Đang phân tích kịch bản...');
+
+  try {
+    const r = await fetch('/api/canva/plan_scenes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        script: script,
+        voiceover: voiceover,
+        style,
+        duration_s: window._canvaVoiceoverDurationS || 0,
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      _canvaTtsStatus('❌ ' + (d.error || 'Lỗi'), 'error');
+      return;
+    }
+    window._canvaPlan = d.components || [];
+    _canvaTtsStatus(`✅ ${d.components.length} components (${d.method})`, 'success');
+
+    // Render plan table
+    const card = document.getElementById('cv-plan-card');
+    const summary = document.getElementById('cv-plan-summary');
+    const table = document.getElementById('cv-plan-table');
+    if (card) card.style.display = '';
+    if (summary) {
+      summary.textContent = `${d.components.length} components · ${d.total_duration_s?.toFixed(1)}s · ${d.method}`;
+    }
+    if (table) {
+      table.innerHTML = `<table class="plan-table">
+        <thead><tr>
+          <th>#</th><th>Keyword</th><th>Start</th><th>End</th><th>X</th><th>Y</th><th>Animation</th><th>Note</th>
+        </tr></thead>
+        <tbody>
+        ${d.components.map((c, i) => `<tr>
+          <td>${i+1}</td>
+          <td><b>${c.keyword || ''}</b></td>
+          <td>${c.start_s}s</td>
+          <td>${c.end_s}s</td>
+          <td>${c.x}</td>
+          <td>${c.y}</td>
+          <td>${c.animation || ''}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(c.note||'').replace(/"/g,'&quot;')}">${c.note || ''}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>`;
+    }
+
+    // Scroll plan into view
+    card?.scrollIntoView({behavior: 'smooth', block: 'start'});
+
+    if (typeof toast === 'function')
+      toast(`🧠 Storyboard: ${d.components.length} components, ${d.total_duration_s?.toFixed(1)}s`, 'success');
+  } catch (e) {
+    _canvaTtsStatus('❌ ' + e, 'error');
+  }
 }

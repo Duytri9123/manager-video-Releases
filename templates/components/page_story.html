@@ -438,6 +438,13 @@
                     </select>
                   </div>
                 </div>
+
+                <!-- Fast mode toggle: parallel scene generation -->
+                <label class="check-item" style="margin-top:10px"
+                       title="Bật để sinh nhiều ảnh song song (4 ảnh cùng lúc) — nhanh hơn ~4×, đổi lại các cảnh hơi kém liên tục so với mode tuần tự.">
+                  <input type="checkbox" id="sw-ai-fast-mode">
+                  <span>⚡ Chế độ nhanh (parallel) — sinh 4 ảnh song song · giảm liên tục cảnh-tới-cảnh</span>
+                </label>
               </div>
             </details>
 
@@ -473,11 +480,22 @@
           <div class="card-header">
             <span class="card-title">🎞 Preview các cảnh</span>
             <div class="card-actions" style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="btn btn-primary btn-sm" type="button" onclick="storyAiCreateVideo()">🎬 Tạo video ngay</button>
+              <button class="btn btn-secondary btn-sm" type="button"
+                      onclick="storyAiGenerateAllEndFrames()"
+                      title="Sinh ảnh kết thúc cho mọi cảnh để có hiệu ứng chuyển động trong panel khi render">
+                ✨ Sinh ảnh end cho tất cả cảnh
+              </button>
               <button class="btn btn-secondary btn-sm" type="button" onclick="storyAiSendToPanels()">📤 Gửi sang Panels (chỉnh chi tiết)</button>
+              <button class="btn btn-primary btn-sm" type="button" onclick="storyAiCreateVideo()">🎬 Tạo video ngay</button>
             </div>
           </div>
           <div class="card-body">
+            <div class="alert-info text-xs" style="margin-bottom:8px;line-height:1.5">
+              💡 Mỗi cảnh hiển thị ảnh start (hoặc start+end nếu đã sinh).
+              Bấm <b>✨ Sinh ảnh end</b> trên một cảnh để tạo ảnh kết thúc → renderer sẽ
+              tự động cross-dissolve giữa hai ảnh, tạo cảm giác chuyển động trong panel
+              mà không cần video model. Hoặc dùng nút bulk ở trên để làm cho mọi cảnh.
+            </div>
             <div id="sw-ai-scenes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px"></div>
           </div>
         </div>
@@ -653,6 +671,18 @@
         <div class="field">
           <label>Khoảng nghỉ giữa panel (s)</label>
           <input id="sw-pause" type="number" step="0.05" min="0" max="2" value="0.25">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label title="Cross-dissolve giữa các panel cho cảm giác móc nối mượt. 0 = cắt cứng.">
+            Crossfade giữa panel (s)
+          </label>
+          <input id="sw-crossfade" type="number" step="0.05" min="0" max="2" value="0.4">
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end">
+          <small class="text-muted">Khuyến nghị 0.3-0.5s. Đặt 0 nếu muốn cắt cứng truyền thống.</small>
         </div>
       </div>
 

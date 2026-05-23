@@ -123,3 +123,27 @@ storywriter:
   chunk: { target_chars_per_segment: 350, max_chars_per_segment: 600, overlap_sentences: 0 }
   comic: { ocr_enabled: false, ocr_provider: tesseract }
   output_dir: ./Downloaded/scripts
+
+# Gemini Video Generation (Veo 2)
+gemini_video:
+  api_key: ''           # hoặc env GEMINI_API_KEY
+  model: veo-2.0-generate-001
+  aspect_ratio: '16:9'
+  duration: '8'
+
+# 9Router — local AI gateway (OpenAI-compatible)
+nine_router:
+  endpoint: http://localhost:20128/v1
+  api_key: ''           # sk-{machineId}-{keyId}-{crc8}
+  default_model: duytris
+  system_prompt: ''
+  temperature: 0.7
+  max_tokens: 4096
+
+# Idea → Video pipeline (ViMax architecture)
+# Dùng LLM (9Router/DeepSeek/OpenAI/Groq) + Gemini Veo 2 để tạo video từ ý tưởng
+idea2video:
+  output_dir: ./Downloaded/idea2video
+  default_style: 'cinematic, high quality, dramatic lighting'
+  shot_duration: 5      # giây mỗi shot (Gemini Veo 2)
+  max_shots_per_scene: 8

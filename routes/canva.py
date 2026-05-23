@@ -1711,183 +1711,172 @@ async def _search_components(page, query: str, sid: str) -> bool:
         return False
 
 
-async def _click_first_search_result(page, sid: str, scene_idx: int = 0,
-                                      keyword: str = "") -> bool:
-    """Pick the best-matching tile from the elements search results and click it.
+async def _move_playhead_to(page, sid: str, target_s: float = 0) -> bool:
+    """Move the timeline playhead/scrubber to a specific time.
 
-    Why scoring instead of just `[0]`:
-      - Canva mixes the real "Kết quả tìm kiếm" grid with an "Đề xuất Magic"
-        (AI-generated) section that's stylistically inconsistent.
-      - The first 1-3 tiles are sponsored/featured and often off-topic
-        (e.g. searching "stickman eat" returns "stickman dancing" first).
-      - Scoring by alt-text/aria-label/title against the search keyword pulls
-        the right one (a stickman holding food) much more reliably.
+    When new elements are added to Canva Video, they are placed at the
+    current playhead position. So we need to move the playhead to 0s (or
+    desired start_s) BEFORE adding each element to avoid them stacking
+    at the end.
 
     Strategy:
-      1. Find the "Kết quả tìm kiếm" / "Search results" heading and only
-         consider tiles AFTER it but BEFORE the "Đề xuất Magic" heading.
-      2. For each tile, read its <img alt>, aria-label, and title attributes
-         + any hover tooltip text.
-      3. Score by: keyword token match (+10 each), prefix token match (+3
-         each), graphic-style hints (+2), avoid AI-generated items (-5).
-      4. Click the highest-scoring tile.
+      1. Find the timeline ruler area
+      2. Click on it at the calculated x position for target_s
     """
-    keyword = (keyword or "").strip().lower()
-    keyword_tokens = [t for t in keyword.split() if len(t) >= 2]
+    js_get_ruler_info = """
+    () => {
+      // Find ruler labels by text content matching "N giây"
+      const allEls = document.querySelectorAll('span, div, p');
+      const points = [];
+      for (const el of allEls) {
+        if (el.children.length > 0) continue;
+        const txt = (el.textContent || '').trim();
+        const match = txt.match(/^(\\d+)\\s*giây$/);
+        if (!match) continue;
+        const sec = parseInt(match[1]);
+        const r = el.getBoundingClientRect();
+        if (r.y < window.innerHeight * 0.5) continue;
+        if (r.width > 100 || r.height > 30) continue;
+        const cx = r.x + r.width / 2;
+        points.push({sec, cx, y: r.y});
+      }
+      if (points.length < 2) return null;
+      points.sort((a, b) => a.sec - b.sec);
+      const first = points[0];
+      const last = points[points.length - 1];
+      const pxPerSec = (last.cx - first.cx) / (last.sec - first.sec);
+      // Use the y of the first label, but click slightly below to hit the ruler
+      return {
+        zeroX: first.cx - first.sec * pxPerSec,  // x position of 0s
+        rulerY: first.y + 5,
+        pxPerSec: pxPerSec,
+      };
+    }
+    """
+    try:
+        info = await page.evaluate(js_get_ruler_info)
+    except Exception:
+        info = None
 
-    # JS scan: collect tiles in the search-results region with metadata.
-    # Returns a list sorted by our composite score, the top one is what we
-    # want to click. We tag the chosen element with data-cv-pick="1" so
-    # Playwright can re-resolve it via query_selector.
-    js_collect = """
-    (kwTokens) => {
+    if not info:
+        _log(sid, f"⚠ Không tìm thấy timeline ruler — không di chuyển playhead.", "warning")
+        return False
+
+    # Calculate target x position
+    target_x = info["zeroX"] + target_s * info["pxPerSec"]
+    target_y = info["rulerY"]
+
+    # Click on the ruler at the target position to move playhead there
+    try:
+        await page.mouse.click(target_x, target_y)
+        await asyncio.sleep(0.4)
+        _log(sid, f"⏯ Đã di chuyển playhead đến {target_s:.1f}s.", "info")
+        return True
+    except Exception as exc:
+        _log(sid, f"⚠ Move playhead lỗi: {exc}", "warning")
+        return False
+
+
+async def _click_first_search_result(page, sid: str, scene_idx: int = 0,
+                                      keyword: str = "") -> bool:
+    # JS scan: find the first tile in the search results panel
+    js_find_first = """
+    () => {
       const norm = s => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
       // Locate the "Kết quả tìm kiếm" heading inside the elements panel.
-      // Anything after this heading but before "Đề xuất Magic" is a real result.
       const headings = Array.from(document.querySelectorAll('h2, h3, h4, p, span, div'))
         .filter(h => {
           const t = norm(h.textContent);
           return t === 'kết quả tìm kiếm' || t === 'search results';
         });
       let resultsTop = 0;
-      let aiTop = Infinity;
       if (headings.length) {
         const r = headings[0].getBoundingClientRect();
         resultsTop = r.bottom;
       }
-      // Find Magic / AI heading to use as a hard upper bound
-      const magicHeadings = Array.from(document.querySelectorAll('h2, h3, h4, p, span, div'))
-        .filter(h => {
-          const t = norm(h.textContent);
-          return t.includes('đề xuất magic') || t.includes('magic suggestion')
-              || t.includes('ai generated') || t.includes('được tạo bằng ai');
-        });
-      if (magicHeadings.length) {
-        const r = magicHeadings[0].getBoundingClientRect();
-        aiTop = r.top;
-      }
 
-      const tiles = [];
-      // Tiles are buttons or draggable divs holding an <img>
+      // Find tiles
       const candidates = document.querySelectorAll(
         'button[role="button"], div[role="button"], div[draggable="true"]'
       );
+      const tiles = [];
       const seen = new Set();
       for (const el of candidates) {
         if (seen.has(el)) continue;
         const r = el.getBoundingClientRect();
-        // Must be in left panel (Thành phần)
         if (r.x > 500 || r.x < 0) continue;
         if (r.width < 50 || r.height < 50) continue;
-        if (r.width > 320 || r.height > 320) continue;  // exclude container blocks
-        // Must be in search results region (after heading, before AI section)
+        if (r.width > 320 || r.height > 320) continue;
         if (r.y < resultsTop) continue;
-        if (r.y >= aiTop) continue;
-        // Must have a visible thumbnail image
         const img = el.querySelector('img');
         if (!img) continue;
         const cs = getComputedStyle(el);
         if (cs.visibility === 'hidden' || cs.display === 'none') continue;
         seen.add(el);
-
-        // Collect every bit of accessible text we can find
-        const ariaLabel = norm(el.getAttribute('aria-label'));
-        const innerAria = Array.from(el.querySelectorAll('[aria-label]'))
-          .map(n => norm(n.getAttribute('aria-label'))).join(' ');
-        const altText = norm(img.getAttribute('alt'));
-        const title = norm(el.getAttribute('title')) + ' ' + norm(img.getAttribute('title'));
-        const innerText = norm(el.textContent);
-        const blob = `${ariaLabel} ${innerAria} ${altText} ${title} ${innerText}`;
-
-        let score = 0;
-        // Each keyword token found = big bonus (eat/run/sleep matter most)
-        for (const t of kwTokens) {
-          if (t && blob.includes(t)) score += 10;
-        }
-        // Stickman/figure/cartoon style hints
-        if (/stick\\s?(man|figure)|hình que/.test(blob)) score += 4;
-        // Penalize AI-generated items (sometimes leak into results)
-        if (/ai\\s?generated|được tạo bằng ai/.test(blob)) score -= 8;
-        // Slight position bonus for higher-up tiles (they tend to be more popular)
-        score += Math.max(0, 3 - r.y / 600);
-        // Prefer non-premium when scores tie
-        const isPremium = !!el.querySelector(
-          '[aria-label*="Premium" i], [aria-label*="cao cấp" i], '
-          + '[data-testid*="premium" i], svg[class*="crown" i]'
-        );
-        if (!isPremium) score += 0.5;
-
-        tiles.push({
-          score,
-          alt: (altText || ariaLabel || '').slice(0, 80),
-          isPremium,
-          x: Math.round(r.x), y: Math.round(r.y),
-          w: Math.round(r.width), h: Math.round(r.height),
-        });
-        // Tag for re-resolve. Use index in tiles array so we can find again
-        el.setAttribute('data-cv-tile-idx', String(tiles.length - 1));
+        tiles.push({el, r});
       }
-      tiles.sort((a, b) => b.score - a.score);
-      return {tiles: tiles.slice(0, 8), totalCount: tiles.length,
-              resultsTop: Math.round(resultsTop), aiTop: aiTop === Infinity ? -1 : Math.round(aiTop)};
+
+      // Sort by position: top-to-bottom, then left-to-right
+      tiles.sort((a, b) => (a.r.y - b.r.y) || (a.r.x - b.r.x));
+
+      if (!tiles.length) return null;
+      const first = tiles[0];
+      first.el.setAttribute('data-cv-tile-pick', '1');
+      const altText = norm((first.el.querySelector('img')?.getAttribute('alt')) || '');
+      const aria = norm(first.el.getAttribute('aria-label') || '');
+      return {
+        x: Math.round(first.r.x), y: Math.round(first.r.y),
+        w: Math.round(first.r.width), h: Math.round(first.r.height),
+        alt: (altText || aria).slice(0, 80),
+        total: tiles.length,
+      };
     }
     """
 
     try:
-        result = await page.evaluate(js_collect, keyword_tokens)
+        result = await page.evaluate(js_find_first)
     except Exception as exc:
         _log(sid, f"⚠ Cảnh {scene_idx}: scan tiles lỗi: {exc}", "warning")
         return False
 
-    tiles = result.get("tiles") or []
-    total = result.get("totalCount") or 0
-
-    if not tiles:
-        # Fallback: old behavior — click first reasonable tile in panel
-        _log(sid, f"⚠ Cảnh {scene_idx}: không match tile theo keyword '{keyword}', "
-                  f"thử fallback click tile đầu.", "warning")
-        try:
-            el = await page.query_selector('aside button[role="button"] img, '
-                                            'div[role="list"] button[role="button"]')
-            if el:
-                await el.scroll_into_view_if_needed()
-                await el.click()
-                await asyncio.sleep(1.2)
-                _log(sid, f"🖼 Cảnh {scene_idx}: đã thêm tile fallback.", "success")
-                return True
-        except Exception:
-            pass
+    if not result:
         _log(sid, f"⚠ Cảnh {scene_idx}: không có kết quả tìm kiếm.", "warning")
         return False
 
-    best = tiles[0]
-    _log(sid, f"🎯 Cảnh {scene_idx}: chọn tile score={best['score']:.1f} "
-              f"alt='{best['alt']}' (trong {total} kết quả).", "info")
+    _log(sid, f"🎯 Cảnh {scene_idx}: click tile đầu '{result['alt']}' "
+              f"(trong {result['total']} kết quả).", "info")
 
-    # Re-resolve the chosen element via the data-cv-tile-idx attribute we set
+    # Re-resolve the tagged element
     target = None
     try:
-        target = await page.query_selector('[data-cv-tile-idx="0"]')
+        target = await page.query_selector('[data-cv-tile-pick="1"]')
     except Exception:
         target = None
 
     if not target:
-        # Element re-resolution failed → click by coords as last resort
         try:
-            cx = best["x"] + best["w"] // 2
-            cy = best["y"] + best["h"] // 2
+            cx = result["x"] + result["w"] // 2
+            cy = result["y"] + result["h"] // 2
             await page.mouse.click(cx, cy)
             await asyncio.sleep(1.2)
-            _log(sid, f"🖼 Cảnh {scene_idx}: clicked tile by coords ({cx},{cy}).", "success")
             return True
-        except Exception as exc:
-            _log(sid, f"⚠ Cảnh {scene_idx}: click coords lỗi: {exc}", "warning")
+        except Exception:
             return False
 
     try:
         await target.scroll_into_view_if_needed()
         await target.click()
         await asyncio.sleep(1.2)
+        # Cleanup tag
+        try:
+            await page.evaluate("""
+              () => {
+                const el = document.querySelector('[data-cv-tile-pick="1"]');
+                if (el) el.removeAttribute('data-cv-tile-pick');
+              }
+            """)
+        except Exception:
+            pass
         _log(sid, f"🖼 Cảnh {scene_idx}: đã thêm thành phần.", "success")
         return True
     except Exception as exc:
@@ -2153,26 +2142,43 @@ async def _add_elements_to_pages(page, scenes: List[Dict[str, str]],
         if not ok:
             continue
 
+        # Move playhead to 0s before adding to keep elements organized while
+        # they're being processed. The clock popup will set exact timing.
+        if i == 0:
+            await _move_playhead_to(page, sid, target_s=0)
+
         ok = await _click_first_search_result(page, sid, scene_idx=i + 1,
                                                 keyword=full_query)
         if ok:
             added += 1
 
             # ── Post-add: position, animation, and timeline timing ──
-            # The element is now selected on canvas. We:
-            #   a) Set position via "Vị trí" → Nâng cao → X/Y to center
-            #   b) Add animation via "Chuyển động" → click "Hiện lên"
-            #   c) Set timeline start/end via trim sliders
+            # Wait for the element to fully load on canvas and timeline
+            await asyncio.sleep(1.5)
 
-            # a) Center the element on canvas (960, 540 for 1920×1080)
-            await _set_element_position(page, sid, x=960, y=540, scene_idx=i + 1)
+            # Use AI plan values if present, fallback to defaults
+            elem_x = int(sc.get("x") or 960)
+            elem_y = int(sc.get("y") or 540)
+            elem_w = int(sc.get("w") or 500)
+            elem_h = int(sc.get("h") or 400)
+            elem_start = float(sc.get("start_s") or (i * scene_duration))
+            elem_end = float(sc.get("end_s") or ((i + 1) * scene_duration))
+            elem_anim = str(sc.get("animation") or "Hiện lên").strip()
 
-            # b) Add animation
-            await _set_element_animation(page, sid, animation="Hiện lên", scene_idx=i + 1)
+            # a) Set timeline timing FIRST via the clock popup. This is the
+            # most reliable step (numeric input, no drag needed). The element
+            # remains selected on canvas after the popup closes.
+            await _set_element_timing(page, sid, start_s=elem_start,
+                                       end_s=elem_end, scene_idx=i + 1)
 
-            # c) Set timeline timing: scene i starts at i*scene_dur, ends at (i+1)*scene_dur
-            await _set_element_timing(page, sid, start_s=i * scene_duration,
-                                       end_s=(i + 1) * scene_duration, scene_idx=i + 1)
+            # b) Set position and size via "Vị trí" panel (still selected)
+            await _set_element_position(page, sid, x=elem_x, y=elem_y,
+                                          width=elem_w, height=elem_h,
+                                          scene_idx=i + 1)
+
+            # c) Add animation via "Chuyển động" panel
+            if elem_anim:
+                await _set_element_animation(page, sid, animation=elem_anim, scene_idx=i + 1)
 
         pct = 30 + int(60 * (i + 1) / max(n, 1))
         _set_status(sid, "filling", progress=pct,
@@ -2182,14 +2188,15 @@ async def _add_elements_to_pages(page, scenes: List[Dict[str, str]],
 
 
 async def _set_element_position(page, sid: str, x: int = 960, y: int = 540,
-                                 scene_idx: int = 0) -> bool:
-    """With the element selected, open "Vị trí" panel → set X/Y in Nâng cao.
+                                 scene_idx: int = 0,
+                                 width: int = 0, height: int = 0) -> bool:
+    """With the element selected, open "Vị trí" panel → set X/Y/W/H in Nâng cao.
 
     Flow:
       1. Click "Vị trí" button in the top toolbar.
-      2. Find the X and Y inputs under "Nâng cao" heading.
-      3. Set values and press Enter.
-      4. Close the panel (press Escape or click X).
+      2. Find the X, Y (and optionally W, H) inputs.
+      3. Set values and press Enter/Tab between them.
+      4. Close the panel.
     """
     # 1) Click "Vị trí" in toolbar
     js_click_position = """
@@ -2201,59 +2208,107 @@ async def _set_element_position(page, sid: str, x: int = 960, y: int = 540,
         const txt = norm(el.textContent);
         if (/^(Vị trí|Position)$/i.test(aria) || /^(Vị trí|Position)$/i.test(txt)) {
           const r = el.getBoundingClientRect();
-          if (r.y < 80 && r.width > 20) {  // top toolbar
+          if (r.y < 100 && r.width > 20 && r.width < 200) {  // top toolbar
             el.click();
-            return true;
+            return {clicked: true, x: Math.round(r.x), y: Math.round(r.y)};
           }
         }
       }
-      return false;
+      return {clicked: false};
     }
     """
     try:
-        ok = await page.evaluate(js_click_position)
-        if not ok:
+        click_res = await page.evaluate(js_click_position)
+        if not click_res.get("clicked"):
+            _log(sid, f"⚠ Cảnh {scene_idx}: không tìm thấy nút 'Vị trí' trên toolbar.", "warning")
             return False
-        await asyncio.sleep(0.8)
-    except Exception:
+        await asyncio.sleep(1.0)
+    except Exception as exc:
+        _log(sid, f"⚠ Cảnh {scene_idx}: click 'Vị trí' lỗi: {exc}", "warning")
         return False
 
-    # 2) Set X and Y inputs
-    js_set_xy = """
-    (x, y) => {
+    # 2) Set X, Y, W, H inputs - try multiple label detection strategies
+    js_set_xywh = """
+    (vals) => {
+      const x = vals[0], y = vals[1], w = vals[2], h = vals[3];
       const setNative = (el, v) => {
         const proto = HTMLInputElement.prototype;
         const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
         el.focus();
+        // Select all then type new value
+        el.select();
         setter.call(el, String(v));
         el.dispatchEvent(new Event('input', {bubbles: true}));
         el.dispatchEvent(new Event('change', {bubbles: true}));
       };
-      const inputs = Array.from(document.querySelectorAll('input'));
-      let setX = false, setY = false;
+
+      const norm = s => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const inputs = Array.from(document.querySelectorAll('input[type="text"], input[type="number"], input:not([type])'));
+      const slots = {x: null, y: null, w: null, h: null};
+
       for (const inp of inputs) {
-        const label = (inp.getAttribute('aria-labelledby') || '');
-        const labelEl = label ? document.getElementById(label) : null;
-        const labelText = labelEl ? labelEl.textContent.trim().toLowerCase() : '';
         const r = inp.getBoundingClientRect();
-        if (r.x > 500 || r.width < 30) continue;
-        if (labelText === 'x' && !setX) {
-          setNative(inp, x + ' px');
-          setX = true;
-        } else if (labelText === 'y' && !setY) {
-          setNative(inp, y + ' px');
-          setY = true;
+        if (r.x > 600 || r.width < 30 || r.height < 15) continue;
+        if (r.x < 0 || r.y < 0) continue;
+
+        // Try multiple ways to find the label
+        let labelText = '';
+        // Strategy A: aria-labelledby
+        const labelId = inp.getAttribute('aria-labelledby');
+        if (labelId) {
+          const labelEl = document.getElementById(labelId);
+          if (labelEl) labelText = norm(labelEl.textContent);
+        }
+        // Strategy B: aria-label directly on input
+        if (!labelText) labelText = norm(inp.getAttribute('aria-label'));
+        // Strategy C: closest label or preceding sibling text
+        if (!labelText) {
+          const wrapper = inp.closest('div, label');
+          if (wrapper) {
+            // Find sibling text element
+            const txt = norm(wrapper.textContent).slice(0, 20);
+            if (/^(x|y|w|h|width|height|chiều rộng|chiều cao)\\b/i.test(txt)) {
+              labelText = txt.split(/\\s+/)[0];
+            }
+          }
+        }
+        // Strategy D: placeholder
+        if (!labelText) labelText = norm(inp.getAttribute('placeholder'));
+
+        const lt = labelText.toLowerCase();
+        if (!slots.x && (lt === 'x' || lt.startsWith('x '))) {
+          slots.x = inp;
+        } else if (!slots.y && (lt === 'y' || lt.startsWith('y '))) {
+          slots.y = inp;
+        } else if (!slots.w && (lt === 'w' || lt === 'width' || lt.includes('chiều rộng') || lt.includes('rộng'))) {
+          slots.w = inp;
+        } else if (!slots.h && (lt === 'h' || lt === 'height' || lt.includes('chiều cao') || lt.includes('cao'))) {
+          slots.h = inp;
         }
       }
-      return {setX, setY};
+
+      const result = {setX: false, setY: false, setW: false, setH: false,
+                      foundInputs: inputs.length};
+      if (slots.x) { setNative(slots.x, x); result.setX = true; }
+      if (slots.y) { setNative(slots.y, y); result.setY = true; }
+      if (w > 0 && slots.w) { setNative(slots.w, w); result.setW = true; }
+      if (h > 0 && slots.h) { setNative(slots.h, h); result.setH = true; }
+      return result;
     }
     """
     try:
-        res = await page.evaluate(js_set_xy, x, y)
+        res = await page.evaluate(js_set_xywh, [x, y, width, height])
         if res.get("setX") or res.get("setY"):
             await page.keyboard.press("Enter")
             await asyncio.sleep(0.3)
-            _log(sid, f"📐 Cảnh {scene_idx}: vị trí X={x}, Y={y}.", "success")
+            parts = []
+            if res.get("setX"): parts.append(f"X={x}")
+            if res.get("setY"): parts.append(f"Y={y}")
+            if res.get("setW"): parts.append(f"W={width}")
+            if res.get("setH"): parts.append(f"H={height}")
+            _log(sid, f"📐 Cảnh {scene_idx}: {', '.join(parts)}.", "success")
+        else:
+            _log(sid, f"⚠ Cảnh {scene_idx}: không tìm thấy X/Y inputs (có {res.get('foundInputs', 0)} inputs).", "warning")
     except Exception as exc:
         _log(sid, f"⚠ Cảnh {scene_idx}: set position lỗi: {exc}", "warning")
 
@@ -2347,146 +2402,184 @@ async def _set_element_animation(page, sid: str, animation: str = "Hiện lên",
 
 async def _set_element_timing(page, sid: str, start_s: float = 0,
                                end_s: float = 5, scene_idx: int = 0) -> bool:
-    """Adjust the selected element's start/end time on the timeline by dragging
-    its trim sliders.
+    """Set the selected element's timing using the clock button popup.
 
-    The timeline has trim sliders with:
-      role="slider" aria-label="Tính năng cắt, phần biên bắt đầu"
-      role="slider" aria-label="Tính năng cắt, phần biên kết thúc"
-      aria-valuenow = microseconds (e.g. 0, 5000000 for 5s)
+    When an element is selected, the toolbar shows a clock icon button labeled
+    like "🕐 5.0 giây" that opens a popup with two inputs:
+      - "Bắt đầu" (Start) — start time in seconds
+      - "Thời lượng" (Duration) — duration in seconds
 
-    Strategy: find the element's track (the one currently selected/highlighted),
-    then use aria-valuemin/max to calculate pixel positions and drag.
+    This is MUCH more reliable than dragging trim handles because:
+      - Direct numeric input (no pixel calculations)
+      - No need to detect track selection state
+      - Works regardless of zoom level
 
-    Simpler approach: use Canva's keyboard shortcut or input. But Canva doesn't
-    expose a direct time input for elements. So we use the trim slider drag.
-
-    Timeline pixel math (from DOM):
-      - Timeline ruler shows "0 giây" at left=0px, "10 giây" at left=240px
-      - So 1 second = 24px (at default zoom)
-      - Element track width = (duration_ms / 1000) * 24px
-      - Element track translateX = (start_ms / 1000) * 24px
-
-    We'll drag the element track itself to set start position, then drag the
-    end trim handle to set duration.
+    Strategy:
+      1. Click the clock button in element toolbar (matches "X.X giây" pattern)
+      2. Find Start/Duration inputs in the popup
+      3. Set values and press Enter
+      4. Close popup with Escape
     """
-    # For now, use a simpler approach: click the element's track in timeline
-    # to select it, then drag it to the right position.
-    # This is complex and fragile. A more reliable approach: set the element's
-    # timing via the trim slider's aria-valuenow attribute + dispatch events.
-
-    # Find the currently-selected element's track (it has a highlighted border)
-    js_find_track = """
+    # ── Step 1: Click the clock duration button on element toolbar ──
+    # The button shows "🕐 X.X giây" or has aria-label containing "Chỉnh sửa thời lượng"
+    js_open_clock = """
     () => {
-      // The selected element's track has a distinct visual state.
-      // We look for the track that was most recently added (bottom-most in DOM
-      // order, or the one with IytRuQ class indicating selection).
-      const tracks = document.querySelectorAll('[data-role="element-track"]');
-      let best = null;
-      for (const t of tracks) {
-        const r = t.getBoundingClientRect();
-        if (r.width < 10) continue;
-        // Check if this track contains the selected-state class
-        const inner = t.querySelector('.IytRuQ, .KacZeg');
-        if (inner && inner.classList.contains('IytRuQ')) {
-          best = t;
-          break;
+      const norm = s => (s || '').replace(/\\s+/g, ' ').trim();
+      const all = Array.from(document.querySelectorAll('button, [role="button"]'));
+      const matches = [];
+      for (const el of all) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 30 || r.height < 20) continue;
+        // Element toolbar appears at top OR floating above element
+        // Skip elements clearly below the canvas (timeline area)
+        if (r.y > window.innerHeight * 0.7) continue;
+
+        const aria = norm(el.getAttribute('aria-label'));
+        const txt = norm(el.textContent);
+        const blob = (aria + ' ' + txt).toLowerCase();
+
+        let score = 0;
+        // Strongest signal: text matches "X.X giây" pattern
+        if (/^[0-9]+([.,][0-9]+)?\\s*giây\\s*$/i.test(txt)) score = 15;
+        else if (/^[0-9]+([.,][0-9]+)?\\s*(s|sec|second)\\s*$/i.test(txt)) score = 14;
+        // Aria-label patterns
+        else if (/(chỉnh.{0,3}thời lượng|edit.{0,3}duration|edit.{0,3}timing)/i.test(blob)) score = 12;
+        else if (/(thời lượng|duration|timing)/i.test(blob)) score = 8;
+
+        // Reject share/download buttons
+        if (/(share|chia sẻ|tải xuống|download|export)/i.test(blob)) continue;
+        // Reject if it's the page-level button (typically right side or page header)
+        // Element button is usually in floating toolbar above the element
+
+        if (score > 0) {
+          matches.push({score, el, aria, txt: txt.slice(0, 30),
+                        x: Math.round(r.x), y: Math.round(r.y),
+                        w: Math.round(r.width), h: Math.round(r.height)});
         }
       }
-      // Fallback: last track (most recently added)
-      if (!best && tracks.length) {
-        best = tracks[tracks.length - 1];
-      }
-      if (!best) return null;
-      const r = best.getBoundingClientRect();
-      // Find trim sliders
-      const startSlider = best.querySelector('[aria-label*="phần biên bắt đầu"]');
-      const endSlider = best.querySelector('[aria-label*="phần biên kết thúc"]');
-      return {
-        x: Math.round(r.x), y: Math.round(r.y),
-        w: Math.round(r.width), h: Math.round(r.height),
-        startNow: startSlider ? parseInt(startSlider.getAttribute('aria-valuenow') || '0') : 0,
-        endNow: endSlider ? parseInt(endSlider.getAttribute('aria-valuenow') || '5000000') : 5000000,
-      };
+      matches.sort((a, b) => b.score - a.score);
+      if (!matches.length) return null;
+      const m = matches[0];
+      m.el.scrollIntoView({behavior: 'instant', block: 'center'});
+      m.el.click();
+      return {score: m.score, aria: m.aria, txt: m.txt,
+              x: m.x, y: m.y, w: m.w, h: m.h, totalMatches: matches.length};
     }
     """
-    try:
-        track = await page.evaluate(js_find_track)
-    except Exception:
-        track = None
 
-    if not track:
-        _log(sid, f"⚠ Cảnh {scene_idx}: không tìm thấy track trên timeline.", "warning")
+    try:
+        opened = await page.evaluate(js_open_clock)
+    except Exception as exc:
+        _log(sid, f"⚠ Cảnh {scene_idx}: lỗi mở clock button: {exc}", "warning")
         return False
 
-    # Calculate pixel positions. From DOM: 10s = 240px → 1s = 24px
-    # But zoom level can change. Use the ruler markers to calculate dynamically.
-    js_get_px_per_sec = """
-    () => {
-      // Find two ruler labels to calculate px/sec
-      const labels = document.querySelectorAll('.NJAL7Q');
-      const points = [];
-      for (const l of labels) {
-        const txt = (l.textContent || '').trim();
-        const match = txt.match(/(\\d+)\\s*giây/);
-        if (match) {
-          const sec = parseInt(match[1]);
-          const left = parseInt(l.style.left || '0');
-          points.push({sec, left});
+    if not opened:
+        _log(sid, f"⚠ Cảnh {scene_idx}: không tìm thấy nút thời lượng (clock).", "warning")
+        return False
+
+    _log(sid, f"🕐 Cảnh {scene_idx}: đã mở popup thời lượng "
+              f"(score={opened['score']}, txt='{opened['txt']}').", "info")
+
+    await asyncio.sleep(0.6)
+
+    # ── Step 2: Set Start and Duration inputs in the popup ──
+    js_set_timing = """
+    (vals) => {
+      const startVal = vals[0], durVal = vals[1];
+      const setNative = (el, v) => {
+        const proto = HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+        el.focus();
+        el.select && el.select();
+        setter.call(el, String(v));
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+      };
+
+      const norm = s => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+      const inputs = Array.from(document.querySelectorAll(
+        'input[type="number"], input[type="text"], input:not([type])'
+      ));
+      const visibleInputs = inputs.filter(el => {
+        const r = el.getBoundingClientRect();
+        if (r.width < 20 || r.height < 12) return false;
+        const cs = getComputedStyle(el);
+        return cs.visibility !== 'hidden' && cs.display !== 'none';
+      });
+
+      let startInp = null, durInp = null;
+
+      // Identify by surrounding label text
+      for (const el of visibleInputs) {
+        // Get label from aria, placeholder, or surrounding text
+        let labelText = '';
+        const labelId = el.getAttribute('aria-labelledby');
+        if (labelId) {
+          const lbl = document.getElementById(labelId);
+          if (lbl) labelText = norm(lbl.textContent);
+        }
+        if (!labelText) labelText = norm(el.getAttribute('aria-label'));
+        if (!labelText) labelText = norm(el.getAttribute('placeholder'));
+        if (!labelText) {
+          // Look at parent/sibling text
+          const wrap = el.closest('div, label');
+          if (wrap) {
+            const t = norm(wrap.textContent).slice(0, 40);
+            labelText = t;
+          }
+        }
+
+        if (!startInp && /(bắt đầu|start|start time)/i.test(labelText)) {
+          startInp = el;
+        } else if (!durInp && /(thời lượng|duration|length)/i.test(labelText)) {
+          durInp = el;
         }
       }
-      if (points.length >= 2) {
-        points.sort((a, b) => a.sec - b.sec);
-        const d = points[1].left - points[0].left;
-        const ds = points[1].sec - points[0].sec;
-        if (ds > 0) return d / ds;
+
+      // Fallback: first 2 visible inputs are usually start + duration
+      if (!startInp && visibleInputs.length >= 1) startInp = visibleInputs[0];
+      if (!durInp && visibleInputs.length >= 2) durInp = visibleInputs[1];
+
+      const result = {setStart: false, setDur: false,
+                      foundInputs: visibleInputs.length,
+                      startLabel: '', durLabel: ''};
+      if (startInp) {
+        setNative(startInp, startVal);
+        result.setStart = true;
+        result.startLabel = norm(startInp.getAttribute('aria-label') || startInp.getAttribute('placeholder') || '');
       }
-      return 24; // default fallback
+      if (durInp) {
+        // Tab between fields, then set duration
+        setNative(durInp, durVal);
+        result.setDur = true;
+        result.durLabel = norm(durInp.getAttribute('aria-label') || durInp.getAttribute('placeholder') || '');
+      }
+      return result;
     }
     """
+
+    duration = max(0.5, end_s - start_s)
+    start_str = f"{start_s:.1f}".rstrip("0").rstrip(".") or "0"
+    dur_str = f"{duration:.1f}".rstrip("0").rstrip(".") or "0.5"
+
     try:
-        px_per_sec = await page.evaluate(js_get_px_per_sec)
-    except Exception:
-        px_per_sec = 24
-
-    # Current position and desired position
-    current_start_s = track["startNow"] / 1_000_000
-    desired_start_s = start_s
-    desired_end_s = end_s
-
-    # Drag the track to move it to the right start time
-    # The track's left edge corresponds to its start time
-    # We need to drag from current center to new position
-    delta_px = (desired_start_s - current_start_s) * px_per_sec
-
-    if abs(delta_px) > 2:
-        # Drag the track body (not the trim handles)
-        track_cx = track["x"] + track["w"] // 2
-        track_cy = track["y"] + track["h"] // 2
-        try:
-            await page.mouse.move(track_cx, track_cy)
-            await asyncio.sleep(0.1)
-            await page.mouse.down()
-            await asyncio.sleep(0.1)
-            # Move in steps for smooth drag
-            steps = max(3, int(abs(delta_px) / 10))
-            for step in range(1, steps + 1):
-                frac = step / steps
-                await page.mouse.move(track_cx + delta_px * frac, track_cy)
-                await asyncio.sleep(0.02)
-            await page.mouse.up()
+        res = await page.evaluate(js_set_timing, [start_str, dur_str])
+        if res.get("setStart") or res.get("setDur"):
+            await page.keyboard.press("Enter")
             await asyncio.sleep(0.3)
-            _log(sid, f"⏱ Cảnh {scene_idx}: timeline {start_s}s–{end_s}s "
-                      f"(drag {delta_px:.0f}px).", "success")
-        except Exception as exc:
-            _log(sid, f"⚠ Cảnh {scene_idx}: drag track lỗi: {exc}", "warning")
-    else:
-        _log(sid, f"⏱ Cảnh {scene_idx}: đã ở đúng vị trí {start_s}s.", "info")
+            _log(sid, f"⏱ Cảnh {scene_idx}: start={start_str}s, duration={dur_str}s "
+                      f"(start_input='{res.get('startLabel','')}', dur_input='{res.get('durLabel','')}').",
+                 "success")
+        else:
+            _log(sid, f"⚠ Cảnh {scene_idx}: không tìm thấy input start/duration "
+                      f"(có {res.get('foundInputs', 0)} inputs).", "warning")
+    except Exception as exc:
+        _log(sid, f"⚠ Cảnh {scene_idx}: set timing lỗi: {exc}", "warning")
 
-    # Click away to deselect
+    # ── Step 3: Close popup ──
     try:
         await page.keyboard.press("Escape")
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.3)
     except Exception:
         pass
 
@@ -2818,6 +2911,15 @@ async def _run_canva_flow(sid: str, params: Dict[str, Any]):
                 "keyword": str(s.get("keyword") or "").strip(),
                 "library_image": str(s.get("library_image") or "").strip(),
                 "category": str(s.get("category") or "").strip(),
+                # AI plan fields (optional — present when generated by /plan_scenes)
+                "x": int(s.get("x") or 960),
+                "y": int(s.get("y") or 540),
+                "w": int(s.get("w") or 500),
+                "h": int(s.get("h") or 400),
+                "start_s": float(s.get("start_s") or 0),
+                "end_s": float(s.get("end_s") or 5),
+                "animation": str(s.get("animation") or "Hiện lên").strip(),
+                "note": str(s.get("note") or "").strip(),
             })
     voiceover = (params.get("voiceover") or "").strip()
     caption = (params.get("caption") or "").strip()  # noqa: F841 (informational)
@@ -3873,3 +3975,328 @@ def cv_lib_clear():
         return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI Scene Planner — analyze voiceover text → generate storyboard with
+# timing, keywords, positions, and transitions for each component.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PLAN_SYSTEM_PROMPT = """Bạn là AI storyboard planner cho video Canva (1920×1080).
+Nhiệm vụ: phân tích KỊCH BẢN (mô tả hành động từng cảnh) → tách thành các COMPONENT (thành phần đồ họa cần tìm trên Canva).
+
+Input là kịch bản dạng:
+  Cảnh 1 — Buổi sáng
+  (Stick figure nằm ngủ. Báo thức reo.)
+  ...
+
+Mỗi component output gồm:
+- keyword: từ khoá tiếng Anh ngắn để search Canva Elements (ví dụ: "stickman sleep", "alarm clock", "arrow right", "stickman run bus")
+- start_s: thời gian bắt đầu hiện (giây)
+- end_s: thời gian kết thúc (giây)
+- x: vị trí X tâm trên canvas (0–1920)
+- y: vị trí Y tâm trên canvas (0–1080)
+- w: chiều rộng element (300-800 pixels, mặc định 500)
+- h: chiều cao element (300-600 pixels, mặc định 400)
+- animation: hiệu ứng ("Hiện lên" / "Rõ dần" / "Lướt" / "Bật ra" / "Gạt")
+- category: "Đồ họa" (mặc định)
+- note: mô tả ngắn component này thể hiện gì trong kịch bản
+
+Quy tắc:
+1. Mỗi cảnh trong kịch bản → 1-2 components (nhân vật chính + mũi tên chuyển cảnh nếu cần).
+2. Thời gian mỗi cảnh tỉ lệ với độ phức tạp (cảnh nhiều hành động = dài hơn).
+3. QUAN TRỌNG: Tổng thời gian PHẢI = duration được cung cấp. Component cuối cùng PHẢI có end_s ≤ duration. KHÔNG ĐƯỢC vượt quá duration.
+4. QUAN TRỌNG: Các component KHÔNG ĐƯỢC trùng thời gian. Mỗi component phải NỐI TIẾP nhau — start_s của component sau = end_s của component trước. KHÔNG overlap.
+5. Bố cục: mỗi component ở vị trí khác nhau trên canvas.
+   - Nhân vật chính: giữa hoặc hơi lệch (x=700-1200, y=400-700)
+   - Đạo cụ/bối cảnh: góc hoặc cạnh (x<500 hoặc x>1400)
+   - Text: dưới cùng (y>800) hoặc trên cùng (y<200)
+   - Mũi tên chuyển cảnh: giữa (x=960, y=540)
+6. Thêm "arrow right" hoặc "transition" giữa các cảnh (thời gian ngắn 0.5-1s, NỐI TIẾP không overlap).
+7. Keyword phải cụ thể, dễ tìm trên Canva (ví dụ: "stickman eating noodles" thay vì chỉ "ăn").
+8. Trả về JSON array, KHÔNG có text ngoài JSON.
+9. Nếu kịch bản dài mà duration ngắn, hãy GIẢM số components hoặc GIẢM thời gian mỗi component để vừa với duration. Ưu tiên giữ đúng duration hơn là đủ chi tiết.
+10. Mỗi component nên có duration tối thiểu 2s để người xem kịp nhìn.
+
+Ví dụ output cho 1 cảnh "Buổi sáng - báo thức" (duration 8s):
+[
+  {"keyword":"stickman sleep bed","start_s":0,"end_s":3,"x":700,"y":540,"w":500,"h":400,"animation":"Hiện lên","category":"Đồ họa","note":"Nhân vật nằm ngủ"},
+  {"keyword":"alarm clock ringing","start_s":3,"end_s":5.5,"x":1200,"y":300,"w":300,"h":300,"animation":"Bật ra","category":"Đồ họa","note":"Báo thức reo"},
+  {"keyword":"stickman wake up","start_s":5.5,"end_s":7,"x":700,"y":540,"w":500,"h":400,"animation":"Rõ dần","category":"Đồ họa","note":"Bật dậy hoảng"},
+  {"keyword":"arrow right","start_s":7,"end_s":8,"x":960,"y":540,"w":400,"h":150,"animation":"Lướt","category":"Đồ họa","note":"Chuyển cảnh"}
+]"""
+
+
+@bp.route("/api/canva/plan_scenes", methods=["POST"])
+def cv_plan_scenes():
+    """Use AI to analyze the SCRIPT (kịch bản) and generate a storyboard plan.
+
+    Body:
+      script (str) — the full script/kịch bản with scene descriptions
+      voiceover (str, optional) — voiceover text (used for timing estimation)
+      duration_s (float, optional) — total MP3 duration in seconds (if known)
+      style (str, optional) — "stickman" / "chibi" / "cartoon" (prefix for keywords)
+      canvas_w (int, optional) — canvas width, default 1920
+      canvas_h (int, optional) — canvas height, default 1080
+
+    Returns:
+      {ok: true, components: [...], total_duration_s: float}
+    """
+    import requests as _requests
+
+    data = request.get_json(silent=True) or {}
+    script = str(data.get("script") or "").strip()
+    voiceover = str(data.get("voiceover") or "").strip()
+    # Use script as primary input; fall back to voiceover if script is empty
+    input_text = script or voiceover
+    if not input_text:
+        return jsonify({"ok": False, "error": "Thiếu kịch bản hoặc voiceover"}), 400
+
+    duration_s = float(data.get("duration_s") or 0)
+    style = str(data.get("style") or "stickman").strip()
+    canvas_w = int(data.get("canvas_w") or 1920)
+    canvas_h = int(data.get("canvas_h") or 1080)
+
+    # Estimate duration from voiceover word count if not provided
+    if duration_s <= 0:
+        ref_text = voiceover or input_text
+        word_count = len(ref_text.split())
+        duration_s = max(15, word_count / 2.5)  # ~150 words/min for VN
+
+    user_msg = (
+        f"Kịch bản video ({duration_s:.1f}s tổng, canvas {canvas_w}×{canvas_h}, style: {style}):\n\n"
+        f"{input_text}\n\n"
+    )
+    if voiceover and script:
+        user_msg += f"Voiceover (dùng để tính timing):\n{voiceover}\n\n"
+    user_msg += "Hãy tạo storyboard components. Trả về JSON array."
+
+    # Call AI via the same 9Router endpoint used by chatbot
+    from core_app import load_cfg
+    cfg = load_cfg()
+    nr = cfg.get("nine_router") or cfg.get("9router") or {}
+    api_key = str(nr.get("api_key") or "").strip()
+    endpoint = str(nr.get("endpoint") or "https://api.9router.com/v1").strip().rstrip("/")
+    model = str(nr.get("model") or "gpt-4o-mini").strip()
+
+    if not api_key:
+        # Fallback: use heuristic planner
+        components = _heuristic_plan(voiceover, duration_s, style, canvas_w, canvas_h)
+        return jsonify({"ok": True, "components": components,
+                        "total_duration_s": duration_s, "method": "heuristic"})
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": _PLAN_SYSTEM_PROMPT},
+            {"role": "user", "content": user_msg},
+        ],
+        "temperature": 0.7,
+        "max_tokens": 4000,
+    }
+
+    try:
+        r = _requests.post(f"{endpoint}/chat/completions",
+                           json=payload, headers=headers, timeout=60)
+        r.raise_for_status()
+        resp = r.json()
+        content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+        # Parse JSON from response (may have markdown fences)
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[-1].rsplit("```", 1)[0]
+        components = json.loads(content)
+        if not isinstance(components, list):
+            raise ValueError("Expected JSON array")
+        # Post-process: clamp any timing that exceeds duration_s
+        components = _clamp_plan_timing(components, duration_s)
+        return jsonify({"ok": True, "components": components,
+                        "total_duration_s": duration_s, "method": "ai"})
+    except Exception as exc:
+        LOGGER.warning("[canva plan] AI failed: %s — falling back to heuristic", exc)
+        components = _heuristic_plan(voiceover, duration_s, style, canvas_w, canvas_h)
+        return jsonify({"ok": True, "components": components,
+                        "total_duration_s": duration_s, "method": "heuristic",
+                        "ai_error": str(exc)})
+
+
+def _clamp_plan_timing(components: List[Dict[str, Any]], duration_s: float) -> List[Dict[str, Any]]:
+    """Ensure no component exceeds the total duration and no overlaps exist.
+
+    If AI returned timing beyond duration_s, scale all timings proportionally
+    to fit within the allowed duration. Also fix any overlapping components
+    by making them sequential.
+    """
+    if not components or duration_s <= 0:
+        return components
+
+    # Find the maximum end_s across all components
+    max_end = max((float(c.get("end_s") or 0) for c in components), default=0)
+
+    if max_end > duration_s:
+        # Scale all timings proportionally to fit within duration_s
+        scale = duration_s / max_end
+        for c in components:
+            c["start_s"] = round(float(c.get("start_s") or 0) * scale, 1)
+            c["end_s"] = round(float(c.get("end_s") or 0) * scale, 1)
+
+    # Fix overlaps: ensure each component starts AFTER the previous one ends
+    # Sort by start_s first
+    components.sort(key=lambda c: float(c.get("start_s") or 0))
+
+    for i in range(len(components)):
+        c = components[i]
+        c["start_s"] = float(c.get("start_s") or 0)
+        c["end_s"] = float(c.get("end_s") or 0)
+
+        # Ensure minimum duration of 1s per component
+        if c["end_s"] - c["start_s"] < 1.0:
+            c["end_s"] = c["start_s"] + 1.0
+
+        # Ensure this component doesn't overlap with the previous one
+        if i > 0:
+            prev_end = components[i - 1]["end_s"]
+            if c["start_s"] < prev_end:
+                # Shift this component to start right after previous
+                shift = prev_end - c["start_s"]
+                c["start_s"] = prev_end
+                c["end_s"] += shift
+
+        # Clamp to duration
+        c["start_s"] = min(c["start_s"], duration_s)
+        c["end_s"] = min(c["end_s"], duration_s)
+
+        # Round
+        c["start_s"] = round(c["start_s"], 1)
+        c["end_s"] = round(c["end_s"], 1)
+
+    # Remove components that ended up with 0 duration (pushed past the end)
+    components = [c for c in components if c["end_s"] > c["start_s"]]
+
+    return components
+
+
+def _heuristic_plan(voiceover: str, duration_s: float, style: str,
+                     canvas_w: int, canvas_h: int) -> List[Dict[str, Any]]:
+    """Simple rule-based scene planner when AI is unavailable."""
+    import re
+
+    # Split voiceover into sentences
+    sentences = re.split(r'[.!?…]+', voiceover)
+    sentences = [s.strip() for s in sentences if s.strip() and len(s.strip()) > 5]
+    if not sentences:
+        sentences = [voiceover]
+
+    n = len(sentences)
+    # Distribute time proportionally by character count
+    total_chars = sum(len(s) for s in sentences)
+    if total_chars == 0:
+        total_chars = 1
+
+    # ── Calculate how much time is available for content (excluding arrows) ──
+    # Arrows overlap with the previous component by 1s and extend 0.5s beyond.
+    # With (n-1) arrows, total arrow overhead = (n-1) * 0.5s (the non-overlapping part).
+    # But we want total timeline to NOT exceed duration_s.
+    n_arrows = max(0, n - 1)
+    # Reserve no extra time for arrows since they overlap with components
+    available_duration = duration_s
+
+    components = []
+    current_t = 0.0
+    positions = [
+        (int(canvas_w * 0.25), int(canvas_h * 0.5)),   # left
+        (int(canvas_w * 0.5), int(canvas_h * 0.5)),    # center
+        (int(canvas_w * 0.75), int(canvas_h * 0.5)),   # right
+        (int(canvas_w * 0.5), int(canvas_h * 0.3)),    # top-center
+        (int(canvas_w * 0.5), int(canvas_h * 0.7)),    # bottom-center
+    ]
+    animations = ["Hiện lên", "Rõ dần", "Lướt", "Bật ra"]
+
+    # Simple keyword extraction from Vietnamese text
+    keyword_map = [
+        (r'báo thức|thức dậy|buổi sáng', 'alarm'),
+        (r'chạy|vội|xe bus', 'run'),
+        (r'ăn|bữa ăn|cơm|mì', 'eat'),
+        (r'laptop|làm việc|deadline|áp lực', 'work laptop'),
+        (r'mưa|buổi tối|đi bộ', 'walk rain'),
+        (r'ngủ|giường|nghỉ|mệt', 'sleep tired'),
+        (r'cố gắng|tiếp tục|bước đi', 'walk forward'),
+        (r'mèo|nhà|về', 'home cat'),
+        (r'vui|cười|hạnh phúc', 'happy'),
+        (r'buồn|khóc', 'sad'),
+    ]
+
+    # ── First pass: calculate raw durations proportionally ──
+    raw_durations = []
+    for sentence in sentences:
+        dur = (len(sentence) / total_chars) * available_duration
+        raw_durations.append(dur)
+
+    # ── Second pass: normalize so total exactly equals available_duration ──
+    # Apply a soft clamp (min 1.5s) but then scale everything to fit
+    min_dur = 1.5
+    clamped = [max(min_dur, d) for d in raw_durations]
+    total_clamped = sum(clamped)
+    if total_clamped > available_duration:
+        # Scale down proportionally to fit within available_duration
+        scale = available_duration / total_clamped
+        clamped = [d * scale for d in clamped]
+
+    for i, sentence in enumerate(sentences):
+        dur = clamped[i]
+
+        # Find keyword
+        kw = "person"
+        lower = sentence.lower()
+        for pattern, keyword in keyword_map:
+            if re.search(pattern, lower):
+                kw = keyword
+                break
+
+        pos = positions[i % len(positions)]
+        anim = animations[i % len(animations)]
+
+        # Reserve time for arrow transition (0.8s) between scenes
+        has_arrow = (i < n - 1) and dur > 2.5
+        scene_dur = dur - 0.8 if has_arrow else dur
+
+        components.append({
+            "keyword": f"{style} {kw}",
+            "start_s": round(current_t, 1),
+            "end_s": round(current_t + scene_dur, 1),
+            "x": pos[0],
+            "y": pos[1],
+            "w": 500,
+            "h": 400,
+            "animation": anim,
+            "category": "Đồ họa",
+            "note": sentence[:60],
+        })
+
+        current_t += scene_dur
+
+        # Add arrow AFTER the scene (sequential, no overlap)
+        if has_arrow:
+            components.append({
+                "keyword": "arrow right",
+                "start_s": round(current_t, 1),
+                "end_s": round(current_t + 0.8, 1),
+                "x": int(canvas_w * 0.5),
+                "y": int(canvas_h * 0.5),
+                "w": 400,
+                "h": 150,
+                "animation": "Lướt",
+                "category": "Đồ họa",
+                "note": "Chuyển cảnh",
+            })
+            current_t += 0.8
+
+        # Safety: don't exceed total duration
+        if current_t >= available_duration:
+            break
+
+    return components

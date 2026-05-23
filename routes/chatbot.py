@@ -50,6 +50,101 @@ _LIGHT_TIMEOUT = 6     # /api/health, /api/settings, /api/keys
 _MODELS_TIMEOUT = 12   # /v1/models can be slow if upstream lookups
 _DEFAULT_TIMEOUT = 120 # /v1/chat/completions
 
+# ── Direct provider fallback when 9Router is offline ──────────────────────
+# Each entry: (name, endpoint, model, config_key_path)
+# config_key_path is a dot-separated path into config.yml to find the API key.
+_FALLBACK_PROVIDERS = [
+    {
+        "name": "deepseek",
+        "endpoint": "https://api.deepseek.com/v1/chat/completions",
+        "model": "deepseek-chat",
+        "key_path": "translation.deepseek_key",
+    },
+    {
+        "name": "gemini",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "model": "gemini-2.5-flash",
+        "key_path": "gemini_video.api_key",
+    },
+    {
+        "name": "openai",
+        "endpoint": "https://api.openai.com/v1/chat/completions",
+        "model": "gpt-4o-mini",
+        "key_path": "transcript.api_key",
+    },
+    {
+        "name": "groq",
+        "endpoint": "https://api.groq.com/openai/v1/chat/completions",
+        "model": "llama-3.1-8b-instant",
+        "key_path": "translation.groq_key",
+    },
+]
+
+
+def _get_cfg_key(cfg: dict, dot_path: str) -> str:
+    """Resolve a dot-separated path like 'translation.deepseek_key' from config."""
+    parts = dot_path.split(".")
+    node = cfg
+    for p in parts:
+        if not isinstance(node, dict):
+            return ""
+        node = node.get(p)
+    return (node or "").strip() if isinstance(node, str) else ""
+
+
+def _pick_fallback_provider(cfg: dict, model_hint: str = "") -> Optional[Dict[str, str]]:
+    """Return the best fallback provider that has a valid API key configured.
+
+    If `model_hint` matches a known provider's model, prefer that provider.
+    Otherwise return the first provider with a valid key.
+    """
+    # If user explicitly picked a model that belongs to a known provider, use it.
+    if model_hint:
+        hint_lower = model_hint.lower()
+        for prov in _FALLBACK_PROVIDERS:
+            if (prov["model"].lower() == hint_lower
+                    or prov["name"] in hint_lower
+                    or hint_lower.startswith(prov["name"])):
+                key = _get_cfg_key(cfg, prov["key_path"])
+                if key:
+                    # Use the user's requested model name (they might want a
+                    # specific variant like gemini-2.5-pro instead of flash).
+                    return {"name": prov["name"], "endpoint": prov["endpoint"],
+                            "model": model_hint, "api_key": key}
+    # Default: first provider with a key.
+    for prov in _FALLBACK_PROVIDERS:
+        key = _get_cfg_key(cfg, prov["key_path"])
+        if key:
+            return {"name": prov["name"], "endpoint": prov["endpoint"],
+                    "model": prov["model"], "api_key": key}
+    return None
+
+
+def _is_9router_reachable(endpoint: str) -> bool:
+    """Quick connectivity check to 9Router (2s timeout)."""
+    try:
+        url = endpoint.rstrip("/").replace("/v1", "") + "/api/health"
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=2):
+            return True
+    except Exception:
+        return False
+
+
+# Cache reachability for 15 seconds to avoid hammering on every request.
+_reachable_cache: Dict[str, Any] = {"ok": None, "ts": 0.0}
+
+
+def _nine_router_reachable(endpoint: str) -> bool:
+    """Cached reachability check (15s TTL)."""
+    now = time.time()
+    if _reachable_cache["ok"] is not None and (now - _reachable_cache["ts"]) < 15.0:
+        return _reachable_cache["ok"]
+    ok = _is_9router_reachable(endpoint)
+    _reachable_cache["ok"] = ok
+    _reachable_cache["ts"] = now
+    return ok
+
 # ── Local DB cache for the CLI token so we don't shell out every request ──
 _cli_token_cache: Optional[str] = None
 
@@ -354,6 +449,8 @@ def chatbot_status():
         except Exception as exc:
             LOGGER.debug("chatbot_status: settings probe failed — %s", exc)
 
+    cfg = load_cfg()
+    fallback = _pick_fallback_provider(cfg)
     return jsonify({
         "ok": True,
         "endpoint": endpoint,
@@ -365,6 +462,8 @@ def chatbot_status():
         "has_key": bool((nr.get("api_key") or "").strip()),
         "masked_key": _mask_key(nr.get("api_key") or "") if nr.get("api_key") else "",
         "has_cli_token": bool(_cli_token()),
+        "fallback_available": fallback is not None,
+        "fallback_provider": fallback["name"] if fallback else None,
     })
 
 
@@ -1034,36 +1133,38 @@ def chatbot_embeddings():
 # ─── Models ───────────────────────────────────────────────────────────────
 @bp.route("/api/chatbot/models", methods=["GET"])
 def chatbot_models():
-    """Proxy `GET /v1/models` — public on 9Router (no auth needed)."""
+    """Proxy `GET /v1/models` — public on 9Router (no auth needed).
+    Falls back to listing available direct providers when 9Router is offline.
+    """
     nr = _nine_router_cfg()
+    cfg = load_cfg()
     headers = {"Accept": "application/json"}
     if (nr.get("api_key") or "").strip():
         headers["Authorization"] = f"Bearer {nr['api_key']}"
 
     url = f"{nr['endpoint'].rstrip('/')}/models"
+    nine_router_ok = False
+    items = []
     try:
         status, body = _http_json(url, method="GET", headers=headers, timeout=_MODELS_TIMEOUT)
+        if status < 400 and isinstance(body, dict):
+            nine_router_ok = True
+            for it in body.get("data") or []:
+                mid = (it or {}).get("id")
+                if mid:
+                    items.append({"id": mid, "owned_by": (it or {}).get("owned_by", "")})
     except Exception as exc:
-        LOGGER.warning("chatbot_models: cannot reach %s — %s", url, exc)
-        return jsonify({
-            "ok": False, "error": "unreachable", "message": str(exc),
-            "hint": "Bật 9Router (Start Server) hoặc kiểm tra endpoint.",
-        }), 502
+        LOGGER.warning("chatbot_models: 9Router unreachable — %s", exc)
 
-    if status >= 400:
-        msg = body if isinstance(body, str) else (
-            (body.get("error") or {}).get("message") if isinstance(body, dict) else str(body)
-        )
-        return jsonify({"ok": False, "status": status, "error": msg or "upstream_error"}), 502
+    # If 9Router is offline, provide fallback models from config keys
+    if not nine_router_ok:
+        for prov in _FALLBACK_PROVIDERS:
+            key = _get_cfg_key(cfg, prov["key_path"])
+            if key:
+                items.append({"id": prov["model"], "owned_by": prov["name"]})
 
-    items = []
-    if isinstance(body, dict):
-        for it in body.get("data") or []:
-            mid = (it or {}).get("id")
-            if mid:
-                items.append({"id": mid, "owned_by": (it or {}).get("owned_by", "")})
-
-    return jsonify({"ok": True, "models": items, "default": nr["default_model"]})
+    return jsonify({"ok": True, "models": items, "default": nr["default_model"],
+                    "fallback_active": not nine_router_ok})
 
 
 # ─── Chat (non-streaming) ─────────────────────────────────────────────────
@@ -1421,6 +1522,9 @@ def chatbot_chat():
         return jsonify(err[1]), err[0]
 
     nr = _nine_router_cfg()
+    cfg = load_cfg()
+
+    # ── Try 9Router first ──
     api_key = (nr.get("api_key") or "").strip()
     headers = {"Content-Type": "application/json"}
     if api_key:
@@ -1429,25 +1533,48 @@ def chatbot_chat():
     payload, route = _build_chat_payload(data, nr, stream=False)
     url = f"{nr['endpoint'].rstrip('/')}/chat/completions"
 
+    nine_router_failed = False
     try:
         status, body = _http_json(url, method="POST", headers=headers, payload=payload)
     except Exception as exc:
-        LOGGER.warning("chatbot_chat: cannot reach %s — %s", url, exc)
-        return jsonify({"ok": False, "error": "unreachable", "message": str(exc)}), 502
+        LOGGER.warning("chatbot_chat: 9Router unreachable — %s", exc)
+        nine_router_failed = True
 
-    if status >= 400:
-        msg = body
-        if isinstance(body, dict):
-            msg = (body.get("error") or {}).get("message") or body
-        # 401 from 9Router → tell user it likely needs a key
-        if status == 401:
-            return jsonify({
-                "ok": False, "status": status,
-                "error": "missing_or_invalid_api_key",
-                "message": str(msg or "Missing API key"),
-                "hint": "Mở tab 9Router → ấn 'Tự động lấy key' để cấp & lưu key.",
-            }), 401
-        return jsonify({"ok": False, "status": status, "error": msg, "raw": body}), 502
+    if not nine_router_failed and status >= 400:
+        nine_router_failed = True
+
+    # ── Fallback to direct providers if 9Router failed ──
+    if nine_router_failed:
+        fallback = _pick_fallback_provider(cfg, model_hint=payload.get("model", ""))
+        if not fallback:
+            return jsonify({"ok": False, "error": "unreachable",
+                           "message": "9Router offline và không có provider fallback nào có API key."}), 502
+
+        LOGGER.info("chatbot_chat: fallback to %s", fallback["name"])
+        fb_headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {fallback['api_key']}",
+        }
+        fb_payload = dict(payload)
+        fb_payload["model"] = fallback["model"]
+        fb_payload["stream"] = False
+        route = {"mode": "fallback", "tier": "direct",
+                 "reason": f"9Router offline → {fallback['name']}"}
+
+        try:
+            status, body = _http_json(fallback["endpoint"], method="POST",
+                                      headers=fb_headers, payload=fb_payload,
+                                      timeout=_DEFAULT_TIMEOUT)
+        except Exception as exc:
+            LOGGER.warning("chatbot_chat: fallback %s failed — %s", fallback["name"], exc)
+            return jsonify({"ok": False, "error": "fallback_failed",
+                           "message": f"{fallback['name']} cũng lỗi: {exc}"}), 502
+
+        if status >= 400:
+            msg = body
+            if isinstance(body, dict):
+                msg = (body.get("error") or {}).get("message") or body
+            return jsonify({"ok": False, "status": status, "error": msg, "raw": body}), 502
 
     if not isinstance(body, dict):
         return jsonify({"ok": False, "error": "invalid_response", "raw": body}), 502
@@ -1469,9 +1596,8 @@ def chatbot_chat():
 @bp.route("/api/chatbot/chat_stream", methods=["POST"])
 def chatbot_chat_stream():
     """Forward the upstream SSE stream from 9Router straight to the browser.
-
-    Why a passthrough instead of a fetch in the browser? Because the API key
-    lives in config.yml — we don't want it leaking into JS at all.
+    Falls back to direct provider calls (DeepSeek/Gemini/OpenAI/Groq) when
+    9Router is offline.
     """
     data = request.json or {}
     err = _ensure_messages(data)
@@ -1479,6 +1605,7 @@ def chatbot_chat_stream():
         return jsonify(err[1]), err[0]
 
     nr = _nine_router_cfg()
+    cfg = load_cfg()
     api_key = (nr.get("api_key") or "").strip()
     payload, route = _build_chat_payload(data, nr, stream=True)
     url = f"{nr['endpoint'].rstrip('/')}/chat/completions"
@@ -1490,52 +1617,95 @@ def chatbot_chat_stream():
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    # Use `requests` with stream=True so each upstream chunk is yielded the
-    # moment it arrives. urllib's HTTPResponse.read(n) buffers until `n`
-    # bytes are available, which collapses 9Router's per-token chunks into
-    # one big payload at [DONE] — the chat bubble would stay empty until
-    # the very end. requests.iter_content honours the upstream framing.
     try:
-        import requests  # type: ignore
+        import requests as _requests_lib  # type: ignore
     except Exception as exc:  # pragma: no cover - requirements.txt has it
         return jsonify({"ok": False, "error": "requests_unavailable", "message": str(exc)}), 500
 
+    # ── Try 9Router first ──
+    upstream = None
+    nine_router_failed = False
     try:
-        upstream = requests.post(
+        upstream = _requests_lib.post(
             url,
             data=json.dumps(payload).encode("utf-8"),
             headers=headers,
             stream=True,
-            # (connect, read) timeouts — read=None means wait forever between
-            # chunks (reasoning models can think 30+ seconds before first byte).
             timeout=(_LIGHT_TIMEOUT, None),
         )
+        if upstream.status_code >= 400:
+            try:
+                _9r_err = upstream.text[:200]
+            except Exception:
+                _9r_err = ""
+            LOGGER.warning("chatbot_chat_stream: 9Router returned %d — %s",
+                           upstream.status_code, _9r_err)
+            upstream.close()
+            upstream = None
+            nine_router_failed = True
     except Exception as exc:
-        LOGGER.warning("chatbot_chat_stream: cannot reach %s — %s", url, exc)
-        def _conn_err_stream():
-            yield f"event: error\ndata: {json.dumps({'status': 502, 'body': str(exc)})}\n\n"
-        return Response(stream_with_context(_conn_err_stream()),
-                        mimetype="text/event-stream",
-                        headers={"Cache-Control": "no-cache"})
+        LOGGER.warning("chatbot_chat_stream: 9Router unreachable — %s", exc)
+        nine_router_failed = True
 
-    if upstream.status_code >= 400:
+    # ── Fallback to direct provider if 9Router failed ──
+    if nine_router_failed:
+        fallback = _pick_fallback_provider(cfg, model_hint=payload.get("model", ""))
+        if not fallback:
+            def _no_provider_stream():
+                yield f"event: error\ndata: {json.dumps({'status': 502, 'body': '9Router offline. Không có provider fallback nào có API key trong config.yml.'})}\n\n"
+            return Response(stream_with_context(_no_provider_stream()),
+                            mimetype="text/event-stream",
+                            headers={"Cache-Control": "no-cache"})
+
+        LOGGER.info("chatbot_chat_stream: fallback to %s (model: %s)",
+                    fallback["name"], fallback["model"])
+        fb_headers = {
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "Authorization": f"Bearer {fallback['api_key']}",
+        }
+        fb_payload = dict(payload)
+        fb_payload["model"] = fallback["model"]
+        fb_payload["stream"] = True
+        route = {"mode": "fallback", "tier": "direct",
+                 "reason": f"9Router offline → {fallback['name']}"}
+
         try:
-            err_body = upstream.text
-        except Exception:
-            err_body = ""
-        upstream.close()
-        def _err_stream():
-            yield f"event: error\ndata: {json.dumps({'status': upstream.status_code, 'body': err_body})}\n\n"
-        return Response(stream_with_context(_err_stream()),
-                        mimetype="text/event-stream",
-                        headers={"Cache-Control": "no-cache"})
+            upstream = _requests_lib.post(
+                fallback["endpoint"],
+                data=json.dumps(fb_payload).encode("utf-8"),
+                headers=fb_headers,
+                stream=True,
+                timeout=(_LIGHT_TIMEOUT, None),
+            )
+        except Exception as exc:
+            LOGGER.warning("chatbot_chat_stream: fallback %s failed — %s", fallback["name"], exc)
+            _fb_err = f"{fallback['name']} cũng lỗi: {exc}"
+            def _fb_err_stream():
+                yield f"event: error\ndata: {json.dumps({'status': 502, 'body': _fb_err})}\n\n"
+            return Response(stream_with_context(_fb_err_stream()),
+                            mimetype="text/event-stream",
+                            headers={"Cache-Control": "no-cache"})
+
+        if upstream.status_code >= 400:
+            try:
+                err_body = upstream.text
+            except Exception:
+                err_body = ""
+            _err_status = upstream.status_code
+            _err_name = fallback["name"]
+            upstream.close()
+            def _fb_status_err_stream():
+                yield f"event: error\ndata: {json.dumps({'status': _err_status, 'body': f'{_err_name}: {err_body}'})}\n\n"
+            return Response(stream_with_context(_fb_status_err_stream()),
+                            mimetype="text/event-stream",
+                            headers={"Cache-Control": "no-cache"})
+
+        # Update payload reference for passthrough metadata
+        payload = fb_payload
 
     def _passthrough():
         try:
-            # Prepend a synthetic SSE event so the UI can show "routed →
-            # tier X" before the real upstream chunks arrive. Falls outside
-            # the OpenAI schema but lives under a custom `event:` name so
-            # well-behaved clients can ignore it.
             meta = {"requested_model": payload["model"], "routing": route}
             yield (f"event: route\ndata: {json.dumps(meta)}\n\n").encode("utf-8")
 
@@ -1553,10 +1723,10 @@ def chatbot_chat_stream():
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # disable nginx/etc buffering when reverse-proxied
+            "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
-        direct_passthrough=True,  # don't let Werkzeug rebuffer the iterator
+        direct_passthrough=True,
     )
 
 

@@ -53,6 +53,10 @@
       hold: 0.5,
       caption: '',
       easing: 'ease',
+      emotion: 'neutral',
+      character_style: 'normal',
+      props: [],
+      background: '',
     });
     _renderScenes();
     _showPosePreview(poseName);
@@ -74,6 +78,10 @@
       _scenes[i][key] = isNaN(v) ? 1.0 : Math.max(0.0, Math.min(15.0, v));
     } else if (key === 'caption') {
       _scenes[i].caption = String(value || '').slice(0, 300);
+    } else if (key === 'emotion') {
+      _scenes[i].emotion = value || 'neutral';
+    } else if (key === 'character_style') {
+      _scenes[i].character_style = value || 'normal';
     }
     _renderScenes(true); // skip full repaint where possible
   };
@@ -88,6 +96,9 @@
       _updateStats();
       return;
     }
+    const _EMOTIONS = ['neutral','happy','sad','angry','surprised','thinking','excited'];
+    const _STYLES = ['normal','teacher','student','scientist','chef','athlete'];
+
     const html = _scenes.map((s, i) => `
       <div class="stk-scene-row">
         <div class="stk-scene-idx">${i + 1}</div>
@@ -101,7 +112,15 @@
           <input type="text" class="stk-mini-input" placeholder="Caption (tuỳ chọn)"
                  value="${_escapeAttr(s.caption || '')}"
                  oninput="stkUpdateScene(${i}, 'caption', this.value)"
-                 style="margin-top:6px">
+                 style="margin-top:4px">
+          <div style="display:flex;gap:4px;margin-top:4px">
+            <select class="stk-mini-input" style="flex:1" onchange="stkUpdateScene(${i}, 'emotion', this.value)" title="Biểu cảm">
+              ${_EMOTIONS.map(e => `<option value="${e}" ${e === (s.emotion || 'neutral') ? 'selected' : ''}>${e}</option>`).join('')}
+            </select>
+            <select class="stk-mini-input" style="flex:1" onchange="stkUpdateScene(${i}, 'character_style', this.value)" title="Phong cách">
+              ${_STYLES.map(st => `<option value="${st}" ${st === (s.character_style || 'normal') ? 'selected' : ''}>${st}</option>`).join('')}
+            </select>
+          </div>
         </div>
         <div class="stk-cell-dur">
           <label style="font-size:10px">Trans (s)</label>
@@ -139,16 +158,17 @@
   // ── Demo / clear ─────────────────────────────────────────────────────────
   window.stkLoadDemo = function () {
     _scenes = [
-      { pose: 'stand',       duration: 0.5, hold: 0.3, caption: 'Xin chào!', easing: 'ease' },
-      { pose: 'wave_right',  duration: 0.6, hold: 0.6, caption: 'Mình là Stickman', easing: 'ease' },
-      { pose: 'point_right', duration: 0.5, hold: 0.5, caption: 'Bắt đầu thôi nào', easing: 'ease' },
-      { pose: 'walk_a',      duration: 0.4, hold: 0.0, caption: '',                 easing: 'linear' },
-      { pose: 'walk_b',      duration: 0.4, hold: 0.0, caption: '',                 easing: 'linear' },
-      { pose: 'jump_up',     duration: 0.4, hold: 0.4, caption: 'Yeahh!',           easing: 'ease' },
-      { pose: 'cheer',       duration: 0.4, hold: 1.0, caption: 'Xong rồi 🎉',      easing: 'ease' },
+      { pose: 'stand',       duration: 0.5, hold: 0.3, caption: 'Xin chào!',           easing: 'ease', emotion: 'happy',    character_style: 'teacher', props: [] },
+      { pose: 'wave_right',  duration: 0.6, hold: 0.6, caption: 'Mình là Stickman',    easing: 'ease', emotion: 'excited',  character_style: 'teacher', props: [] },
+      { pose: 'point_right', duration: 0.5, hold: 0.5, caption: 'Bắt đầu thôi nào',   easing: 'ease', emotion: 'neutral',  character_style: 'teacher', props: ['pointer'] },
+      { pose: 'think',       duration: 0.5, hold: 0.8, caption: 'Hmm suy nghĩ...',     easing: 'ease', emotion: 'thinking', character_style: 'scientist', props: ['book'] },
+      { pose: 'walk_a',      duration: 0.4, hold: 0.0, caption: '',                    easing: 'linear', emotion: 'neutral', character_style: 'normal', props: [] },
+      { pose: 'walk_b',      duration: 0.4, hold: 0.0, caption: '',                    easing: 'linear', emotion: 'neutral', character_style: 'normal', props: [] },
+      { pose: 'jump_up',     duration: 0.4, hold: 0.4, caption: 'Yeahh!',             easing: 'ease', emotion: 'surprised', character_style: 'athlete', props: [] },
+      { pose: 'cheer',       duration: 0.4, hold: 1.0, caption: 'Xong rồi 🎉',        easing: 'ease', emotion: 'excited',  character_style: 'normal', props: ['microphone'] },
     ];
     _renderScenes();
-    if (typeof toast === 'function') toast('Đã nạp demo 7 scenes', 'info');
+    if (typeof toast === 'function') toast('Đã nạp demo 8 scenes (có emotion + style)', 'info');
   };
 
   window.stkClearScenes = function () {
@@ -197,6 +217,9 @@
         hold: s.hold,
         caption: s.caption || '',
         easing: s.easing || 'ease',
+        emotion: s.emotion || 'neutral',
+        character_style: s.character_style || 'normal',
+        props: s.props || [],
       })),
       preset: document.getElementById('stk-preset').value,
       fps: parseInt(document.getElementById('stk-fps').value, 10) || 24,
@@ -357,4 +380,51 @@
     if (!ev.target) return;
     if (ev.target.id === 'stk-fps') _updateStats();
   });
+
+  // ── AI Director ────────────────────────────────────────────────────────────
+  window.stkAiGenerate = function () {
+    const content = (document.getElementById('stk-ai-content')?.value || '').trim();
+    if (!content) {
+      if (typeof toast === 'function') toast('Nhập nội dung/chủ đề trước.', 'warning');
+      return;
+    }
+
+    const statusEl = document.getElementById('stk-ai-status');
+    if (statusEl) statusEl.textContent = '⏳ Đang gọi AI sinh kịch bản…';
+
+    const payload = {
+      content: content,
+      num_scenes: parseInt(document.getElementById('stk-ai-num')?.value || '8', 10),
+      language: document.getElementById('stk-ai-lang')?.value || 'vi',
+    };
+
+    fetch('/api/stickman/ai_generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) throw new Error(data.error || 'AI generate failed');
+        // Load scenes into editor
+        _scenes = (data.scenes || []).map(s => ({
+          pose: s.pose || 'stand',
+          duration: s.duration || 1.0,
+          hold: s.hold || 0.5,
+          caption: s.caption || '',
+          easing: 'ease',
+          emotion: s.emotion || 'neutral',
+          character_style: s.character_style || 'normal',
+          props: s.props || [],
+          background: s.background || '',
+        }));
+        _renderScenes();
+        if (statusEl) statusEl.innerHTML = `✅ AI đã sinh <b>${data.count}</b> scenes. Kiểm tra & chỉnh sửa bên dưới rồi bấm Render.`;
+        if (typeof toast === 'function') toast(`AI sinh ${data.count} scenes thành công!`, 'success');
+      })
+      .catch(err => {
+        if (statusEl) statusEl.textContent = '❌ Lỗi: ' + err.message;
+        if (typeof toast === 'function') toast('AI lỗi: ' + err.message, 'error');
+      });
+  };
 })();

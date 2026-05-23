@@ -1,24 +1,208 @@
 <!-- PAGE: PROCESS VIDEO -->
 <div id="page-process" class="page">
-  <!-- Save defaults bar -->
-  <div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
-    <span id="proc-active-aspect-badge"
-      style="display:none;font-size:12px;font-weight:600;padding:4px 10px;border-radius:12px;background:var(--card-bg, #1f2937);border:1px solid var(--border, #374151);color:var(--text2, #d1d5db)"
-      title="Bộ cài đặt phụ đề đang áp dụng theo tỉ lệ video gốc">📐 ...</span>
-    <select id="proc-aspect-override" onchange="_onAspectOverrideChange()"
-      title="Buộc dùng preset cho tỉ lệ cụ thể (mặc định: tự nhận diện theo video)"
-      style="font-size:12px;padding:4px 8px">
-      <option value="auto" selected>Tự nhận diện</option>
-      <option value="9x16">📱 Dùng preset 9:16</option>
-      <option value="16x9">🖥 Dùng preset 16:9</option>
-    </select>
-    <button class="btn btn-secondary btn-sm" onclick="procRestoreDefaults()" title="Khôi phục cài đặt mặc định đã lưu cho tỉ lệ hiện tại">
-      ↩ Khôi phục
-    </button>
-    <button class="btn btn-primary btn-sm" onclick="procSaveDefaults()" title="Lưu mặc định cho tỉ lệ hiện tại (9:16 hoặc 16:9)">
-      💾 Lưu mặc định
-    </button>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       💬 Phụ đề & Dịch — full-width, nằm trên 2 cột chính
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="card card-collapsible" style="margin-bottom:16px">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="card-title">💬 Phụ đề &amp; Dịch</span>
+      <div class="card-actions" onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="procRestoreDefaults()" title="Khôi phục cài đặt mặc định">↩ Khôi phục</button>
+        <button class="btn btn-primary btn-sm" onclick="procSaveDefaults()" title="Lưu cài đặt mặc định">💾 Lưu mặc định</button>
+        <label class="toggle-wrap">
+          <input type="checkbox" class="toggle-input" id="proc-burn" checked>
+          <div class="toggle"></div>
+          <span class="toggle-label text-sm">Ghi phụ đề</span>
+        </label>
+      </div>
+    </div>
+    <div class="card-body">
+      <!-- ═══════════════════════════════════════════════════════════════════
+           Layout: Preview+Thumbnail (LEFT) | Settings (RIGHT)
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+
+        <!-- ── LEFT: Preview + Thumbnail ── -->
+        <!-- 9:16 (frame on): nằm ngang cạnh nhau, mỗi cái 50% -->
+        <!-- 16:9 (frame off): đè lên nhau (cột), mỗi cái full width, container chiếm 50% tổng -->
+        <div id="proc-preview-col" style="flex:0 0 50%;min-width:300px;display:flex;flex-direction:column;gap:10px">
+
+          <!-- Aspect selector -->
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:11px;color:var(--text-muted);margin:0;flex-shrink:0">Khung hình</label>
+            <select id="proc-preview-aspect" onchange="_onPreviewAspectChange()"
+              title="Khung hình hiển thị Preview & Thumbnail"
+              style="font-size:12px;padding:4px 8px;flex:1">
+              <option value="auto" selected>🔍 Tự nhận diện</option>
+              <option value="16x9">🖥 16:9 (ngang)</option>
+              <option value="9x16">📱 9:16 (dọc)</option>
+            </select>
+          </div>
+
+          <!-- Container cho Preview + Thumbnail (direction thay đổi theo aspect) -->
+          <div id="proc-preview-row" style="display:flex;flex-direction:column;gap:10px">
+
+            <!-- Preview Video -->
+            <div class="sub-preview-box" style="padding:10px;flex:1;min-width:0">
+              <div class="sub-preview-header" style="margin-bottom:8px">
+                <span style="font-size:12px;font-weight:700;color:var(--text2)">🖼 Preview</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <button class="btn btn-secondary btn-sm proc-mobile-toggle" style="font-size:10px;padding:2px 6px;display:none" onclick="this.closest('.sub-preview-box').classList.toggle('collapsed-mobile')">▼</button>
+                  <input type="number" id="sub-preview-ts" min="0" step="1" value="5"
+                    style="width:60px;padding:3px 6px;font-size:11px"
+                    oninput="subPreviewFetchFrame()">
+                  <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 8px"
+                    onclick="subPreviewFetchFrame()">📷 Lấy frame</button>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+                <label style="font-size:10px;color:var(--text-muted);margin:0;flex-shrink:0">Mẫu</label>
+                <input type="text" id="sub-preview-sample" value="Đây là phụ đề tiếng Việt mẫu"
+                  style="flex:1;font-size:11px;padding:3px 6px"
+                  oninput="subPreviewUpdate()">
+              </div>
+
+              <div id="sub-preview-wrap" style="position:relative;width:100%;background:#111;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;aspect-ratio:16/9">
+                <img id="sub-preview-img" src="" alt="" style="width:100%;display:none;vertical-align:bottom">
+                <div id="sub-preview-placeholder" style="color:#555;font-size:11px;padding:20px;text-align:center">
+                  Bấm 📷 Lấy frame để xem preview
+                </div>
+                <div id="sub-preview-blur" style="display:none;position:absolute;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:2px;"></div>
+                <canvas id="sub-preview-blur-canvas" style="display:none;position:absolute;pointer-events:none;border-radius:2px;"></canvas>
+                <div id="sub-preview-text" style="position:absolute;left:0;right:0;pointer-events:none;padding:0 12px;text-align:center;display:none"></div>
+                <canvas id="frame-preview-canvas" style="display:none;width:100%;border-radius:6px"></canvas>
+              </div>
+            </div>
+
+            <!-- Thumbnail -->
+            <div class="sub-preview-box" style="padding:10px;flex:1;min-width:0">
+              <div class="flex-between" style="margin-bottom:8px;flex-wrap:wrap;gap:4px">
+                <span style="font-size:12px;font-weight:700;color:var(--text2)">🖼 Thumbnail</span>
+                <div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">
+                  <button class="btn btn-secondary btn-sm proc-mobile-toggle" style="font-size:10px;padding:2px 6px;display:none" title="Ẩn/hiện" onclick="this.closest('.sub-preview-box').classList.toggle('collapsed-mobile')">▼</button>
+                  <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 7px" title="Import từ máy" onclick="document.getElementById('thumb-import-file').click()">📁</button>
+                  <input type="file" id="thumb-import-file" accept="image/*" style="display:none" onchange="thumbImportFile(this)">
+                  <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 7px" title="Tạo từ frame video" onclick="generateThumbnailPreview()">🎨</button>
+                  <button class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 7px" title="AI tạo từ frame + nội dung" onclick="generateThumbnailAI()">🤖</button>
+                  <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 7px" title="Xóa thumbnail" onclick="thumbClear()">🗑</button>
+                  <label class="toggle-wrap" title="Tắt/bật chèn thumbnail vào đầu video">
+                    <input type="checkbox" class="toggle-input" id="thumb-enabled" checked onchange="thumbToggleEnabled()">
+                    <div class="toggle"></div>
+                  </label>
+                </div>
+              </div>
+              <input type="text" id="thumb-title" value="Trạm giải trí" placeholder="Tiêu đề kênh / nội dung gợi ý cho AI"
+                style="font-size:11px;padding:3px 6px;width:100%;margin-bottom:6px">
+              <div id="thumb-preview-wrap" style="position:relative;width:100%;background:#111;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;aspect-ratio:16/9">
+                <img id="thumb-preview-img" src="" alt="" style="max-width:100%;max-height:100%;display:none;border-radius:4px">
+                <div id="thumb-placeholder" style="color:#555;font-size:11px;padding:16px;text-align:center">
+                  📁 Import / 🎨 Tạo / 🤖 AI
+                </div>
+              </div>
+              <div id="thumb-output-info" style="display:none;font-size:10px;color:var(--text-muted);margin-top:4px;word-break:break-all"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── RIGHT: Settings (compact, aligned) ── -->
+        <div style="flex:1;min-width:320px">
+
+          <!-- Subtitle controls -->
+          <div class="check-grid mb-8" style="grid-template-columns:repeat(3,1fr)">
+            <label class="check-item"><input type="checkbox" id="proc-translate-subs" checked><span>Dịch tiếng</span></label>
+            <label class="check-item"><input type="checkbox" id="proc-burn-vi" checked><span>Ghi phụ đề</span></label>
+            <label class="check-item"><input type="checkbox" id="proc-blur-original" checked><span>Che phụ đề gốc</span></label>
+          </div>
+
+          <!-- Subtitle settings: 3 cột -->
+          <div class="proc-grid-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px 12px;margin-bottom:10px">
+            <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="proc-font-size" min="1" max="20" step="0.5" value="4.5" oninput="subPreviewUpdate()"></div>
+            <div class="field"><label>Màu chữ</label>
+              <div style="display:flex;gap:4px;align-items:center;height:38px">
+                <select id="proc-font-color" onchange="subPreviewUpdate();_syncColorPicker()" style="flex:1;font-size:12px;height:38px"><option value="white" selected>Trắng</option><option value="yellow">Vàng</option><option value="cyan">Cyan</option><option value="custom">Tùy chỉnh</option></select>
+                <input type="color" id="proc-font-color-picker" value="#ffffff" style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:4px;cursor:pointer;flex-shrink:0;box-sizing:border-box" oninput="_onColorPickerChange()">
+              </div>
+            </div>
+            <div class="field"><label>Vị trí</label><select id="proc-sub-pos" onchange="subPreviewUpdate()" style="height:38px"><option value="bottom" selected>Dưới</option><option value="top">Trên</option></select></div>
+            <div class="field"><label>Đáy (%)</label><input type="number" id="proc-margin-v" min="0" max="50" step="0.5" value="3" oninput="subPreviewUpdate()"></div>
+            <div class="field"><label>Che cao (%)</label><input type="number" id="proc-blur-height" min="3" max="45" step="1" value="15" oninput="subPreviewUpdate()"></div>
+            <div class="field"><label>Che Y (%)</label><input type="number" id="proc-blur-y" min="0" max="100" step="1" value="" placeholder="auto" oninput="subPreviewUpdate()" title="Vị trí vùng che (0=trên, 100=dưới). Để trống = tự theo phụ đề"></div>
+          </div>
+
+          <!-- Vùng che bổ sung (nhiều vùng) -->
+          <div id="proc-blur-extra-list" style="margin-bottom:10px"></div>
+          <div style="margin-bottom:10px">
+            <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px" onclick="procAddBlurZone()">＋ Thêm vùng che</button>
+          </div>
+
+          <!-- ═══ Frame Video Controls ═══ -->
+          <div style="border-top:1px solid var(--border);padding-top:8px">
+            <div class="flex-between mb-6">
+              <span style="font-size:12px;font-weight:700;color:var(--text2)">🎞 Khung video</span>
+              <label class="toggle-wrap">
+                <input type="checkbox" class="toggle-input" id="frame-enabled" onchange="frameToggle()">
+                <div class="toggle"></div>
+                <span class="toggle-label text-sm">Bật</span>
+              </label>
+            </div>
+
+            <div id="frame-controls" style="display:none">
+              <!-- Tiêu đề: 3 cột (title | hiện | cỡ chữ) -->
+              <div style="display:grid;grid-template-columns:3fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="field"><label>📝 Tiêu đề</label><input type="text" id="frame-title" placeholder="Nhập tiêu đề..." style="height:38px" oninput="framePreviewUpdate()"></div>
+                <div class="field"><label>Hiện</label><label class="check-item w-full" style="height:38px;margin:0;box-sizing:border-box;justify-content:center"><input type="checkbox" id="frame-title-enabled" checked onchange="framePreviewUpdate()"><span style="font-size:11px">Bật</span></label></div>
+                <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="frame-title-size" value="5" min="1" max="15" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+              </div>
+
+              <!-- Màu: 3 cột (màu1 | màu2 | chia màu) -->
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="field"><label>Màu 1</label>
+                  <div style="display:flex;gap:3px;height:38px"><input type="color" id="frame-title-color" value="#000000" style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:4px;cursor:pointer;box-sizing:border-box" oninput="document.getElementById('frame-title-color-hex').value=this.value;framePreviewUpdate()"><input type="text" id="frame-title-color-hex" value="#000000" style="flex:1;font-family:monospace;font-size:11px;height:38px;box-sizing:border-box;min-width:0" oninput="document.getElementById('frame-title-color').value=this.value;framePreviewUpdate()"></div>
+                </div>
+                <div class="field"><label>Màu 2</label>
+                  <div style="display:flex;gap:3px;height:38px"><input type="color" id="frame-title-color-2" value="#ff0000" style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:4px;cursor:pointer;box-sizing:border-box" oninput="document.getElementById('frame-title-color-2-hex').value=this.value;framePreviewUpdate()"><input type="text" id="frame-title-color-2-hex" value="#ff0000" style="flex:1;font-family:monospace;font-size:11px;height:38px;box-sizing:border-box;min-width:0" oninput="document.getElementById('frame-title-color-2').value=this.value;framePreviewUpdate()"></div>
+                </div>
+                <div class="field"><label>Chia màu</label><label class="check-item w-full" style="height:38px;margin:0;box-sizing:border-box;justify-content:center"><input type="checkbox" id="frame-title-split-color" checked onchange="framePreviewUpdate()"><span style="font-size:11px">Bật (|)</span></label></div>
+              </div>
+
+              <!-- Blur: 4 cột -->
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+                <div class="field"><label>Mờ trên (%)</label><input type="number" id="frame-blur-top" value="0" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
+                <div class="field"><label>Mờ dưới (%)</label><input type="number" id="frame-blur-bottom" value="0" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
+                <div class="field"><label>Mờ bên (%)</label><input type="number" id="frame-blur-w" value="15" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
+                <div class="field"><label>Độ mờ</label><input type="number" id="frame-blur-opacity" value="60" min="0" max="100" step="5" style="height:38px" oninput="framePreviewUpdate()"></div>
+              </div>
+
+              <!-- Kiểu mờ: inline -->
+              <div style="display:flex;gap:12px;margin-bottom:8px;align-items:center">
+                <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">Kiểu mờ:</span>
+                <label class="check-item" style="margin:0"><input type="radio" name="frame-blur-mode" value="overlay" checked onchange="framePreviewUpdate()"><span style="font-size:11px">Đè lên</span></label>
+                <label class="check-item" style="margin:0"><input type="radio" name="frame-blur-mode" value="expand" onchange="framePreviewUpdate()"><span style="font-size:11px">Đẩy ra ngoài</span></label>
+              </div>
+
+              <!-- Logo: 4 cột (file | size | top | left) -->
+              <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="field"><label>🏷 Logo</label>
+                  <div style="display:flex;gap:3px;height:38px"><input type="text" id="frame-logo-path" placeholder="Chọn file..." readonly style="flex:1;font-size:11px;height:38px;box-sizing:border-box"><button class="btn btn-secondary btn-sm" style="padding:0 8px;height:38px;box-sizing:border-box" onclick="document.getElementById('frame-logo-file').click()">📂</button><input type="file" id="frame-logo-file" accept="image/*" style="display:none" onchange="frameSetLogo(this)"></div>
+                </div>
+                <div class="field"><label>Size%</label><input type="number" id="frame-logo-size" value="12" min="2" max="40" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                <div class="field"><label>Top%</label><input type="number" id="frame-logo-top" value="3" min="0" max="90" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                <div class="field"><label>Left%</label><input type="number" id="frame-logo-left" value="3" min="0" max="90" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+              </div>
+
+              <!-- Bo tròn: full width -->
+              <div class="field"><label>Bo tròn (<span id="frame-logo-radius-val">50</span>%)</label><input type="range" id="frame-logo-radius" min="0" max="50" step="1" value="50" style="width:100%" oninput="document.getElementById('frame-logo-radius-val').textContent=this.value;framePreviewUpdate()"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
   </div>
+
   <div class="page-layout-2col">
 
     <!-- LEFT: Settings -->
@@ -129,203 +313,7 @@
         </div>
       </div>
 
-      <!-- Subtitles -->
-      <div class="card card-collapsible collapsed">
-        <div class="card-header" onclick="toggleCard(this)">
-          <span class="card-title">💬 Phụ đề &amp; Dịch</span>
-          <div class="card-actions" onclick="event.stopPropagation()">
-            <label class="toggle-wrap">
-              <input type="checkbox" class="toggle-input" id="proc-burn" checked>
-              <div class="toggle"></div>
-              <span class="toggle-label text-sm">Ghi phụ đề</span>
-            </label>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="check-grid mb-12">
-            <label class="check-item"><input type="checkbox" id="proc-translate-subs" checked><span>Dịch tiếng</span></label>
-            <label class="check-item"><input type="checkbox" id="proc-burn-vi" checked><span>Ghi phụ đề</span></label>
-            <label class="check-item"><input type="checkbox" id="proc-blur-original" checked><span>Che phụ đề gốc</span></label>
-          </div>
-          <div class="grid-2">
-            <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="proc-font-size" min="1" max="20" step="0.5" value="4.5"
-              oninput="subPreviewUpdate()"></div>
-            <div class="field">
-              <label>Màu chữ</label>
-              <div style="display:flex;gap:8px;align-items:center">
-                <select id="proc-font-color" onchange="subPreviewUpdate();_syncColorPicker()" style="flex:1">
-                  <option value="white" selected>Trắng</option>
-                  <option value="yellow">Vàng</option>
-                  <option value="cyan">Xanh cyan</option>
-                  <option value="custom">Tùy chỉnh...</option>
-                </select>
-                <input type="color" id="proc-font-color-picker" value="#ffffff"
-                  style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer;flex-shrink:0"
-                  oninput="_onColorPickerChange()">
-              </div>
-            </div>
-            <div class="field"><label>Khoảng cách đáy (%)</label><input type="number" id="proc-margin-v" min="0" max="50" step="0.5" value="3"
-              oninput="subPreviewUpdate()"></div>
-            <div class="field">
-              <label>Vị trí phụ đề</label>
-              <select id="proc-sub-pos" onchange="subPreviewUpdate()">
-                <option value="bottom" selected>Dưới</option>
-                <option value="top">Trên</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- ── Subtitle + Frame Preview ── -->
-          <div class="sub-preview-box mt-12">
-            <div class="sub-preview-header">
-              <span style="font-size:12px;font-weight:700;color:var(--text2)">🖼 Preview</span>
-              <div style="display:flex;align-items:center;gap:8px">
-                <label style="font-size:11px;color:var(--text-muted);margin:0">Thời điểm (giây)</label>
-                <input type="number" id="sub-preview-ts" min="0" step="1" value="5"
-                  style="width:70px;padding:4px 6px;font-size:12px"
-                  oninput="subPreviewFetchFrame()">
-                <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px"
-                  onclick="subPreviewFetchFrame()">📷 Lấy frame</button>
-              </div>
-            </div>
-
-            <!-- Shared canvas preview area — switches between subtitle mode and frame mode -->
-            <div id="sub-preview-wrap" style="position:relative;width:100%;background:#111;border-radius:6px;overflow:hidden;min-height:120px;display:flex;align-items:center;justify-content:center">
-              <!-- Subtitle mode: raw img + overlays -->
-              <img id="sub-preview-img" src="" alt="" style="width:100%;display:none;vertical-align:bottom">
-              <div id="sub-preview-placeholder" style="color:#555;font-size:12px;padding:30px;text-align:center">
-                Chọn video và bấm 📷 Lấy frame để xem preview
-              </div>
-              <div id="sub-preview-blur" style="display:none;position:absolute;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:2px;"></div>
-              <canvas id="sub-preview-blur-canvas" style="display:none;position:absolute;pointer-events:none;border-radius:2px;"></canvas>
-              <div id="sub-preview-text" style="position:absolute;left:0;right:0;pointer-events:none;padding:0 12px;text-align:center;display:none"></div>
-              <!-- Frame mode: canvas replaces img -->
-              <canvas id="frame-preview-canvas" style="display:none;width:100%;border-radius:6px"></canvas>
-            </div>
-
-            <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-              <label style="font-size:11px;color:var(--text-muted);margin:0;flex-shrink:0">Nội dung mẫu</label>
-              <input type="text" id="sub-preview-sample" value="Đây là phụ đề tiếng Việt mẫu"
-                style="flex:1;font-size:12px;padding:4px 8px"
-                oninput="subPreviewUpdate()">
-            </div>
-
-            <!-- ── Frame Video Controls (inline, toggleable) ── -->
-            <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
-              <div class="flex-between mb-8">
-                <span style="font-size:12px;font-weight:700;color:var(--text2)">🎞 Khung video</span>
-                <label class="toggle-wrap">
-                  <input type="checkbox" class="toggle-input" id="frame-enabled" onchange="frameToggle()">
-                  <div class="toggle"></div>
-                  <span class="toggle-label text-sm">Bật</span>
-                </label>
-              </div>
-
-              <div id="frame-controls" style="display:none">
-                <!-- Title -->
-                <div class="field">
-                  <label>📝 Tiêu đề phía trên</label>
-                  <input type="text" id="frame-title" placeholder="Nhập tiêu đề..." oninput="framePreviewUpdate()">
-                </div>
-                <div class="grid-2 mt-8">
-                  <div class="field">
-                    <label>Cỡ chữ (%)</label>
-                    <input type="number" id="frame-title-size" value="5" min="1" max="15" step="0.5" oninput="framePreviewUpdate()">
-                  </div>
-                  <div class="field">
-                    <label>Màu chữ (phần 1)</label>
-                    <div style="display:flex;gap:6px">
-                      <input type="color" id="frame-title-color" value="#000000"
-                        style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer"
-                        oninput="document.getElementById('frame-title-color-hex').value=this.value;framePreviewUpdate()">
-                      <input type="text" id="frame-title-color-hex" value="#000000"
-                        style="flex:1;font-family:monospace;font-size:12px"
-                        oninput="document.getElementById('frame-title-color').value=this.value;framePreviewUpdate()">
-                    </div>
-                  </div>
-                </div>
-                <div class="grid-2 mt-8">
-                  <div class="field">
-                    <label>Màu chữ (phần 2 — nhấn mạnh)</label>
-                    <div style="display:flex;gap:6px">
-                      <input type="color" id="frame-title-color-2" value="#ff0000"
-                        style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer"
-                        oninput="document.getElementById('frame-title-color-2-hex').value=this.value;framePreviewUpdate()">
-                      <input type="text" id="frame-title-color-2-hex" value="#ff0000"
-                        style="flex:1;font-family:monospace;font-size:12px"
-                        oninput="document.getElementById('frame-title-color-2').value=this.value;framePreviewUpdate()">
-                    </div>
-                  </div>
-                  <div class="field">
-                    <label>Chia màu 2 phần</label>
-                    <label class="check-item w-full" style="height:38px;margin:0">
-                      <input type="checkbox" id="frame-title-split-color" checked onchange="framePreviewUpdate()">
-                      <span>Bật (dùng dấu | để tách)</span>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- Side blur -->
-                <div class="grid-2 mt-8">
-                  <div class="field">
-                    <label>🌫 Độ rộng mờ 2 bên (%)</label>
-                    <input type="number" id="frame-blur-w" value="15" min="0" max="40" step="1" oninput="framePreviewUpdate()">
-                  </div>
-                  <div class="field">
-                    <label>Độ mờ (0-100)</label>
-                    <input type="number" id="frame-blur-opacity" value="60" min="0" max="100" step="5" oninput="framePreviewUpdate()">
-                  </div>
-                </div>
-                <div class="field mt-4">
-                  <label>Kiểu vùng mờ</label>
-                  <div style="display:flex;gap:8px">
-                    <label class="check-item" style="flex:1">
-                      <input type="radio" name="frame-blur-mode" value="overlay" checked onchange="framePreviewUpdate()">
-                      <span>Đè lên video</span>
-                    </label>
-                    <label class="check-item" style="flex:1">
-                      <input type="radio" name="frame-blur-mode" value="expand" onchange="framePreviewUpdate()">
-                      <span>Đẩy ra ngoài</span>
-                    </label>
-                  </div>
-                </div>
-
-                <!-- Logo -->
-                <div class="field mt-8">
-                  <label>🏷 Logo (PNG/JPG)</label>
-                  <div style="display:flex;gap:8px">
-                    <input type="text" id="frame-logo-path" placeholder="Chọn file logo..." readonly style="flex:1;font-size:12px">
-                    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('frame-logo-file').click()">📂</button>
-                    <input type="file" id="frame-logo-file" accept="image/*" style="display:none" onchange="frameSetLogo(this)">
-                  </div>
-                </div>
-                <div class="grid-2">
-                  <div class="field">
-                    <label>Kích thước logo (% chiều cao)</label>
-                    <input type="number" id="frame-logo-size" value="12" min="2" max="40" step="0.5" oninput="framePreviewUpdate()">
-                  </div>
-                  <div class="field">
-                    <label>Vị trí từ trên (%)</label>
-                    <input type="number" id="frame-logo-top" value="3" min="0" max="90" step="0.5" oninput="framePreviewUpdate()">
-                  </div>
-                  <div class="field">
-                    <label>Vị trí từ trái (%)</label>
-                    <input type="number" id="frame-logo-left" value="3" min="0" max="90" step="0.5" oninput="framePreviewUpdate()">
-                  </div>
-                  <div class="field">
-                    <label>Bo tròn (<span id="frame-logo-radius-val">50</span>%)</label>
-                    <input type="range" id="frame-logo-radius" min="0" max="50" step="1" value="50"
-                      style="width:100%"
-                      oninput="document.getElementById('frame-logo-radius-val').textContent=this.value;framePreviewUpdate()">
-                  </div>
-                </div>
-                <div class="text-xs text-muted mt-4">Preview tỷ lệ 9:16 — kích thước thay đổi theo điều chỉnh</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      <!-- Subtitles - moved to top, full-width, see below -->
       <!-- Voice -->
       <div class="card card-collapsible collapsed">
         <div class="card-header" onclick="toggleCard(this)">
@@ -683,6 +671,89 @@
         </div>
       </div>
 
+      <!-- Thumbnail Picker Panel (shown after ASS confirmed, before burn) -->
+      <div class="card" id="proc-thumb-pick-card" style="display:none;border:2px solid #f59e0b">
+        <div class="card-header" style="background:#fef3c7">
+          <span class="card-title" style="color:#b45309">🖼 Chọn thumbnail</span>
+          <span class="badge" style="background:#f59e0b;color:#fff">Chờ xác nhận</span>
+        </div>
+        <div class="card-body">
+          <div class="alert-info mb-8" style="font-size:12px">
+            Chọn ảnh thumbnail cho video. Bỏ qua nếu không muốn chèn thumbnail vào đầu video.
+          </div>
+
+          <!-- Mode selector -->
+          <div class="check-grid mb-12" style="grid-template-columns:repeat(4,1fr)">
+            <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="none" checked onchange="procThumbPickModeChange()"><span>Không dùng</span></label>
+            <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="frame" onchange="procThumbPickModeChange()"><span>Frame video</span></label>
+            <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="import" onchange="procThumbPickModeChange()"><span>Upload ảnh</span></label>
+            <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="ai" onchange="procThumbPickModeChange()"><span>AI (9Router/Gemini)</span></label>
+          </div>
+
+          <!-- Frame timestamp option -->
+          <div id="proc-thumb-pick-frame-opts" style="display:none">
+            <label class="lbl">Thời điểm lấy frame (giây)</label>
+            <input type="number" id="proc-thumb-pick-ts" value="5" min="0" step="0.5" class="inp">
+          </div>
+
+          <!-- Import file option -->
+          <div id="proc-thumb-pick-import-opts" style="display:none">
+            <label class="lbl">File ảnh thumbnail</label>
+            <input type="file" id="proc-thumb-pick-file" accept="image/*" onchange="procThumbPickPreview()">
+            <img id="proc-thumb-pick-preview" style="display:none;max-width:100%;max-height:200px;margin-top:8px;border-radius:6px;border:1px solid var(--border)">
+          </div>
+
+          <!-- Common options -->
+          <div id="proc-thumb-pick-common" style="display:none">
+            <div class="grid-2 mt-8">
+              <div>
+                <label class="lbl">Tiêu đề trên thumbnail (tùy chọn)</label>
+                <input type="text" id="proc-thumb-pick-title" class="inp" placeholder="Để trống = dùng tên video">
+              </div>
+              <div>
+                <label class="lbl">Thời lượng chèn (giây)</label>
+                <input type="number" id="proc-thumb-pick-duration" value="2" min="0.5" max="10" step="0.5" class="inp">
+              </div>
+            </div>
+          </div>
+
+          <div class="btn-group mt-12">
+            <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="procThumbPickContinue()">
+              ✅ Tiếp tục xử lý
+            </button>
+            <button class="btn btn-secondary" onclick="procThumbPickSkip()">
+              ⏭ Bỏ qua thumbnail
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thumbnail Failure Recovery Panel (shown when AI thumbnail fails mid-pipeline) -->
+      <div class="card" id="proc-thumb-fail-card" style="display:none;border:2px solid #dc2626">
+        <div class="card-header" style="background:#fee2e2">
+          <span class="card-title" style="color:#991b1b">⚠ Thumbnail AI thất bại</span>
+          <span class="badge" style="background:#dc2626;color:#fff">Cần xử lý</span>
+        </div>
+        <div class="card-body">
+          <div class="alert-info mb-8" style="font-size:12px;background:#fef2f2;border-color:#fecaca;color:#991b1b">
+            Tạo thumbnail AI không thành công. Pipeline đang chờ — chọn 1 trong 3 cách bên dưới.
+          </div>
+          <div class="btn-group" style="flex-direction:column;gap:8px">
+            <button class="btn btn-primary" onclick="procThumbFailRetry()">
+              🔄 Tạo lại bằng AI
+            </button>
+            <div>
+              <label class="lbl">Hoặc upload ảnh thay thế:</label>
+              <input type="file" id="proc-thumb-fail-file" accept="image/*" onchange="procThumbFailUpload()">
+              <img id="proc-thumb-fail-preview" style="display:none;max-width:100%;max-height:200px;margin-top:8px;border-radius:6px;border:1px solid var(--border)">
+            </div>
+            <button class="btn btn-secondary" onclick="procThumbFailSkip()">
+              ⏭ Bỏ qua thumbnail (không chèn)
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Progress -->
       <div class="card">
         <div class="card-header">
@@ -909,7 +980,18 @@
       pPubOnAssConfirmed(path, content).catch(() => {});
     }
 
-    // Resume processing (frame video will run after pipeline completes)
+    // Show thumbnail picker (instead of resuming directly)
+    const thumbCard = document.getElementById('proc-thumb-pick-card');
+    if (thumbCard) {
+      thumbCard.style.display = 'block';
+      thumbCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      // Fallback: no thumbnail picker → resume directly
+      _procDoResume();
+    }
+  }
+
+  async function _procDoResume() {
     if (window._procReviewResolve) {
       window._procReviewResolve('continue');
       window._procReviewResolve = null;
@@ -920,6 +1002,169 @@
         body: JSON.stringify({ action: 'continue' })
       });
     } catch (_) {}
+  }
+
+  // ── Thumbnail picker (after ASS review) ────────────────────────────
+  function procThumbPickModeChange() {
+    const mode = document.querySelector('input[name="proc-thumb-pick-mode"]:checked')?.value || 'none';
+    const frameOpts  = document.getElementById('proc-thumb-pick-frame-opts');
+    const importOpts = document.getElementById('proc-thumb-pick-import-opts');
+    const common     = document.getElementById('proc-thumb-pick-common');
+    if (frameOpts)  frameOpts.style.display  = (mode === 'frame') ? 'block' : 'none';
+    if (importOpts) importOpts.style.display = (mode === 'import') ? 'block' : 'none';
+    if (common)     common.style.display     = (mode !== 'none') ? 'block' : 'none';
+  }
+
+  function procThumbPickPreview() {
+    const file = document.getElementById('proc-thumb-pick-file')?.files?.[0];
+    const img  = document.getElementById('proc-thumb-pick-preview');
+    if (!file || !img) return;
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; img.style.display = 'block'; };
+    reader.readAsDataURL(file);
+  }
+
+  async function procThumbPickContinue() {
+    const mode = document.querySelector('input[name="proc-thumb-pick-mode"]:checked')?.value || 'none';
+    const cfg = { thumb_enabled: mode !== 'none', thumb_mode: mode };
+
+    if (mode === 'frame') {
+      cfg.thumb_timestamp = parseFloat(document.getElementById('proc-thumb-pick-ts')?.value || 5);
+    } else if (mode === 'import') {
+      const file = document.getElementById('proc-thumb-pick-file')?.files?.[0];
+      if (!file) {
+        toast('Vui lòng chọn file ảnh', 'warning');
+        return;
+      }
+      // Upload the file first
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('type', 'thumbnail');
+        const r = await fetch('/api/upload_anti_fp_image', { method: 'POST', body: form });
+        const d = await r.json();
+        if (!d.ok) {
+          toast('Upload ảnh thất bại: ' + (d.error || ''), 'error');
+          return;
+        }
+        cfg.thumb_path = d.path;
+      } catch (e) {
+        toast('Lỗi upload ảnh: ' + e.message, 'error');
+        return;
+      }
+    }
+
+    if (mode !== 'none') {
+      cfg.thumb_title    = document.getElementById('proc-thumb-pick-title')?.value || '';
+      cfg.thumb_duration = parseFloat(document.getElementById('proc-thumb-pick-duration')?.value || 2);
+    }
+
+    // Send config to server, then resume
+    try {
+      await fetch('/api/proc_set_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg)
+      });
+    } catch (_) {}
+
+    const card = document.getElementById('proc-thumb-pick-card');
+    if (card) card.style.display = 'none';
+    await _procDoResume();
+  }
+
+  async function procThumbPickSkip() {
+    try {
+      await fetch('/api/proc_set_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thumb_enabled: false, thumb_mode: 'none' })
+      });
+    } catch (_) {}
+    const card = document.getElementById('proc-thumb-pick-card');
+    if (card) card.style.display = 'none';
+    await _procDoResume();
+  }
+
+  // ── Thumbnail failure recovery (when AI thumbnail fails mid-pipeline) ──
+  function _showThumbFailCard() {
+    const card = document.getElementById('proc-thumb-fail-card');
+    if (card) {
+      card.style.display = 'block';
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function _hideThumbFailCard() {
+    const card = document.getElementById('proc-thumb-fail-card');
+    if (card) card.style.display = 'none';
+    const fileInput = document.getElementById('proc-thumb-fail-file');
+    if (fileInput) fileInput.value = '';
+    const preview = document.getElementById('proc-thumb-fail-preview');
+    if (preview) { preview.src = ''; preview.style.display = 'none'; }
+  }
+
+  async function procThumbFailRetry() {
+    _hideThumbFailCard();
+    toast('🔄 Đang thử tạo lại thumbnail AI...', 'info');
+    try {
+      await fetch('/api/proc_retry_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retry' })
+      });
+    } catch (e) {
+      toast('Lỗi gửi yêu cầu retry: ' + e.message, 'error');
+    }
+  }
+
+  async function procThumbFailUpload() {
+    const file = document.getElementById('proc-thumb-fail-file')?.files?.[0];
+    if (!file) return;
+    // Show preview
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = document.getElementById('proc-thumb-fail-preview');
+        if (img) { img.src = e.target.result; img.style.display = 'block'; }
+      };
+      reader.readAsDataURL(file);
+    } catch (_) {}
+
+    // Upload to server
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('type', 'thumbnail');
+      const r = await fetch('/api/upload_anti_fp_image', { method: 'POST', body: form });
+      const d = await r.json();
+      if (!d.ok) {
+        toast('Upload ảnh thất bại: ' + (d.error || ''), 'error');
+        return;
+      }
+      // Tell pipeline to use this image
+      await fetch('/api/proc_retry_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'upload', path: d.path })
+      });
+      _hideThumbFailCard();
+      toast('✓ Đã gửi ảnh thay thế cho pipeline', 'success');
+    } catch (e) {
+      toast('Lỗi upload ảnh: ' + e.message, 'error');
+    }
+  }
+
+  async function procThumbFailSkip() {
+    _hideThumbFailCard();
+    try {
+      await fetch('/api/proc_retry_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'skip' })
+      });
+    } catch (_) {}
+    toast('Đã bỏ qua thumbnail', 'info');
   }
 
   async function _triggerFrameVideo() {
@@ -1054,7 +1299,10 @@
   document.addEventListener('DOMContentLoaded', () => { _syncColorPicker(); });
 
   function _getPreviewVideoPath() {
-    // Priority: first item in batch queue (file type) → proc-video field
+    // Priority: uploaded file path → first item in batch queue (file type) → proc-video field
+    if (window._procUploadedPath) {
+      return { type: 'file', val: window._procUploadedPath };
+    }
     if (window._batchQueue && window._batchQueue.length > 0) {
       const first = window._batchQueue[0];
       if (first.type === 'file' && first.val) return { type: 'file', val: first.val };
@@ -1070,6 +1318,19 @@
     const overlay = document.getElementById('sub-preview-text');
     const blurEl  = document.getElementById('sub-preview-blur');
     if (!overlay || !wrap) return;
+
+    // Trạng thái "Ghi phụ đề"
+    const burnOn   = document.getElementById('proc-burn')?.checked ?? true;
+    const burnViOn = document.getElementById('proc-burn-vi')?.checked ?? true;
+
+    // Khi frame mode bật, subtitle được vẽ trên canvas → không dùng DOM overlay
+    if (document.getElementById('frame-enabled')?.checked) {
+      if (overlay) overlay.style.display = 'none';
+      if (blurEl)  blurEl.style.display  = 'none';
+      const blurC = document.getElementById('sub-preview-blur-canvas');
+      if (blurC) blurC.style.display = 'none';
+      return;
+    }
 
     const img = document.getElementById('sub-preview-img');
     if (!img || img.style.display === 'none') return; // no frame yet
@@ -1101,34 +1362,34 @@
       ? _getSubtitleColor()
       : (colorMap[color] || '#ffffff');
 
-    // ── Blur zone: covers original subtitle area (bottom/top edge of video) ──
-    // Match FFmpeg logic: auto-center blur around subtitle position
-    const blurH    = 0.15;
+    // ── Blur zone: covers original subtitle area ──
+    const blurH    = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
     const blurW    = 0.80;
-    // Calculate blur lift same as FFmpeg burn_subtitles:
-    // sub_y = videoH - margin_v_px - sub_height/2
-    // blur_y = sub_y - blur_h/2
-    // blur_lift = 1.0 - (blur_y + blur_h) / videoH
+    const blurYOverride = document.getElementById('proc-blur-y')?.value?.trim();
+    // Calculate blur position
     const videoH = imgH || 720;
-    const subHeightPx = Math.round(videoH * fontPct / 100) + 4; // font + outline approx
+    const subHeightPx = Math.round(videoH * fontPct / 100) + 4;
     const marginVPx   = Math.round(videoH * marginPct / 100);
-    let blurLift = 0.06; // fallback
-    if (pos === 'bottom') {
-      const subY  = videoH - marginVPx - Math.round(subHeightPx / 2);
-      const blurHPx = Math.round(videoH * blurH);
-      const blurY = subY - Math.round(blurHPx / 2);
-      blurLift = Math.max(0, 1.0 - (blurY + blurHPx) / videoH);
-    } else if (pos === 'top') {
-      const subY  = marginVPx + Math.round(subHeightPx / 2);
-      const blurHPx = Math.round(videoH * blurH);
-      const blurY = subY - Math.round(blurHPx / 2);
-      blurLift = Math.max(0, blurY / videoH);
+
+    let blurTopPct; // position from top as fraction (0-1)
+    if (blurYOverride !== '' && blurYOverride !== undefined) {
+      // Manual override: Y% = position of center of blur zone from top
+      blurTopPct = Math.max(0, Math.min(1, parseFloat(blurYOverride) / 100 - blurH / 2));
+    } else {
+      // Auto: center around subtitle position
+      if (pos === 'bottom') {
+        const subY = videoH - marginVPx - Math.round(subHeightPx / 2);
+        blurTopPct = Math.max(0, (subY - Math.round(videoH * blurH / 2)) / videoH);
+      } else {
+        const subY = marginVPx + Math.round(subHeightPx / 2);
+        blurTopPct = Math.max(0, (subY - Math.round(videoH * blurH / 2)) / videoH);
+      }
     }
 
     const bH    = Math.round(dispH * blurH);
     const bW    = Math.round(dispW * blurW);
     const bLeft = Math.round(dispW * (1 - blurW) / 2);
-    const liftPx = Math.round(dispH * blurLift);
+    const bTop  = Math.round(dispH * blurTopPct);
 
     // Canvas-based pixel blur (matches real FFmpeg blur effect)
     const canvas = document.getElementById('sub-preview-blur-canvas');
@@ -1137,8 +1398,8 @@
       el.style.height = bH + 'px';
       el.style.left   = bLeft + 'px';
       el.style.right  = 'auto';
-      if (pos === 'top') { el.style.top = liftPx + 'px'; el.style.bottom = 'auto'; }
-      else               { el.style.bottom = liftPx + 'px'; el.style.top = 'auto'; }
+      el.style.top    = bTop + 'px';
+      el.style.bottom = 'auto';
     };
 
     if (blurOn && canvas && img.complete && img.naturalWidth > 0) {
@@ -1157,12 +1418,10 @@
       const scaleY  = imgH / (imgRect.height || dispH);
 
       const canvasLeft   = bLeft - imgOffX;
-      const canvasBottom = pos === 'top'
-        ? liftPx - imgOffY
-        : (imgRect.height || dispH) - liftPx - bH - imgOffY;
+      const canvasTop    = bTop - imgOffY;
 
-      const sx = Math.round(canvasLeft   * scaleX);
-      const sy = Math.round(canvasBottom * scaleY);
+      const sx = Math.round(canvasLeft * scaleX);
+      const sy = Math.round(canvasTop  * scaleY);
       const sw = Math.round(bW * scaleX);
       const sh = Math.round(bH * scaleY);
 
@@ -1185,7 +1444,7 @@
     }
 
     // ── Subtitle text: positioned by margin_v from edge, above blur zone ──
-    overlay.style.display    = 'block';
+    overlay.style.display    = (burnOn && burnViOn) ? 'block' : 'none';
     overlay.style.fontSize   = scaledFont + 'px';
     overlay.style.color      = cssColor;
     // Outline via text-shadow (matches FFmpeg outline rendering)
@@ -1209,6 +1468,25 @@
       overlay.style.top    = 'auto';
     }
     overlay.textContent = sample;
+
+    // ── Render extra blur zones on preview ──
+    // Remove old extra blur elements
+    wrap.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
+    if (blurOn && window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
+      window._procExtraBlurZones.forEach(zone => {
+        const zH = (zone.height || 12) / 100;
+        const zY = (zone.position || 50) / 100 - zH / 2;
+        const zW = (zone.width || 80) / 100;
+        const ezH = Math.round(dispH * zH);
+        const ezW = Math.round(dispW * zW);
+        const ezLeft = Math.round(dispW * (1 - zW) / 2);
+        const ezTop = Math.round(dispH * Math.max(0, Math.min(1 - zH, zY)));
+        const div = document.createElement('div');
+        div.className = 'extra-blur-zone';
+        div.style.cssText = `position:absolute;left:${ezLeft}px;top:${ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:none;border-radius:2px;backdrop-filter:blur(6px);`;
+        wrap.appendChild(div);
+      });
+    }
   }
 
   async function subPreviewFetchFrame() {
@@ -1260,6 +1538,12 @@
                   }
                 }
                 if (typeof _updateAspectBadge === 'function') _updateAspectBadge();
+              }
+
+              // If preview-aspect select is in 'auto' mode, re-apply layout
+              const aspectSel = document.getElementById('proc-preview-aspect');
+              if (aspectSel?.value === 'auto' && typeof _onPreviewAspectChange === 'function') {
+                _onPreviewAspectChange();
               }
             } catch (_) {}
 
@@ -1330,10 +1614,14 @@
     framePreviewUpdate();
   });
 
-  // Re-render when "Che phụ đề gốc" checkbox changes
+  // Re-render when "Che phụ đề gốc" or "Ghi phụ đề" checkbox changes
   document.addEventListener('DOMContentLoaded', () => {
     const blurChk = document.getElementById('proc-blur-original');
     if (blurChk) blurChk.addEventListener('change', () => _renderSubOverlay());
+    const burnChk = document.getElementById('proc-burn');
+    if (burnChk) burnChk.addEventListener('change', () => _renderSubOverlay());
+    const burnViChk = document.getElementById('proc-burn-vi');
+    if (burnViChk) burnViChk.addEventListener('change', () => _renderSubOverlay());
   });
 
   /* ════════════════════════════════════════════════════════
@@ -1396,7 +1684,8 @@
     const canvas = document.getElementById('frame-preview-canvas');
     if (!canvas) return;
 
-    const title       = document.getElementById('frame-title')?.value || '';
+    const titleEnabled = document.getElementById('frame-title-enabled')?.checked ?? true;
+    const title       = titleEnabled ? (document.getElementById('frame-title')?.value || '') : '';
     const titleSizePct= parseFloat(document.getElementById('frame-title-size')?.value || 5);
     const titleColor  = document.getElementById('frame-title-color')?.value || '#000000';
     const titleColor2 = document.getElementById('frame-title-color-2')?.value || '#ff0000';
@@ -1414,9 +1703,9 @@
     const wrap  = document.getElementById('sub-preview-wrap');
     const wrapW = wrap?.offsetWidth || 640;
 
-    // Title bar
-    const titleFontPx = Math.max(10, Math.round(wrapW * titleSizePct / 100));
-    const titleBarH   = Math.round(titleFontPx * 2.4);
+    // Title bar — chỉ hiện nếu titleEnabled
+    const titleFontPx = titleEnabled ? Math.max(10, Math.round(wrapW * titleSizePct / 100)) : 0;
+    const titleBarH   = titleEnabled ? Math.round(titleFontPx * 2.4) : 0;
 
     // Side blur width in preview pixels
     const sideW = Math.round(wrapW * blurWPct);
@@ -1503,11 +1792,44 @@
       }
     }
 
-    // ── Title bar ──
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, cW, titleBarH);
+    // ── Draw top/bottom blur strips ──
+    const blurTopPct    = parseFloat(document.getElementById('frame-blur-top')?.value || 0) / 100;
+    const blurBottomPct = parseFloat(document.getElementById('frame-blur-bottom')?.value || 0) / 100;
 
-    if (title) {
+    if (blurTopPct > 0 && blurOpacity > 0) {
+      const topH = Math.round(vidH * blurTopPct);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(vidX, vidY, vidW, topH);
+      ctx.clip();
+      ctx.filter = 'blur(12px)';
+      ctx.drawImage(srcImg, vidX - 8, vidY - 8, vidW + 16, topH + 16);
+      ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+      ctx.fillRect(vidX, vidY, vidW, topH);
+    }
+
+    if (blurBottomPct > 0 && blurOpacity > 0) {
+      const bottomH = Math.round(vidH * blurBottomPct);
+      const bottomY = vidY + vidH - bottomH;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(vidX, bottomY, vidW, bottomH);
+      ctx.clip();
+      ctx.filter = 'blur(12px)';
+      ctx.drawImage(srcImg, vidX - 8, bottomY - 8, vidW + 16, bottomH + 16);
+      ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+      ctx.fillRect(vidX, bottomY, vidW, bottomH);
+    }
+
+    // ── Title bar (chỉ vẽ nếu titleEnabled) ──
+    if (titleEnabled && titleBarH > 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, cW, titleBarH);
+    }
+
+    if (titleEnabled && title) {
       ctx.font = `bold ${titleFontPx}px Arial, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -1609,6 +1931,8 @@
 
   function _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH) {
     const sample    = document.getElementById('sub-preview-sample')?.value || '';
+    const burnOn    = document.getElementById('proc-burn')?.checked ?? true;
+    const burnViOn  = document.getElementById('proc-burn-vi')?.checked ?? true;
 
     const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
     const marginPct = parseFloat(document.getElementById('proc-margin-v')?.value  || 3);
@@ -1618,32 +1942,35 @@
 
     // ── Draw blur zone (che phụ đề gốc) ──
     if (blurOn) {
-      const blurH = 0.15;  // 15% of video height
-      const blurW = 0.80;  // 80% of video width
-      const blurLift = 0.06;
+      const blurZone = document.getElementById('proc-blur-zone')?.value || 'bottom';
+      if (blurZone !== 'none') {
+        const blurH = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
+        const blurW = 0.80;  // 80% of video width
+        const blurLift = 0.06;
 
-      const bH = Math.round(vidH * blurH);
-      const bW = Math.round(vidW * blurW);
-      const bX = vidX + Math.round(vidW * (1 - blurW) / 2);
-      const liftPx = Math.round(vidH * blurLift);
+        const bH = Math.round(vidH * blurH);
+        const bW = Math.round(vidW * blurW);
+        const bX = vidX + Math.round(vidW * (1 - blurW) / 2);
+        const liftPx = Math.round(vidH * blurLift);
 
-      let bY;
-      if (pos === 'top') {
-        bY = vidY + liftPx;
-      } else {
-        bY = vidY + vidH - bH - liftPx;
+        let bY;
+        if (blurZone === 'top') {
+          bY = vidY + liftPx;
+        } else {
+          bY = vidY + vidH - bH - liftPx;
+        }
+
+        // Draw blurred region (simulate with semi-transparent dark overlay)
+        ctx.save();
+        ctx.filter = 'blur(8px)';
+        ctx.drawImage(ctx.canvas, bX, bY, bW, bH, bX - 4, bY - 4, bW + 8, bH + 8);
+        ctx.restore();
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(bX, bY, bW, bH);
       }
-
-      // Draw blurred region (simulate with semi-transparent dark overlay)
-      ctx.save();
-      ctx.filter = 'blur(8px)';
-      ctx.drawImage(ctx.canvas, bX, bY, bW, bH, bX - 4, bY - 4, bW + 8, bH + 8);
-      ctx.restore();
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(bX, bY, bW, bH);
     }
 
-    if (!sample) return;
+    if (!sample || !burnOn || !burnViOn) return;
 
     // Scale relative to video area height (same formula as _renderSubOverlay)
     const scaledFont   = Math.max(6, Math.round(vidH * fontPct   / 100));
@@ -1787,11 +2114,20 @@
 
   // All field IDs to save (id → type)
   const _PROC_FIELDS = [
+    // Aspect / Preview
+    { id:'proc-preview-aspect', type:'value' },
+    // AI Model + Language
+    { id:'proc-model',          type:'value' },
+    { id:'proc-lang',           type:'value' },
+    { id:'proc-target-lang',    type:'value' },
     // Subtitle
     { id:'proc-burn',           type:'checkbox' },
     { id:'proc-translate-subs', type:'checkbox' },
     { id:'proc-burn-vi',        type:'checkbox' },
     { id:'proc-blur-original',  type:'checkbox' },
+    { id:'proc-blur-height',    type:'value' },
+    { id:'proc-blur-zone',      type:'value' },
+    { id:'proc-blur-y',         type:'value' },
     { id:'proc-font-size',      type:'value' },
     { id:'proc-font-color',     type:'value' },
     { id:'proc-font-color-picker', type:'value' },
@@ -1820,15 +2156,28 @@
     // Frame video
     { id:'frame-enabled',       type:'checkbox' },
     { id:'frame-title',         type:'value' },
+    { id:'frame-title-enabled', type:'checkbox' },
     { id:'frame-title-size',    type:'value' },
     { id:'frame-title-color',   type:'value' },
+    { id:'frame-title-color-hex', type:'value' },
     { id:'frame-title-color-2', type:'value' },
+    { id:'frame-title-color-2-hex', type:'value' },
     { id:'frame-title-split-color', type:'checkbox' },
     { id:'frame-blur-w',        type:'value' },
+    { id:'frame-blur-top',      type:'value' },
+    { id:'frame-blur-bottom',   type:'value' },
     { id:'frame-blur-opacity',  type:'value' },
     { id:'frame-logo-size',     type:'value' },
     { id:'frame-logo-top',      type:'value' },
     { id:'frame-logo-left',     type:'value' },
+    { id:'frame-logo-radius',   type:'value' },
+    // Thumbnail
+    { id:'thumb-title',         type:'value' },
+    { id:'sub-preview-sample',  type:'value' },
+    { id:'sub-preview-ts',      type:'value' },
+    // CapCut
+    { id:'proc-capcut-enabled', type:'checkbox' },
+    { id:'proc-capcut-auto-open', type:'checkbox' },
     // Output dir
     { id:'proc-out',            type:'value' },
   ];
@@ -1885,6 +2234,10 @@
       if (typeof _syncVoiceOptions === 'function') {
         _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
       }
+      // Sync frame controls visibility
+      if (typeof frameToggle === 'function') frameToggle();
+      // Sync preview aspect layout
+      if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
       toast(`✅ Đã khôi phục cài đặt cho tỉ lệ ${aspect.replace('x', ':')}`, 'success');
     } catch (e) {
       toast('Lỗi khôi phục: ' + e.message, 'error');
@@ -1894,18 +2247,12 @@
   // Auto-restore on page load
   document.addEventListener('DOMContentLoaded', () => {
     try {
-      // Restore aspect override selector
-      const savedOverride = localStorage.getItem(_PROC_ASPECT_OVERRIDE_K) || 'auto';
-      const ovEl = document.getElementById('proc-aspect-override');
-      if (ovEl) ovEl.value = savedOverride;
-
-      // Pick initial preset to apply on first load:
-      //   - if override is forced (9x16/16x9) → use that
-      //   - otherwise default to 16x9 (will be replaced once a frame is loaded)
+      // Pick initial preset to apply on first load
       const map = _loadPresetsMap();
-      const initialAspect = (savedOverride !== 'auto') ? savedOverride : '16x9';
+      // Check if saved preset has proc-preview-aspect
+      const initialAspect = '16x9';
       window._procActiveAspect = initialAspect;
-      const data = map[initialAspect];
+      const data = map[initialAspect] || map['9x16'];
 
       if (data) {
         _PROC_FIELDS.forEach(f => {
@@ -1914,6 +2261,7 @@
           if (f.type === 'checkbox') el.checked = data[f.id];
           else el.value = data[f.id];
         });
+        // Restore blur mode radio (not in _PROC_FIELDS because it's a radio group)
         if (data['frame-blur-mode']) {
           const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
           if (radio) radio.checked = true;
@@ -1924,8 +2272,54 @@
         if (typeof _syncColorPicker === 'function') _syncColorPicker();
       }
       _updateAspectBadge();
+      // Sync frame controls visibility on page load
+      if (typeof frameToggle === 'function') frameToggle();
+      // Apply preview aspect on page load (reads from proc-preview-aspect select which was restored above)
+      if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
     } catch (_) {}
   });
+
+  // ── Đổi khung hình Preview/Thumbnail (16:9, 9:16, hoặc auto) ───────────
+  function _onPreviewAspectChange() {
+    const sel = document.getElementById('proc-preview-aspect');
+    const value = sel?.value || 'auto';
+
+    // Resolve effective aspect:
+    //  - 'auto' → dùng aspect của video frame đã load (nếu có), mặc định 16x9
+    //  - '16x9' / '9x16' → ép buộc
+    let aspect = value;
+    if (value === 'auto') {
+      const img = document.getElementById('sub-preview-img');
+      if (img && img.naturalWidth && img.naturalHeight) {
+        aspect = (img.naturalHeight > img.naturalWidth) ? '9x16' : '16x9';
+      } else {
+        aspect = '16x9';  // default fallback when no video loaded yet
+      }
+    }
+    const isVertical = aspect === '9x16';
+
+    const subWrap   = document.getElementById('sub-preview-wrap');
+    const thumbWrap = document.getElementById('thumb-preview-wrap');
+    const previewRow = document.getElementById('proc-preview-row');
+
+    const aspectStr = isVertical ? '9 / 16' : '16 / 9';
+    if (subWrap)   subWrap.style.aspectRatio   = aspectStr;
+    if (thumbWrap) thumbWrap.style.aspectRatio = aspectStr;
+
+    // 9:16 → Preview & Thumbnail nằm ngang cạnh nhau (row), mỗi cái 50%
+    // 16:9 → đè lên nhau (column), full width
+    if (previewRow) {
+      previewRow.style.flexDirection = isVertical ? 'row' : 'column';
+    }
+
+    // Sync với window._procActiveAspect để các logic khác dùng
+    window._procActiveAspect = aspect;
+    if (typeof _updateAspectBadge === 'function') _updateAspectBadge();
+
+    // Re-render preview overlays
+    if (typeof _renderSubOverlay === 'function') _renderSubOverlay();
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+  }
 
   function frameToggle() {
     const enabled = document.getElementById('frame-enabled')?.checked;
@@ -1970,7 +2364,296 @@
     // frame-enabled change is handled by inline onchange="frameToggle()"
     const blurChk = document.getElementById('proc-blur-original');
     if (blurChk) blurChk.addEventListener('change', () => _renderSubOverlay());
+    const burnChk2 = document.getElementById('proc-burn');
+    if (burnChk2) burnChk2.addEventListener('change', () => _renderSubOverlay());
+    const burnViChk2 = document.getElementById('proc-burn-vi');
+    if (burnViChk2) burnViChk2.addEventListener('change', () => _renderSubOverlay());
   });
+
+  // ── Thumbnail preview (chỉ hiển thị, không lưu file) ─────────────────────
+  async function generateThumbnailPreview() {
+    const source = _getPreviewVideoPath();
+    if (!source) {
+      toast('Chưa có video — hãy chọn file hoặc nhập URL', 'warning');
+      return;
+    }
+
+    const ts = parseFloat(document.getElementById('sub-preview-ts')?.value || 2);
+
+    const img = document.getElementById('thumb-preview-img');
+    const ph  = document.getElementById('thumb-placeholder');
+    const info = document.getElementById('thumb-output-info');
+    const btn = document.querySelector('[onclick="generateThumbnailPreview()"]');
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+    if (ph) { ph.style.display = 'block'; ph.textContent = 'Đang lấy preview...'; }
+    if (img) img.style.display = 'none';
+    if (info) info.style.display = 'none';
+
+    try {
+      let res, data;
+
+      if (source.type === 'file') {
+        // Chỉ lấy frame preview (không tạo file thumbnail)
+        res = await fetch('/api/video_frame', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_path: source.val, timestamp: ts }),
+        });
+        data = await res.json();
+      } else {
+        // URL — lấy cover từ URL
+        res = await fetch('/api/video_frame_from_url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: source.val }),
+        });
+        data = await res.json();
+      }
+
+      if (data.ok && data.image) {
+        if (img) {
+          img.src = data.image;
+          img.style.display = 'block';
+        }
+        if (ph) ph.style.display = 'none';
+        // Save state — frame mode means: server will extract frame at runtime, no path needed
+        window._thumbState = { mode: 'frame', path: '', b64: data.image };
+        toast('✓ Preview thumbnail', 'success');
+      } else {
+        if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'Không lấy được frame'; }
+        toast('Lỗi: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
+      toast('Lỗi: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🎨'; }
+    }
+  }
+
+  // ── Thumbnail helpers: Import / Clear / Toggle / Source tracking ─────────
+  // window._thumbState: { mode: 'import'|'ai'|'frame'|'none', path: string, b64: string }
+  window._thumbState = { mode: 'none', path: '', b64: '' };
+
+  // ── Multiple blur zones ────────────────────────────────────────────────────
+  window._procExtraBlurZones = [];
+  let _blurZoneCounter = 0;
+
+  function procAddBlurZone() {
+    _blurZoneCounter++;
+    const id = _blurZoneCounter;
+    window._procExtraBlurZones.push({ id, height: 12, position: 50, zone: 'custom' });
+    _renderExtraBlurZones();
+    subPreviewUpdate();
+  }
+
+  function procRemoveBlurZone(id) {
+    window._procExtraBlurZones = window._procExtraBlurZones.filter(z => z.id !== id);
+    _renderExtraBlurZones();
+    subPreviewUpdate();
+  }
+
+  function _renderExtraBlurZones() {
+    const container = document.getElementById('proc-blur-extra-list');
+    if (!container) return;
+    container.innerHTML = window._procExtraBlurZones.map(z => `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:6px;align-items:end" data-blur-id="${z.id}">
+        <div class="field"><label>Cao (%)</label><input type="number" value="${z.height}" min="3" max="40" step="1" style="height:38px" onchange="procUpdateBlurZone(${z.id},'height',this.value)" oninput="subPreviewUpdate()"></div>
+        <div class="field"><label>Vị trí Y (%)</label><input type="number" value="${z.position}" min="0" max="100" step="1" style="height:38px" onchange="procUpdateBlurZone(${z.id},'position',this.value)" oninput="subPreviewUpdate()"></div>
+        <div class="field"><label>Rộng (%)</label><input type="number" value="80" min="20" max="100" step="5" style="height:38px" onchange="procUpdateBlurZone(${z.id},'width',this.value)" oninput="subPreviewUpdate()"></div>
+        <button class="btn btn-secondary btn-sm" style="height:38px;padding:0 8px;font-size:14px" onclick="procRemoveBlurZone(${z.id})" title="Xóa vùng che">🗑</button>
+      </div>
+    `).join('');
+  }
+
+  function procUpdateBlurZone(id, key, val) {
+    const zone = window._procExtraBlurZones.find(z => z.id === id);
+    if (zone) zone[key] = parseFloat(val) || 0;
+  }
+
+
+  function thumbImportFile(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast('Chỉ hỗ trợ file ảnh', 'error');
+      return;
+    }
+    // Upload file to server
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('type', 'thumbnail');
+    fetch('/api/upload_anti_fp_image', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok && data.path) {
+          window._thumbState = { mode: 'import', path: data.path, b64: '' };
+          // Show preview from local FileReader
+          const reader = new FileReader();
+          reader.onload = e => {
+            const img = document.getElementById('thumb-preview-img');
+            const ph  = document.getElementById('thumb-placeholder');
+            const info = document.getElementById('thumb-output-info');
+            if (img) { img.src = e.target.result; img.style.display = 'block'; }
+            if (ph) ph.style.display = 'none';
+            if (info) { info.style.display = 'block'; info.textContent = '📁 ' + data.path; }
+          };
+          reader.readAsDataURL(file);
+          toast('✓ Đã import thumbnail', 'success');
+        } else {
+          toast('Lỗi upload: ' + (data.error || ''), 'error');
+        }
+      })
+      .catch(e => toast('Lỗi: ' + e.message, 'error'))
+      .finally(() => { input.value = ''; });
+  }
+
+  function thumbClear() {
+    const img = document.getElementById('thumb-preview-img');
+    const ph  = document.getElementById('thumb-placeholder');
+    const info = document.getElementById('thumb-output-info');
+    if (img) { img.src = ''; img.style.display = 'none'; }
+    if (ph) { ph.style.display = 'block'; ph.textContent = '📁 Import / 🎨 Tạo / 🤖 AI'; }
+    if (info) info.style.display = 'none';
+    window._thumbState = { mode: 'none', path: '', b64: '' };
+    toast('Đã xóa thumbnail', 'info');
+  }
+
+  function thumbToggleEnabled() {
+    const enabled = document.getElementById('thumb-enabled')?.checked;
+    const wrap = document.getElementById('thumb-preview-wrap');
+    if (wrap) wrap.style.opacity = enabled ? '1' : '0.4';
+    if (!enabled) {
+      toast('Đã tắt thumbnail (sẽ không chèn vào video)', 'info');
+    }
+  }
+
+
+  async function generateThumbnailAI() {
+    const source = _getPreviewVideoPath();
+    const ts = parseFloat(document.getElementById('sub-preview-ts')?.value || 2);
+    const title = document.getElementById('thumb-title')?.value?.trim() || '';
+    let sample = document.getElementById('sub-preview-sample')?.value?.trim() || '';
+    if (sample === 'Đây là phụ đề tiếng Việt mẫu') {
+      sample = ''; // Bỏ qua phụ đề mẫu mặc định để tránh làm nhiễu AI
+    }
+
+    // Ưu tiên 1: Lấy ảnh đang có sẵn ở Thumbnail để chỉnh sửa / vẽ tiếp lên chính nó
+    const existingThumbImg = document.getElementById('thumb-preview-img');
+    const previewImg = document.getElementById('sub-preview-img');
+    
+    let frameB64 = null;
+    let isEditingExistingThumb = false;
+
+    if (existingThumbImg && existingThumbImg.src && existingThumbImg.src.startsWith('data:image/')) {
+      const parts = existingThumbImg.src.split(',');
+      if (parts.length > 1) {
+        frameB64 = parts[1];
+        isEditingExistingThumb = true;
+      }
+    } 
+    // Ưu tiên 2: Fallback lấy ảnh bên khung Preview nếu chưa có thumbnail nào được tạo
+    else if (previewImg && previewImg.src && previewImg.src.startsWith('data:image/')) {
+      const parts = previewImg.src.split(',');
+      if (parts.length > 1) {
+        frameB64 = parts[1];
+      }
+    }
+
+    // Bắt buộc phải có ảnh tham chiếu khi bấm tạo bằng nút AI ở Thumbnail
+    if (!frameB64) {
+      toast('⚠️ Vui lòng lấy frame Preview hoặc import/tạo sẵn 1 thumbnail trước để AI có ảnh làm dữ liệu tham chiếu!', 'warning');
+      return;
+    }
+
+    const img = document.getElementById('thumb-preview-img');
+    const ph  = document.getElementById('thumb-placeholder');
+    const info = document.getElementById('thumb-output-info');
+    const btn = document.querySelector('[onclick="generateThumbnailAI()"]');
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ AI đang tạo...'; }
+    if (ph) { ph.style.display = 'block'; ph.textContent = '🤖 AI đang phân tích video và tạo thumbnail...'; }
+    if (img) img.style.display = 'none';
+    if (info) info.style.display = 'none';
+
+    try {
+      const body = {
+        timestamp: ts,
+        title: title,
+        subtitle_text: sample,
+        style: 'youtube',
+        aspect_ratio: '9:16',
+        frame_b64: frameB64,
+        is_editing_existing_thumb: isEditingExistingThumb,
+      };
+
+      // Add video_path if source is file
+      if (source && source.type === 'file') {
+        body.video_path = source.val;
+      }
+
+      const res = await fetch('/api/generate_thumbnail_ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.ok && data.image) {
+        if (img) {
+          img.src = data.image;
+          img.style.display = 'block';
+        }
+        if (ph) ph.style.display = 'none';
+        if (info) {
+          info.style.display = 'block';
+          let infoText = '';
+          if (data.output_path) infoText += '📁 ' + data.output_path;
+          if (data.prompt_used) infoText += '\n💡 Prompt: ' + data.prompt_used;
+          info.textContent = infoText;
+        }
+        // Save state for batch processing
+        window._thumbState = {
+          mode: 'ai',
+          path: data.output_path || '',
+          b64: data.image || ''
+        };
+        toast('✓ AI đã tạo thumbnail', 'success');
+      } else {
+        if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'AI thumbnail thất bại'; }
+        toast('Lỗi AI thumbnail: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
+      toast('Lỗi: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🤖'; }
+    }
+  }
+
+  // Listen for thumbnail_path in NDJSON stream from /api/process_video
+  // (Auto-display when pipeline finishes generating thumbnail)
+  window._displayProcThumbnail = function(thumbPath, thumbImage) {
+    const img = document.getElementById('thumb-preview-img');
+    const ph  = document.getElementById('thumb-placeholder');
+    const info = document.getElementById('thumb-output-info');
+    if (img && thumbImage) {
+      img.src = thumbImage;
+      img.style.display = 'block';
+    }
+    if (ph) {
+      if (thumbImage) {
+        ph.style.display = 'none';
+      } else {
+        ph.style.display = 'block';
+        ph.textContent = 'Thumbnail đã tạo: ' + (thumbPath || '').split(/[\\/]/).pop();
+      }
+    }
+    if (info && thumbPath) {
+      info.style.display = 'block';
+      info.textContent = '📁 ' + thumbPath;
+    }
+  };
   </script>
 
 <style>
@@ -1996,6 +2679,93 @@
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* ── Align all fields uniformly inside the Subtitle card ────────────────── */
+#frame-controls .field,
+.proc-grid-3 .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#frame-controls .field > label,
+.proc-grid-3 .field > label {
+  font-size: 11px;
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Force all inputs/selects to same height */
+.card-collapsible .field input[type=number],
+.card-collapsible .field input[type=text],
+.card-collapsible .field select {
+  height: 38px;
+  box-sizing: border-box;
+}
+.card-collapsible .field .check-item {
+  height: 38px !important;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+/* ── Mobile responsive for Phụ đề & Dịch card ──────────────────────────── */
+@media (max-width: 768px) {
+  /* Main layout: stack vertically on mobile */
+  #page-process .card-body > div[style*="display:flex"][style*="flex-wrap"] {
+    flex-direction: column !important;
+  }
+  /* Preview column: full width */
+  #proc-preview-col {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+  /* Preview row: always column on mobile */
+  #proc-preview-row {
+    flex-direction: column !important;
+  }
+  /* Settings: full width */
+  #proc-preview-col + div {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+  /* Checkboxes: keep 3 columns on mobile */
+  .check-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  /* Grids: reduce to 2 columns on mobile */
+  .proc-grid-3,
+  #frame-controls > div[style*="grid-template-columns: repeat(4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  /* Logo row: stack on mobile */
+  #frame-controls > div[style*="grid-template-columns: 2fr 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  /* Card header: wrap actions below title on mobile */
+  .card-header {
+    flex-wrap: wrap !important;
+  }
+  .card-header .card-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+  /* Preview + Thumbnail: toggle buttons visible on mobile */
+  .proc-mobile-toggle {
+    display: inline-block !important;
+  }
+  .sub-preview-box.collapsed-mobile > *:not(:first-child) {
+    display: none !important;
+  }
+  .sub-preview-box.collapsed-mobile .sub-preview-header,
+  .sub-preview-box.collapsed-mobile .flex-between {
+    margin-bottom: 0 !important;
+  }
 }
 </style>
 </div>

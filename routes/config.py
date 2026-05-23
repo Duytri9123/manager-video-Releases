@@ -242,33 +242,22 @@ def test_api_key():
     # ── Groq (Whisper + LLM) ──────────────────────────────────────────────────
     elif provider == "groq":
         try:
-            payload = _json.dumps({
-                "model": "llama-3.1-8b-instant",
-                "messages": [{"role": "user", "content": "hi"}],
-                "max_tokens": 1,
-            }).encode()
-            req = urllib.request.Request(
-                "https://api.groq.com/openai/v1/chat/completions",
-                data=payload, method="POST",
-                headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+            # Test bằng list models — nhẹ, không tốn quota, xác nhận key hợp lệ
+            models_req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": f"Bearer {key}"},
             )
-            with urllib.request.urlopen(req, timeout=10) as r:
-                resp = _json.loads(r.read())
-            # Check Whisper model availability
-            whisper_ok = False
-            try:
-                models_req = urllib.request.Request(
-                    "https://api.groq.com/openai/v1/models",
-                    headers={"Authorization": f"Bearer {key}"},
-                )
-                with urllib.request.urlopen(models_req, timeout=8) as mr:
-                    models_data = _json.loads(mr.read())
-                model_ids = [m.get("id", "") for m in models_data.get("data", [])]
-                whisper_ok = any("whisper" in m for m in model_ids)
-            except Exception:
-                pass
-            quota = f"Whisper: {'✓' if whisper_ok else '✗'} | LLM: ✓"
-            return jsonify({"ok": True, "model": "llama-3.1-8b-instant", "quota": quota})
+            with urllib.request.urlopen(models_req, timeout=10) as mr:
+                models_data = _json.loads(mr.read())
+            model_ids = [m.get("id", "") for m in models_data.get("data", [])]
+            whisper_ok = any("whisper" in m for m in model_ids)
+            llm_ok = any("llama" in m or "gemma" in m or "mixtral" in m for m in model_ids)
+            whisper_models = [m for m in model_ids if "whisper" in m]
+            parts = []
+            parts.append(f"Whisper: {'✓ (' + whisper_models[0] + ')' if whisper_ok else '✗'}")
+            parts.append(f"LLM: {'✓' if llm_ok else '✗'}")
+            quota = " | ".join(parts)
+            return jsonify({"ok": True, "model": whisper_models[0] if whisper_models else "N/A", "quota": quota})
         except urllib.error.HTTPError as e:
             body = ""
             try: body = _json.loads(e.read()).get("error", {}).get("message", "")

@@ -327,6 +327,239 @@ def tts_from_ass():
     return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
 
 
+# ── /api/tts_to_mp3 ───────────────────────────────────────────────────────────
+def _split_text_to_chunks(text: str, max_chars: int = 800) -> list:
+    """Split long text into chunks at sentence boundaries (max_chars per chunk).
+
+    Strategy:
+    1. First split by paragraph breaks (\n\n or \n).
+    2. Within each paragraph, split by sentence terminators (. ! ? ... 。！？).
+    3. Greedily pack sentences into chunks <= max_chars.
+    4. If a single sentence is too long, hard-split by max_chars.
+    """
+    import re
+
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    # Split into sentences while keeping terminators
+    # Vietnamese/Chinese/English punctuation
+    sent_re = re.compile(r"(?<=[\.\!\?。！？\n])\s+")
+    raw_paragraphs = re.split(r"\n\s*\n", text)
+    sentences = []
+    for para in raw_paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        # Split into sentences
+        parts = sent_re.split(para)
+        for p in parts:
+            p = p.strip()
+            if p:
+                sentences.append(p)
+
+    chunks = []
+    cur = ""
+    for s in sentences:
+        # If a single sentence is itself too long, hard-split
+        if len(s) > max_chars:
+            if cur:
+                chunks.append(cur.strip())
+                cur = ""
+            for i in range(0, len(s), max_chars):
+                chunks.append(s[i:i + max_chars].strip())
+            continue
+
+        if not cur:
+            cur = s
+        elif len(cur) + 1 + len(s) <= max_chars:
+            cur = cur + " " + s
+        else:
+            chunks.append(cur.strip())
+            cur = s
+
+    if cur:
+        chunks.append(cur.strip())
+    return [c for c in chunks if c]
+
+
+@bp.route("/api/tts_to_mp3", methods=["POST"])
+def tts_to_mp3():
+    """Generate one MP3 from raw text. Supports long text by chunking + concat.
+
+    Request JSON:
+      text, tts_engine, tts_voice, tts_pitch, tts_rate, tts_emotion,
+      fx_*, fpt_api_key (optional)
+
+    Returns: audio/mpeg stream (MP3) or JSON error.
+    """
+    import asyncio as _asyncio
+    from core.video_processor import (
+        _tts_edge, _tts_gtts, _tts_fpt_ai, FPT_TTS_DEFAULT_KEY,
+        find_ffmpeg, _run_ffmpeg,
+    )
+
+    data = request.json or {}
+    text = str(data.get("text") or "").strip()
+    tts_engine = str(data.get("tts_engine") or "edge-tts").strip().lower()
+    tts_voice = str(data.get("tts_voice") or "banmai").strip()
+    tts_pitch = str(data.get("tts_pitch") or "+0Hz").strip()
+    tts_rate = str(data.get("tts_rate") or "+0%").strip()
+    tts_emotion = str(data.get("tts_emotion") or "default").strip()
+
+    if not text:
+        return jsonify({"ok": False, "error": "Text is empty"}), 400
+
+    cfg = load_cfg()
+    vp_cfg = cfg.get("video_process") or {}
+    fpt_api_key = (
+        str(data.get("fpt_api_key") or "").strip()
+        or str(vp_cfg.get("fpt_api_key") or "").strip()
+        or FPT_TTS_DEFAULT_KEY
+    )
+    fpt_speed = int(data.get("fpt_speed") or 0)
+
+    fx_enabled = bool(data.get("fx_enabled", False))
+    fx_params = {
+        "pitch":  float(data.get("fx_pitch",  1.5)),
+        "speed":  float(data.get("fx_speed",  1.08)),
+        "bass":   float(data.get("fx_bass",   -2)),
+        "mid":    float(data.get("fx_mid",    2)),
+        "treble": float(data.get("fx_treble", 3)),
+        "comp":   str(data.get("fx_comp",     "none")),
+        "reverb": float(data.get("fx_reverb", 0)),
+    }
+
+    # Pick chunk size by engine (FPT v5 has stricter limits than edge-tts)
+    if tts_engine == "fpt-ai":
+        max_chars = 700
+    elif tts_engine == "gtts":
+        max_chars = 200  # gTTS has small per-request quota
+    else:
+        max_chars = 1500
+
+    chunks = _split_text_to_chunks(text, max_chars=max_chars)
+    if not chunks:
+        return jsonify({"ok": False, "error": "Cannot split text"}), 400
+
+    LOGGER.info(f"tts_to_mp3: engine={tts_engine}, voice={tts_voice}, chars={len(text)}, chunks={len(chunks)}")
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="tts_to_mp3_") as tmpdir:
+            tmpdir = Path(tmpdir)
+            clip_paths = []
+
+            # Generate each chunk
+            for idx, chunk in enumerate(chunks):
+                clip_path = tmpdir / f"chunk_{idx:04d}.mp3"
+                try:
+                    if tts_engine == "gtts":
+                        ok = _tts_gtts(chunk, "vi", clip_path)
+                    elif tts_engine == "fpt-ai":
+                        ok = _asyncio.run(_tts_fpt_ai(chunk, tts_voice, clip_path, fpt_api_key, fpt_speed))
+                    elif tts_engine == "minimax":
+                        from core.video_processor import _tts_minimax
+                        ok = _asyncio.run(_tts_minimax(chunk, tts_voice, clip_path))
+                    else:
+                        # edge-tts (default)
+                        ok = _asyncio.run(_tts_edge(
+                            chunk, tts_voice, clip_path,
+                            rate=tts_rate, pitch=tts_pitch, style=tts_emotion,
+                        ))
+                except Exception as inner_e:
+                    # Fallback: nếu edge-tts fail, thử FPT AI
+                    if tts_engine in ("edge-tts", "edge") and fpt_api_key:
+                        LOGGER.warning(f"edge-tts failed chunk {idx+1}, fallback to FPT AI: {inner_e}")
+                        try:
+                            fpt_voice = tts_voice if tts_voice in ("banmai", "leminh", "thuminh", "giahuy", "myan", "lannhi", "lianh") else "banmai"
+                            ok = _asyncio.run(_tts_fpt_ai(chunk, fpt_voice, clip_path, fpt_api_key, fpt_speed))
+                        except Exception as fpt_e:
+                            return jsonify({
+                                "ok": False,
+                                "error": f"TTS failed at chunk {idx + 1}/{len(chunks)}: edge-tts={inner_e}, fpt-ai={fpt_e}",
+                            }), 500
+                    else:
+                        return jsonify({
+                            "ok": False,
+                            "error": f"TTS failed at chunk {idx + 1}/{len(chunks)}: {inner_e}",
+                        }), 500
+
+                if not ok or (not clip_path.exists()) or clip_path.stat().st_size <= 0:
+                    return jsonify({
+                        "ok": False,
+                        "error": f"Empty audio at chunk {idx + 1}/{len(chunks)}",
+                    }), 500
+
+                clip_paths.append(clip_path)
+
+            # If only 1 chunk, no need to concat
+            if len(clip_paths) == 1:
+                final_path = clip_paths[0]
+            else:
+                ffmpeg = find_ffmpeg()
+                if not ffmpeg:
+                    return jsonify({
+                        "ok": False,
+                        "error": "FFmpeg required to merge multi-chunk audio. Install ffmpeg.",
+                    }), 500
+
+                concat_list = tmpdir / "concat.txt"
+                with open(str(concat_list), "w", encoding="utf-8") as f:
+                    for c in clip_paths:
+                        # ffmpeg concat demuxer needs forward slashes / escaped quotes
+                        cp = str(c).replace("\\", "/").replace("'", "'\\''")
+                        f.write(f"file '{cp}'\n")
+
+                merged = tmpdir / "merged.mp3"
+                ok, err = _run_ffmpeg([
+                    ffmpeg, "-f", "concat", "-safe", "0",
+                    "-i", str(concat_list),
+                    "-c:a", "libmp3lame", "-b:a", "128k",
+                    str(merged), "-y", "-loglevel", "error",
+                ])
+                if not ok or not merged.exists() or merged.stat().st_size <= 0:
+                    return jsonify({"ok": False, "error": f"Merge failed: {err}"}), 500
+                final_path = merged
+
+            # Apply FX if enabled
+            if fx_enabled:
+                from core.video_processor import find_ffmpeg, apply_audio_effects
+                ffmpeg = find_ffmpeg()
+                if ffmpeg:
+                    fx_out = tmpdir / "final_fx.mp3"
+                    try:
+                        apply_audio_effects(
+                            input_path=final_path,
+                            output_path=fx_out,
+                            ffmpeg=ffmpeg,
+                            pitch_semitones=fx_params["pitch"],
+                            speed=fx_params["speed"],
+                            bass=int(fx_params["bass"]),
+                            mid=int(fx_params["mid"]),
+                            treble=int(fx_params["treble"]),
+                            compression=fx_params["comp"],
+                            reverb=int(fx_params["reverb"]),
+                        )
+                        if fx_out.exists() and fx_out.stat().st_size > 0:
+                            final_path = fx_out
+                    except Exception:
+                        pass  # fall back to non-fx audio
+
+            audio_data = io.BytesIO(final_path.read_bytes())
+            audio_data.seek(0)
+            return send_file(
+                audio_data,
+                mimetype="audio/mpeg",
+                as_attachment=False,
+                download_name="tts.mp3",
+            )
+
+    except Exception as e:
+        LOGGER.exception("tts_to_mp3 failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ── /api/hf_voices ────────────────────────────────────────────────────────────
 @bp.route("/api/hf_voices", methods=["GET"])
 def list_hf_voices():

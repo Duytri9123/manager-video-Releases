@@ -28,7 +28,13 @@ from core.stickman import (
     Scene,
     list_poses,
     render_preview_png,
+    render_preview_png_v3,
     render_video,
+)
+from core.stickman.ai_director import (
+    generate_scenes,
+    EMOTIONS, CHARACTER_STYLES, PROPS,
+    BACKGROUND_PRESETS, GROUND_STYLES, SCENE_OBJECT_NAMES, TRANSITIONS,
 )
 from core_app import LOGGER, ROOT
 
@@ -116,6 +122,42 @@ def _parse_scenes(raw: Any) -> List[Scene]:
                 raise ValueError(f"scene[{i}].pose_from='{pose_from}' không tồn tại.")
         easing = "linear" if str(item.get("easing") or "ease") == "linear" else "ease"
         caption = str(item.get("caption") or "").strip()[:300]
+
+        # Enhanced fields
+        emotion = str(item.get("emotion") or "neutral").strip().lower()
+        if emotion not in EMOTIONS:
+            emotion = "neutral"
+        character_style = str(item.get("character_style") or "normal").strip().lower()
+        if character_style not in CHARACTER_STYLES:
+            character_style = "normal"
+        props_raw = item.get("props") or []
+        if isinstance(props_raw, str):
+            props_raw = [props_raw]
+        props = [p for p in props_raw if p in PROPS] or None
+        background_image = str(item.get("background_image") or "").strip() or None
+
+        # Scene composition fields
+        background_preset = str(item.get("background_preset") or "neutral").strip().lower()
+        if background_preset not in {"sky", "sunset", "night", "forest", "ocean", "classroom", "space", "warm", "cool", "neutral"}:
+            background_preset = "neutral"
+        ground = str(item.get("ground") or "none").strip().lower()
+        if ground not in {"flat", "grass", "floor", "road", "none"}:
+            ground = "none"
+        scene_objects_raw = item.get("scene_objects") or []
+        if isinstance(scene_objects_raw, str):
+            scene_objects_raw = [scene_objects_raw]
+        valid_objects = {"desk", "whiteboard", "tree", "sun", "moon", "cloud", "building", "computer", "chair", "stage", "podium", "lamp"}
+        scene_objects = [o for o in scene_objects_raw if o in valid_objects][:5] or None
+        speech = str(item.get("speech") or "").strip()[:200]
+        transition = str(item.get("transition") or "none").strip().lower()
+        if transition not in {"fade", "slide_left", "slide_up", "zoom_in", "none"}:
+            transition = "none"
+        try:
+            num_characters = int(item.get("num_characters") or 1)
+        except (TypeError, ValueError):
+            num_characters = 1
+        num_characters = max(1, min(3, num_characters))
+
         scenes.append(
             Scene(
                 pose_to=pose_to,
@@ -124,6 +166,16 @@ def _parse_scenes(raw: Any) -> List[Scene]:
                 pose_from=pose_from,
                 easing=easing,
                 caption=caption,
+                emotion=emotion,
+                character_style=character_style,
+                props=props,
+                background_image=background_image,
+                background_preset=background_preset,
+                ground=ground,
+                scene_objects=scene_objects,
+                speech=speech,
+                transition=transition,
+                num_characters=num_characters,
             )
         )
     return scenes
@@ -139,7 +191,8 @@ def api_poses():
 def api_preview(pose_name: str):
     try:
         from flask import Response
-        png = render_preview_png(pose_name)
+        emotion = request.args.get("emotion", "neutral")
+        png = render_preview_png_v3(pose_name, emotion=emotion)
         return Response(png, mimetype="image/png")
     except Exception as exc:  # noqa: BLE001
         return jsonify({"ok": False, "error": str(exc)}), 400
@@ -298,3 +351,77 @@ def api_file(sid: str):
     if not path.exists():
         abort(404)
     return send_file(path, mimetype="video/mp4", as_attachment=False, download_name=path.name)
+
+
+# ── AI Director endpoint ────────────────────────────────────────────────────
+@bp.route("/api/stickman/ai_generate", methods=["POST"])
+def api_ai_generate():
+    """Use LLM (9Router) to generate scenes from content/topic.
+
+    Request JSON:
+        content: str (required) — nội dung/chủ đề
+        language: str — "vi" | "en" (default "vi")
+        num_scenes: int — 5-15 (default 8)
+        style: str — "giải thích" | "kể chuyện" | "hài hước" | "quảng cáo"
+        model: str — override model (optional)
+        temperature: float — 0.0-1.5 (default 0.7)
+
+    Response:
+        ok: True, scenes: [...] — list of scene dicts ready for render
+    """
+    data = request.get_json(silent=True) or {}
+    content = (data.get("content") or "").strip()
+    if not content:
+        return jsonify({"ok": False, "error": "Cần nhập nội dung/chủ đề."}), 400
+
+    language = str(data.get("language") or "vi").strip()[:5]
+    try:
+        num_scenes = int(data.get("num_scenes") or 8)
+    except (TypeError, ValueError):
+        num_scenes = 8
+    num_scenes = max(3, min(20, num_scenes))
+
+    style = str(data.get("style") or "giải thích").strip()[:50]
+    model = data.get("model") or None
+    try:
+        temperature = float(data.get("temperature") or 0.7)
+    except (TypeError, ValueError):
+        temperature = 0.7
+    temperature = max(0.0, min(1.5, temperature))
+
+    ok, result = generate_scenes(
+        content,
+        language=language,
+        num_scenes=num_scenes,
+        style=style,
+        model=model,
+        temperature=temperature,
+    )
+
+    if not ok:
+        return jsonify({"ok": False, "error": result}), 502
+
+    return jsonify({
+        "ok": True,
+        "scenes": result,
+        "count": len(result),
+        "emotions": sorted(EMOTIONS),
+        "character_styles": sorted(CHARACTER_STYLES),
+        "props": sorted(PROPS),
+    })
+
+
+@bp.route("/api/stickman/meta", methods=["GET"])
+def api_meta():
+    """Return available options for the enhanced stickman features."""
+    return jsonify({
+        "ok": True,
+        "poses": list_poses(),
+        "emotions": sorted(EMOTIONS),
+        "character_styles": sorted(CHARACTER_STYLES),
+        "props": sorted(PROPS),
+        "background_presets": sorted(BACKGROUND_PRESETS),
+        "ground_styles": sorted(GROUND_STYLES),
+        "scene_objects": sorted(SCENE_OBJECT_NAMES),
+        "transitions": sorted(TRANSITIONS),
+    })

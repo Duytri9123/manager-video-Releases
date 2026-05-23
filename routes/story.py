@@ -5,6 +5,7 @@ import time
 import urllib.parse
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 from flask import Blueprint, jsonify, request, send_file, abort
 from werkzeug.utils import secure_filename
@@ -249,6 +250,128 @@ def comic_ocr():
 # AI Story Generation — call 9Router / LLM to write story content
 # ══════════════════════════════════════════════════════════════════════════════
 
+# Patterns commonly emitted by chat-assistant LLMs that we don't want in the
+# narrative output. Stripped by `_clean_story_text` before returning to UI.
+import re as _re_clean
+
+_STORY_PREAMBLE_PATTERNS = [
+    # English
+    r"^(here(?:'s| is)|sure[,! ]+|of course[,! ]+|certainly[,! ]+|absolutely[,! ]+).*?(?=\n\n|\n[A-ZĐÁ])",
+    r"^i(?:'ll| will| would|'d) (?:write|tell|create|share).*?(?=\n\n|\n[A-ZĐÁ])",
+    # Vietnamese
+    r"^(mình|tôi|chúng tôi|chào).*?(?:rất muốn|sẽ viết|xin viết|sẽ kể|kịch bản).*?(?=\n\n|\n[A-ZĐÁ])",
+    r"^(đây là|sau đây là|dưới đây là).*?(?:câu chuyện|truyện|đoạn|kịch bản).*?(?=\n\n|\n[A-ZĐÁ])",
+    # Step-by-step instruction blocks
+    r"(?:^|\n)(?:bước|step)\s*\d+.*?(?=\n\n|\Z)",
+]
+
+_STORY_POSTAMBLE_PATTERNS = [
+    # English wrap-up
+    r"\n\n(?:i hope|hope you|let me know|feel free|would you like|do you want).*$",
+    # Vietnamese wrap-up
+    r"\n\n(?:bạn (?:có )?muốn|hi vọng|chúc bạn|nếu bạn|bạn nghĩ).*$",
+    # Markdown horizontal rules
+    r"\n\n---+.*$",
+]
+
+
+def _clean_story_text(raw: str) -> str:
+    """Strip chat-assistant cruft so only the narrative remains.
+
+    Handles common failure modes:
+        - Markdown headers / bullet lists / blockquotes
+        - Step-by-step instruction blocks ("Bước 1:", "Step 2:")
+        - Self-introductions ("Mình rất muốn…", "Here's a story for you…")
+        - Trailing meta-commentary ("Bạn có muốn mình viết lại…")
+        - Code fences and emoji clutter
+        - Markdown bold/italic markers around plain text
+    """
+    if not raw:
+        return ""
+    s = raw.strip()
+
+    # Strip outer code fences if the whole reply is wrapped (```...```)
+    if s.startswith("```"):
+        s = s.strip("`").strip()
+        # Remove language tag on first line if any
+        first_nl = s.find("\n")
+        if 0 < first_nl < 30 and " " not in s[:first_nl]:
+            s = s[first_nl + 1:].strip()
+
+    # Strip emoji and decorative symbol clusters that LLMs love to add early —
+    # before bullet detection, so "- 🎙️ Voice" becomes "-  Voice" and the
+    # bullet line filter below catches the empty-content bullet.
+    s = _re_clean.sub(
+        r"[\U0001F000-\U0001FFFF\U00002600-\U000027BF\U0001F300-\U0001F9FF\uFE0F]+",
+        "",
+        s,
+    )
+
+    # Drop markdown headers, decorative bullet lines, and instructional lines.
+    cleaned_lines = []
+    for line in s.split("\n"):
+        ln = line.rstrip()
+        stripped = ln.lstrip()
+        if not stripped:
+            cleaned_lines.append("")
+            continue
+        # Skip markdown headers (# ## ###) and horizontal rules
+        if stripped.startswith(("#", "---", "***", "===")):
+            continue
+        # Skip blockquote markers but keep content
+        if stripped.startswith(">"):
+            stripped = stripped.lstrip("> ").strip()
+            if not stripped:
+                continue
+            ln = stripped
+        # Skip "Bước N:" / "Step N:" lines (instructional)
+        if _re_clean.match(r"^\s*(?:bước|step)\s+\d+\s*[:.\-]", stripped, _re_clean.IGNORECASE):
+            continue
+        # Skip "**bold heading**" alone on a line
+        if _re_clean.match(r"^\*\*[^*]+\*\*\s*$", stripped):
+            continue
+        # Skip bullet lines that look like UI/instruction items, not story prose:
+        #   - contain markdown bold (**...**)  → almost always a label
+        #   - very short content (< 20 chars after strip)
+        #   - contain known UI keywords (Giọng, Voice, Bước, Step, Provider, …)
+        if stripped[:1] in "-*+•":
+            bullet_body = _re_clean.sub(r"^[-*+•\s]+", "", stripped)
+            cleaned_body = _re_clean.sub(r"[\*_`]+", "", bullet_body).strip()
+            ui_keyword = _re_clean.search(
+                r"\b(giọng|voice|bước|step|provider|nhấn|chọn|tts|model|copy|paste)\b",
+                cleaned_body, _re_clean.IGNORECASE,
+            )
+            has_bold = "**" in bullet_body or bullet_body.startswith("*")
+            if len(cleaned_body) < 20 or has_bold or ui_keyword:
+                continue
+        cleaned_lines.append(ln)
+    s = "\n".join(cleaned_lines).strip()
+
+    # Strip leading "preamble" (assistant-style intro) and trailing wrap-up.
+    flags = _re_clean.IGNORECASE | _re_clean.DOTALL
+    for pat in _STORY_PREAMBLE_PATTERNS:
+        s = _re_clean.sub(pat, "", s, flags=flags).strip()
+    for pat in _STORY_POSTAMBLE_PATTERNS:
+        s = _re_clean.sub(pat, "", s, flags=flags).strip()
+
+    # Remove markdown emphasis markers that wrap whole paragraphs / quotes:
+    #   **text**  →  text
+    #   *text*    →  text   (but only when wrapping a chunk, not mid-word)
+    #   "text"    →  text   (only when whole paragraph is quoted)
+    s = _re_clean.sub(r"\*\*([^*]+)\*\*", r"\1", s)
+    s = _re_clean.sub(r"(?<!\w)\*([^*\n]+)\*(?!\w)", r"\1", s)
+    # Strip wrapping straight or curly quotes around an entire paragraph
+    s = _re_clean.sub(
+        r'(^|\n\n)\s*["“”]([^"“”]+?)["“”]\s*(?=\n\n|$)',
+        lambda m: m.group(1) + m.group(2).strip(),
+        s,
+    )
+
+    # Collapse excess blank lines (3+ → 2) and trim
+    s = _re_clean.sub(r"\n{3,}", "\n\n", s).strip()
+    return s
+
+
 @bp.route("/api/story/ai_generate", methods=["POST"])
 def ai_generate_story():
     """Generate story text using 9Router (or compatible OpenAI endpoint).
@@ -298,18 +421,26 @@ def ai_generate_story():
     lang_name = {"vi": "tiếng Việt", "en": "English", "ja": "tiếng Nhật",
                  "ko": "tiếng Hàn", "zh": "tiếng Trung", "th": "tiếng Thái"}.get(language, language)
 
+    # Stricter prompt — many LLMs default to "helpful assistant" mode and reply
+    # with markdown, emoji, step-by-step instructions, or meta-commentary
+    # ("Here is the story for you..."). We need plain narrative prose only.
     system_msg = (
-        f"Bạn là nhà văn sáng tạo chuyên viết truyện ngắn hấp dẫn bằng {lang_name}. "
-        f"Hãy viết một câu chuyện chia thành đúng {num_panels} đoạn (paragraph), "
-        f"mỗi đoạn tương ứng với một cảnh/panel trong video. "
-        f"Mỗi đoạn nên có 2-4 câu, mô tả sinh động để người đọc hình dung được cảnh. "
-        f"Các đoạn phân cách bằng dòng trống.\n\n"
-        f"Quy tắc:\n"
-        f"- Viết bằng {lang_name}\n"
-        f"- Đúng {num_panels} đoạn, mỗi đoạn 2-4 câu\n"
-        f"- Không đánh số đoạn, không thêm tiêu đề\n"
-        f"- Nội dung liền mạch, có mở đầu - thân - kết\n"
-        f"- Giọng văn kể chuyện cuốn hút, phù hợp làm lời đọc video\n"
+        f"Bạn là một nhà văn. Viết một câu chuyện ngắn bằng {lang_name}.\n\n"
+        f"YÊU CẦU TUYỆT ĐỐI:\n"
+        f"- Trả về CHỈ nội dung truyện, không nói gì thêm.\n"
+        f"- KHÔNG dùng markdown, KHÔNG dùng emoji, KHÔNG dùng tiêu đề (# ## ###).\n"
+        f"- KHÔNG mở đầu bằng câu giới thiệu kiểu 'Đây là câu chuyện…', "
+        f"'Mình rất muốn viết…', 'Sao chép đoạn truyện…', 'Bước 1…', v.v.\n"
+        f"- KHÔNG hướng dẫn người dùng làm gì (TTS, copy, paste…).\n"
+        f"- KHÔNG thêm bình luận sau khi kết truyện.\n"
+        f"- KHÔNG bọc nội dung trong ``` hoặc trích dẫn (>).\n\n"
+        f"ĐỊNH DẠNG:\n"
+        f"- Đúng {num_panels} đoạn văn (paragraph), phân cách bằng MỘT DÒNG TRỐNG.\n"
+        f"- Mỗi đoạn 2-4 câu, mô tả sinh động (cảnh, hành động, cảm xúc).\n"
+        f"- Mỗi đoạn tương ứng một khung hình cho video.\n"
+        f"- Không đánh số đoạn, không tiêu đề.\n"
+        f"- Cấu trúc: mở đầu → diễn biến → kết thúc.\n"
+        f"- Giọng kể chuyện cuốn hút, phù hợp làm lời đọc video.\n"
     )
     if genre:
         system_msg += f"- Thể loại: {genre}\n"
@@ -327,7 +458,8 @@ def ai_generate_story():
 
     messages = [
         {"role": "system", "content": system_msg},
-        {"role": "user", "content": f"Viết truyện với đề bài: {prompt}"},
+        {"role": "user",
+         "content": f"Viết truyện cho đề bài sau (chỉ trả về nguyên văn truyện, không có gì khác): {prompt}"},
     ]
 
     headers = {"Content-Type": "application/json"}
@@ -357,9 +489,13 @@ def ai_generate_story():
     choice = (body.get("choices") or [{}])[0]
     content = (choice.get("message") or {}).get("content", "")
 
+    # Defensive post-processing — even with a strict system prompt, some models
+    # still wrap the output in chat-assistant cruft. Strip it before returning.
+    content = _clean_story_text(content)
+
     return jsonify({
         "ok": True,
-        "text": content.strip(),
+        "text": content,
         "model": body.get("model") or model,
         "usage": body.get("usage") or {},
     })
@@ -525,20 +661,218 @@ Output format (exactly):
     return jsonify({"ok": True, "prompts": prompts, "fallback": False})
 
 
+# ── Internal helper: call 9Router image API (with optional reference images)
+#
+# Centralised so /ai_generate_image, /ai_generate_anchor, /ai_generate_portrait
+# all use the same code path. Adding `reference_image_paths` here is the core
+# change that makes the AI story pipeline produce visually coherent panels:
+# instead of every panel being generated from scratch, downstream callers can
+# now pass an "anchor" + the previous panel as references so the model edits
+# rather than re-imagines the scene each time.
+def _ai_images_root(cfg: dict) -> Path:
+    """Root folder under which every AI-image session lives."""
+    p = _manga_output_dir(cfg) / "ai_images"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _session_dir(session_id: str, cfg: Optional[dict] = None) -> Path:
+    """Per-run folder. When the caller passes an empty session_id we fall
+    back to the legacy flat layout so existing code still works."""
+    cfg = cfg or _cfg()
+    root = _ai_images_root(cfg)
+    sid = secure_filename((session_id or "").strip())
+    if not sid:
+        return root
+    p = root / sid
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _make_session_id() -> str:
+    """Build a human-friendly, sortable session id (timestamp + random)."""
+    import uuid
+    return time.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+
+
+def _resolve_image_url_to_path(url: str, out_dir: Path) -> Optional[Path]:
+    """Map a `/api/story/ai_image[/<session>]/<name>` URL or path back to a file.
+
+    Tries (in order):
+      1. URL with session: /api/story/ai_image/<sid>/<name>
+      2. Legacy URL: /api/story/ai_image/<name>
+      3. Absolute / project-relative filesystem path
+    """
+    if not url:
+        return None
+    s = str(url).strip()
+    if not s:
+        return None
+    marker = "/api/story/ai_image/"
+    if marker in s:
+        tail = s.rsplit(marker, 1)[-1].split("?", 1)[0]
+        parts = [secure_filename(x) for x in tail.split("/") if x]
+        if not parts:
+            return None
+        # Walk parts as path components: the last is the file name, anything
+        # before it are session subfolders.
+        candidate = out_dir
+        for piece in parts[:-1]:
+            candidate = candidate / piece
+        candidate = candidate / parts[-1]
+        if candidate.exists():
+            return candidate
+        # Fallback: maybe this URL was generated against the global root and
+        # `out_dir` already points inside a session — try the parent root.
+        try:
+            root = out_dir
+            while root.name and root.parent.name and root.parent.name != "ai_images":
+                root = root.parent
+            if root.parent.name == "ai_images":
+                root = root.parent
+            cand2 = root.joinpath(*parts)
+            if cand2.exists():
+                return cand2
+        except Exception:
+            pass
+        return None
+    # Absolute / project-relative path
+    try:
+        p = Path(s)
+        if not p.is_absolute():
+            p = ROOT / p
+        if p.exists() and p.is_file():
+            return p
+    except Exception:
+        pass
+    return None
+
+
+def _call_image_api(
+    *,
+    prompt: str,
+    model: str,
+    quality: str,
+    ratio: str,
+    seed: int,
+    out_path: Path,
+    reference_image_paths: Optional[list] = None,
+) -> tuple[bool, dict]:
+    """Send a single generation request to 9Router and write the result to disk.
+
+    Returns (ok, info_dict). info_dict keys:
+        - on success: model, size, used_references, status_code
+        - on error:   error, status_code (best-effort)
+    """
+    import base64
+    import requests as _requests
+
+    cfg = _cfg()
+    nr_cfg = cfg.get("nine_router") or {}
+    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+    api_key = (nr_cfg.get("api_key") or "").strip()
+    if not api_key:
+        return False, {
+            "error": "Chưa cấu hình API key 9Router. Mở tab 'Chat Bot · 9Router' để thiết lập.",
+            "status_code": 400,
+        }
+
+    ratio_map = {
+        "9:16": (1024, 1792),
+        "16:9": (1792, 1024),
+        "1:1": (1024, 1024),
+        "3:4": (1024, 1365),
+        "4:3": (1365, 1024),
+    }
+    width, height = ratio_map.get(ratio, (1024, 1792))
+
+    # Encode reference images (cap at 4 — most providers accept up to 4)
+    ref_b64s = []
+    for p in (reference_image_paths or [])[:4]:
+        try:
+            with open(p, "rb") as f:
+                ref_b64s.append(base64.b64encode(f.read()).decode("ascii"))
+        except Exception:
+            continue
+
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    payload = {
+        "model": model,
+        "prompt": prompt[:2000],
+        "n": 1,
+        "size": f"{width}x{height}",
+        "quality": quality,
+        "response_format": "b64_json",
+        "seed": seed,
+    }
+    if ref_b64s:
+        # 9Router image-edit / multimodal field. Different providers use different
+        # field names; we send the most common ones so the gateway can route.
+        payload["images"] = ref_b64s            # nano-banana / seedream multi-ref
+        payload["image"] = ref_b64s[0]          # OpenAI image-edit single-ref
+
+    url = f"{endpoint}/images/generations"
+    try:
+        resp = _requests.post(url, json=payload, headers=headers, timeout=240)
+    except _requests.exceptions.Timeout:
+        return False, {"error": "Timeout khi gọi 9Router (model có thể đang quá tải).", "status_code": 504}
+    except _requests.exceptions.ConnectionError as exc:
+        return False, {"error": f"Không kết nối được 9Router tại {endpoint}: {exc}", "status_code": 502}
+    except Exception as exc:
+        return False, {"error": str(exc)[:300], "status_code": 500}
+
+    if resp.status_code >= 400:
+        try:
+            err_body = resp.json()
+            err_msg = (err_body.get("error") or {}).get("message") or str(err_body)
+        except Exception:
+            err_msg = resp.text[:300]
+        return False, {
+            "error": f"9Router lỗi {resp.status_code}: {err_msg}",
+            "status_code": resp.status_code,
+            "model": model,
+        }
+
+    try:
+        body = resp.json()
+        img_data = (body.get("data") or [{}])[0]
+        if img_data.get("b64_json"):
+            with open(out_path, "wb") as f:
+                f.write(base64.b64decode(img_data["b64_json"]))
+        elif img_data.get("url"):
+            dl = _requests.get(img_data["url"], timeout=180)
+            with open(out_path, "wb") as f:
+                f.write(dl.content)
+        else:
+            return False, {"error": "9Router không trả ảnh (data trống).", "status_code": 502}
+    except Exception as exc:
+        return False, {"error": f"Lỗi xử lý response: {exc}", "status_code": 500}
+
+    if not out_path.exists() or out_path.stat().st_size < 1024:
+        return False, {"error": "File ảnh tải về bị rỗng.", "status_code": 502}
+
+    return True, {
+        "model": model,
+        "size": f"{width}x{height}",
+        "used_references": len(ref_b64s),
+        "status_code": 200,
+    }
+
+
 @bp.route("/api/story/ai_generate_image", methods=["POST"])
 def ai_generate_image():
-    """Generate a single image via 9Router (Codex GPT image models).
+    """Generate a single image via 9Router, optionally with reference images.
 
     Body:
-      prompt       (str)  — image generation prompt
-      model        (str)  — 9Router model id (default: cx/gpt-5.5-image)
-      quality      (str)  — 'standard' | 'hd'
-      ratio        (str)  — aspect ratio like '9:16'
-      scene_index  (int)  — scene number (for filename)
-      seed         (int)  — same seed across a story keeps style coherent
+      prompt                 (str)        — image generation prompt
+      model                  (str)        — 9Router model id (default: cx/gpt-5.5-image)
+      quality                (str)        — 'standard' | 'hd'
+      ratio                  (str)        — aspect ratio like '9:16'
+      scene_index            (int)        — scene number (for filename)
+      seed                   (int)        — same seed across a story keeps style coherent
+      reference_image_urls   (list[str])  — NEW: URLs/paths of anchor + previous frame
+                                            so the model preserves character/scene continuity
     """
-    import requests as _requests
-    import base64
     import uuid
 
     data = request.get_json(silent=True) or {}
@@ -558,92 +892,306 @@ def ai_generate_image():
     except (ValueError, TypeError):
         seed = 42
 
-    # Map ratio to pixel dimensions
-    ratio_map = {
-        "9:16": (1024, 1792),
-        "16:9": (1792, 1024),
-        "1:1": (1024, 1024),
-        "3:4": (1024, 1365),
-    }
-    width, height = ratio_map.get(ratio, (1024, 1792))
-
-    # Output directory for generated images
     cfg = _cfg()
-    out_dir = _manga_output_dir(cfg) / "ai_images"
+    session_id = (data.get("session_id") or "").strip()
+    out_dir = _session_dir(session_id, cfg)
     out_dir.mkdir(parents=True, exist_ok=True)
     filename = f"scene_{scene_index:03d}_{uuid.uuid4().hex[:8]}.png"
     out_path = out_dir / filename
 
-    nr_cfg = cfg.get("nine_router") or {}
-    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
-    api_key = (nr_cfg.get("api_key") or "").strip()
-    if not api_key:
-        return jsonify({
-            "ok": False,
-            "error": "Chưa cấu hình API key 9Router. Mở tab 'Chat Bot · 9Router' để thiết lập.",
-        }), 400
+    # Resolve any reference URLs (anchor + previous panel) → real local paths
+    ref_urls = data.get("reference_image_urls") or []
+    ref_paths = []
+    for u in ref_urls:
+        p = _resolve_image_url_to_path(u, out_dir)
+        if p:
+            ref_paths.append(p)
 
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
-    payload = {
-        "model": model,
-        "prompt": prompt[:2000],
-        "n": 1,
-        "size": f"{width}x{height}",
-        "quality": quality,
-        "response_format": "b64_json",
-    }
-    # Some models accept seed; pass it when supported (server may ignore).
-    payload["seed"] = seed
-
-    url = f"{endpoint}/images/generations"
-    try:
-        resp = _requests.post(url, json=payload, headers=headers, timeout=180)
-    except _requests.exceptions.Timeout:
-        return jsonify({"ok": False, "error": "Timeout khi gọi 9Router (model có thể đang quá tải)."}), 504
-    except _requests.exceptions.ConnectionError as exc:
-        return jsonify({"ok": False, "error": f"Không kết nối được 9Router tại {endpoint}: {exc}"}), 502
-    except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)[:300]}), 500
-
-    if resp.status_code >= 400:
-        try:
-            err_body = resp.json()
-            err_msg = (err_body.get("error") or {}).get("message") or str(err_body)
-        except Exception:
-            err_msg = resp.text[:300]
-        return jsonify({
-            "ok": False,
-            "error": f"9Router lỗi {resp.status_code}: {err_msg}",
-            "model": model,
-        }), 502
-
-    try:
-        body = resp.json()
-        img_data = (body.get("data") or [{}])[0]
-        if img_data.get("b64_json"):
-            with open(out_path, "wb") as f:
-                f.write(base64.b64decode(img_data["b64_json"]))
-        elif img_data.get("url"):
-            dl = _requests.get(img_data["url"], timeout=120)
-            with open(out_path, "wb") as f:
-                f.write(dl.content)
-        else:
-            return jsonify({"ok": False, "error": "9Router không trả ảnh (data trống)."}), 502
-    except Exception as exc:
-        return jsonify({"ok": False, "error": f"Lỗi xử lý response: {exc}"}), 500
-
-    if not out_path.exists() or out_path.stat().st_size < 1024:
-        return jsonify({"ok": False, "error": "File ảnh tải về bị rỗng."}), 502
+    ok, info = _call_image_api(
+        prompt=prompt, model=model, quality=quality, ratio=ratio, seed=seed,
+        out_path=out_path, reference_image_paths=ref_paths,
+    )
+    if not ok:
+        return jsonify({"ok": False, "error": info.get("error", "Lỗi không rõ"),
+                        "model": info.get("model", model)}), info.get("status_code", 500)
 
     rel_path = str(out_path.relative_to(ROOT)).replace("\\", "/")
-    serve_url = f"/api/story/ai_image/{filename}"
+    # URL incorporates the session so the renderer + browser can fetch it
+    # back later even after restoring an old session.
+    if session_id:
+        serve_url = f"/api/story/ai_image/{secure_filename(session_id)}/{filename}"
+    else:
+        serve_url = f"/api/story/ai_image/{filename}"
     return jsonify({
         "ok": True,
         "image_url": serve_url,
         "filename": filename,
+        "session_id": session_id,
         "path": rel_path,
-        "model": model,
-        "size": f"{width}x{height}",
+        "model": info.get("model", model),
+        "size": info.get("size"),
+        "used_references": info.get("used_references", 0),
+    })
+
+
+@bp.route("/api/story/ai_generate_anchor", methods=["POST"])
+def ai_generate_anchor():
+    """Generate the "anchor" (master establishing shot) for a story.
+
+    The anchor shows all main characters in the main location with the chosen
+    art style. It is used as a reference image for every subsequent scene so
+    character appearance, clothing, lighting and palette stay consistent.
+
+    Body:
+      characters   (list[{name, description}])  — main characters
+      location     (str)                        — primary setting
+      art_style    (str)                        — visual style (empty → AI picks)
+      genre        (str)                        — story genre (for mood)
+      model        (str)                        — 9Router model id
+      quality      (str)                        — 'standard' | 'hd'
+      ratio        (str)                        — aspect ratio
+      seed         (int)                        — story seed
+    """
+    import uuid
+
+    data = request.get_json(silent=True) or {}
+    characters = data.get("characters") or []
+    location = (data.get("location") or "").strip()
+    art_style = (data.get("art_style") or "").strip()
+    genre = (data.get("genre") or "").strip()
+    model = (data.get("model") or "cx/gpt-5.5-image").strip()
+    quality = (data.get("quality") or "standard").strip()
+    ratio = (data.get("ratio") or "9:16").strip()
+    seed = data.get("seed")
+    try:
+        seed = int(seed) if seed not in (None, "") else 42
+    except (ValueError, TypeError):
+        seed = 42
+
+    char_lines = []
+    for c in characters:
+        name = (c.get("name") or "").strip()
+        desc = (c.get("description") or "").strip()[:200]
+        if name:
+            char_lines.append(f"- {name}: {desc}")
+    char_block = ("Main characters (must appear identical in every later scene):\n"
+                  + "\n".join(char_lines)) if char_lines else "No specific named characters."
+
+    style_anchor = art_style or "cinematic film still, dramatic natural lighting, detailed, coherent color palette"
+    genre_hint = f" Genre mood: {genre}." if genre else ""
+    location_hint = location or "a fitting setting that matches the genre"
+
+    prompt = (
+        f"Master establishing shot for a visual story. {style_anchor}.{genre_hint}\n"
+        f"{char_block}\n"
+        f"Location: {location_hint}.\n"
+        f"Composition: wide-shot showing the location and (if any) main characters in their default outfits, "
+        f"neutral standing pose, clearly visible faces and clothing. Aim for a 'reference sheet' feel — "
+        f"this image will be used as a visual anchor for every subsequent scene. "
+        f"Coherent lighting, no text or speech bubbles."
+    )
+
+    cfg = _cfg()
+    session_id = (data.get("session_id") or "").strip()
+    out_dir = _session_dir(session_id, cfg)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"anchor_{uuid.uuid4().hex[:8]}.png"
+    out_path = out_dir / filename
+
+    ok, info = _call_image_api(
+        prompt=prompt, model=model, quality=quality, ratio=ratio, seed=seed,
+        out_path=out_path, reference_image_paths=None,
+    )
+    if not ok:
+        return jsonify({"ok": False, "error": info.get("error", "Lỗi không rõ"),
+                        "model": info.get("model", model)}), info.get("status_code", 500)
+
+    if session_id:
+        serve_url = f"/api/story/ai_image/{secure_filename(session_id)}/{filename}"
+    else:
+        serve_url = f"/api/story/ai_image/{filename}"
+    return jsonify({
+        "ok": True,
+        "image_url": serve_url,
+        "filename": filename,
+        "session_id": session_id,
+        "model": info.get("model", model),
+        "size": info.get("size"),
+        "prompt_preview": prompt[:300],
+    })
+
+
+@bp.route("/api/story/ai_generate_portrait", methods=["POST"])
+def ai_generate_portrait():
+    """Generate a front-view portrait for one character on a clean background.
+
+    Used as an additional reference for any scene where the character appears.
+
+    Body:
+      name         (str)
+      description  (str)
+      art_style    (str)
+      model, quality, ratio, seed → as usual
+      anchor_url   (str)   — optional: if provided, used as reference so the
+                             portrait matches the anchor's style/lighting
+    """
+    import uuid
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    description = (data.get("description") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Thiếu tên nhân vật."}), 400
+
+    art_style = (data.get("art_style") or "").strip()
+    model = (data.get("model") or "cx/gpt-5.5-image").strip()
+    quality = (data.get("quality") or "standard").strip()
+    ratio = (data.get("ratio") or "1:1").strip()
+    seed = data.get("seed")
+    try:
+        seed = int(seed) if seed not in (None, "") else 42
+    except (ValueError, TypeError):
+        seed = 42
+    anchor_url = (data.get("anchor_url") or "").strip()
+
+    style_anchor = art_style or "cinematic film still, soft natural lighting, detailed"
+    prompt = (
+        f"Full-body front-view portrait of {name}. {style_anchor}.\n"
+        f"Character details: {description or 'unspecified'}.\n"
+        f"The character is centered, facing the camera with a neutral expression, "
+        f"arms relaxed at sides. Clean uniform background. No text, no speech bubbles. "
+        f"This image will be reused as a reference in many later scenes — keep the appearance "
+        f"crisp and unambiguous."
+    )
+
+    cfg = _cfg()
+    session_id = (data.get("session_id") or "").strip()
+    out_dir = _session_dir(session_id, cfg)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = secure_filename(name) or "char"
+    filename = f"portrait_{safe_name}_{uuid.uuid4().hex[:6]}.png"
+    out_path = out_dir / filename
+
+    ref_paths = []
+    if anchor_url:
+        p = _resolve_image_url_to_path(anchor_url, out_dir)
+        if p:
+            ref_paths.append(p)
+
+    ok, info = _call_image_api(
+        prompt=prompt, model=model, quality=quality, ratio=ratio, seed=seed,
+        out_path=out_path, reference_image_paths=ref_paths,
+    )
+    if not ok:
+        return jsonify({"ok": False, "error": info.get("error", "Lỗi không rõ"),
+                        "model": info.get("model", model)}), info.get("status_code", 500)
+
+    if session_id:
+        serve_url = f"/api/story/ai_image/{secure_filename(session_id)}/{filename}"
+    else:
+        serve_url = f"/api/story/ai_image/{filename}"
+    return jsonify({
+        "ok": True,
+        "name": name,
+        "image_url": serve_url,
+        "filename": filename,
+        "session_id": session_id,
+        "model": info.get("model", model),
+        "size": info.get("size"),
+        "used_references": info.get("used_references", 0),
+    })
+
+
+@bp.route("/api/story/ai_generate_end_frame", methods=["POST"])
+def ai_generate_end_frame():
+    """Generate an "end frame" image for one panel by editing the start frame.
+
+    The renderer will cross-dissolve from the start frame to the end frame
+    over the panel's duration, giving the panel a sense of motion without
+    needing a video model. This is much cheaper and faster than calling a
+    real text-to-video API like Runway / Veo / Seedance.
+
+    Body:
+      start_image_url   (str)  — the panel's main image (required)
+      scene_text        (str)  — the panel's narration; we use it as a hint
+                                 for the kind of motion to suggest
+      motion_hint       (str)  — optional explicit motion override
+                                 (e.g. "camera dolly in", "character turns head")
+      art_style         (str)  — keep style consistent
+      model, quality, ratio, seed, session_id → as usual
+    """
+    import uuid
+
+    data = request.get_json(silent=True) or {}
+    start_url = (data.get("start_image_url") or "").strip()
+    if not start_url:
+        return jsonify({"ok": False, "error": "Thiếu start_image_url."}), 400
+
+    scene_text = (data.get("scene_text") or "").strip()[:400]
+    motion_hint = (data.get("motion_hint") or "").strip()
+    art_style = (data.get("art_style") or "").strip()
+    model = (data.get("model") or "cx/gpt-5.5-image").strip()
+    quality = (data.get("quality") or "standard").strip()
+    ratio = (data.get("ratio") or "9:16").strip()
+    seed = data.get("seed")
+    try:
+        seed = int(seed) if seed not in (None, "") else 42
+    except (ValueError, TypeError):
+        seed = 42
+
+    cfg = _cfg()
+    session_id = (data.get("session_id") or "").strip()
+    out_dir = _session_dir(session_id, cfg)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    start_path = _resolve_image_url_to_path(start_url, out_dir)
+    if not start_path:
+        # Try the global root too (older sessions)
+        start_path = _resolve_image_url_to_path(start_url, _ai_images_root(cfg))
+    if not start_path:
+        return jsonify({"ok": False, "error": "Không tìm thấy file ảnh bắt đầu."}), 400
+
+    style_anchor = art_style or "cinematic film still, soft natural lighting"
+    if motion_hint:
+        change = motion_hint
+    else:
+        # Heuristic: derive a small camera/character change from the scene text.
+        # Keeping it generic prevents the model from completely rewriting the
+        # composition, which would defeat the morph illusion.
+        change = "very subtle camera dolly-in and tiny character motion (eye blink, hair shift, slight head turn)"
+
+    prompt = (
+        f"Edit the provided image. Keep the SAME composition, SAME characters, "
+        f"SAME location, SAME outfits, SAME lighting and color palette. {style_anchor}.\n"
+        f"Apply only this minor change: {change}.\n"
+        f"Context (for tone — do not redraw): {scene_text}\n"
+        f"This image will be the END frame of a short cross-dissolve, so the "
+        f"difference from the START frame should be small but visible."
+    )
+
+    filename = f"endframe_{uuid.uuid4().hex[:8]}.png"
+    out_path = out_dir / filename
+
+    ok, info = _call_image_api(
+        prompt=prompt, model=model, quality=quality, ratio=ratio, seed=seed,
+        out_path=out_path, reference_image_paths=[start_path],
+    )
+    if not ok:
+        return jsonify({"ok": False, "error": info.get("error", "Lỗi không rõ"),
+                        "model": info.get("model", model)}), info.get("status_code", 500)
+
+    if session_id:
+        serve_url = f"/api/story/ai_image/{secure_filename(session_id)}/{filename}"
+    else:
+        serve_url = f"/api/story/ai_image/{filename}"
+    return jsonify({
+        "ok": True,
+        "image_url": serve_url,
+        "filename": filename,
+        "session_id": session_id,
+        "model": info.get("model", model),
+        "size": info.get("size"),
+        "used_references": info.get("used_references", 0),
     })
 
 
@@ -709,11 +1257,25 @@ def ai_image_models():
     return jsonify({"ok": True, "models": defaults, "source": "default"})
 
 
+@bp.route("/api/story/ai_image/<session>/<filename>", methods=["GET"])
+def serve_ai_image_session(session, filename):
+    """Serve a generated AI image scoped to a per-run session folder."""
+    cfg = _cfg()
+    safe_session = secure_filename(session)
+    safe_name = secure_filename(filename)
+    if not safe_session or not safe_name:
+        abort(400)
+    fpath = _ai_images_root(cfg) / safe_session / safe_name
+    if not fpath.exists():
+        abort(404)
+    return send_file(str(fpath), mimetype="image/png")
+
+
 @bp.route("/api/story/ai_image/<filename>", methods=["GET"])
 def serve_ai_image(filename):
-    """Serve a generated AI image."""
+    """Serve a generated AI image (legacy flat layout, no session)."""
     cfg = _cfg()
-    out_dir = _manga_output_dir(cfg) / "ai_images"
+    out_dir = _ai_images_root(cfg)
     safe_name = secure_filename(filename)
     if not safe_name:
         abort(400)
@@ -721,6 +1283,17 @@ def serve_ai_image(filename):
     if not fpath.exists():
         abort(404)
     return send_file(str(fpath), mimetype="image/png")
+
+
+@bp.route("/api/story/ai_session/new", methods=["POST"])
+def ai_session_new():
+    """Allocate a new session id (used by the front-end before kicking off
+    the AI pipeline so anchor / portraits / scenes all land in one folder)."""
+    sid = _make_session_id()
+    cfg = _cfg()
+    # Pre-create the folder so the very first image upload doesn't race
+    _session_dir(sid, cfg)
+    return jsonify({"ok": True, "session_id": sid})
 
 
 # ── AI Story Sessions — save & load for consistency ─────────────────────────
@@ -1182,22 +1755,31 @@ def manga_render():
         url = (p.get("image_url") or p.get("url") or "").strip()
         if not url:
             continue
-        # Resolve relative URLs (incl. AI-generated images) to absolute paths.
-        # For AI images we know the local file path → pass it directly to the
-        # renderer (which falls back to local-file copy when given a non-http
-        # path). Saves a round-trip and avoids any localhost/proxy weirdness.
-        if url.startswith("/api/story/ai_image/"):
-            fname = url.rsplit("/", 1)[-1]
-            local_file = ai_image_dir / secure_filename(fname)
-            if local_file.exists():
-                url = str(local_file.resolve())
-            else:
-                url = base_url + url
-        elif url.startswith("/"):
-            url = base_url + url
+        end_url = (p.get("end_image_url") or "").strip()
+
+        # Helper: turn a server-relative URL (incl. AI-generated images) into
+        # something the renderer can read directly. For AI images we resolve
+        # to the absolute filesystem path so the renderer just copies the
+        # file instead of paying for an HTTP round-trip via localhost.
+        def _resolve(u: str) -> str:
+            if not u:
+                return ""
+            if u.startswith("/api/story/ai_image/"):
+                fname = u.rsplit("/", 1)[-1]
+                local_file = ai_image_dir / secure_filename(fname)
+                if local_file.exists():
+                    return str(local_file.resolve())
+                return base_url + u
+            if u.startswith("/"):
+                return base_url + u
+            return u
+
+        url = _resolve(url)
+        end_url = _resolve(end_url)
         panels.append(PanelInput(
             image_url=url,
             text=(p.get("text") or "").strip(),
+            end_image_url=end_url,
         ))
     if not panels:
         return jsonify({"ok": False, "error": "Không có panel hợp lệ."}), 400
@@ -1248,6 +1830,8 @@ def manga_render():
         intro_sec=float(data.get("intro_sec") or 0.8),
         outro_sec=float(data.get("outro_sec") or 1.2),
         zoom=bool(data.get("zoom", True)),
+        # NEW: smooth crossfade between panels (0 = hard cut, 0.4s = default)
+        crossfade_sec=float(data.get("crossfade_sec") if data.get("crossfade_sec") is not None else 0.4),
         bgm_url=(data.get("bgm_url") or "").strip(),
         bgm_volume=float(data.get("bgm_volume") or 0.10),
         title_text=(data.get("title_text") or data.get("title") or "").strip(),

@@ -226,4 +226,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         "output_dir": "./Downloaded/scripts",
     },
+    # ── Idea → Video pipeline (ViMax architecture) ──
+    "idea2video": {
+        "output_dir": "./Downloaded/idea2video",
+        "default_style": "cinematic, high quality, dramatic lighting",
+        "shot_duration": 5,       # giây mỗi shot (Gemini Veo 2)
+        "max_shots_per_scene": 8,
+    },
 }

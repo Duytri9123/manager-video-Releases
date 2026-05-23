@@ -137,6 +137,50 @@
     </div>
   </div>
 
+  <!-- AI Director card -->
+  <div class="card">
+    <div class="card-header card-collapsible" onclick="toggleCard(this)">
+      <div class="card-title">🤖 AI Director — Sinh kịch bản tự động</div>
+      <div class="card-actions">
+        <span class="badge badge-yellow">LLM · 9Router</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="text-xs text-muted mb-8">
+        Nhập nội dung/chủ đề → AI sẽ sinh danh sách scenes với pose, biểu cảm, phụ kiện, background phù hợp.
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Nội dung / Chủ đề</label>
+          <textarea id="stk-ai-content" rows="4" placeholder="VD: Giải thích vì sao trái đất quay quanh mặt trời&#10;Hoặc: Kể chuyện cười về lập trình viên&#10;Hoặc: 2 người tranh luận về AI"></textarea>
+        </div>
+        <div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Số scenes</label>
+              <input type="number" id="stk-ai-num" value="8" min="3" max="20" class="stk-mini-input">
+            </div>
+            <div class="field">
+              <label>Ngôn ngữ caption</label>
+              <select id="stk-ai-lang" class="stk-mini-input">
+                <option value="vi" selected>Tiếng Việt</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+          </div>
+          <div class="text-xs text-muted mb-8 mt-4">
+            AI sẽ tự chọn phong cách, background, vật thể, biểu cảm phù hợp nội dung.
+            Không cần chọn thủ công.
+          </div>
+          <button class="btn btn-primary btn-lg" style="width:100%" onclick="stkAiGenerate()">
+            🤖 AI Sinh kịch bản
+          </button>
+          <div id="stk-ai-status" class="text-xs text-muted mt-4"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="stk-grid">
 
     <!-- LEFT: Scenes editor -->

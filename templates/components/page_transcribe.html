@@ -115,11 +115,16 @@
             </select>
           </div>
           <div class="field">
-            <label>Nội dung nghe thử</label>
-            <textarea id="tr-preview-text" rows="2" placeholder="Nhập văn bản để nghe thử giọng đọc..."></textarea>
+            <label>Nội dung nghe thử / tạo MP3</label>
+            <textarea id="tr-preview-text" rows="4" placeholder="Nhập văn bản để nghe thử hoặc tạo file MP3..."></textarea>
+          </div>
+          <div class="field">
+            <label>Tên file MP3 xuất ra (tuỳ chọn)</label>
+            <input type="text" id="tr-tts-filename" placeholder="vd: my_audio.mp3 (để trống = tự đặt tên)">
           </div>
           <div class="flex-center gap-8 mt-8">
             <button class="btn btn-secondary btn-sm" id="btn-tr-preview" onclick="previewTranscribeVoice()">▶ Nghe thử</button>
+            <button class="btn btn-primary btn-sm" id="btn-tr-tts-mp3" onclick="createMp3FromText()">💾 Tạo &amp; tải MP3</button>
             <audio id="tr-preview-audio" controls style="display:none;height:32px;flex:1"></audio>
           </div>
         </div>

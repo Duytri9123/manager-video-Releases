@@ -301,6 +301,92 @@
   .cw-resize{position:absolute;left:0;top:58px;width:6px;height:calc(100% - 58px);cursor:ew-resize;background:transparent}
   .cw-resize-tl{position:absolute;left:0;top:58px;width:14px;height:14px;cursor:nwse-resize;background:transparent}
 
+  /* TTS settings modal */
+  .cw-tts-modal-ov{position:fixed;inset:0;background:rgba(15,30,60,.45);
+    z-index:99998;display:flex;align-items:center;justify-content:center;
+    backdrop-filter:blur(2px);animation:cw-bubble-in .15s ease}
+  .cw-tts-modal-card{background:#fff;border-radius:14px;width:min(420px,92vw);
+    max-height:85vh;display:flex;flex-direction:column;
+    box-shadow:0 20px 60px rgba(15,30,60,.35);overflow:hidden;
+    animation:cw-bubble-in .2s ease}
+  .cw-tts-modal-head{display:flex;align-items:flex-start;gap:8px;
+    padding:14px 16px;border-bottom:1px solid #eef2ff}
+  .cw-tts-modal-head > div:first-child{flex:1;font-size:14px;color:#1a2332}
+  .cw-tts-modal-sub{font-size:11px;color:#5b7aa6;font-weight:400;margin-top:2px}
+  .cw-tts-modal-close{background:transparent;border:none;width:28px;height:28px;
+    border-radius:8px;cursor:pointer;color:#8fa8c8;font-size:16px;
+    display:flex;align-items:center;justify-content:center;transition:all .15s}
+  .cw-tts-modal-close:hover{background:#fdecea;color:#c0392b}
+  .cw-tts-modal-body{padding:14px 16px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;flex:1}
+  .cw-tts-modal-field{display:flex;flex-direction:column;gap:4px}
+  .cw-tts-modal-field label{font-size:11.5px;color:#5b7aa6;font-weight:600}
+  .cw-tts-modal-field select{padding:8px 10px;border:1px solid #d8e2f5;border-radius:8px;
+    background:#f5f8ff;font-family:inherit;font-size:12.5px;color:#1a2332;
+    outline:none;transition:border-color .15s;cursor:pointer}
+  .cw-tts-modal-field select:focus{border-color:#1a73e8;background:#fff}
+  .cw-tts-modal-status{font-size:11.5px;color:#5b7aa6;min-height:18px;
+    padding:6px 0;line-height:1.4}
+  .cw-tts-modal-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    padding:12px 16px;border-top:1px solid #eef2ff;background:#fafbff}
+  .cw-tts-modal-foot button{padding:7px 14px;border:none;border-radius:8px;
+    cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;
+    transition:all .15s}
+  .cw-tts-modal-foot button.primary{background:linear-gradient(135deg,#1a73e8,#3b82f6);
+    color:#fff;box-shadow:0 2px 6px rgba(26,115,232,.25)}
+  .cw-tts-modal-foot button.primary:hover{transform:translateY(-1px);
+    box-shadow:0 4px 10px rgba(26,115,232,.35)}
+  .cw-tts-modal-foot button.ghost{background:#eef2ff;color:#5b7aa6}
+  .cw-tts-modal-foot button.ghost:hover:not(:disabled){background:#dbe5ff}
+  .cw-tts-modal-foot button:disabled{opacity:.5;cursor:not-allowed}
+
+  /* TTS wizard embedded in bot bubble — one question at a time */
+  .cw-tts-wizard{display:flex;flex-direction:column;gap:8px;min-width:240px;max-width:100%}
+  .cw-tts-step-title{font-size:12.5px;line-height:1.5;color:#1a2332}
+  .cw-tts-step-title b{color:#1a73e8}
+  .cw-tts-step-title span{color:#5b7aa6}
+  .cw-tts-summary{margin-top:4px;font-size:11px;color:#5b7aa6;
+    background:#eef2ff;border-radius:6px;padding:4px 8px;display:inline-block}
+  .cw-tts-chips{display:flex;flex-direction:column;gap:5px;margin-top:2px}
+  .cw-tts-chip{display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+    padding:8px 12px;border:1px solid #d8e2f5;border-radius:10px;background:#f5f8ff;
+    cursor:pointer;font-family:inherit;text-align:left;transition:all .15s;
+    color:#1a2332;width:100%}
+  .cw-tts-chip:hover{border-color:#1a73e8;background:#eaf2ff;
+    transform:translateY(-1px);box-shadow:0 2px 8px rgba(26,115,232,.12)}
+  .cw-tts-chip:active{transform:translateY(0)}
+  .cw-tts-chip b{font-size:12.5px;font-weight:600;color:#1a2332}
+  .cw-tts-chip span{font-size:11px;color:#5b7aa6}
+  .cw-tts-back{align-self:flex-start;background:transparent;border:none;cursor:pointer;
+    color:#5b7aa6;font-size:11px;padding:4px 6px;font-family:inherit;transition:color .15s}
+  .cw-tts-back:hover{color:#1a73e8;text-decoration:underline}
+  .cw-tts-text{width:100%;min-height:70px;max-height:180px;padding:8px 10px;
+    border:1px solid #d8e2f5;border-radius:10px;background:#f5f8ff;font-family:inherit;
+    font-size:12.5px;color:#1a2332;outline:none;resize:vertical;line-height:1.4;
+    transition:border-color .15s}
+  .cw-tts-text:focus{border-color:#1a73e8;background:#fff;box-shadow:0 0 0 3px rgba(26,115,232,.1)}
+  .cw-tts-btns{display:flex;gap:6px;justify-content:flex-end}
+  .cw-tts-btns button{padding:7px 14px;border:none;border-radius:8px;cursor:pointer;
+    font-size:12px;font-weight:600;font-family:inherit;transition:all .15s}
+  .cw-tts-btns .primary{background:linear-gradient(135deg,#1a73e8,#3b82f6);color:#fff;
+    box-shadow:0 2px 6px rgba(26,115,232,.25)}
+  .cw-tts-btns .primary:hover:not(:disabled){transform:translateY(-1px);
+    box-shadow:0 4px 10px rgba(26,115,232,.35)}
+  .cw-tts-btns .primary:disabled{opacity:.6;cursor:not-allowed;transform:none}
+  .cw-tts-btns .ghost{background:#eef2ff;color:#5b7aa6}
+  .cw-tts-btns .ghost:hover:not(:disabled){background:#dbe5ff}
+  .cw-tts-btns .ghost:disabled{opacity:.5;cursor:not-allowed}
+  .cw-tts-result,.cw-tts-done{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+  .cw-tts-done audio{width:100%;height:36px}
+  .cw-tts-muted{font-size:11px;color:#5b7aa6}
+  .cw-tts-muted b{color:#1a73e8}
+  .cw-tts-warn{font-size:11px;color:#c0392b;background:#fdecea;
+    border:1px solid #f5c1bb;border-radius:6px;padding:5px 8px}
+  .cw-tts-dl{font-size:11px;color:#1a73e8;text-decoration:none;align-self:flex-start}
+  .cw-tts-dl:hover{text-decoration:underline}
+  .cw-tts-preview{font-size:11px;color:#8fa8c8;font-style:italic;
+    border-left:3px solid #d8e2f5;padding:2px 8px;margin-top:2px}
+
   /* Typing indicator */
   .cw-typing{display:inline-flex;gap:4px;padding:2px 0}
   .cw-typing span{width:7px;height:7px;border-radius:50%;background:#a8c4f0;animation:cw-typing 1.3s infinite}
@@ -363,6 +449,9 @@
           </div>
         </div>
         <div class="cw-head-actions">
+          <button id="cw-tts-cfg" title="Cài đặt giọng đọc (TTS)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </button>
           <button id="cw-history" title="Lịch sử">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 1.5-5"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>
           </button>
@@ -880,6 +969,12 @@
     setStatus('đang kiểm tra…', '');
     const { ok, data } = await api('GET','/api/chatbot/status');
     if (!ok || !data?.reachable){
+      // 9Router offline — check if fallback providers are available
+      if (data?.fallback_available) {
+        setStatus(`fallback: ${data.fallback_provider}`, 'yellow');
+        state.statusOk = true;  // allow chatting via fallback
+        return true;
+      }
       setStatus('offline', 'red');
       state.statusOk = false;
       return false;
@@ -1232,6 +1327,1110 @@
     return { ok: true, content: '[Đã tạo ảnh: ' + prompt.slice(0, 80) + ']' };
   }
 
+  // ── TTS triggered from chat input ────────────────────────────────────
+  // Khi user gõ "tạo giọng nói", "đọc giúp tôi...", "tạo mp3", "voice
+  // over"... → ta hiển thị form chọn giọng/model + nội dung kịch bản
+  // ngay trong bubble, thay vì để LLM trả lời "không tạo được audio".
+  // Trigger phải đặt ở đầu câu để không nhầm với câu hỏi tự nhiên.
+  const TTS_TRIGGERS = [
+    // VN: "tạo (1|một) (đoạn|file)? (giọng nói|voice|mp3|audio|tts|voiceover)"
+    /^(?:tạo|sinh|làm|gen)\s+(?:cho\s+(?:tôi|mình|tao|t)\s+)?(?:một\s+|1\s+)?(?:đoạn\s+|file\s+|bản\s+)?(?:giọng\s*(?:nói|đọc)?|voice(?:over)?|mp3|audio|tts)\b/i,
+    // VN: "(bạn |hãy )?đọc (giúp|hộ|cho|nó|đoạn|cái|văn bản này)..."
+    /^(?:bạn\s+)?(?:hãy\s+|làm\s+ơn\s+)?đọc(?:\s+(?:giúp|hộ|cho|nó|cái|đoạn|văn|bài|văn\s*bản|đoạn\s*văn|truyện|câu\s*chuyện|chuyện))?\b/i,
+    /^(?:lồng\s+tiếng|thuyết\s+minh|narrate|voiceover|voice\s+over)(?=\s|$|[:,.!?])/i,
+    // VN: "chuyển (văn bản|text) (sang|thành) (giọng|audio|mp3|speech)"
+    /^chuyển\s+(?:văn\s*bản|text|đoạn\s+này|nó)\s+(?:sang|thành|qua)\s+(?:giọng|audio|mp3|speech|tts|voice)/i,
+    // EN: text-to-speech / speak this / read this aloud
+    /^(?:speak|say|read)\s+(?:this|that|it|aloud|out\s+loud|the\s+(?:text|story|article))/i,
+    /^(?:text[\s-]to[\s-]speech|tts)\b/i,
+    /^generate\s+(?:an?\s+)?(?:audio|speech|voice|mp3|voiceover)\b/i,
+  ];
+
+  // "Change voice" intent — open the wizard with the saved settings as
+  // defaults so the user can revise their pick. Distinct from a TTS run.
+  const TTS_CHANGE_TRIGGERS = [
+    /^(?:đổi|chỉnh|thay|cấu\s*hình|cài\s*đặt|chọn\s*lại|sửa)\s+(?:giọng|voice|engine|cài\s*đặt\s+(?:giọng|tts))/i,
+    /^(?:cài\s*đặt|setting)s?\s+(?:tts|giọng|voice)/i,
+    /^change\s+(?:voice|tts|engine)\b/i,
+    /^reset\s+tts\b/i,
+  ];
+
+  // "Anaphora" patterns — phrases that mean "read the previous assistant
+  // message" instead of expecting an inline script. We detect these so
+  // the user can say "đọc nó giúp tôi" after a story, and we'll grab
+  // the most recent assistant content automatically.
+  const TTS_ANAPHORA = /\b(?:nó|cái\s*đó|cái\s*này|đoạn\s*đó|đoạn\s*này|đoạn\s*vừa\s*rồi|văn\s*bản\s*này|truyện|câu\s*chuyện|chuyện\s*này|bài\s*đó|trên|vừa\s*rồi|that|this|it|the\s+(?:above|story|text|article))\b/i;
+
+  // Try to extract the script content the user already provided in the
+  // same message (after a colon, dash, or quotes). Returns '' when nothing
+  // looks like a script — caller may then resolve from history.
+  function _extractTtsScript(text){
+    // After "...: <script>" or "...— <script>"
+    const m = text.match(/[:：\-—]\s*([\s\S]+)$/);
+    if (m && m[1].trim().length >= 8) return m[1].trim();
+    // Quoted: "....." or "....."
+    const q = text.match(/[""'""„«]([\s\S]+?)[""''""»]/);
+    if (q && q[1].trim().length >= 8) return q[1].trim();
+    // No separator, but the user wrote: "đọc cho tôi câu này xin chào..."
+    // Strip leading TTS verbiage and treat the rest as the script if it
+    // looks long enough to be meaningful content (not a meta question).
+    const stripped = text.replace(
+      /^(?:bạn\s+)?(?:hãy\s+|làm\s+ơn\s+)?(?:đọc|read|speak|say)\s+(?:giúp|hộ|cho|cho\s+(?:tôi|mình|tao|t)|nó|cái|đoạn|văn|bài|văn\s*bản|đoạn\s*văn|truyện|câu\s*chuyện|chuyện|aloud|out\s+loud|the\s+(?:text|story))?\s*(?:câu\s+này|đoạn\s+này|văn\s+bản\s+này|nó|this|that|it)?\s*(?:với\s+(?:giọng|voice)\s+(?:mặc\s*định|default|nào))?\s*(?:cho\s+(?:tôi|mình|tao|t)\s+)?[:：\-—]?\s*/i,
+      '',
+    ).trim();
+    // If a meaningful body remains AND the original text wasn't pure
+    // anaphora (e.g. "đọc nó giúp tôi"), use it.
+    if (stripped.length >= 8 && stripped !== text && !TTS_ANAPHORA.test(stripped)){
+      return stripped;
+    }
+    return '';
+  }
+
+  // Pull the most recent assistant text from history. Strips inline
+  // markdown image refs / code fences so the speech sounds natural.
+  function _lastAssistantText(){
+    const hist = (state && Array.isArray(state.history)) ? state.history : [];
+    for (let i = hist.length - 1; i >= 0; i--){
+      const m = hist[i];
+      if (m && m.role === 'assistant'){
+        let s = '';
+        if (typeof m.content === 'string'){
+          s = m.content;
+        } else if (Array.isArray(m.content)){
+          // OpenAI vision-style array — concat text parts only.
+          s = m.content
+            .filter(p => p && typeof p === 'object' && p.type === 'text')
+            .map(p => p.text || '')
+            .join('\n');
+        }
+        s = String(s || '').trim();
+        if (!s) continue;
+        // Strip our own placeholder markers (e.g. "[Đã tạo ảnh: ...]").
+        if (/^\[(?:TTS|Đã tạo)/i.test(s)) continue;
+        // Light cleanup: remove fenced code blocks and image markdown.
+        s = s.replace(/```[\s\S]*?```/g, ' ')
+             .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+             .replace(/\s+/g, ' ').trim();
+        if (s.length >= 12) return s;
+      }
+    }
+    return '';
+  }
+
+  // ── TTS settings persistence (per-browser) ────────────────────────────
+  // Saved after a successful TTS run via the wizard, so subsequent
+  // "đọc nó giúp tôi" requests skip the wizard entirely.
+  const LS_TTS_SETTINGS = 'cw_tts_settings_v1';
+  function _loadTtsSettings(){
+    try {
+      const raw = localStorage.getItem(LS_TTS_SETTINGS);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (obj && obj.engine && obj.voice) return obj;
+    } catch(_){}
+    return null;
+  }
+  function _saveTtsSettings(s){
+    try { localStorage.setItem(LS_TTS_SETTINGS, JSON.stringify(s)); }
+    catch(_){}
+  }
+  function _clearTtsSettings(){
+    try { localStorage.removeItem(LS_TTS_SETTINGS); } catch(_){}
+  }
+
+  // ── TTS settings modal ────────────────────────────────────────────────
+  // Persistent overlay UI for changing the default voice without typing
+  // a chat command. Triggered by the ⚙️ icon in the header.
+  function openTtsSettingsModal(){
+    // Remove any existing instance to keep state simple.
+    document.getElementById('cw-tts-modal')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'cw-tts-modal';
+    overlay.className = 'cw-tts-modal-ov';
+
+    const card = document.createElement('div');
+    card.className = 'cw-tts-modal-card';
+    overlay.appendChild(card);
+
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    // Header
+    const head = document.createElement('div');
+    head.className = 'cw-tts-modal-head';
+    head.innerHTML = '<div><b>🔊 Cài đặt giọng đọc</b>'
+      + '<div class="cw-tts-modal-sub">Mặc định cho lệnh "đọc giúp tôi", "đọc đoạn này"...</div></div>';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'cw-tts-modal-close';
+    closeBtn.innerHTML = '✕';
+    closeBtn.addEventListener('click', close);
+    head.appendChild(closeBtn);
+    card.appendChild(head);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'cw-tts-modal-body';
+    body.appendChild(_ttsMuted('⏳ Đang tải danh sách giọng...'));
+    card.appendChild(body);
+
+    document.body.appendChild(overlay);
+
+    // Lazy-load engines, then build the form.
+    (async () => {
+      const engines = await loadTtsEngines();
+      const list = (engines && engines.length) ? engines : [{
+        id: 'edge-tts', label: 'Edge TTS',
+        voices: { vi: [['vi-VN-HoaiMyNeural', 'Hoài My (nữ)']] },
+      }];
+
+      const saved = _loadTtsSettings() || {};
+      const state = {
+        engine: saved.engine || list[0].id,
+        lang:   saved.lang   || '',
+        voice:  saved.voice  || '',
+      };
+
+      body.replaceChildren();
+
+      // Engine row
+      const fEng = document.createElement('div');
+      fEng.className = 'cw-tts-modal-field';
+      fEng.innerHTML = '<label>Engine (nhà cung cấp)</label>';
+      const selEng = document.createElement('select');
+      for (const e of list){
+        const o = document.createElement('option');
+        o.value = e.id;
+        o.textContent = e.label || e.id;
+        selEng.appendChild(o);
+      }
+      selEng.value = state.engine;
+      fEng.appendChild(selEng);
+      body.appendChild(fEng);
+
+      // Language row
+      const fLang = document.createElement('div');
+      fLang.className = 'cw-tts-modal-field';
+      fLang.innerHTML = '<label>Ngôn ngữ</label>';
+      const selLang = document.createElement('select');
+      fLang.appendChild(selLang);
+      body.appendChild(fLang);
+
+      // Voice row
+      const fVoice = document.createElement('div');
+      fVoice.className = 'cw-tts-modal-field';
+      fVoice.innerHTML = '<label>Giọng đọc</label>';
+      const selVoice = document.createElement('select');
+      fVoice.appendChild(selVoice);
+      body.appendChild(fVoice);
+
+      // Status / preview
+      const status = document.createElement('div');
+      status.className = 'cw-tts-modal-status';
+      body.appendChild(status);
+
+      function refreshLangs(){
+        const eng = list.find(x => x.id === state.engine);
+        const langs = eng?.voices ? Object.keys(eng.voices)
+          .filter(k => Array.isArray(eng.voices[k]) && eng.voices[k].length) : [];
+        selLang.replaceChildren();
+        for (const k of langs){
+          const o = document.createElement('option');
+          o.value = k;
+          o.textContent = TTS_LANG_LABELS[k] || k;
+          selLang.appendChild(o);
+        }
+        if (!langs.includes(state.lang)) state.lang = langs[0] || '';
+        selLang.value = state.lang;
+        refreshVoices();
+      }
+      function refreshVoices(){
+        const eng = list.find(x => x.id === state.engine);
+        const arr = (eng?.voices?.[state.lang]) || [];
+        const items = arr.map(v => Array.isArray(v)
+          ? { id: v[0], label: v[1] } : { id: v.id || v.value, label: v.label });
+        selVoice.replaceChildren();
+        for (const v of items){
+          const o = document.createElement('option');
+          o.value = v.id;
+          o.textContent = v.label;
+          selVoice.appendChild(o);
+        }
+        if (!items.find(v => v.id === state.voice)) state.voice = items[0]?.id || '';
+        selVoice.value = state.voice;
+      }
+      selEng.addEventListener('change', () => {
+        state.engine = selEng.value; state.lang = ''; state.voice = '';
+        refreshLangs();
+      });
+      selLang.addEventListener('change', () => {
+        state.lang = selLang.value; state.voice = '';
+        refreshVoices();
+      });
+      selVoice.addEventListener('change', () => { state.voice = selVoice.value; });
+      refreshLangs();
+
+      // Footer
+      const foot = document.createElement('div');
+      foot.className = 'cw-tts-modal-foot';
+
+      // Test (preview) button
+      const testBtn = document.createElement('button');
+      testBtn.className = 'ghost';
+      testBtn.textContent = '🎧 Nghe thử';
+      testBtn.addEventListener('click', async () => {
+        if (!state.voice){ status.textContent = '⚠ Chưa chọn giọng.'; return; }
+        testBtn.disabled = true;
+        status.textContent = '⏳ Đang tạo mẫu nghe thử...';
+        const eng = list.find(x => x.id === state.engine) || {};
+        const settings = {
+          engine: state.engine, lang: state.lang, voice: state.voice,
+          backend: eng.backend || 'local',
+          defaultModel: eng.defaultModel || '',
+        };
+        try {
+          const sample = 'Xin chào, đây là giọng đọc mẫu trên ứng dụng làm video.';
+          const blob = await _ttsFetch(sample, settings);
+          status.replaceChildren();
+          const audio = document.createElement('audio');
+          audio.controls = true; audio.autoplay = true;
+          audio.src = URL.createObjectURL(blob);
+          audio.style.width = '100%'; audio.style.height = '32px';
+          status.appendChild(audio);
+        } catch (err) {
+          status.textContent = '❌ ' + (err.message || err);
+        } finally {
+          testBtn.disabled = false;
+        }
+      });
+      foot.appendChild(testBtn);
+
+      const spacer = document.createElement('div'); spacer.style.flex = '1';
+      foot.appendChild(spacer);
+
+      // Cancel
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'ghost';
+      cancelBtn.textContent = 'Huỷ';
+      cancelBtn.addEventListener('click', close);
+      foot.appendChild(cancelBtn);
+
+      // Save
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'primary';
+      saveBtn.textContent = '💾 Lưu mặc định';
+      saveBtn.addEventListener('click', () => {
+        if (!state.engine || !state.voice){
+          status.textContent = '⚠ Chưa chọn đủ engine/giọng.';
+          return;
+        }
+        const eng = list.find(x => x.id === state.engine) || {};
+        const voiceObj = (eng?.voices?.[state.lang] || []).find(v =>
+          (Array.isArray(v) ? v[0] : v.id || v.value) === state.voice);
+        const voiceLabel = Array.isArray(voiceObj) ? voiceObj[1]
+          : (voiceObj?.label || state.voice);
+        _saveTtsSettings({
+          engine: state.engine,
+          lang:   state.lang,
+          voice:  state.voice,
+          voiceLabel,
+          backend: eng.backend || 'local',
+          defaultModel: eng.defaultModel || '',
+        });
+        status.style.color = '#1a73e8';
+        status.textContent = '✅ Đã lưu giọng mặc định: ' + voiceLabel;
+        setTimeout(close, 700);
+      });
+      foot.appendChild(saveBtn);
+
+      // Reset / clear
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'ghost';
+      clearBtn.textContent = '↺ Xoá mặc định';
+      clearBtn.title = 'Lần sau sẽ hiện wizard chọn lại';
+      clearBtn.addEventListener('click', () => {
+        _clearTtsSettings();
+        status.style.color = '#5b7aa6';
+        status.textContent = '✓ Đã xoá. Lần đọc kế tiếp sẽ hiện wizard.';
+      });
+      foot.appendChild(clearBtn);
+
+      card.appendChild(foot);
+    })();
+  }
+
+  // Shared TTS request — used by the modal preview button. Same logic
+  // as _runTtsDirect but returns the blob instead of rendering it.
+  async function _ttsFetch(text, settings){
+    let resp;
+    if (settings.backend === '9router'){
+      const payload = {
+        input: text, model: settings.defaultModel || '',
+        voice: settings.voice, format: 'mp3',
+      };
+      if (settings.lang && settings.lang !== 'multi') payload.language = settings.lang;
+      resp = await fetch('/api/chatbot/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      resp = await fetch('/api/tts_to_mp3', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text, tts_engine: settings.engine, tts_voice: settings.voice,
+          tts_pitch: '+0Hz', tts_rate: '+0%', tts_emotion: 'default',
+        }),
+      });
+    }
+    const ctype = resp.headers.get('Content-Type') || '';
+    if (!resp.ok || ctype.includes('application/json')){
+      let msg = 'HTTP ' + resp.status;
+      try {
+        const j = await resp.json();
+        msg = j?.error || j?.message || msg;
+        if (typeof msg !== 'string') msg = JSON.stringify(msg);
+      } catch(_){}
+      throw new Error(msg);
+    }
+    return resp.blob();
+  }
+
+  // ── Module-level UI helpers shared by wizard + direct path ──────────
+  function _ttsEsc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function _ttsMuted(html){
+    const d = document.createElement('div');
+    d.className = 'cw-tts-muted'; d.innerHTML = html;
+    return d;
+  }
+  function _ttsWarn(text){
+    const d = document.createElement('div');
+    d.className = 'cw-tts-warn'; d.textContent = text;
+    return d;
+  }
+  function _ttsTagText(t){
+    const s = document.createElement('span');
+    s.style.opacity = .7; s.textContent = t;
+    return s;
+  }
+
+  // Render the result block (audio + download + preview + actions) into
+  // the bubble. Used by both the wizard and the direct TTS path so the
+  // output looks identical regardless of how it was invoked.
+  function _renderTtsResult({ holder, blob, text, settings, voiceLabel, onAgain, onChange }){
+    const bub = holder.bub;
+    bub.replaceChildren();
+    const url = URL.createObjectURL(blob);
+    const done = document.createElement('div');
+    done.className = 'cw-tts-done';
+
+    done.appendChild(_ttsMuted(
+      '✅ Đã tạo · ' + _ttsEsc(settings.engine)
+      + ' · <b>' + _ttsEsc(voiceLabel || settings.voice) + '</b>'
+      + ' · ' + Math.round(blob.size / 1024) + ' KB'
+    ));
+
+    const audio = document.createElement('audio');
+    audio.controls = true; audio.autoplay = true; audio.src = url;
+    done.appendChild(audio);
+
+    const dl = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const engineSlug = settings.engine.replace(/[:/]/g, '-');
+    dl.download = 'tts_' + engineSlug + '_' + stamp + '.mp3';
+    dl.href = url;
+    dl.className = 'cw-tts-dl';
+    dl.textContent = '⬇ Tải về (' + dl.download + ')';
+    done.appendChild(dl);
+
+    const preview = document.createElement('div');
+    preview.className = 'cw-tts-preview';
+    preview.textContent = '"' + (text.length > 160 ? text.slice(0, 160) + '…' : text) + '"';
+    done.appendChild(preview);
+
+    const actions = document.createElement('div');
+    actions.style.display = 'flex'; actions.style.gap = '8px';
+    actions.style.flexWrap = 'wrap'; actions.style.marginTop = '4px';
+
+    if (onAgain){
+      const again = document.createElement('button');
+      again.type = 'button';
+      again.className = 'cw-tts-back';
+      again.textContent = '🔄 Đọc đoạn khác';
+      again.addEventListener('click', onAgain);
+      actions.appendChild(again);
+    }
+    if (onChange){
+      const change = document.createElement('button');
+      change.type = 'button';
+      change.className = 'cw-tts-back';
+      change.textContent = '⚙️ Đổi giọng mặc định';
+      change.addEventListener('click', onChange);
+      actions.appendChild(change);
+    }
+    if (actions.childElementCount) done.appendChild(actions);
+
+    bub.appendChild(done);
+
+    if (holder.tag){
+      holder.tag.replaceChildren(_ttsTagText(
+        '🔊 ' + settings.engine + ' · ' + settings.voice
+      ));
+    }
+  }
+
+  // Direct TTS run — used when we already have a script + saved settings,
+  // so we can skip the wizard.
+  async function _runTtsDirect(holder, text, settings){
+    const bub = holder.bub;
+    bub.classList.remove('err', 'warn');
+    bub.replaceChildren();
+    bub.appendChild(_ttsMuted(
+      '🎙 Đang đọc bằng <b>' + _ttsEsc(settings.voiceLabel || settings.voice) + '</b>'
+      + ' (' + settings.engine + ', ' + text.length + ' ký tự)...'
+    ));
+    if (holder.tag) holder.tag.replaceChildren(_ttsTagText('🔊 đang tạo...'));
+
+    try {
+      const blob = await _ttsFetch(text, settings);
+      _renderTtsResult({
+        holder, blob, text, settings,
+        voiceLabel: settings.voiceLabel || settings.voice,
+        onAgain: () => _renderTtsWizard(holder, '', { prefillSettings: settings }),
+        onChange: () => _renderTtsWizard(holder, text, { prefillSettings: settings }),
+      });
+      return { ok: true };
+    } catch (err) {
+      bub.replaceChildren();
+      bub.appendChild(_ttsWarn('❌ Không tạo được giọng nói: ' + (err.message || err)));
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'cw-tts-back';
+      retry.textContent = '⚙️ Mở lại cài đặt giọng';
+      retry.addEventListener('click', () => {
+        _renderTtsWizard(holder, text, { prefillSettings: settings });
+      });
+      bub.appendChild(retry);
+      if (holder.tag) holder.tag.replaceChildren();
+      return { ok: false };
+    }
+  }
+
+  // Engine catalog is loaded lazily from /api/movie/voices — the backend
+  // already curates engines (Edge / FPT / MiniMax / gTTS / OpenAI...) with
+  // voices grouped by language. We cache the result per session.
+  // Response shape: { ok, engines: [{ id, label, default, voices: {lang:[[id,label],...]} }] }
+  const TTS_LANG_LABELS = {
+    vi: '🇻🇳 Tiếng Việt',
+    en: '🇬🇧 English',
+    zh: '🇨🇳 中文',
+    ja: '🇯🇵 日本語',
+    ko: '🇰🇷 한국어',
+    th: '🇹🇭 ไทย',
+    id: '🇮🇩 Bahasa Indonesia',
+    fr: '🇫🇷 Français',
+    de: '🇩🇪 Deutsch',
+    es: '🇪🇸 Español',
+    ru: '🇷🇺 Русский',
+    multi: '🌐 Đa ngôn ngữ',
+  };
+  let _ttsEnginesCache = null;
+  let _ttsEnginesPromise = null;
+
+  // Curated voice presets for 9Router providers. We don't try to mirror
+  // every voice the upstream supports — just expose the popular ones so
+  // the wizard stays usable. Power users still have the full TTS panel.
+  // Each entry: { provider, modelId (optional), voices: { lang: [[id,label]] } }
+  const NINE_ROUTER_TTS_PRESETS = [
+    {
+      id: 'openai',  // 9Router model id starts with "openai/"
+      label: 'OpenAI TTS (9Router)',
+      desc: 'OpenAI HD voices · qua 9Router · đa ngôn ngữ',
+      modelPattern: /^openai\/(?:tts|gpt-4o.*tts)/i,
+      defaultModel: 'openai/tts-1',
+      voices: {
+        en: [
+          ['nova',    'Nova (female, warm)'],
+          ['shimmer', 'Shimmer (female, soft)'],
+          ['alloy',   'Alloy (neutral)'],
+          ['echo',    'Echo (male, deep)'],
+          ['onyx',    'Onyx (male, strong)'],
+          ['fable',   'Fable (storyteller, UK)'],
+        ],
+        vi: [
+          ['nova',    'Nova (đa ngôn ngữ — đọc tiếng Việt khá ổn)'],
+          ['shimmer', 'Shimmer (đa ngôn ngữ)'],
+          ['alloy',   'Alloy (đa ngôn ngữ)'],
+        ],
+        ja: [['nova', 'Nova (multilingual)'], ['shimmer', 'Shimmer (multilingual)']],
+        ko: [['nova', 'Nova (multilingual)'], ['shimmer', 'Shimmer (multilingual)']],
+        zh: [['nova', 'Nova (multilingual)'], ['shimmer', 'Shimmer (multilingual)']],
+      },
+    },
+    {
+      id: 'gemini',
+      label: 'Google Gemini TTS (9Router)',
+      desc: 'Gemini · biểu cảm tự nhiên',
+      modelPattern: /^gemini\/.*tts/i,
+      voices: {
+        en: [
+          ['Kore',    'Kore (female)'],
+          ['Charon',  'Charon (male)'],
+          ['Puck',    'Puck (cheerful)'],
+          ['Aoede',   'Aoede (warm)'],
+        ],
+        vi: [
+          ['Kore',   'Kore (đa ngôn ngữ)'],
+          ['Charon', 'Charon (đa ngôn ngữ)'],
+        ],
+      },
+    },
+    {
+      id: 'el',  // ElevenLabs alias on 9Router
+      label: 'ElevenLabs (9Router)',
+      desc: 'Voice cloning · giọng cực tự nhiên',
+      modelPattern: /^el\//i,
+      defaultModel: 'el/eleven_multilingual_v2',
+      // ElevenLabs uses voice_id strings; these are the public defaults.
+      voices: {
+        en: [
+          ['21m00Tcm4TlvDq8ikWAM', 'Rachel (female)'],
+          ['AZnzlk1XvdvUeBnXmlld', 'Domi (female, energetic)'],
+          ['EXAVITQu4vr4xnSDxMaL', 'Bella (female, soft)'],
+          ['ErXwobaYiN019PkySvjV', 'Antoni (male, well-rounded)'],
+          ['VR6AewLTigWG4xSOukaG', 'Arnold (male, crisp)'],
+          ['pNInz6obpgDQGcFmaJgB', 'Adam (male, deep)'],
+        ],
+        vi: [
+          ['21m00Tcm4TlvDq8ikWAM', 'Rachel (multilingual v2)'],
+          ['EXAVITQu4vr4xnSDxMaL', 'Bella (multilingual v2)'],
+        ],
+        multi: [
+          ['21m00Tcm4TlvDq8ikWAM', 'Rachel (multilingual)'],
+          ['EXAVITQu4vr4xnSDxMaL', 'Bella (multilingual)'],
+        ],
+      },
+    },
+    {
+      id: 'minimax',
+      label: 'MiniMax (9Router)',
+      desc: 'MiniMax Speech · biểu cảm cao',
+      modelPattern: /^minimax\//i,
+      voices: {
+        en: [
+          ['English_expressive_narrator',  'Expressive Narrator (EN)'],
+          ['English_radiant_girl',         'Radiant Girl (EN, female)'],
+          ['English_PassionateWarrior',    'Passionate Warrior (EN, male)'],
+        ],
+        zh: [
+          ['Chinese_audiobook_male',  '有声书男声 (Chinese)'],
+          ['Chinese_audiobook_female','有声书女声 (Chinese)'],
+        ],
+      },
+    },
+  ];
+
+  // Shape adapter: convert NINE_ROUTER_TTS_PRESETS into the same engine
+  // shape used by /api/movie/voices, so the wizard treats them uniformly.
+  // We only emit an engine for a provider if the live /v1/models/tts list
+  // confirms at least one model of that provider exists on 9Router (so
+  // we never offer a provider the user has no key for / 9Router didn't
+  // configure).
+  function _build9RouterEngines(modelsList){
+    if (!Array.isArray(modelsList) || !modelsList.length) return [];
+    const engines = [];
+    for (const preset of NINE_ROUTER_TTS_PRESETS){
+      // Find a matching live model (first match wins).
+      const matched = modelsList.find(m =>
+        preset.modelPattern.test(m.id || m));
+      if (!matched) continue;
+      const modelId = (typeof matched === 'string' ? matched : matched.id)
+        || preset.defaultModel || '';
+      engines.push({
+        id: '9r:' + preset.id,         // namespace to avoid clashes
+        label: preset.label,
+        desc:  preset.desc,
+        backend: '9router',
+        provider: preset.id,
+        defaultModel: modelId,
+        voices: preset.voices,
+      });
+    }
+    return engines;
+  }
+
+  async function _loadLocalEngines(){
+    try {
+      const r = await fetch('/api/movie/voices');
+      const j = await r.json();
+      if (j?.ok && Array.isArray(j.engines)){
+        // Mark local engines so we can pick the right backend later.
+        return j.engines.map(e => ({ ...e, backend: 'local' }));
+      }
+    } catch(_){}
+    return [];
+  }
+
+  async function _load9RouterEngines(){
+    try {
+      const r = await fetch('/api/chatbot/media_models?kind=tts');
+      const j = await r.json();
+      if (j?.ok && Array.isArray(j.models) && j.models.length){
+        return _build9RouterEngines(j.models);
+      }
+    } catch(_){}
+    return [];
+  }
+
+  async function loadTtsEngines(){
+    if (_ttsEnginesCache) return _ttsEnginesCache;
+    if (_ttsEnginesPromise) return _ttsEnginesPromise;
+    _ttsEnginesPromise = (async () => {
+      const [local, nine] = await Promise.all([
+        _loadLocalEngines(), _load9RouterEngines(),
+      ]);
+      // Local engines first (free, no quota), then 9Router (premium).
+      _ttsEnginesCache = [...local, ...nine];
+      return _ttsEnginesCache;
+    })();
+    return _ttsEnginesPromise;
+  }
+
+  // Engine catalog cached from /api/movie/voices.
+  // Response shape: { ok, engines: [{ id, label, default, voices: {lang:[[id,label],...]} }] }
+  const TTS_ENGINE_DESC = {
+    'edge-tts': 'Microsoft Edge TTS · miễn phí · đa ngôn ngữ',
+    'fpt-ai':   'FPT AI · giọng Việt tự nhiên (cần API key)',
+    'minimax':  'MiniMax · biểu cảm cao · trả phí',
+    'gtts':     'Google gTTS · đơn giản, dự phòng',
+    'openai':   'OpenAI TTS · đa ngôn ngữ',
+  };
+
+  // Step-by-step wizard rendered inside the bot bubble. Asks ONE thing
+  // at a time so the panel never overflows: engine → language → voice
+  // → script → result. User can click "↩ Quay lại" to revise an earlier
+  // pick. State lives on the closure so multiple wizards can coexist.
+  // opts: { prefillSettings?: { engine, lang, voice, defaultModel, backend } }
+  function _renderTtsWizard(holder, defaultScript, opts){
+    const bub = holder.bub;
+    bub.classList.remove('err', 'warn');
+    const pre = (opts && opts.prefillSettings) || {};
+    const ctx = {
+      engine: pre.engine || '',
+      lang:   pre.lang   || '',
+      voice:  pre.voice  || '',
+      script: (defaultScript || '').trim(),
+      engines: null,
+    };
+
+    const goStep = (n) => renderStep(n);
+
+    function makeChipList(items, onPick){
+      const wrap = document.createElement('div');
+      wrap.className = 'cw-tts-chips';
+      for (const it of items){
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cw-tts-chip';
+        b.innerHTML = '<b>' + _esc(it.label) + '</b>'
+          + (it.desc ? '<span>' + _esc(it.desc) + '</span>' : '');
+        b.addEventListener('click', () => onPick(it.id));
+        wrap.appendChild(b);
+      }
+      return wrap;
+    }
+
+    function makeBack(prevStep){
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'cw-tts-back';
+      back.textContent = '↩ Quay lại';
+      back.addEventListener('click', () => goStep(prevStep));
+      return back;
+    }
+
+    function makeHeader(title){
+      const h = document.createElement('div');
+      h.className = 'cw-tts-step-title';
+      h.innerHTML = title;
+      return h;
+    }
+
+    function _voicesFor(engineId, langId){
+      const e = (ctx.engines || []).find(x => x.id === engineId);
+      if (!e || !e.voices) return [];
+      const arr = e.voices[langId] || [];
+      return arr.map(v => Array.isArray(v)
+        ? { id: v[0], label: v[1] }
+        : { id: v.id || v.value, label: v.label });
+    }
+
+    function _langsFor(engineId){
+      const e = (ctx.engines || []).find(x => x.id === engineId);
+      if (!e || !e.voices) return [];
+      return Object.keys(e.voices)
+        .filter(k => Array.isArray(e.voices[k]) && e.voices[k].length)
+        .map(k => ({
+          id: k,
+          label: TTS_LANG_LABELS[k] || k,
+          desc: e.voices[k].length + ' giọng',
+        }));
+    }
+
+    async function renderStep(n){
+      bub.replaceChildren();
+      const wizard = document.createElement('div');
+      wizard.className = 'cw-tts-wizard';
+      bub.appendChild(wizard);
+
+      // Lazy-load engines on first step if not loaded yet.
+      if (!ctx.engines){
+        wizard.appendChild(_muted('⏳ Đang tải danh sách giọng...'));
+        ctx.engines = await loadTtsEngines();
+        wizard.replaceChildren();
+      }
+      // Fallback minimal catalog if backend is unreachable.
+      if (!ctx.engines || !ctx.engines.length){
+        ctx.engines = [{
+          id: 'edge-tts', label: 'Edge TTS',
+          voices: { vi: [['vi-VN-HoaiMyNeural', 'Hoài My (nữ)']] },
+        }];
+      }
+
+      // If the wizard was opened with prefilled settings (e.g. from the
+      // "⚙️ Đổi giọng mặc định" button) and we land on step 1, fast-forward
+      // to step 4 — but only if all picks are still valid in the loaded
+      // catalog. Otherwise gracefully fall back to the relevant step.
+      if (n === 1 && ctx.engine && ctx.voice){
+        const eng = ctx.engines.find(e => e.id === ctx.engine);
+        if (eng){
+          const langs = _langsFor(ctx.engine).map(l => l.id);
+          if (!ctx.lang || !langs.includes(ctx.lang)){
+            ctx.lang = langs[0] || '';
+          }
+          const voices = _voicesFor(ctx.engine, ctx.lang).map(v => v.id);
+          if (ctx.lang && voices.length){
+            if (!voices.includes(ctx.voice)) ctx.voice = voices[0];
+            return goStep(4);
+          }
+        }
+        // Engine no longer available — clear the stale picks and start over.
+        ctx.engine = ''; ctx.lang = ''; ctx.voice = '';
+      }
+
+      // Step 1 — pick engine
+      if (n === 1){
+        wizard.appendChild(makeHeader(
+          '🔊 <b>Tạo giọng nói</b><br>'
+          + '<span>Bước 1/4 · Chọn <b>engine</b> (nhà cung cấp):</span>'
+        ));
+        const items = ctx.engines.map(e => ({
+          id: e.id,
+          label: e.label || e.id,
+          desc: e.desc || TTS_ENGINE_DESC[e.id] || '',
+        }));
+        wizard.appendChild(makeChipList(items, (id) => {
+          ctx.engine = id;
+          ctx.lang = ''; ctx.voice = '';
+          goStep(2);
+        }));
+        if (holder.tag) holder.tag.replaceChildren(_tagText('🔊 đang chọn engine...'));
+      }
+
+      // Step 2 — pick language (filtered by engine)
+      else if (n === 2){
+        const langs = _langsFor(ctx.engine);
+        wizard.appendChild(makeHeader('Bước 2/4 · Chọn <b>ngôn ngữ</b>:'));
+
+        if (!langs.length){
+          wizard.appendChild(_warn('⚠ Engine này chưa có giọng nào. Hãy chọn engine khác.'));
+          wizard.appendChild(makeBack(1));
+          return;
+        }
+        // Auto-skip if engine supports only one language.
+        if (langs.length === 1){
+          ctx.lang = langs[0].id;
+          return goStep(3);
+        }
+        wizard.appendChild(makeChipList(langs, (id) => {
+          ctx.lang = id; ctx.voice = '';
+          goStep(3);
+        }));
+        wizard.appendChild(makeBack(1));
+        if (holder.tag) holder.tag.replaceChildren(_tagText('🔊 ' + ctx.engine));
+      }
+
+      // Step 3 — pick voice (filtered by engine + lang)
+      else if (n === 3){
+        const voices = _voicesFor(ctx.engine, ctx.lang);
+        const langTxt = TTS_LANG_LABELS[ctx.lang] || ctx.lang;
+        wizard.appendChild(makeHeader(
+          'Bước 3/4 · Chọn <b>giọng đọc</b>:'
+          + '<div class="cw-tts-summary">' + ctx.engine + ' · ' + _esc(langTxt) + '</div>'
+        ));
+
+        if (!voices.length){
+          wizard.appendChild(_warn('⚠ Không có giọng cho cặp này. Quay lại chọn lại.'));
+          wizard.appendChild(makeBack(2));
+          return;
+        }
+        wizard.appendChild(makeChipList(
+          voices.map(v => ({ id: v.id, label: v.label, desc: v.id })),
+          (id) => { ctx.voice = id; goStep(4); }
+        ));
+        wizard.appendChild(makeBack(2));
+        if (holder.tag) holder.tag.replaceChildren(_tagText(
+          '🔊 ' + ctx.engine + ' · ' + ctx.lang
+        ));
+      }
+
+      // Step 4 — enter script + run
+      else if (n === 4){
+        const voiceLabel = (_voicesFor(ctx.engine, ctx.lang)
+          .find(v => v.id === ctx.voice)?.label) || ctx.voice;
+        wizard.appendChild(makeHeader(
+          'Bước 4/4 · Nhập <b>nội dung cần đọc</b>:'
+          + '<div class="cw-tts-summary">'
+          + ctx.engine + ' · ' + ctx.lang
+          + ' · <b>' + _esc(voiceLabel) + '</b>'
+          + '</div>'
+        ));
+        const ta = document.createElement('textarea');
+        ta.className = 'cw-tts-text';
+        ta.placeholder = 'Ví dụ: Xin chào các bạn, hôm nay mình sẽ chia sẻ...';
+        ta.value = ctx.script || '';
+        ta.addEventListener('input', () => { ctx.script = ta.value; });
+        wizard.appendChild(ta);
+
+        const btns = document.createElement('div');
+        btns.className = 'cw-tts-btns';
+        const back = document.createElement('button');
+        back.type = 'button'; back.className = 'ghost';
+        back.textContent = '↩ Quay lại';
+        back.addEventListener('click', () => goStep(3));
+        const go = document.createElement('button');
+        go.type = 'button'; go.className = 'primary';
+        go.textContent = '🔊 Tạo MP3';
+        go.addEventListener('click', () => runTts(wizard, go, back, ta));
+        btns.appendChild(back); btns.appendChild(go);
+        wizard.appendChild(btns);
+
+        const out = document.createElement('div');
+        out.className = 'cw-tts-result';
+        wizard.appendChild(out);
+
+        setTimeout(() => { try { ta.focus(); } catch(_){} }, 50);
+        if (holder.tag) holder.tag.replaceChildren(_tagText(
+          '🔊 ' + ctx.engine + ' · ' + ctx.voice
+        ));
+      }
+
+      try { bub.scrollIntoView({ block: 'end', behavior: 'smooth' }); } catch(_){}
+    }
+
+    async function runTts(wizard, goBtn, backBtn, ta){
+      const text = (ta.value || '').trim();
+      const out = wizard.querySelector('.cw-tts-result');
+      if (!text){
+        out.replaceChildren(_warn('⚠ Vui lòng nhập nội dung cần đọc.'));
+        try { ta.focus(); } catch(_){}
+        return;
+      }
+      goBtn.disabled = true; backBtn.disabled = true;
+      goBtn.textContent = '⏳ Đang tạo...';
+      out.replaceChildren(_muted('🎙 Đang tạo MP3 (' + text.length + ' ký tự)...'));
+
+      // Look up the engine descriptor so we know which backend to call.
+      const engineObj = (ctx.engines || []).find(e => e.id === ctx.engine) || {};
+      const isNineRouter = engineObj.backend === '9router';
+
+      let resp, ctype = '';
+      try {
+        if (isNineRouter){
+          // Route via 9Router proxy: /api/chatbot/tts → /v1/audio/speech.
+          // Model id comes from the live /v1/models/tts list, picked when
+          // we built the engine. Voice is the per-provider id (OpenAI
+          // friendly name or ElevenLabs voice_id, etc).
+          const payload = {
+            input: text,
+            model: engineObj.defaultModel || '',
+            voice: ctx.voice,
+            format: 'mp3',
+          };
+          // Gemini uses a language hint; harmless for other providers.
+          if (ctx.lang && ctx.lang !== 'multi') payload.language = ctx.lang;
+          resp = await fetch('/api/chatbot/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          // Local engine path: /api/tts_to_mp3 (edge-tts, fpt-ai, gtts...).
+          // It already handles long text by chunking + ffmpeg concat.
+          const payload = {
+            text,
+            tts_engine: ctx.engine,
+            tts_voice:  ctx.voice,
+            tts_pitch:  '+0Hz',
+            tts_rate:   '+0%',
+            tts_emotion:'default',
+          };
+          resp = await fetch('/api/tts_to_mp3', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        }
+        ctype = resp.headers.get('Content-Type') || '';
+        if (!resp.ok || ctype.includes('application/json')){
+          let msg = 'HTTP ' + resp.status;
+          try {
+            const j = await resp.json();
+            msg = j?.error || j?.message || msg;
+            if (typeof msg !== 'string') msg = JSON.stringify(msg);
+          } catch(_){}
+          throw new Error(msg);
+        }
+        const blob = await resp.blob();
+
+        // Persist the picks so the user doesn't have to repeat the wizard
+        // next time they say "đọc giúp tôi". Voice label is included for
+        // nicer summaries on subsequent direct runs.
+        const voiceLabel = (_voicesFor(ctx.engine, ctx.lang)
+          .find(v => v.id === ctx.voice)?.label) || ctx.voice;
+        const savedSettings = {
+          engine: ctx.engine,
+          lang:   ctx.lang,
+          voice:  ctx.voice,
+          voiceLabel,
+          backend: engineObj.backend || 'local',
+          defaultModel: engineObj.defaultModel || '',
+        };
+        _saveTtsSettings(savedSettings);
+
+        _renderTtsResult({
+          holder, blob, text, settings: savedSettings, voiceLabel,
+          onAgain: () => _renderTtsWizard(holder, '', { prefillSettings: savedSettings }),
+          onChange: () => _renderTtsWizard(holder, text, { prefillSettings: savedSettings }),
+        });
+      } catch (err) {
+        goBtn.disabled = false; backBtn.disabled = false;
+        goBtn.textContent = '🔊 Thử lại';
+        out.replaceChildren(_warn('❌ ' + (err.message || err)));
+      }
+    }
+
+    // Helpers (scoped).
+    function _tagText(t){
+      const s = document.createElement('span');
+      s.style.opacity = .7; s.textContent = t;
+      return s;
+    }
+    function _muted(html){
+      const d = document.createElement('div');
+      d.className = 'cw-tts-muted'; d.innerHTML = html;
+      return d;
+    }
+    function _warn(text){
+      const d = document.createElement('div');
+      d.className = 'cw-tts-warn'; d.textContent = text;
+      return d;
+    }
+    function _esc(s){
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Kick off step 1.
+    goStep(1);
+  }
+
+  // Smart fallback used when the user clearly asked for TTS + script,
+  // but hasn't configured a default voice yet. We pick a sensible Vi
+  // voice and silently save it so subsequent commands run instantly.
+  // Tweak this if you'd rather default to English for non-Vi installs.
+  const TTS_SMART_DEFAULT = {
+    engine: 'edge-tts',
+    lang: 'vi',
+    voice: 'vi-VN-HoaiMyNeural',
+    voiceLabel: 'Hoài My (nữ, miền Bắc)',
+    backend: 'local',
+    defaultModel: '',
+  };
+
+  // Routing brain. Decides between three flows depending on what the
+  // user said and whether they've already configured a default voice:
+  //
+  //   1. User says "đổi giọng / cài đặt giọng"
+  //        → open the wizard with prefilled settings to revise the pick.
+  //   2. User says "đọc <text>" / "đọc nó" + has a script we can resolve
+  //        → run TTS directly (no wizard). If no settings exist yet,
+  //          silently fall back to TTS_SMART_DEFAULT and save it.
+  //   3. Otherwise (no script, first run, or just "tạo giọng nói")
+  //        → wizard, with prefilled defaults if available.
+  function handleTtsRequest(text, holder){
+    const settings = _loadTtsSettings();
+    const isChange = TTS_CHANGE_TRIGGERS.some(rx => rx.test(text));
+    if (isChange){
+      _renderTtsWizard(holder, '', { prefillSettings: settings || {} });
+      return Promise.resolve({
+        ok: true,
+        content: '[TTS wizard mở để đổi giọng]',
+      });
+    }
+
+    // Resolve the script:
+    //   a) inline (after ":" / "—" / quotes / "đọc cho tôi câu này ...")
+    //   b) anaphora ("đọc nó", "đọc đoạn này") → last assistant message
+    let script = _extractTtsScript(text);
+    let scriptSource = script ? 'inline' : '';
+    if (!script && TTS_ANAPHORA.test(text)){
+      script = _lastAssistantText();
+      if (script) scriptSource = 'history';
+    }
+
+    if (script){
+      // Path 2: read straight away. Use saved settings, or fall back to
+      // a smart default that we save silently for next time.
+      let useSettings = settings;
+      let firstTime = false;
+      if (!useSettings){
+        useSettings = { ...TTS_SMART_DEFAULT };
+        _saveTtsSettings(useSettings);
+        firstTime = true;
+      }
+      // Render a brief intro before the audio so the user understands
+      // *what* is being read and can change voice via the ⚙️ icon.
+      try {
+        holder.bub.replaceChildren();
+        const intro = _ttsMuted(
+          (firstTime ? 'ℹ️ Lần đầu — dùng tạm <b>' + _ttsEsc(useSettings.voiceLabel)
+                     + '</b>. Đổi qua ⚙️ trên đầu khung chat.<br>' : '')
+          + (scriptSource === 'history'
+              ? '🎧 Đang đọc đoạn assistant vừa trả lời...'
+              : '🎧 Đang đọc đoạn bạn vừa gửi...')
+        );
+        holder.bub.appendChild(intro);
+      } catch(_){}
+      _runTtsDirect(holder, script, useSettings);
+      return Promise.resolve({
+        ok: true,
+        content: '[Đã đọc bằng ' + useSettings.engine + ' · ' + useSettings.voice + ']',
+      });
+    }
+
+    // Path 3: open the wizard to gather missing info.
+    _renderTtsWizard(holder, script, { prefillSettings: settings || {} });
+    return Promise.resolve({
+      ok: true,
+      content: '[TTS wizard đã mở]',
+    });
+  }
+
   async function send(){
     if (state.sending) return;
     const inp = $('cw-input');
@@ -1284,7 +2483,22 @@
 
     const model = $('cw-model')?.value || '';
     const stream = !!$('cw-stream')?.checked;
-    const payload = { messages: state.history.map(({ role, content }) => ({ role, content })) };
+    // Prepend a small system hint so the LLM stops apologising about not
+    // being able to play audio. The widget itself can render TTS via
+    // /api/chatbot/tts and /api/tts_to_mp3, so we inform the model that
+    // such a tool exists at the user's fingertips.
+    const SYSTEM_HINT = (
+      'Bạn là trợ lý trong ứng dụng làm video. Ứng dụng có sẵn tính năng '
+      + 'Text-to-Speech (TTS) trong khung chat: người dùng chỉ cần gõ '
+      + '"đọc giúp tôi", "đọc nó", "tạo giọng nói" hoặc bấm icon ⚙️ '
+      + 'trên header để đổi giọng mặc định. Nếu người dùng yêu cầu phát '
+      + 'âm thanh, ĐỪNG nói "không thể tạo audio" — thay vào đó hãy hướng '
+      + 'dẫn ngắn gọn họ gõ "đọc giúp tôi" để widget tự đọc, hoặc trả lời '
+      + 'nội dung họ cần và đề xuất họ gõ "đọc nó giúp tôi" sau đó.'
+    );
+    const sysMsg = { role: 'system', content: SYSTEM_HINT };
+    const turns = state.history.map(({ role, content }) => ({ role, content }));
+    const payload = { messages: [sysMsg, ...turns] };
     if (model) payload.model = model;
 
     const holder = appendTyping();
@@ -1293,8 +2507,17 @@
     // attached — those are vision inputs, not image-gen).
     const hasImageAttachment = (displayAtts || []).some(a => a.kind === 'image');
     const wantsImage = !hasImageAttachment && IMAGE_TRIGGERS.some(rx => rx.test(text));
+    // TTS shortcut: when user asks for voiceover/MP3/giọng nói. We render
+    // an interactive form (model/voice/format + script) inside the bot
+    // bubble instead of relaying to the LLM (which would just refuse).
+    const hasMediaAttachment = (displayAtts || []).some(a => a.kind !== 'image');
+    const wantsTts = !hasImageAttachment && !hasMediaAttachment
+                  && (TTS_TRIGGERS.some(rx => rx.test(text))
+                   || TTS_CHANGE_TRIGGERS.some(rx => rx.test(text)));
     let result;
-    if (wantsImage){
+    if (wantsTts){
+      result = await handleTtsRequest(text, holder);
+    } else if (wantsImage){
       result = await handleImageGen(text, holder);
     } else if (stream){
       result = await sendStream(payload, holder);
@@ -2402,6 +3625,7 @@
     $('cw-min').addEventListener('click', () => $('cw-panel').classList.toggle('minimized'));
     $('cw-new').addEventListener('click', () => newSession());
     $('cw-history').addEventListener('click', toggleDrawer);
+    $('cw-tts-cfg').addEventListener('click', openTtsSettingsModal);
     $('cw-drawer-new').addEventListener('click', () => { newSession(); closeDrawer(); });
     $('cw-send').addEventListener('click', send);
     $('cw-stop').addEventListener('click', stop);

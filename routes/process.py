@@ -18,6 +18,90 @@ _proc_pause_event.set()  # not paused by default
 _proc_review_event = _threading.Event()
 _proc_review_event.set()  # not waiting for review by default
 
+# Thumbnail config được set bởi user khi chọn từ modal sau review ASS.
+# Pipeline sẽ đọc dict này thay vì giá trị ban đầu trong request body.
+_proc_thumb_override: dict = {}
+_proc_thumb_lock = _threading.Lock()
+
+# State cho retry thumbnail khi AI fail.
+# Pipeline emit thumb_failed → đợi user resolve qua /api/proc_retry_thumb.
+_proc_thumb_retry_event = _threading.Event()
+_proc_thumb_retry_event.set()  # not waiting by default
+_proc_thumb_retry_action: dict = {}  # {action: 'retry'|'upload'|'skip', path?: str}
+_proc_thumb_retry_lock = _threading.Lock()
+
+
+@bp.route("/api/proc_retry_thumb", methods=["POST"])
+def proc_retry_thumb():
+    """User chọn cách xử lý khi AI thumbnail fail.
+
+    Body:
+      action: 'retry' | 'upload' | 'skip'
+      path:   (chỉ với action='upload') đường dẫn server của ảnh user upload
+    """
+    data = request.json or {}
+    action = str(data.get("action") or "").strip().lower()
+    if action not in ("retry", "upload", "skip"):
+        return jsonify({"ok": False, "error": "Invalid action"}), 400
+    payload = {"action": action}
+    if action == "upload":
+        path_str = str(data.get("path") or "").strip()
+        if not path_str:
+            return jsonify({"ok": False, "error": "Missing path for upload action"}), 400
+        payload["path"] = path_str
+    with _proc_thumb_retry_lock:
+        _proc_thumb_retry_action.clear()
+        _proc_thumb_retry_action.update(payload)
+    _proc_thumb_retry_event.set()
+    return jsonify({"ok": True})
+
+
+def wait_thumb_retry_action(timeout: float = 600.0) -> dict:
+    """Pipeline gọi để đợi user resolve thumbnail failure.
+
+    Trả về {'action': 'retry'|'upload'|'skip', 'path'?: str}.
+    Nếu timeout → trả {'action': 'skip'}.
+    """
+    _proc_thumb_retry_event.clear()
+    got = _proc_thumb_retry_event.wait(timeout=timeout)
+    _proc_thumb_retry_event.set()
+    if not got:
+        return {"action": "skip"}
+    with _proc_thumb_retry_lock:
+        cfg = dict(_proc_thumb_retry_action)
+        _proc_thumb_retry_action.clear()
+    return cfg or {"action": "skip"}
+
+
+@bp.route("/api/proc_set_thumb", methods=["POST"])
+def proc_set_thumb():
+    """Set thumbnail config from frontend modal (sau khi review ASS xong).
+
+    Pipeline đọc giá trị này để override config thumbnail trước khi tạo.
+    Reset sau mỗi lần đọc để tránh leak giữa các video trong batch.
+    """
+    data = request.json or {}
+    cfg = {
+        "thumb_enabled": bool(data.get("thumb_enabled")),
+        "thumb_mode": str(data.get("thumb_mode") or "none").lower(),
+        "thumb_path": str(data.get("thumb_path") or "").strip(),
+        "thumb_title": str(data.get("thumb_title") or "").strip(),
+        "thumb_duration": float(data.get("thumb_duration") or 2.0),
+        "thumb_timestamp": float(data.get("thumb_timestamp") or 5.0),
+    }
+    with _proc_thumb_lock:
+        _proc_thumb_override.clear()
+        _proc_thumb_override.update(cfg)
+    return jsonify({"ok": True})
+
+
+def get_proc_thumb_override() -> dict:
+    """Pop thumbnail config that user picked. Returns {} if not set."""
+    with _proc_thumb_lock:
+        cfg = dict(_proc_thumb_override)
+        _proc_thumb_override.clear()
+    return cfg
+
 
 @bp.route("/api/proc_resume", methods=["POST"])
 def proc_resume():
@@ -72,7 +156,8 @@ def proc_save_ass():
 
 @bp.route("/api/video_frame", methods=["POST"])
 def video_frame():
-    """Extract a frame from a video at a given timestamp and return as base64 JPEG."""
+    """Extract a frame from a video at a given timestamp and return as base64 JPEG.
+    Handles Unicode filenames by copying to temp dir with safe name."""
     import base64
     import subprocess
     import shutil
@@ -96,27 +181,33 @@ def video_frame():
         return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
 
     try:
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            tmp_path = tmp.name
+        with tempfile.TemporaryDirectory(prefix="vframe_") as tmpdir:
+            # Copy video to temp with safe ASCII name to avoid Unicode path issues
+            tmp_video = Path(tmpdir) / f"input{vp.suffix}"
+            shutil.copy2(str(vp), str(tmp_video))
 
-        result = subprocess.run([
-            ffmpeg, "-ss", str(timestamp),
-            "-i", str(vp),
-            "-vframes", "1",
-            "-q:v", "3",
-            "-vf", "scale=640:-1",
-            tmp_path, "-y", "-loglevel", "error"
-        ], capture_output=True, timeout=15)
+            tmp_jpg = Path(tmpdir) / "frame.jpg"
 
-        if not Path(tmp_path).exists() or Path(tmp_path).stat().st_size == 0:
-            return jsonify({"ok": False, "error": "Không thể extract frame"}), 500
+            result = subprocess.run([
+                ffmpeg, "-ss", str(timestamp),
+                "-i", str(tmp_video),
+                "-vframes", "1",
+                "-q:v", "2",
+                "-vf", "scale=720:-1",
+                str(tmp_jpg), "-y", "-loglevel", "error"
+            ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
 
-        with open(tmp_path, "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode()
+            if not tmp_jpg.exists() or tmp_jpg.stat().st_size == 0:
+                err_msg = (result.stderr or "").strip()[:200] if result else ""
+                return jsonify({"ok": False, "error": f"Không thể extract frame. {err_msg}"}), 500
 
-        Path(tmp_path).unlink(missing_ok=True)
+            with open(tmp_jpg, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+
         return jsonify({"ok": True, "image": f"data:image/jpeg;base64,{img_b64}"})
 
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "Timeout khi extract frame (>30s)"}), 500
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -304,6 +395,60 @@ def upload_batch_video():
 
     upload_file.save(str(save_path))
     return jsonify({"ok": True, "path": str(save_path)})
+
+
+@bp.route("/api/upload_process_video", methods=["POST"])
+def upload_process_video():
+    """Upload a video file. Each video gets its own subfolder under
+    Downloaded/Process_video/<video_name>/ so processed outputs are grouped
+    per video. If the same video name is uploaded again, it goes into the
+    same folder (resume cache works)."""
+    from utils.validators import sanitize_filename
+
+    upload_file = request.files.get("file") if request.files else None
+    if not upload_file or not upload_file.filename:
+        return jsonify({"ok": False, "error": "No file provided"}), 400
+
+    cfg = load_cfg()
+    download_dir_str = str(cfg.get("path") or "./Downloaded").strip()
+    base_dir = Path(download_dir_str).expanduser()
+    if not base_dir.is_absolute():
+        base_dir = ROOT / base_dir
+
+    # Per-video folder: Downloaded/Process_video/<safe_stem>/
+    # Dùng cùng logic _safe_stem (slugify ASCII, max 60 chars) như pipeline
+    # để folder + tên file đồng bộ + tránh vượt MAX_PATH 260 trên Windows.
+    from core.video_processor import _safe_stem
+    original_name = Path(upload_file.filename).name
+    raw_stem = Path(original_name).stem
+    suffix = Path(original_name).suffix.lower() or ".mp4"
+    safe_stem = _safe_stem(raw_stem)
+
+    video_dir = base_dir / "Process_video" / safe_stem
+    video_dir.mkdir(parents=True, exist_ok=True)
+
+    # Tên file lưu cũng dùng safe_stem để khớp với folder và tránh tên dài
+    save_path = video_dir / f"{safe_stem}{suffix}"
+
+    # If the same file already exists in this folder, keep it (don't overwrite
+    # to preserve resume cache). User can manually delete if they want a fresh start.
+    if save_path.exists() and save_path.stat().st_size > 0:
+        return jsonify({
+            "ok": True,
+            "path": str(save_path.resolve()),
+            "name": save_path.name,
+            "dir": str(video_dir.resolve()),
+            "reused": True,
+        })
+
+    upload_file.save(str(save_path))
+    return jsonify({
+        "ok": True,
+        "path": str(save_path.resolve()),
+        "name": save_path.name,
+        "dir": str(video_dir.resolve()),
+        "reused": False,
+    })
 
 
 @bp.route("/api/read_subtitle", methods=["POST"])
@@ -508,9 +653,15 @@ def process_video():
 
                 play_url, headers = play_info
                 from utils.validators import sanitize_filename
+                from core.video_processor import _safe_stem
 
-                base_name = sanitize_filename(f"{resolved_title}_{aweme_id}")
-                save_dir = out_path
+                # Slugify title sang ASCII + giới hạn chiều dài để folder + tên file
+                # nhất quán và không vượt MAX_PATH trên Windows.
+                slug = _safe_stem(resolved_title)
+                base_name = f"{slug}_{aweme_id}"
+                # Lưu vào Downloaded/Process_video/<base_name>/<base_name>.mp4
+                # cùng cấu trúc với upload manual để pipeline xử lý nhất quán.
+                save_dir = out_path / "Process_video" / base_name
                 save_dir.mkdir(parents=True, exist_ok=True)
                 save_path = save_dir / f"{base_name}.mp4"
 
@@ -769,3 +920,446 @@ def burn_subtitle_only():
         tmp_ass.unlink(missing_ok=True)
 
     return Response(stream_with_context(generate()), mimetype="text/plain")
+
+
+@bp.route("/api/generate_thumbnail", methods=["POST"])
+def generate_thumbnail_route():
+    """Generate a thumbnail image from a video frame with title bar and content box."""
+    import base64
+    from core.video_processor import generate_thumbnail, find_ffmpeg
+
+    data = request.json or {}
+    video_path_str = str(data.get("video_path") or "").strip()
+    timestamp = float(data.get("timestamp") or 2.0)
+    title = str(data.get("title") or "Trạm giải trí").strip()
+    subtitle_text = str(data.get("subtitle_text") or "").strip()
+    width = int(data.get("width") or 1080)
+    height = int(data.get("height") or 1920)
+    corner_radius = int(data.get("corner_radius") or 40)
+
+    if not video_path_str:
+        return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
+
+    vp = Path(video_path_str).expanduser()
+    if not vp.is_absolute():
+        vp = ROOT / vp
+    if not vp.exists():
+        return jsonify({"ok": False, "error": f"Video không tồn tại: {vp}"}), 404
+
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
+
+    # Output path: cùng thư mục với video, tên _thumbnail.jpg
+    out_dir = vp.parent
+    output_path = out_dir / f"{vp.stem}_thumbnail.jpg"
+
+    ok, result = generate_thumbnail(
+        video_path=vp,
+        output_path=output_path,
+        ffmpeg=ffmpeg,
+        timestamp=timestamp,
+        title=title,
+        subtitle_text=subtitle_text,
+        width=width,
+        height=height,
+        corner_radius=corner_radius,
+    )
+
+    if ok:
+        # Trả về cả path và base64 preview
+        try:
+            with open(output_path, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode()
+            return jsonify({
+                "ok": True,
+                "output_path": str(output_path.resolve()),
+                "image": f"data:image/jpeg;base64,{img_b64}",
+            })
+        except Exception as e:
+            return jsonify({"ok": True, "output_path": str(output_path.resolve()), "error_preview": str(e)})
+
+    return jsonify({"ok": False, "error": result}), 500
+
+
+@bp.route("/api/generate_thumbnail_ai", methods=["POST"])
+def generate_thumbnail_ai():
+    """Generate thumbnail using AI (Gemini).
+    
+    Flow:
+    1. Extract frame from video (or use provided image)
+    2. Send frame to Gemini Vision to analyze content and generate a creative thumbnail prompt
+    3. Use Gemini native image generation to create an eye-catching thumbnail
+    
+    Body JSON:
+      video_path (str) — path to local video file
+      timestamp (float) — time to extract frame (default 2.0)
+      title (str) — channel/brand title to include
+      style (str) — thumbnail style hint (e.g. "youtube", "tiktok", "cinematic")
+      custom_prompt (str) — optional custom prompt override
+      aspect_ratio (str) — "9:16" (vertical) or "16:9" (horizontal)
+    """
+    import base64
+    import json as _json
+    import urllib.request
+    import urllib.error
+    import os
+
+    data = request.json or {}
+    video_path_str = str(data.get("video_path") or "").strip()
+    
+    # Fallback: Tự động tìm video .mp4 mới nhất trong thư mục Downloaded hoặc temp_uploads nếu thiếu video_path
+    if not video_path_str:
+        try:
+            mp4_files = []
+            downloaded_dir = ROOT / "Downloaded"
+            if downloaded_dir.exists():
+                for p in downloaded_dir.rglob("*.mp4"):
+                    if p.is_file():
+                        mp4_files.append((p, p.stat().st_mtime))
+            temp_uploads_dir = ROOT / "temp_uploads"
+            if temp_uploads_dir.exists():
+                for p in temp_uploads_dir.rglob("*.mp4"):
+                    if p.is_file():
+                        mp4_files.append((p, p.stat().st_mtime))
+            if mp4_files:
+                mp4_files.sort(key=lambda x: x[1], reverse=True)
+                video_path_str = str(mp4_files[0][0])
+        except Exception:
+            pass
+
+    timestamp = float(data.get("timestamp") or 2.0)
+    title = str(data.get("title") or "").strip()
+    style = str(data.get("style") or "youtube").strip()
+    custom_prompt = str(data.get("custom_prompt") or "").strip()
+    aspect_ratio = str(data.get("aspect_ratio") or "9:16").strip()
+    subtitle_text = str(data.get("subtitle_text") or "").strip()
+
+    # Get API keys (need at least 1 of: 9Router or Gemini)
+    cfg = load_cfg()
+    api_key = (
+        (cfg.get("gemini_video") or {}).get("api_key", "").strip()
+        or os.environ.get("GEMINI_API_KEY", "").strip()
+    )
+    nr_check = cfg.get("nine_router") or {}
+    has_9router = bool((nr_check.get("endpoint") or "").strip() and (nr_check.get("api_key") or "").strip())
+    if not api_key and not has_9router:
+        return jsonify({"ok": False, "error": "Chưa cấu hình 9Router (nine_router) hoặc Gemini API key (gemini_video.api_key)"}), 400
+
+    # ── Step 1: Extract frame from video ──────────────────────────────────────
+    frame_b64 = data.get("frame_b64") or None
+    if not frame_b64 and video_path_str:
+        from core.video_processor import find_ffmpeg
+        import subprocess
+        import shutil
+
+        vp = Path(video_path_str).expanduser()
+        if not vp.is_absolute():
+            vp = ROOT / vp
+        if not vp.exists():
+            return jsonify({"ok": False, "error": f"Video không tồn tại: {vp}"}), 404
+
+        ffmpeg = find_ffmpeg()
+        if not ffmpeg:
+            return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="ai_thumb_") as tmpdir:
+                tmp_video = Path(tmpdir) / f"input{vp.suffix}"
+                shutil.copy2(str(vp), str(tmp_video))
+                tmp_jpg = Path(tmpdir) / "frame.jpg"
+
+                subprocess.run([
+                    ffmpeg, "-ss", str(timestamp),
+                    "-i", str(tmp_video),
+                    "-vframes", "1", "-q:v", "2",
+                    str(tmp_jpg), "-y", "-loglevel", "error"
+                ], capture_output=True, timeout=30)
+
+                if tmp_jpg.exists() and tmp_jpg.stat().st_size > 0:
+                    frame_b64 = base64.b64encode(tmp_jpg.read_bytes()).decode()
+        except Exception:
+            pass  # Continue without frame
+
+    # ── Step 2: Build prompt ──────────────────────────────────────────────────
+    is_editing_existing_thumb = bool(data.get("is_editing_existing_thumb"))
+
+    if custom_prompt:
+        gen_prompt = custom_prompt
+    else:
+        # Use Gemini Vision to analyze frame và viết prompt — chỉ khi có Gemini key.
+        # Nếu không có (chỉ có 9Router) thì dùng prompt mặc định dựa trên title/subtitle.
+        if frame_b64 and api_key:
+            gen_prompt = _ai_thumbnail_prompt_from_frame(api_key, frame_b64, title, subtitle_text, style, aspect_ratio, is_editing_existing_thumb)
+        else:
+            content_desc = subtitle_text or title or "entertaining video content"
+            if is_editing_existing_thumb:
+                gen_prompt = (
+                    f"Modify this existing video thumbnail. "
+                    f"Make it more eye-catching, vibrant colors, high contrast. "
+                    f"Include bold text overlay: '{title}' clearly onto the existing composition. "
+                    f"Add details related to content: '{content_desc}' while maintaining the original layout."
+                )
+            else:
+                gen_prompt = (
+                    f"Create a professional {style} video thumbnail image. "
+                    f"Content: {content_desc}. "
+                    f"Style: eye-catching, vibrant colors, high contrast, professional quality. "
+                    f"Aspect ratio: {aspect_ratio}. "
+                    f"Include bold text overlay: '{title}' if applicable. "
+                    f"Make it click-worthy and engaging."
+                )
+
+    # ── Step 3: Generate thumbnail — ưu tiên 9Router, fallback Gemini ─────────
+    cfg_full = load_cfg()
+    nr_cfg = cfg_full.get("nine_router") or {}
+    nr_endpoint = (nr_cfg.get("endpoint") or "").strip().rstrip("/")
+    nr_key = (nr_cfg.get("api_key") or "").strip()
+
+    img_b64_data = None
+    used_provider = None
+
+    # Priority 1: 9Router (cx/gpt-5.5-image hoặc model user cấu hình)
+    if nr_endpoint and nr_key:
+        try:
+            model_id = (nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
+            size_map = {"9:16": "1024x1792", "16:9": "1792x1024", "1:1": "1024x1024"}
+            size_str = size_map.get(aspect_ratio, "1024x1792")
+            payload = {
+                "model": model_id,
+                "prompt": gen_prompt[:2000],
+                "n": 1,
+                "size": size_str,
+                "quality": "standard",
+                "response_format": "b64_json",
+            }
+            if frame_b64:
+                payload["images"] = [frame_b64]
+                payload["image"] = frame_b64
+            body = _json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                f"{nr_endpoint}/images/generations",
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {nr_key}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=240) as resp:
+                rdata = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
+            img_data = (rdata.get("data") or [{}])[0]
+            if img_data.get("b64_json"):
+                img_b64_data = img_data["b64_json"]
+                used_provider = f"9Router ({model_id})"
+            elif img_data.get("url"):
+                with urllib.request.urlopen(img_data["url"], timeout=180) as dl:
+                    img_b64_data = base64.b64encode(dl.read()).decode("ascii")
+                used_provider = f"9Router ({model_id})"
+        except Exception:
+            img_b64_data = None  # fall through to Gemini
+
+    # Priority 2: Gemini fallback
+    if not img_b64_data:
+        if not api_key:
+            return jsonify({"ok": False, "error": "Chưa có 9Router cũng như Gemini API key"}), 400
+        result = _ai_generate_thumbnail_image(api_key, gen_prompt, frame_b64, aspect_ratio)
+        if result.get("ok"):
+            img_b64_data = result["image_b64"]
+            used_provider = "Gemini"
+        else:
+            return jsonify({"ok": False, "error": result.get("error", "AI thumbnail generation failed")}), 500
+
+    # Save to file
+    img_data = base64.b64decode(img_b64_data)
+    if video_path_str:
+        vp = Path(video_path_str).expanduser()
+        if not vp.is_absolute():
+            vp = ROOT / vp
+        out_dir = vp.parent
+        output_path = out_dir / f"{vp.stem}_ai_thumbnail.png"
+    else:
+        out_dir = ROOT / "temp_uploads"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        output_path = out_dir / f"ai_thumbnail_{int(time.time())}.png"
+
+    output_path.write_bytes(img_data)
+
+    return jsonify({
+        "ok": True,
+        "image": f"data:image/png;base64,{img_b64_data}",
+        "output_path": str(output_path.resolve()),
+        "prompt_used": gen_prompt[:200],
+        "provider": used_provider,
+    })
+
+
+def _ai_thumbnail_prompt_from_frame(api_key: str, frame_b64: str, title: str, subtitle: str, style: str, aspect_ratio: str, is_editing_existing_thumb: bool = False) -> str:
+    """Use Gemini Vision to analyze a video frame and generate a creative thumbnail prompt."""
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    model = "gemini-2.5-flash"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+    if is_editing_existing_thumb:
+        system_instruction = f"""You are an expert thumbnail editor. 
+Analyze the provided existing thumbnail image and output a prompt for AI image generation that modifies and refines it.
+
+Rules for modification:
+- Do NOT generate a completely new composition or change the core elements.
+- Analyze the layout, colors, and key items of this existing image.
+- Write a prompt instructing the generator to add a prominent, stylish text overlay showing: '{title}'.
+- The prompt must specify to keep the existing background and elements, but enhance contrast, dramatic lighting, and add details matching the content: '{subtitle or title}'.
+- Output ONLY the prompt text to edit this image, keeping the exact style, nothing else. Keep it under 150 words."""
+    else:
+        system_instruction = f"""You are an expert thumbnail designer for {style} videos.
+Analyze the video frame and create a prompt for AI image generation that will produce an eye-catching thumbnail.
+
+Rules:
+- The thumbnail should be visually striking and click-worthy
+- Use vibrant colors, high contrast, dramatic lighting
+- Include relevant visual elements from the video content
+- Aspect ratio: {aspect_ratio}
+- If a title/brand is provided, incorporate it naturally
+- Keep the prompt concise (under 150 words)
+- Output ONLY the image generation prompt, nothing else
+
+Title/Brand: {title or 'N/A'}
+Content hint: {subtitle or 'N/A'}"""
+
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": system_instruction},
+                {"inlineData": {"mimeType": "image/jpeg", "data": frame_b64}},
+                {"text": "Generate a creative thumbnail prompt based on this video frame:"},
+            ]
+        }],
+        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 300},
+    }
+
+    try:
+        body = _json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
+
+        candidates = data.get("candidates") or []
+        if candidates:
+            parts = (candidates[0].get("content") or {}).get("parts") or []
+            for part in parts:
+                text = part.get("text", "").strip()
+                if text:
+                    return text
+    except Exception:
+        pass
+
+    # Fallback prompt
+    return (
+        f"Create a professional {style} video thumbnail. "
+        f"Eye-catching design with vibrant colors and high contrast. "
+        f"Content: {subtitle or title or 'entertaining video'}. "
+        f"Aspect ratio: {aspect_ratio}. Professional quality, click-worthy."
+    )
+
+
+def _ai_generate_thumbnail_image(api_key: str, prompt: str, reference_frame_b64: str | None, aspect_ratio: str) -> dict:
+    """Generate thumbnail image using Gemini native image generation."""
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    model = "gemini-2.5-flash-image"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+    # Build parts — include reference frame if available
+    parts = []
+    if reference_frame_b64:
+        parts.append({"inlineData": {"mimeType": "image/jpeg", "data": reference_frame_b64}})
+        parts.append({"text": f"Based on this video frame, generate a professional thumbnail image. {prompt}"})
+    else:
+        parts.append({"text": prompt})
+
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"],
+        },
+    }
+
+    try:
+        body = _json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
+    except urllib.error.HTTPError as e:
+        err_body = ""
+        try:
+            err_body = e.read().decode("utf-8", "replace")
+            err_json = _json.loads(err_body)
+            err_msg = err_json.get("error", {}).get("message", err_body[:300])
+        except Exception:
+            err_msg = err_body[:300] or f"HTTP {e.code}"
+        return {"ok": False, "error": f"Gemini API error: {err_msg}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    # Parse response — look for image in candidates
+    candidates = data.get("candidates") or []
+    for cand in candidates:
+        parts = (cand.get("content") or {}).get("parts") or []
+        for part in parts:
+            inline = part.get("inlineData") or {}
+            if inline.get("mimeType", "").startswith("image/"):
+                img_b64 = inline.get("data", "")
+                if img_b64:
+                    return {"ok": True, "image_b64": img_b64}
+
+    return {"ok": False, "error": "Gemini không trả về ảnh. Thử lại hoặc đổi prompt."}
+
+
+
+@bp.route("/api/check_gemini_api", methods=["POST"])
+def check_gemini_api():
+    """Preflight check: verify Gemini API key is valid before batch processing."""
+    import os
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    cfg = load_cfg()
+    api_key = (
+        (cfg.get("gemini_video") or {}).get("api_key", "").strip()
+        or os.environ.get("GEMINI_API_KEY", "").strip()
+    )
+    if not api_key:
+        return jsonify({"ok": False, "error": "Chưa cấu hình Gemini API key trong config.yml (gemini_video.api_key)"}), 400
+
+    # Test with a small generateContent call
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": "ping"}]}],
+        "generationConfig": {"maxOutputTokens": 5},
+    }
+    try:
+        body = _json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
+        # If we get here without exception, API is valid
+        if data.get("candidates"):
+            return jsonify({"ok": True, "model": "gemini-2.5-flash"})
+        return jsonify({"ok": False, "error": "API trả về kết quả rỗng"}), 400
+    except urllib.error.HTTPError as e:
+        err_body = ""
+        try:
+            err_body = e.read().decode("utf-8", "replace")
+            err_json = _json.loads(err_body)
+            err_msg = err_json.get("error", {}).get("message", err_body[:200])
+        except Exception:
+            err_msg = err_body[:200] or f"HTTP {e.code}"
+        return jsonify({"ok": False, "error": err_msg}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500

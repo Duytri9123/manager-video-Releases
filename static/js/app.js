@@ -186,7 +186,7 @@ function switchPage(name) {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
     movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router',
-    canva:'Canva Auto', stickman:'Stickman Studio'
+    canva:'Canva Auto', videogen:'Video AI', stickman:'Stickman Studio', ai_studio:'AI Studio'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
   if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
@@ -197,6 +197,8 @@ function switchPage(name) {
   if (name === 'proxies') { if (typeof proxyLoadList === 'function') proxyLoadList(); if (typeof routerLoadList === 'function') routerLoadList(); }
   if (name === 'chat' && typeof chatInit === 'function') chatInit();
   if (name === 'canva' && typeof canvaInit === 'function') canvaInit();
+  if (name === 'videogen' && typeof vgInit === 'function') vgInit();
+  if (name === 'stickman' && typeof stkInit === 'function') stkInit();
   if (name === 'stickman' && typeof stkInit === 'function') stkInit();
 }
 
@@ -351,6 +353,17 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     translate_provider:  _getProcessProvider('translate'),
     burn_subs:        document.getElementById('proc-burn')?.checked ?? true,
     blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
+    blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
+    blur_y_pct:       (() => {
+      const v = document.getElementById('proc-blur-y')?.value?.trim();
+      return (v !== '' && v !== undefined) ? parseFloat(v) / 100 : null;  // null = auto
+    })(),
+    blur_zone:        'bottom',  // legacy compat
+    blur_extra_zones: (window._procExtraBlurZones || []).map(z => ({
+      height_pct: (z.height || 12) / 100,
+      position_pct: (z.position || 50) / 100,
+      width_pct: (z.width || 80) / 100,
+    })),
     translate_subs:   document.getElementById('proc-translate-subs')?.checked ?? true,
     burn_vi_subs:     document.getElementById('proc-burn-vi')?.checked ?? true,
     voice_convert:    document.getElementById('proc-voice')?.checked ?? false,
@@ -405,14 +418,19 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     // CapCut settings
     capcut_enabled:   document.getElementById('proc-capcut-enabled')?.checked ?? false,
     capcut_auto_open: document.getElementById('proc-capcut-auto-open')?.checked ?? false,
+    // Aspect ratio: 'auto' = giữ nguyên, '9x16' = chuyển dọc, '16x9' = chuyển ngang
+    target_aspect: document.getElementById('proc-preview-aspect')?.value || 'auto',
     // Frame video (step 6)
     frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
     frame_title:          document.getElementById('frame-title')?.value || '',
+    frame_title_enabled:  document.getElementById('frame-title-enabled')?.checked ?? true,
     frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
     frame_title_color:    document.getElementById('frame-title-color')?.value || '#000000',
     frame_title_color_2:  document.getElementById('frame-title-color-2')?.value || '#ff0000',
     frame_title_split_color: document.getElementById('frame-title-split-color')?.checked ?? true,
     frame_blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
+    frame_blur_top_pct:    parseFloat(document.getElementById('frame-blur-top')?.value || 0),
+    frame_blur_bottom_pct: parseFloat(document.getElementById('frame-blur-bottom')?.value || 0),
     frame_blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
     frame_blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
     frame_logo_path:      (() => {
@@ -423,6 +441,12 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
+    // Thumbnail
+    thumb_enabled:        document.getElementById('thumb-enabled')?.checked ?? false,
+    thumb_mode:           (window._batchThumbMode || (window._thumbState?.mode === 'none' ? 'frame' : window._thumbState?.mode || 'frame')),
+    thumb_path:           (window._batchThumbPath || window._thumbState?.path || ''),
+    thumb_title:          document.getElementById('thumb-title')?.value || '',
+    thumb_duration:       2.0,  // seconds to show thumbnail at start
   };
 
   const doRequest = (body, isFormData) => fetch('/api/process_video', {
@@ -491,6 +515,16 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
             }
             if (d.subtitle_path) {
               window._publishLastSubtitlePath = d.subtitle_path;
+            }
+            if (d.thumbnail_path) {
+              window._publishLastThumbnailPath = d.thumbnail_path;
+              if (typeof window._displayProcThumbnail === 'function') {
+                window._displayProcThumbnail(d.thumbnail_path, d.thumbnail_image);
+              }
+            }
+            // ── Thumbnail AI failure event ──
+            if (d.thumb_failed) {
+              if (typeof _showThumbFailCard === 'function') _showThumbFailCard();
             }
             if (d.overall !== undefined) _setProcProgress(d.overall, d.overall_lbl || '');
 
@@ -905,9 +939,93 @@ function _setTrProgress(overallPct, overallLbl, filePct, fileLbl) {
   setProgress('pb-tr-file', 'lbl-tr-file', Number(filePct) || 0, fileLbl || '--');
 }
 
-async function previewTranscribeVoice() {
+async function createMp3FromText() {
   const textInput = document.getElementById('tr-preview-text');
-  let text = textInput?.value?.trim() || '';
+  const text = textInput?.value?.trim() || '';
+  if (!text) {
+    alert('Vui lòng nhập nội dung để tạo MP3.');
+    textInput?.focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-tr-tts-mp3');
+  if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo...'; }
+  _appendTrLog('🎙 Đang tạo MP3 từ văn bản (' + text.length + ' ký tự)...', 'info');
+
+  try {
+    const res = await fetch('/api/tts_to_mp3', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        tts_engine: document.getElementById('tr-tts-engine')?.value || 'edge-tts',
+        tts_voice: document.getElementById('tr-tts-voice')?.value || 'vi-VN-HoaiMyNeural',
+        tts_pitch: _sanitizeVoiceParam(document.getElementById('tr-tts-pitch')?.value || '+0Hz'),
+        tts_rate: _sanitizeVoiceParam(document.getElementById('tr-tts-rate')?.value || '+0%'),
+        tts_emotion: document.getElementById('tr-tts-emotion')?.value || 'default',
+        fx_enabled: document.getElementById('tr-fx-enabled')?.checked || false,
+        fx_pitch: parseFloat(document.getElementById('tr-fx-pitch')?.value || '1.5'),
+        fx_speed: parseFloat(document.getElementById('tr-fx-speed')?.value || '1.08'),
+        fx_bass: parseFloat(document.getElementById('tr-fx-bass')?.value || '-2'),
+        fx_mid: parseFloat(document.getElementById('tr-fx-mid')?.value || '2'),
+        fx_treble: parseFloat(document.getElementById('tr-fx-treble')?.value || '3'),
+        fx_comp: document.getElementById('tr-fx-comp')?.value || 'none',
+        fx_reverb: parseFloat(document.getElementById('tr-fx-reverb')?.value || '0'),
+      }),
+    });
+
+    if (!res.ok) {
+      let errorText = 'Không thể tạo MP3';
+      try {
+        const errJson = await res.json();
+        if (errJson?.error) errorText = errJson.error;
+      } catch (_) {}
+      throw new Error(errorText);
+    }
+
+    const blob = await res.blob();
+
+    // Tên file: dùng input nếu có, không thì auto theo timestamp
+    let filename = (document.getElementById('tr-tts-filename')?.value || '').trim();
+    if (!filename) {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      filename = 'tts_' + ts + '.mp3';
+    } else if (!/\.mp3$/i.test(filename)) {
+      filename += '.mp3';
+    }
+
+    // Trigger download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    // Cho phép nghe luôn trong player
+    const audio = document.getElementById('tr-preview-audio');
+    if (audio) {
+      if (window._trPreviewObjectUrl) {
+        URL.revokeObjectURL(window._trPreviewObjectUrl);
+      }
+      window._trPreviewObjectUrl = URL.createObjectURL(blob);
+      audio.src = window._trPreviewObjectUrl;
+      audio.style.display = 'block';
+    }
+
+    _appendTrLog('✅ Đã tạo MP3: ' + filename, 'success');
+    toast('Đã tải MP3: ' + filename, 'success');
+  } catch (err) {
+    _appendTrLog('❌ Lỗi: ' + err.message, 'error');
+    alert('Lỗi tạo MP3: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Tạo & tải MP3'; }
+  }
+}
+
+async function previewTranscribeVoice() {
   if (!text && window._trAssPreviewText) {
     text = window._trAssPreviewText;
     if (textInput) textInput.value = text;
@@ -1089,14 +1207,37 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   _initUserPageListeners();
 
-  document.getElementById('proc-file')?.addEventListener('change', function() {
+  document.getElementById('proc-file')?.addEventListener('change', async function() {
     const file = this.files && this.files[0] ? this.files[0] : null;
     window._procSelectedFile = file;
+    window._procUploadedPath = null;
     const pathBox = document.getElementById('proc-video');
     const label = document.getElementById('proc-file-name');
     if (pathBox) pathBox.value = file ? file.name : '';
     if (label) label.textContent = file ? file.name : '--';
     this.value = '';
+
+    // Upload file lên server (vào thư mục Downloaded) để xử lý frame, lấy path tuyệt đối
+    if (file) {
+      if (label) label.textContent = `${file.name} (đang upload...)`;
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const r = await fetch('/api/upload_process_video', { method: 'POST', body: fd });
+        const data = await r.json();
+        if (data.ok && data.path) {
+          window._procUploadedPath = data.path;
+          if (pathBox) pathBox.value = data.path;
+          if (label) label.textContent = `${file.name} ✓ → ${data.dir}`;
+        } else {
+          if (label) label.textContent = `${file.name} ⚠ upload thất bại`;
+          if (typeof toast === 'function') toast('Upload file thất bại: ' + (data.error || ''), 'error');
+        }
+      } catch (e) {
+        if (label) label.textContent = `${file.name} ⚠ ${e.message}`;
+        if (typeof toast === 'function') toast('Lỗi upload: ' + e.message, 'error');
+      }
+    }
   });
 
   document.getElementById('proc-tts-engine')?.addEventListener('change', function() {

@@ -1131,6 +1131,9 @@
       fpt_speed: parseInt(document.getElementById('sw-tts-fpt-speed').value || '0', 10),
       min_panel_sec: parseFloat(document.getElementById('sw-min-panel').value || '2.5'),
       inter_panel_pause_sec: parseFloat(document.getElementById('sw-pause').value || '0.25'),
+      // Smooth cross-dissolve between panels (Step 3 — "khung hình móc nối")
+      // Read from optional UI input #sw-crossfade; default 0.4s for AI stories.
+      crossfade_sec: parseFloat(document.getElementById('sw-crossfade')?.value || '0.4'),
       zoom: document.getElementById('sw-zoom').checked,
       bgm_url: document.getElementById('sw-bgm').value.trim(),
       bgm_volume: parseFloat(document.getElementById('sw-bgm-vol').value || '0.10'),
@@ -1308,7 +1311,13 @@
       const tokens = usage.total_tokens || (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
       if (status) status.textContent = `✓ Text xong · model: ${model}${tokens ? ' · ' + tokens + ' tokens' : ''}`;
       _log(`✓ Đã sinh ${(r.text || '').length} ký tự (model: ${model}, ${tokens} tokens)`, 'success');
-      _toast('Đã tạo nội dung truyện! Bạn có thể chỉnh sửa hoặc tiếp tục sinh ảnh.', 'success');
+
+      // Show a clear "next step" callout so the user isn't lost wondering what to
+      // do with the freshly-written story. The callout offers two paths:
+      //   1. continue with AI image generation (full pipeline)
+      //   2. fall back to manual panels (paste own images)
+      _showAiNextStepHint(r.text || '');
+      _toast('Đã tạo nội dung truyện! Bấm "Sinh ảnh AI" để tạo khung hình tự động.', 'success');
 
       // Auto-save text-only session
       _autoSaveSession({
@@ -1331,6 +1340,79 @@
   function _parseScenes(text) {
     // Split text into paragraphs (separated by blank lines)
     return (text || '').split(/\n\s*\n/).map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  // Render a sticky next-step banner under the story textarea so users who
+  // just generated text-only know what to do next. Idempotent — calling it
+  // twice replaces the previous banner instead of duplicating.
+  function _showAiNextStepHint(storyText) {
+    const oldBanner = document.getElementById('sw-ai-next-step-banner');
+    if (oldBanner) oldBanner.remove();
+
+    const sceneCount = _parseScenes(storyText).length;
+    const textArea = document.getElementById('sw-text');
+    if (!textArea) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'sw-ai-next-step-banner';
+    banner.className = 'alert-info';
+    banner.style.cssText = 'margin-top:10px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between';
+
+    const txt = document.createElement('div');
+    txt.style.cssText = 'flex:1;min-width:240px;font-size:13px;line-height:1.5';
+    txt.innerHTML =
+      `<b>✓ Đã tạo truyện ${sceneCount} cảnh.</b> ` +
+      `Bước tiếp theo: bấm <b>🎨 Sinh ảnh AI</b> để tạo ảnh cho từng cảnh, ` +
+      `hoặc <b>📤 Gửi sang Panels</b> nếu bạn muốn dán ảnh thủ công.`;
+    banner.appendChild(txt);
+
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+
+    const btnImages = document.createElement('button');
+    btnImages.className = 'btn btn-primary btn-sm';
+    btnImages.type = 'button';
+    btnImages.textContent = '🎨 Sinh ảnh AI cho ' + sceneCount + ' cảnh';
+    btnImages.onclick = () => {
+      banner.remove();
+      // Re-run the full pipeline; it will reuse the prompt/characters from the
+      // form and the text already in #sw-text. Pipeline detects existing text
+      // and skips re-writing it… but currently it always re-writes. So we
+      // route through aiFullPipeline which is the canonical "everything" path.
+      aiFullPipeline();
+    };
+    actions.appendChild(btnImages);
+
+    const btnPanels = document.createElement('button');
+    btnPanels.className = 'btn btn-secondary btn-sm';
+    btnPanels.type = 'button';
+    btnPanels.textContent = '📤 Gửi sang Panels (ảnh thủ công)';
+    btnPanels.onclick = () => {
+      banner.remove();
+      // Build empty-image panels from scenes so user can paste images later
+      const scenes = _parseScenes(textArea.value || '');
+      if (!scenes.length) return _toast('Truyện trống.', 'warning');
+      const panels = scenes.map(t => ({ image_url: '', text: t, end_image_url: '' }));
+      setPanels(panels);
+      _toast(`Đã đẩy ${panels.length} cảnh sang Panels. Cuộn xuống để dán/upload ảnh.`, 'info');
+      document.getElementById('sw-panels-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    actions.appendChild(btnPanels);
+
+    const btnDismiss = document.createElement('button');
+    btnDismiss.className = 'btn-icon';
+    btnDismiss.type = 'button';
+    btnDismiss.title = 'Đóng gợi ý';
+    btnDismiss.style.cssText = 'font-size:16px;line-height:1';
+    btnDismiss.textContent = '✕';
+    btnDismiss.onclick = () => banner.remove();
+    actions.appendChild(btnDismiss);
+
+    banner.appendChild(actions);
+
+    // Insert right after the textarea's parent .field
+    const insertAfter = textArea.closest('.field') || textArea;
+    insertAfter.parentNode.insertBefore(banner, insertAfter.nextSibling);
   }
 
   async function aiFullPipeline() {
@@ -1362,6 +1444,8 @@
     _aiScenes = [];
     _aiCancelled = false;
     _aiSetBusy(true);
+    // Each run gets its own session folder so previous runs don't pollute it.
+    window._aiSessionId = '';
 
     _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'banner');
     _log('🚀 Bắt đầu pipeline tạo truyện + sinh ảnh', 'banner');
@@ -1390,7 +1474,7 @@
       const t1 = Date.now();
       const textRes = await API.post('/api/story/ai_generate', {
         prompt, genre, num_panels: numPanels, language, characters, location,
-      });
+      }, { silent: true });
       if (!textRes.ok) throw new Error(textRes.error || 'Text generation failed');
       const storyText = textRes.text || '';
       document.getElementById('sw-text').value = storyText;
@@ -1409,7 +1493,7 @@
       const t2 = Date.now();
       const promptRes = await API.post('/api/story/ai_image_prompts', {
         scenes, characters, art_style: artStyle, location, img_note: imgNote, img_ratio: imgRatio, genre,
-      });
+      }, { silent: true });
       const imgPrompts = (promptRes.ok && promptRes.prompts) ? promptRes.prompts : scenes.map(s => `${artStyle || 'cinematic'}, ${s.slice(0, 100)}`);
       if (promptRes.fallback) {
         _log(`  ⚠ Dùng prompt fallback (lý do: ${promptRes.error_hint || 'LLM không trả JSON'})`, 'warning');
@@ -1427,40 +1511,186 @@
         text,
         image_prompt: imgPrompts[i] || '',
         image_url: '',
+        end_image_url: '',
       }));
       _renderAiScenes();
-      _log(`▶ Bước 3/3: Sinh ${scenes.length} ảnh qua ${imgModel} (seed=${storySeed})...`, 'info');
+
+      // ── Step 2.5 (NEW): Generate the master "anchor" image so every panel
+      // can reference it. This is the single most impactful change for visual
+      // continuity — without an anchor, each panel is generated independently
+      // and characters / lighting / palette drift between scenes.
+
+      // Allocate a fresh session id so anchor / portraits / scenes / end-frames
+      // all land in one folder under .../ai_images/<sid>/. This lets us clean
+      // up old sessions later and keeps the output directory tidy.
+      try {
+        if (!window._aiSessionId) {
+          const sidRes = await API.post('/api/story/ai_session_new', {}, { silent: true });
+          window._aiSessionId = (sidRes && sidRes.ok) ? sidRes.session_id : '';
+        }
+      } catch {
+        window._aiSessionId = '';
+      }
+
+      let anchorUrl = '';
+      try {
+        if (status) status.textContent = '⏳ Tạo ảnh anchor (master shot)...';
+        _log('▶ Bước 2.5/3: Sinh ảnh anchor (master shot) — dùng làm tham chiếu xuyên suốt câu chuyện', 'info');
+        const tA = Date.now();
+        const anchorRes = await API.post('/api/story/ai_generate_anchor', {
+          characters, location, art_style: artStyle, genre,
+          model: imgModel, quality: imgQuality, ratio: imgRatio, seed: storySeed,
+          session_id: window._aiSessionId || '',
+        }, { silent: true });
+        if (anchorRes.ok && anchorRes.image_url) {
+          anchorUrl = anchorRes.image_url;
+          _log(`  ⚓ Anchor: ${anchorUrl} · ${((Date.now() - tA) / 1000).toFixed(1)}s`, 'success');
+        } else {
+          _log(`  ⚠ Không tạo được anchor (sẽ tiếp tục không có anchor): ${anchorRes.error || ''}`, 'warning');
+        }
+      } catch (anchorErr) {
+        _log(`  ⚠ Lỗi anchor: ${anchorErr.message || anchorErr}`, 'warning');
+      }
+
+      // ── Step 2.6 (NEW): Generate one portrait per named character so the
+      // model has a clean head-on reference for each face. Skip silently when
+      // no characters are defined — anchor alone is enough in that case.
+      const portraits = {};   // {name: image_url}
+      if (characters && characters.length) {
+        if (status) status.textContent = `⏳ Tạo chân dung ${characters.length} nhân vật...`;
+        _log(`▶ Bước 2.6/3: Sinh chân dung cho ${characters.length} nhân vật`, 'info');
+        // Run portraits in parallel (independent of each other) — typically 2-4×
+        // faster than sequential without overloading 9Router.
+        const portraitJobs = characters.map(async (c) => {
+          if (!c.name) return;
+          try {
+            const tP = Date.now();
+            const r = await API.post('/api/story/ai_generate_portrait', {
+              name: c.name, description: c.description || '',
+              art_style: artStyle, model: imgModel, quality: imgQuality,
+              ratio: '1:1', seed: storySeed, anchor_url: anchorUrl,
+              session_id: window._aiSessionId || '',
+            }, { silent: true });
+            if (r.ok && r.image_url) {
+              portraits[c.name] = r.image_url;
+              _log(`  👤 ${c.name}: ${((Date.now() - tP) / 1000).toFixed(1)}s`, 'detail');
+            } else {
+              _log(`  ⚠ Bỏ qua chân dung ${c.name}: ${r.error || ''}`, 'warning');
+            }
+          } catch (pErr) {
+            _log(`  ⚠ Lỗi chân dung ${c.name}: ${pErr.message || pErr}`, 'warning');
+          }
+        });
+        await Promise.all(portraitJobs);
+      }
+
+      _log(`▶ Bước 3/3: Sinh ${scenes.length} ảnh qua ${imgModel} (seed=${storySeed}, anchor=${anchorUrl ? 'có' : 'không'}, portraits=${Object.keys(portraits).length})...`, 'info');
+
+      // Heuristic: detect which named characters appear in a scene's text so
+      // we can include only the relevant portraits (sending all 5 portraits
+      // for a 1-character scene confuses the model).
+      function _charsInScene(sceneText) {
+        const lower = (sceneText || '').toLowerCase();
+        return Object.keys(portraits).filter(name =>
+          lower.includes((name || '').toLowerCase())
+        );
+      }
+
+      // Build the per-scene generation task. Two modes:
+      //   - "chain"    (default, slower, best quality): each scene gets the
+      //                previous scene's image as a reference → maximum
+      //                continuity, but must run sequentially.
+      //   - "parallel" (fast mode): scenes only reference anchor + portraits,
+      //                so they can be generated concurrently (4 at a time).
+      //                Slightly less continuity but ~4× faster.
+      const fastMode = !!document.getElementById('sw-ai-fast-mode')?.checked;
+
+      function _buildRefs(sceneIdx, prevImageUrl) {
+        const refs = [];
+        if (anchorUrl) refs.push(anchorUrl);
+        for (const name of _charsInScene(scenes[sceneIdx])) {
+          if (refs.length >= 3) break;
+          if (portraits[name]) refs.push(portraits[name]);
+        }
+        if (prevImageUrl && refs.length < 4) refs.push(prevImageUrl);
+        return refs;
+      }
+
+      async function _genSingleScene(i, prevImageUrl) {
+        const refs = _buildRefs(i, prevImageUrl);
+        const ti = Date.now();
+        const imgRes = await API.post('/api/story/ai_generate_image', {
+          prompt: imgPrompts[i] || `${artStyle || 'cinematic film still'}, ${scenes[i].slice(0, 100)}`,
+          model: imgModel,
+          quality: imgQuality,
+          ratio: imgRatio,
+          scene_index: i + 1,
+          seed: storySeed,
+          reference_image_urls: refs,
+          session_id: window._aiSessionId || '',
+        }, { silent: true });
+        return { ok: !!(imgRes.ok && imgRes.image_url), imgRes, dt: Date.now() - ti };
+      }
 
       let okCount = 0, failCount = 0;
       const t3 = Date.now();
-      for (let i = 0; i < scenes.length; i++) {
-        if (_aiCancelled) throw new Error('CANCELLED');
-        updateProgress(`Đang sinh ảnh cảnh ${i + 1}/${scenes.length}...`);
-        if (status) status.textContent = `⏳ Sinh ảnh ${i + 1}/${scenes.length}...`;
-        const ti = Date.now();
-        try {
-          const imgRes = await API.post('/api/story/ai_generate_image', {
-            prompt: imgPrompts[i] || `${artStyle || 'cinematic film still'}, ${scenes[i].slice(0, 100)}`,
-            model: imgModel,
-            quality: imgQuality,
-            ratio: imgRatio,
-            scene_index: i + 1,
-            seed: storySeed,
-          });
-          if (imgRes.ok && imgRes.image_url) {
-            _aiScenes[i].image_url = imgRes.image_url;
-            okCount++;
-            _log(`  ✓ Cảnh ${i + 1}/${scenes.length}: OK trong ${((Date.now() - ti) / 1000).toFixed(1)}s · ${imgRes.size || ''}`, 'success');
-          } else {
-            failCount++;
-            _log(`  ✗ Cảnh ${i + 1}/${scenes.length}: ${imgRes.error || 'không nhận được ảnh'}`, 'error');
+
+      if (fastMode) {
+        _log(`  ⚡ Chế độ nhanh (parallel): bỏ qua chain, chạy ${Math.min(4, scenes.length)} ảnh song song`, 'detail');
+        // Parallel pool with concurrency = 4
+        const CONCURRENCY = Math.min(4, scenes.length);
+        let next = 0;
+        let done = 0;
+        async function worker() {
+          while (true) {
+            const i = next++;
+            if (i >= scenes.length) return;
+            if (_aiCancelled) return;
+            try {
+              const { ok, imgRes, dt } = await _genSingleScene(i, '');
+              if (ok) {
+                _aiScenes[i].image_url = imgRes.image_url;
+                okCount++;
+                _log(`  ✓ Cảnh ${i + 1}/${scenes.length}: ${(dt / 1000).toFixed(1)}s · refs=${imgRes.used_references || 0}`, 'success');
+              } else {
+                failCount++;
+                _log(`  ✗ Cảnh ${i + 1}/${scenes.length}: ${imgRes.error || 'unknown'}`, 'error');
+              }
+            } catch (e) {
+              failCount++;
+              _log(`  ✗ Cảnh ${i + 1}/${scenes.length}: ${e.message || e}`, 'error');
+            }
+            done++;
+            updateProgress(`Đang sinh ảnh ${done}/${scenes.length}...`);
+            if (status) status.textContent = `⏳ Sinh ảnh ${done}/${scenes.length}...`;
+            _renderAiScenes();
           }
-        } catch (imgErr) {
-          failCount++;
-          _log(`  ✗ Cảnh ${i + 1}/${scenes.length}: ${imgErr.message || imgErr}`, 'error');
-          console.warn('Image gen failed for scene', i, imgErr);
         }
-        _renderAiScenes();
+        await Promise.all(Array(CONCURRENCY).fill(0).map(worker));
+      } else {
+        // Sequential chain mode — each scene references the previous one.
+        let prevImageUrl = '';
+        for (let i = 0; i < scenes.length; i++) {
+          if (_aiCancelled) throw new Error('CANCELLED');
+          updateProgress(`Đang sinh ảnh cảnh ${i + 1}/${scenes.length}...`);
+          if (status) status.textContent = `⏳ Sinh ảnh ${i + 1}/${scenes.length}...`;
+          try {
+            const { ok, imgRes, dt } = await _genSingleScene(i, prevImageUrl);
+            if (ok) {
+              _aiScenes[i].image_url = imgRes.image_url;
+              prevImageUrl = imgRes.image_url;
+              okCount++;
+              _log(`  ✓ Cảnh ${i + 1}/${scenes.length}: ${(dt / 1000).toFixed(1)}s · refs=${imgRes.used_references || 0}`, 'success');
+            } else {
+              failCount++;
+              _log(`  ✗ Cảnh ${i + 1}/${scenes.length}: ${imgRes.error || 'unknown'}`, 'error');
+            }
+          } catch (imgErr) {
+            failCount++;
+            _log(`  ✗ Cảnh ${i + 1}/${scenes.length}: ${imgErr.message || imgErr}`, 'error');
+          }
+          _renderAiScenes();
+        }
       }
       _log(`  ─ Tổng kết: ${okCount} thành công, ${failCount} lỗi · tổng ${((Date.now() - t3) / 1000).toFixed(1)}s`, okCount > 0 ? 'info' : 'error');
 
@@ -1553,33 +1783,163 @@
     const aspectCSS = ratio.replace(':', '/');
     _aiScenes.forEach((scene, idx) => {
       const item = _el('div', {
-        style: 'border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg2)',
+        style: 'border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg2);display:flex;flex-direction:column',
       });
+
+      // Top: image (or two thumbs side by side when there's an end frame)
       if (scene.image_url) {
-        const img = _el('img', {
-          src: scene.image_url,
-          style: `width:100%;aspect-ratio:${aspectCSS};object-fit:cover;display:block;background:var(--bg3)`,
-          loading: 'lazy',
-        });
-        img.onerror = () => { img.style.display = 'none'; };
-        item.appendChild(img);
+        if (scene.end_image_url) {
+          const row = _el('div', {
+            style: 'display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--bg3)',
+          });
+          const imgA = _el('img', {
+            src: scene.image_url,
+            style: `width:100%;aspect-ratio:${aspectCSS};object-fit:cover;display:block`,
+            loading: 'lazy',
+            title: 'Ảnh bắt đầu cảnh',
+          });
+          const imgB = _el('img', {
+            src: scene.end_image_url,
+            style: `width:100%;aspect-ratio:${aspectCSS};object-fit:cover;display:block`,
+            loading: 'lazy',
+            title: 'Ảnh kết thúc cảnh (sẽ morph tới đây)',
+          });
+          imgA.onerror = () => { imgA.style.display = 'none'; };
+          imgB.onerror = () => { imgB.style.display = 'none'; };
+          row.appendChild(imgA);
+          row.appendChild(imgB);
+          item.appendChild(row);
+        } else {
+          const img = _el('img', {
+            src: scene.image_url,
+            style: `width:100%;aspect-ratio:${aspectCSS};object-fit:cover;display:block;background:var(--bg3)`,
+            loading: 'lazy',
+          });
+          img.onerror = () => { img.style.display = 'none'; };
+          item.appendChild(img);
+        }
       } else {
         item.appendChild(_el('div', {
           style: `width:100%;aspect-ratio:${aspectCSS};background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:24px`,
         }, '⏳'));
       }
-      const meta = _el('div', { style: 'padding:8px' });
-      meta.appendChild(_el('div', { class: 'badge badge-accent', style: 'margin-bottom:4px' }, `Cảnh ${idx + 1}`));
-      meta.appendChild(_el('div', { style: 'font-size:11px;color:var(--text2);line-height:1.4;max-height:60px;overflow:hidden' }, scene.text.slice(0, 120) + (scene.text.length > 120 ? '...' : '')));
+
+      const meta = _el('div', { style: 'padding:8px;display:flex;flex-direction:column;gap:6px;flex:1' });
+      meta.appendChild(_el('div', { class: 'badge badge-accent', style: 'align-self:flex-start' }, `Cảnh ${idx + 1}`));
+      meta.appendChild(_el('div', {
+        style: 'font-size:11px;color:var(--text2);line-height:1.4;max-height:60px;overflow:hidden;flex:1',
+      }, scene.text.slice(0, 120) + (scene.text.length > 120 ? '...' : '')));
+
+      // Per-scene actions: regenerate start frame, generate/regenerate end frame
+      if (scene.image_url) {
+        const actions = _el('div', {
+          style: 'display:flex;gap:4px;flex-wrap:wrap;margin-top:auto',
+        });
+        const endBtn = _el('button', {
+          class: 'btn btn-secondary btn-sm',
+          style: 'flex:1;min-width:0;font-size:10px;padding:4px 6px',
+          onclick: () => aiGenerateEndFrame(idx),
+          title: 'Sinh ảnh kết thúc cảnh để có chuyển động khi render',
+        }, scene.end_image_url ? '🔄 Đổi ảnh end' : '✨ Sinh ảnh end');
+        actions.appendChild(endBtn);
+        if (scene.end_image_url) {
+          const clearBtn = _el('button', {
+            class: 'btn btn-secondary btn-sm',
+            style: 'font-size:10px;padding:4px 6px',
+            onclick: () => { scene.end_image_url = ''; _renderAiScenes(); },
+            title: 'Xoá ảnh end (về hiệu ứng tĩnh + Ken Burns)',
+          }, '✖');
+          actions.appendChild(clearBtn);
+        }
+        meta.appendChild(actions);
+      }
+
       item.appendChild(meta);
       wrap.appendChild(item);
     });
+  }
+
+  // ── End-frame generation for a specific scene ───────────────────────────
+  // Calls /api/story/ai_generate_end_frame, which edits the scene's start
+  // image to produce a slightly different end-frame for the morph effect.
+  async function aiGenerateEndFrame(idx) {
+    const scene = _aiScenes[idx];
+    if (!scene || !scene.image_url) return _toast('Cảnh chưa có ảnh start.', 'warning');
+
+    const artStyle = document.getElementById('sw-ai-art-style')?.value || '';
+    const imgModel = (document.getElementById('sw-ai-img-model')?.value || 'cx/gpt-5.5-image').trim();
+    const imgQuality = document.getElementById('sw-ai-img-quality')?.value || 'standard';
+    const imgRatio = document.getElementById('sw-ai-img-ratio')?.value || '9:16';
+    const seed = _hashSeed(scene.text + '|end');
+
+    _toast(`Đang sinh ảnh kết thúc cho cảnh ${idx + 1}...`, 'info');
+    _log(`▶ Sinh end-frame cho cảnh ${idx + 1}...`, 'info');
+    const t0 = Date.now();
+    try {
+      const r = await API.post('/api/story/ai_generate_end_frame', {
+        start_image_url: scene.image_url,
+        scene_text: scene.text,
+        art_style: artStyle,
+        model: imgModel,
+        quality: imgQuality,
+        ratio: imgRatio,
+        seed,
+        session_id: window._aiSessionId || '',
+      }, { silent: true });
+      if (r.ok && r.image_url) {
+        _aiScenes[idx].end_image_url = r.image_url;
+        _renderAiScenes();
+        _log(`  ✓ Cảnh ${idx + 1}: end-frame OK trong ${((Date.now() - t0) / 1000).toFixed(1)}s`, 'success');
+        _toast(`Đã có ảnh kết thúc cho cảnh ${idx + 1}. Render sẽ tự động morph.`, 'success');
+      } else {
+        _log(`  ✗ End-frame cảnh ${idx + 1}: ${r.error || ''}`, 'error');
+        _toast(`Lỗi: ${r.error || 'không tạo được ảnh end'}`, 'error');
+      }
+    } catch (e) {
+      _log(`  ✗ End-frame cảnh ${idx + 1}: ${e.message || e}`, 'error');
+      _toast(`Lỗi: ${e.message || e}`, 'error');
+    }
+  }
+
+  // ── Bulk: generate end-frames for ALL scenes that don't have one yet ────
+  async function aiGenerateAllEndFrames() {
+    const todo = _aiScenes
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => s.image_url && !s.end_image_url);
+    if (!todo.length) {
+      return _toast(_aiScenes.length
+        ? 'Tất cả cảnh đều đã có ảnh end (hoặc chưa có ảnh start).'
+        : 'Chưa có cảnh nào.', 'info');
+    }
+    _log(`▶ Sinh end-frame song song cho ${todo.length} cảnh...`, 'info');
+    const t0 = Date.now();
+
+    // Limit concurrency to avoid 9Router rate limit. 4 is a safe default.
+    const CONCURRENCY = 4;
+    let next = 0;
+    let okCount = 0, failCount = 0;
+    async function worker() {
+      while (true) {
+        const cur = next++;
+        if (cur >= todo.length) return;
+        const { i } = todo[cur];
+        try {
+          await aiGenerateEndFrame(i);
+          okCount++;
+        } catch {
+          failCount++;
+        }
+      }
+    }
+    await Promise.all(Array(CONCURRENCY).fill(0).map(worker));
+    _log(`  ─ Bulk end-frame: ${okCount}/${todo.length} thành công · tổng ${((Date.now() - t0) / 1000).toFixed(1)}s`, okCount === todo.length ? 'success' : 'warning');
   }
 
   function aiSendToPanels() {
     if (!_aiScenes.length) return _toast('Chưa có cảnh nào.', 'warning');
     const panels = _aiScenes.map(s => ({
       image_url: s.image_url || '',
+      end_image_url: s.end_image_url || '',
       text: s.text || '',
     }));
     setPanels(panels);
@@ -1596,9 +1956,11 @@
     _log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'banner');
     _log(`🎬 Bắt đầu render video từ ${withImages} cảnh có ảnh`, 'banner');
 
-    // Send scenes to panels
+    // Send scenes to panels — pass end_image_url so the renderer can morph
+    // between the two frames if both are available (Step 2 — "khung hình động")
     const panels = _aiScenes.map(s => ({
       image_url: s.image_url || '',
+      end_image_url: s.end_image_url || '',
       text: s.text || '',
     }));
     setPanels(panels);
@@ -1757,6 +2119,7 @@
         text: sc.text || '',
         image_prompt: sc.image_prompt || '',
         image_url: sc.image_url || '',
+        end_image_url: sc.end_image_url || '',
       }));
       _renderAiScenes();
     }
@@ -1791,6 +2154,9 @@
     storyAiClear: aiClear,
     storyAiLoadSessions: aiLoadSessions,
     storyAiCancel: aiCancel,
+    // End-frame morph helpers (per-scene + bulk)
+    storyAiGenerateEndFrame: aiGenerateEndFrame,
+    storyAiGenerateAllEndFrames: aiGenerateAllEndFrames,
     // Panels
     storyBuildNarration: buildNarration,
     storyPanelsClearTexts: panelsClearTexts,

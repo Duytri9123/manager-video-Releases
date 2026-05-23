@@ -191,7 +191,120 @@ async function updateQueueItemDesc(url, desc) {
 }
 
 function startQueueDownload() {
-  _runQueueViaProcessApi();
+  // Show thumbnail mode selection modal first if thumbnail is enabled
+  const thumbEnabled = document.getElementById('thumb-enabled')?.checked ?? false;
+  if (thumbEnabled) {
+    _showThumbnailModeModal()
+      .then(mode => {
+        if (mode === null) return;  // User cancelled
+        window._batchThumbMode = mode;
+        // Validate before processing
+        return _preflightCheckThumbnail(mode).then(ok => {
+          if (!ok) return;
+          _runQueueViaProcessApi();
+        });
+      })
+      .catch(e => {
+        if (typeof toast === 'function') toast('Lỗi: ' + e.message, 'error');
+      });
+  } else {
+    window._batchThumbMode = 'none';
+    _runQueueViaProcessApi();
+  }
+}
+
+// Show modal asking user how to handle thumbnails for the batch
+function _showThumbnailModeModal() {
+  return new Promise(resolve => {
+    // Remove existing modal
+    document.getElementById('thumb-mode-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'thumb-mode-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML = `
+      <div style="background:var(--card-bg,#fff);color:var(--text,#111);max-width:500px;width:100%;border-radius:12px;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.3)">
+        <h3 style="margin:0 0 8px 0;font-size:18px">🖼 Thumbnail cho video</h3>
+        <p style="margin:0 0 16px 0;font-size:13px;color:var(--text-muted,#666)">Chọn cách tạo thumbnail cho tất cả video trong queue. Thumbnail sẽ chèn vào đầu video (2 giây).</p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="thumb-mode-btn" data-mode="ai" style="text-align:left;padding:12px;border:2px solid var(--border,#ddd);border-radius:8px;background:transparent;cursor:pointer;font-size:14px">
+            <div style="font-weight:700">🤖 AI tự tạo (Gemini)</div>
+            <div style="font-size:12px;color:var(--text-muted,#666);margin-top:2px">Phân tích frame + tiêu đề để sinh thumbnail bắt mắt cho từng video</div>
+          </button>
+          <button class="thumb-mode-btn" data-mode="import" style="text-align:left;padding:12px;border:2px solid var(--border,#ddd);border-radius:8px;background:transparent;cursor:pointer;font-size:14px">
+            <div style="font-weight:700">📁 Dùng ảnh đã import</div>
+            <div style="font-size:12px;color:var(--text-muted,#666);margin-top:2px">Cùng 1 ảnh cho tất cả video (đã chọn ở trên)</div>
+          </button>
+          <button class="thumb-mode-btn" data-mode="frame" style="text-align:left;padding:12px;border:2px solid var(--border,#ddd);border-radius:8px;background:transparent;cursor:pointer;font-size:14px">
+            <div style="font-weight:700">🎨 Mặc định (frame video)</div>
+            <div style="font-size:12px;color:var(--text-muted,#666);margin-top:2px">Lấy frame tại giây ${document.getElementById('sub-preview-ts')?.value || 5} làm thumbnail</div>
+          </button>
+          <button class="thumb-mode-btn" data-mode="none" style="text-align:left;padding:12px;border:2px solid var(--border,#ddd);border-radius:8px;background:transparent;cursor:pointer;font-size:14px">
+            <div style="font-weight:700">❌ Không dùng thumbnail</div>
+            <div style="font-size:12px;color:var(--text-muted,#666);margin-top:2px">Bỏ qua, video không có intro</div>
+          </button>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <button id="thumb-mode-cancel" class="btn btn-secondary btn-sm" style="font-size:13px;padding:6px 14px">Hủy</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll('.thumb-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        modal.remove();
+        resolve(mode);
+      });
+      btn.addEventListener('mouseenter', () => {
+        btn.style.borderColor = 'var(--primary,#3b82f6)';
+        btn.style.background = 'var(--bg2,#f3f4f6)';
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.borderColor = 'var(--border,#ddd)';
+        btn.style.background = 'transparent';
+      });
+    });
+    modal.querySelector('#thumb-mode-cancel').addEventListener('click', () => {
+      modal.remove();
+      resolve(null);
+    });
+  });
+}
+
+// Preflight check: validate API/file before starting batch
+async function _preflightCheckThumbnail(mode) {
+  if (mode === 'none' || mode === 'frame') return true;
+
+  if (mode === 'import') {
+    const path = window._thumbState?.path;
+    if (!path) {
+      if (typeof toast === 'function') toast('Chưa import ảnh thumbnail. Vui lòng bấm 📁 để chọn ảnh', 'error');
+      return false;
+    }
+    return true;
+  }
+
+  if (mode === 'ai') {
+    // Test Gemini API key
+    if (typeof toast === 'function') toast('Đang kiểm tra Gemini API...', 'info');
+    try {
+      const res = await fetch('/api/check_gemini_api', { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) {
+        if (typeof toast === 'function') toast('Gemini API lỗi: ' + (data.error || 'Không hợp lệ'), 'error');
+        return false;
+      }
+      if (typeof toast === 'function') toast('✓ Gemini API OK', 'success');
+      return true;
+    } catch (e) {
+      if (typeof toast === 'function') toast('Không kết nối được Gemini: ' + e.message, 'error');
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function _buildQueueProcessPayload(videoUrl) {
@@ -204,12 +317,25 @@ function _buildQueueProcessPayload(videoUrl) {
     language: document.getElementById('proc-lang')?.value || 'zh',
     burn_subs: queueOpts.burn_vi_subs,
     blur_original: document.getElementById('proc-blur-original')?.checked ?? true,
+    blur_height_pct: parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
+    blur_zone: document.getElementById('proc-blur-zone')?.value || 'bottom',
     translate_subs: queueOpts.translate_subs,
     burn_vi_subs: queueOpts.burn_vi_subs,
     subtitle_format: 'ass',
-    font_size: parseInt(document.getElementById('proc-font-size')?.value || '32', 10),
-    font_color: document.getElementById('proc-font-color')?.value || 'white',
-    margin_v: parseInt(document.getElementById('proc-margin-v')?.value || '20', 10),
+    font_size: (() => {
+      const pct = parseFloat(document.getElementById('proc-font-size')?.value || '4.5');
+      return Math.max(8, Math.round(720 * pct / 100));
+    })(),
+    font_color: (() => {
+      const sel = document.getElementById('proc-font-color');
+      const picker = document.getElementById('proc-font-color-picker');
+      if (sel?.value === 'custom' && picker) return picker.value;
+      return sel?.value || 'white';
+    })(),
+    margin_v: (() => {
+      const pct = parseFloat(document.getElementById('proc-margin-v')?.value || '3');
+      return Math.max(0, Math.round(720 * pct / 100));
+    })(),
     subtitle_position: document.getElementById('proc-sub-pos')?.value || 'bottom',
     transcribe_provider: (typeof _getProcessProvider === 'function') ? _getProcessProvider('transcribe') : 'groq',
     translate_provider: queueOpts.translate_provider,
@@ -240,6 +366,12 @@ function _buildQueueProcessPayload(videoUrl) {
     frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
+    // Thumbnail
+    thumb_enabled:        document.getElementById('thumb-enabled')?.checked ?? false,
+    thumb_mode:           (window._batchThumbMode || (window._thumbState?.mode === 'none' ? 'frame' : window._thumbState?.mode || 'frame')),
+    thumb_path:           (window._batchThumbPath || window._thumbState?.path || ''),
+    thumb_title:          document.getElementById('thumb-title')?.value || '',
+    thumb_duration:       2.0,  // seconds to show thumbnail at start
   };
 }
 
@@ -283,6 +415,16 @@ function _runSingleQueueItem(item, index, total) {
               }
               if (d.subtitle_path) {
                 window._publishLastSubtitlePath = d.subtitle_path;
+              }
+              if (d.thumbnail_path) {
+                window._publishLastThumbnailPath = d.thumbnail_path;
+                if (typeof window._displayProcThumbnail === 'function') {
+                  window._displayProcThumbnail(d.thumbnail_path, d.thumbnail_image);
+                }
+              }
+              // ── Thumbnail AI failure event ──
+              if (d.thumb_failed && typeof _showThumbFailCard === 'function') {
+                _showThumbFailCard();
               }
             } catch (_) {}
           });
