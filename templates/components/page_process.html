@@ -1569,6 +1569,12 @@
           };
           img.src = data.image;
           img.style.display = 'block';
+          // Lưu ảnh gốc không có logo để dùng cho AI thumbnail
+          if (data.image && data.image.startsWith('data:image/')) {
+            window._rawFrameB64 = data.image.split(',')[1] || null;
+          } else {
+            window._rawFrameB64 = null;
+          }
         }
         if (ph) ph.style.display = 'none';
         if (data.source === 'thumbnail') {
@@ -1629,6 +1635,7 @@
   ════════════════════════════════════════════════════════ */
   window._frameLogoImg  = null;
   window._frameLogoFile = null;
+  window._rawFrameB64   = null; // Ảnh gốc từ video (không có logo) — dùng cho AI thumbnail
 
   function frameSetLogo(input) {
     const file = input.files?.[0];
@@ -2547,13 +2554,18 @@
     let isEditingExistingThumb = false;
 
     if (existingThumbImg && existingThumbImg.src && existingThumbImg.src.startsWith('data:image/')) {
+      // Chỉnh sửa thumbnail hiện tại: dùng chính thumbnail đó làm ảnh tham chiếu
       const parts = existingThumbImg.src.split(',');
       if (parts.length > 1) {
         frameB64 = parts[1];
         isEditingExistingThumb = true;
       }
-    } 
-    // Ưu tiên 2: Fallback lấy ảnh bên khung Preview nếu chưa có thumbnail nào được tạo
+    }
+    // Ưu tiên 2: Tạo mới — luôn dùng ảnh frame gốc (không có logo) từ window._rawFrameB64
+    else if (window._rawFrameB64) {
+      frameB64 = window._rawFrameB64;
+    }
+    // Fallback cuối: lấy từ src của sub-preview-img (trường hợp không có _rawFrameB64)
     else if (previewImg && previewImg.src && previewImg.src.startsWith('data:image/')) {
       const parts = previewImg.src.split(',');
       if (parts.length > 1) {
@@ -2572,8 +2584,13 @@
     const info = document.getElementById('thumb-output-info');
     const btn = document.querySelector('[onclick="generateThumbnailAI()"]');
 
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ AI đang tạo...'; }
-    if (ph) { ph.style.display = 'block'; ph.textContent = '🤖 AI đang phân tích video và tạo thumbnail...'; }
+    const loadingMsg = isEditingExistingThumb
+      ? '✏️ AI đang chỉnh sửa thumbnail hiện tại...'
+      : '🤖 AI đang phân tích video và tạo thumbnail...';
+    const btnLabel  = isEditingExistingThumb ? '⏳ AI đang sửa...' : '⏳ AI đang tạo...';
+
+    if (btn) { btn.disabled = true; btn.textContent = btnLabel; }
+    if (ph) { ph.style.display = 'block'; ph.textContent = loadingMsg; }
     if (img) img.style.display = 'none';
     if (info) info.style.display = 'none';
 
@@ -2618,7 +2635,10 @@
           path: data.output_path || '',
           b64: data.image || ''
         };
-        toast('✓ AI đã tạo thumbnail', 'success');
+        const successMsg = isEditingExistingThumb
+          ? '✓ AI đã chỉnh sửa thumbnail thành công!'
+          : '✓ AI đã tạo thumbnail mới!';
+        toast(successMsg, 'success');
       } else {
         if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'AI thumbnail thất bại'; }
         toast('Lỗi AI thumbnail: ' + (data.error || ''), 'error');
