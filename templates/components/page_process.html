@@ -1981,6 +1981,27 @@
         ctx.fillStyle = 'rgba(0,0,0,0.35)';
         ctx.fillRect(bX, bY, bW, bH);
       }
+
+      // Draw extra blur zones
+      if (window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
+        window._procExtraBlurZones.forEach(zone => {
+          const zH = (zone.height || 12) / 100;
+          const zY = (zone.position || 50) / 100 - zH / 2;
+          const zW = (zone.width || 80) / 100;
+
+          const ezH = Math.round(vidH * zH);
+          const ezW = Math.round(vidW * zW);
+          const ezX = vidX + Math.round(vidW * (1 - zW) / 2);
+          const ezY = vidY + Math.round(vidH * Math.max(0, Math.min(1 - zH, zY)));
+
+          ctx.save();
+          ctx.filter = 'blur(8px)';
+          ctx.drawImage(ctx.canvas, ezX, ezY, ezW, ezH, ezX - 4, ezY - 4, ezW + 8, ezH + 8);
+          ctx.restore();
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.fillRect(ezX, ezY, ezW, ezH);
+        });
+      }
     }
 
     if (!sample || !burnOn || !burnViOn) return;

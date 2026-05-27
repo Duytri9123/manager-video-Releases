@@ -1,0 +1,28 @@
+Query: 'Ma Hoàng Trác Phàm'
+Found images: 35
+  0 - Image: http://cdn.collider.com/wp-content/uploads/2019/02/ma-octavia-spencer-image.jpg
+    - Thumb: https://ts1.mm.bing.net/th?id=OIP.qNZb4Sj_ySJsLSyJ-J3HOgHaE8&pid=15.1
+  1 - Image: https://static0.colliderimages.com/wordpress/wp-content/uploads/2023/11/octavia-spencer-in-ma-movie-2019-copy.jpg
+    - Thumb: https://ts1.mm.bing.net/th?id=OIP.8i2aFFUEpwaEClejZieHgAHaDt&pid=15.1
+  2 - Image: https://s2.r29static.com/bin/entry/339/0,0,2000,1050/x,80/2190482/image.jpg
+    - Thumb: https://ts2.mm.bing.net/th?id=OIP.QJGjNW1nJbjgE2_JLkQqlAHaD4&pid=15.1
+  3 - Image: https://3.bp.blogspot.com/-ai4mO8DXlQw/XGRSs_fqYjI/AAAAAAAALYI/ifNyVp1rGTMP_tWiLR2YOCGkPeyj_X9NQCLcBGAs/s1600/ma%2Bmovie%2Boctavia%2Bspencer.jpg
+    - Thumb: https://ts1.mm.bing.net/th?id=OIP.KU8FPJWCJeoJtNgy4rGxQQHaEK&pid=15.1
+  4 - Image: https://i.ytimg.com/vi/x7HQU15Sh0M/maxresdefault.jpg
+    - Thumb: https://ts1.mm.bing.net/th?id=OIP.GFXNMakZytMnrTXwhqucGAHaEK&pid=15.1
+  5 - Image: https://images.plex.tv/photo?size=large-1280&scale=1&url=https:%2F%2Fmetadata-static.plex.tv%2F5%2Fpeople%2F54b52c6211ed16989495bb758654ebf5.jpg
+    - Thumb: https://ts2.mm.bing.net/th?id=OIP.BVsZ8-C6jezrakbYwn1tYwHaHa&pid=15.1
+  6 - Image: https://images.squarespace-cdn.com/content/v1/51b3dc8ee4b051b96ceb10de/9a3b1bd8-5009-46c3-88d1-bd9ec787f98f/Octavia+Spencer+Returns+for+a+Sequel+To+Her+Horror+Film+MA.jpg
+    - Thumb: https://ts2.mm.bing.net/th?id=OIP.o2hBJDb17y2CJHcU7icg8wHaEK&pid=15.1
+  7 - Image: https://s3.r29static.com/bin/entry/621/0,0,2000,1050/x,80/2125731/image.jpg
+    - Thumb: https://ts3.mm.bing.net/th?id=OIP.PIEZthDEFSBWaHAwjh4olwHaD4&pid=15.1
+  8 - Image: https://static.independent.co.uk/s3fs-public/thumbnails/image/2019/05/30/10/ma-octavia-spencer.jpeg
+    - Thumb: https://ts4.mm.bing.net/th?id=OIP.4FXeS4qZDEaUWdLstPtyuwHaFj&pid=15.1
+  9 - Image: https://media1.popsugar-assets.com/files/thumbor/pcDLmEAPcumS6mEYG8k8o5_DQ9g=/fit-in/792x1188/filters:format_auto():upscale()/2019/05/30/949/n/1922283/759aa0e3809e65fb_GettyImages-1149711306.jpg
+    - Thumb: https://ts3.mm.bing.net/th?id=OIP.xV0u2AtuxRM9B2KmOxC1QAHaLH&pid=15.1
+
+Query: 'Trác Phàm Đại Quản Gia Là Ma Hoàng'
+Found images: 1
+  0 - Image: http://xv.rkclf.com/img/video/28172.jpg
+    - Thumb: https://ts4.mm.bing.net/th?id=OIP.TIp8KcyBN5RGRpgXGsT1BwAAAA&pid=15.1
+

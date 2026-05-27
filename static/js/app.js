@@ -446,7 +446,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     thumb_mode:           (window._batchThumbMode || (window._thumbState?.mode === 'none' ? 'frame' : window._thumbState?.mode || 'frame')),
     thumb_path:           (window._batchThumbPath || window._thumbState?.path || ''),
     thumb_title:          document.getElementById('thumb-title')?.value || '',
-    thumb_duration:       2.0,  // seconds to show thumbnail at start
+    thumb_duration:       0.3,  // seconds to show thumbnail at start
   };
 
   const doRequest = (body, isFormData) => fetch('/api/process_video', {
@@ -582,7 +582,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
   if (selectedFile) {
     const form = new FormData();
     form.append('video_file', selectedFile);
-    Object.entries(baseFields).forEach(([key, value]) => form.append(key, String(value ?? '')));
+    Object.entries(baseFields).forEach(([key, value]) => form.append(key, typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '')));
     doRequest(form, true);
     return;
   }

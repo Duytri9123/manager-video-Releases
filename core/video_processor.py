@@ -753,7 +753,8 @@ def write_ass(segments: list[dict], out_path: Path,
               font_size: int = 32, font_color: str = "white",
               outline_color: str = "black", outline_width: int = 2,
               shadow: int = 1, margin_v: int = 20,
-              alignment: int = 2, font_name: str = "Arial") -> Path:
+              alignment: int = 2, font_name: str = "Arial",
+              play_res_x: int = 1280, play_res_y: int = 720) -> Path:
     """
     Write ASS subtitle file from segments list.
     alignment: 2=bottom-center, 8=top-center
@@ -764,8 +765,8 @@ def write_ass(segments: list[dict], out_path: Path,
 
     header = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: 1280
-PlayResY: 720
+PlayResX: {play_res_x}
+PlayResY: {play_res_y}
 WrapStyle: 0
 
 [V4+ Styles]
@@ -1451,6 +1452,7 @@ def burn_subtitles(
     frame_target_w: int = 1080,
     log_callback=None,
     blur_y_pct: Optional[float] = None,
+    blur_extra_zones: Optional[list] = None,
 ) -> tuple[bool, str]:
     """
     Burn subtitles into video.
@@ -1491,14 +1493,16 @@ def burn_subtitles(
                          frame_blur_opacity=frame_blur_opacity,
                          frame_target_w=frame_target_w,
                          log_callback=log_callback,
-                         blur_y_pct=blur_y_pct)
+                         blur_y_pct=blur_y_pct,
+                         blur_extra_zones=blur_extra_zones)
 
     # SRT path (original logic — no frame support)
     return _burn_srt(video_path, srt_path, output_path, ffmpeg,
                      blur_original, blur_zone, blur_height_pct, blur_width_pct, blur_lift_pct_adj,
                      font_size, font_color, outline_color, outline_width,
                      margin_v, subtitle_position,
-                     blur_y_pct=blur_y_pct)
+                     blur_y_pct=blur_y_pct,
+                     blur_extra_zones=blur_extra_zones)
 
 
 def _burn_ass(
@@ -1528,6 +1532,7 @@ def _burn_ass(
     frame_target_w: int = 1080,
     log_callback=None,
     blur_y_pct: Optional[float] = None,
+    blur_extra_zones: Optional[list] = None,
 ) -> tuple[bool, str]:
     """Burn ASS subtitle file into video. Optionally blur a zone to hide burned-in original subs.
     Frame elements (title bar, blur panels) are now embedded directly in the ASS file.
@@ -1611,8 +1616,11 @@ def _burn_ass(
         except Exception:
             pass
 
-        # Build filter: optional blur zone + ASS + optional logo overlay
+        # Build filter: optional blur zone(s) + ASS + optional logo overlay
         extra_inputs = []
+        
+        # Gather all active blur zones
+        active_zones = []
         if blur_original and blur_zone != "none":
             h_pct = _clamp_float(blur_height_pct, 0.08, 0.45)
             w_pct = max(0.35, min(1.0, float(blur_width_pct)))
@@ -1624,16 +1632,38 @@ def _burn_ass(
                     y_start = max(0.0, 1.0 - h_pct - lift_pct)
                 else:
                     y_start = 0.0
+            active_zones.append((h_pct, w_pct, y_start))
+            
+        if blur_original and blur_extra_zones:
+            for ez in blur_extra_zones:
+                try:
+                    ez_h = float(ez.get("height_pct", 0.12))
+                    ez_pos = float(ez.get("position_pct", 0.50))
+                    ez_w = float(ez.get("width_pct", 0.80))
+                    ez_y = _clamp_float(ez_pos - ez_h / 2, 0.0, 1.0 - ez_h)
+                    active_zones.append((ez_h, ez_w, ez_y))
+                except Exception:
+                    pass
 
-            _log(f"🌫 Vùng che: từ {y_start*100:.0f}% → {(y_start+h_pct)*100:.0f}%")
-            filter_complex = (
-                f"[0:v]split[orig][copy];"
-                f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:ih*{y_start:.4f},"
-                f"boxblur=luma_radius=20:luma_power=3[blurred];"
-                f"[orig][blurred]overlay=(W-w)/2:H*{y_start:.4f},ass='{ass_esc}'[subbed]"
+        # Apply each blur zone in a chain
+        curr_label = "0:v"
+        filter_complex_parts = []
+        for idx, (h, w, y) in enumerate(active_zones):
+            next_label = f"b{idx}"
+            filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
+            filter_complex_parts.append(
+                f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*(1-{w:.4f})/2:ih*{y:.4f},"
+                f"boxblur=luma_radius=20:luma_power=3[blurred_{idx}]"
             )
-        else:
-            filter_complex = f"[0:v]ass='{ass_esc}'[subbed]"
+            filter_complex_parts.append(
+                f"[orig_{idx}][blurred_{idx}]overlay=(W-w)/2:H*{y:.4f}[{next_label}]"
+            )
+            curr_label = next_label
+            _log(f"🌫 Vùng che {idx+1}: từ {y*100:.0f}% → {(y+h)*100:.0f}%, rộng {w*100:.0f}%")
+
+        # Finally, apply ASS subtitle filter
+        filter_complex_parts.append(f"[{curr_label}]ass='{ass_esc}'[subbed]")
+        filter_complex = ";".join(filter_complex_parts)
 
         # Add logo overlay if available
         if _logo_file and _logo_file.exists():
@@ -1753,6 +1783,7 @@ def _burn_srt(
     margin_v: int = 30,
     subtitle_position: str = "bottom",
     blur_y_pct: Optional[float] = None,
+    blur_extra_zones: Optional[list] = None,
 ) -> tuple[bool, str]:
     """
     Burn SRT subtitles into video.
@@ -1798,24 +1829,49 @@ def _burn_srt(
             # Step A: blur zone → intermediate file
             tmp_blurred = Path(tmpdir) / "blurred.mp4"
 
-            h_pct = _clamp_float(blur_height_pct, 0.08, 0.45)
-            w_pct = max(0.35, min(1.0, float(blur_width_pct)))
-            if blur_y_pct is not None:
-                y_start = _clamp_float(blur_y_pct - h_pct / 2, 0.0, 1.0 - h_pct)
-            else:
-                lift_pct = _clamp_float(blur_lift_pct, 0.0, 0.20)
-                if blur_zone == "bottom":
-                    y_start = max(0.0, 1.0 - h_pct - lift_pct)
+            # Gather all active blur zones
+            active_zones = []
+            if blur_original and blur_zone != "none":
+                h_pct = _clamp_float(blur_height_pct, 0.08, 0.45)
+                w_pct = max(0.35, min(1.0, float(blur_width_pct)))
+                if blur_y_pct is not None:
+                    y_start = _clamp_float(blur_y_pct - h_pct / 2, 0.0, 1.0 - h_pct)
                 else:
-                    y_start = 0.0
+                    lift_pct = _clamp_float(blur_lift_pct, 0.0, 0.20)
+                    if blur_zone == "bottom":
+                        y_start = max(0.0, 1.0 - h_pct - lift_pct)
+                    else:
+                        y_start = 0.0
+                active_zones.append((h_pct, w_pct, y_start))
+                
+            if blur_original and blur_extra_zones:
+                for ez in blur_extra_zones:
+                    try:
+                        ez_h = float(ez.get("height_pct", 0.12))
+                        ez_pos = float(ez.get("position_pct", 0.50))
+                        ez_w = float(ez.get("width_pct", 0.80))
+                        ez_y = _clamp_float(ez_pos - ez_h / 2, 0.0, 1.0 - ez_h)
+                        active_zones.append((ez_h, ez_w, ez_y))
+                    except Exception:
+                        pass
 
-            # crop bottom strip, blur it, pad back, overlay
-            crop_filter = (
-                f"[0:v]split[orig][copy];"
-                f"[copy]crop=iw*{w_pct:.4f}:ih*{h_pct:.4f}:iw*(1-{w_pct:.4f})/2:ih*{y_start:.4f},"
-                f"boxblur=luma_radius=20:luma_power=3[blurred];"
-                f"[orig][blurred]overlay=(W-w)/2:H*{y_start:.4f}[blended]"
-            )
+            # Apply each blur zone in a chain
+            curr_label = "0:v"
+            filter_complex_parts = []
+            for idx, (h, w, y) in enumerate(active_zones):
+                next_label = f"b{idx}"
+                filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
+                filter_complex_parts.append(
+                    f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*(1-{w:.4f})/2:ih*{y:.4f},"
+                    f"boxblur=luma_radius=20:luma_power=3[blurred_{idx}]"
+                )
+                filter_complex_parts.append(
+                    f"[orig_{idx}][blurred_{idx}]overlay=(W-w)/2:H*{y:.4f}[{next_label}]"
+                )
+                curr_label = next_label
+
+            filter_complex_parts.append(f"[{curr_label}]null[blended]")
+            crop_filter = ";".join(filter_complex_parts)
 
             ok, err = run_ffmpeg([
                 ffmpeg, "-i", str(tmp_video),
@@ -2956,6 +3012,16 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         yield send(log="ffmpeg not found. Install ffmpeg and add to PATH.", level="error")
         return
 
+    # Detect actual video dimensions
+    try:
+        import subprocess, re
+        _r = subprocess.run([ffmpeg, "-i", str(video_path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        _m = re.search(r"(\d{2,5})x(\d{2,5})", _r.stderr or "")
+        _vw, _vh = (int(_m.group(1)), int(_m.group(2))) if _m else (1280, 720)
+    except Exception:
+        _vw, _vh = 1280, 720
+
     # Output dir logic:
     # - User chỉ định out_dir → dùng nó
     # - Nếu video gốc đã nằm trong Downloaded/Process_video/<name>/ → giữ nguyên (resume)
@@ -3124,7 +3190,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         yield send(log="[Bước 2/5] ✗ Không thể tính được thời lượng video", level="error")
                         return
             else:
-                write_ass(segments, ass_path)
+                write_ass(segments, ass_path, play_res_x=_vw, play_res_y=_vh)
                 yield send(log=f"[Bước 2/5] ✓ Phiên âm {len(segments)} đoạn → {ass_path.name}", level="success", subtitle_path=str(ass_path.resolve()))
             yield send(overall=35, overall_lbl=f"Phiên âm xong: {len(segments)} đoạn")
         except RuntimeError as e:
@@ -3239,19 +3305,19 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     vi_segs = [{"start": s["start"], "end": s["end"], "text": t}
                                for s, t in zip(segments, translated_texts) if t]
 
+                    # Scale font_size, margin_v, and outline_width dynamically based on actual video height vs 720
+                    _orig_font_size = _as_int(data.get("font_size", 32), 32)
+                    _orig_margin_v = effective_margin_v
+                    _orig_outline_width = _as_int(data.get("outline_width", 2), 2)
+                    
+                    _scaled_font_size = max(8, int(_orig_font_size * _vh / 720))
+                    _scaled_margin_v = max(0, int(_orig_margin_v * _vh / 720))
+                    _scaled_outline_width = max(1, int(_orig_outline_width * _vh / 720))
+
                     # Check if frame elements should be embedded in ASS
                     frame_enabled = _as_bool(data.get("frame_enabled", False), False)
 
                     if frame_enabled:
-                        # Get video dimensions to match PlayRes
-                        try:
-                            _r = subprocess.run([ffmpeg, "-i", str(video_path)],
-                                capture_output=True, text=True, encoding="utf-8", errors="replace")
-                            _m = re.search(r"(\d{2,5})x(\d{2,5})", _r.stderr or "")
-                            _vw, _vh = (int(_m.group(1)), int(_m.group(2))) if _m else (1280, 720)
-                        except Exception:
-                            _vw, _vh = 1280, 720
-
                         _duration = get_media_duration_seconds(ffmpeg, video_path)
                         if _duration <= 0:
                             _duration = 600.0
@@ -3288,11 +3354,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             video_duration=_duration,
                             play_res_x=_vw,
                             play_res_y=_vh,
-                            font_size=_as_int(data.get("font_size", 32), 32),
+                            font_size=_scaled_font_size,
                             font_color=data.get("font_color", "white"),
                             outline_color=data.get("outline_color", "black"),
-                            outline_width=_as_int(data.get("outline_width", 2), 2),
-                            margin_v=effective_margin_v,
+                            outline_width=_scaled_outline_width,
+                            margin_v=_scaled_margin_v,
                             alignment=alignment,
                             title_text=_frame_title if _as_bool(data.get("frame_title_enabled", True), True) else "",
                             title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
@@ -3324,12 +3390,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         yield send(log=f"[Bước 3/5] 🎞 Khung: title=\"{_frame_title[:25]}\", blur={_as_float(data.get('frame_blur_w_pct'), 15.0)}%, logo={'✓' if _logo_path else '✗'}", level="info")
                     else:
                         write_ass(vi_segs, vi_ass_path,
-                                  font_size=_as_int(data.get("font_size", 32), 32),
+                                  font_size=_scaled_font_size,
                                   font_color=data.get("font_color", "white"),
                                   outline_color=data.get("outline_color", "black"),
-                                  outline_width=_as_int(data.get("outline_width", 2), 2),
-                                  margin_v=effective_margin_v,
-                                  alignment=alignment)
+                                  outline_width=_scaled_outline_width,
+                                  margin_v=_scaled_margin_v,
+                                  alignment=alignment,
+                                  play_res_x=_vw,
+                                  play_res_y=_vh)
                         yield send(log=f"[Bước 3/5] ✓ ASS {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                     # Signal frontend to review the ASS file before continuing
                     yield send(
@@ -3369,14 +3437,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         _thumb_mode = str(_thumb_user_cfg.get("thumb_mode") or "none").lower()
         _thumb_path_input = str(_thumb_user_cfg.get("thumb_path") or "").strip()
         _thumb_title = str(_thumb_user_cfg.get("thumb_title") or "").strip()
-        _thumb_duration = _as_float(_thumb_user_cfg.get("thumb_duration", 2.0), 2.0)
+        _thumb_duration = _as_float(_thumb_user_cfg.get("thumb_duration", 0.3), 0.3)
         _thumb_timestamp = _as_float(_thumb_user_cfg.get("thumb_timestamp", 5.0), 5.0)
     else:
         _thumb_enabled = _as_bool(data.get("thumb_enabled", False), False)
         _thumb_mode = str(data.get("thumb_mode") or "none").lower()
         _thumb_path_input = str(data.get("thumb_path") or "").strip()
         _thumb_title = str(data.get("thumb_title") or "").strip()
-        _thumb_duration = _as_float(data.get("thumb_duration", 2.0), 2.0)
+        _thumb_duration = _as_float(data.get("thumb_duration", 0.3), 0.3)
         _thumb_timestamp = _as_float(data.get("sub_preview_ts") or data.get("thumb_timestamp", 5.0), 5.0)
 
     _thumb_future = None
@@ -3465,6 +3533,17 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             except Exception:
                 pass
 
+        _blur_extra_zones_raw = data.get("blur_extra_zones")
+        _blur_extra_zones = None
+        if _blur_extra_zones_raw:
+            if isinstance(_blur_extra_zones_raw, str):
+                try:
+                    _blur_extra_zones = _j.loads(_blur_extra_zones_raw)
+                except Exception:
+                    pass
+            elif isinstance(_blur_extra_zones_raw, list):
+                _blur_extra_zones = _blur_extra_zones_raw
+
         ok, err = burn_subtitles(
             video_path=video_path,
             srt_path=srt_path,
@@ -3485,6 +3564,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             frame_enabled=False,
             log_callback=_burn_log_cb,
             blur_y_pct=_blur_y_pct,
+            blur_extra_zones=_blur_extra_zones,
         )
         # Emit collected burn logs
         for _msg, _lvl in _burn_logs:
@@ -3752,6 +3832,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         elif video_title:
             thumb_subtitle = video_title
 
+        # Resolve logo_path for standard thumbnail
+        _logo_path = str(data.get("frame_logo_path") or data.get("logo_path") or "").strip()
+        if not _logo_path:
+            _default_logo = Path(__file__).parent.parent / "img" / "logo.png"
+            if _default_logo.exists():
+                _logo_path = str(_default_logo)
+
         thumb_ok, thumb_result = generate_thumbnail(
             video_path=video_path,
             output_path=thumb_path,
@@ -3759,6 +3846,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             timestamp=2.0,
             title="Trạm giải trí",
             subtitle_text=thumb_subtitle,
+            logo_path=_logo_path,
         )
         if thumb_ok:
             # Encode base64 để frontend hiển thị trực tiếp (không cần serve static)
@@ -3953,9 +4041,10 @@ def generate_thumbnail(
     height: int = 1920,
     corner_radius: int = 40,
     title_bar_h_pct: float = 10.0,
-    content_bar_h_pct: float = 18.0,
+    content_bar_h_pct: float = 40.0,
     title_font_size: int = 0,
     content_font_size: int = 0,
+    logo_path: str = "",
 ) -> tuple[bool, str]:
     """
     Tạo thumbnail cho video với layout:
@@ -3976,6 +4065,7 @@ def generate_thumbnail(
         content_bar_h_pct: chiều cao khung nội dung dưới (% tổng height)
         title_font_size: cỡ chữ tiêu đề (0 = tự tính)
         content_font_size: cỡ chữ nội dung (0 = tự tính)
+        logo_path: đường dẫn logo chèn góc khung mô tả
 
     Returns:
         (success, error_or_path)
@@ -3984,6 +4074,26 @@ def generate_thumbnail(
         from PIL import Image, ImageDraw, ImageFont
     except ImportError:
         return False, "Pillow chưa cài: pip install Pillow"
+
+    # Resolve logo path
+    resolved_logo = None
+    if logo_path:
+        p = Path(logo_path)
+        if not p.is_absolute():
+            p = Path(__file__).parent.parent / p
+        if p.exists():
+            resolved_logo = p
+    if not resolved_logo:
+        default_logo = Path(__file__).parent.parent / "img" / "logo.png"
+        if default_logo.exists():
+            resolved_logo = default_logo
+
+    logo_img = None
+    if resolved_logo:
+        try:
+            logo_img = Image.open(resolved_logo).convert("RGBA")
+        except Exception:
+            pass
 
     video_path = Path(video_path)
     output_path = Path(output_path)
@@ -4015,14 +4125,18 @@ def generate_thumbnail(
 
     # ── Bước 2: Tính toán layout ─────────────────────────────────────────────
     title_bar_h = max(60, int(height * title_bar_h_pct / 100))
-    content_bar_h = max(80, int(height * content_bar_h_pct / 100))
-    frame_area_h = height - title_bar_h - content_bar_h
+    # Tăng chiều cao banner lên tối thiểu 40% chiều cao video để đè hoàn toàn phụ đề gốc (tiếng Trung/Anh)
+    actual_content_bar_h_pct = max(content_bar_h_pct, 40.0)
+    content_bar_h = max(80, int(height * actual_content_bar_h_pct / 100))
+    # Video frame kéo dài xuống tận đáy màn hình để làm nền trong suốt bên dưới banner
+    frame_area_h = height - title_bar_h
 
     # Font sizes
     if not title_font_size:
         title_font_size = max(28, int(width * 0.055))
     if not content_font_size:
-        content_font_size = max(22, int(width * 0.04))
+        # Tăng kích thước chữ mô tả to rõ rệt hơn (6.5% width thay vì 4%)
+        content_font_size = max(38, int(width * 0.065))
 
     # ── Bước 3: Tạo canvas ───────────────────────────────────────────────────
     canvas = Image.new("RGBA", (width, height), (255, 255, 255, 255))
@@ -4073,21 +4187,78 @@ def generate_thumbnail(
 
     canvas.paste(frame_cropped, (0, title_bar_h))
 
-    # ── Bước 6: Vẽ khung nội dung dưới (bo góc) ─────────────────────────────
-    content_y = title_bar_h + frame_area_h
+    # ── Bước 6: Vẽ khung nội dung dưới (Gradient xanh nhạt & khung vuông nổi bật với Padding viền ngoài) ─────────────────────────────
+    # Dán đè banner lên trên video frame ở sát mép dưới màn hình
+    content_y = height - content_bar_h
 
-    # Tạo khung bo góc trên (rounded rectangle)
+    # Tạo khung nội dung dưới
     content_box = Image.new("RGBA", (width, content_bar_h), (0, 0, 0, 0))
     content_draw = ImageDraw.Draw(content_box)
 
-    # Vẽ rounded rectangle nền trắng
-    content_draw.rounded_rectangle(
-        [(20, 0), (width - 20, content_bar_h - 10)],
-        radius=corner_radius,
-        fill=(255, 255, 255, 240),
-        outline=(220, 220, 220, 255),
-        width=2,
-    )
+    # Padding viền ngoài của cả banner so với các cạnh màn hình (banner_margin_x = 20, banner_margin_y = 20)
+    # Ranh giới thực tế của banner sẽ nằm gọn trong khoảng này
+    banner_x0 = 20
+    banner_y0 = 10
+    banner_x1 = width - 20
+    banner_y1 = content_bar_h - 20
+
+    # Bán kính bo góc (R = 60) cho góc phải trên và góc trái dưới
+    R = 60
+    
+    # 1. Vẽ Outer Shape (Nền trắng làm viền 10px)
+    outer_mask = Image.new("L", (width, content_bar_h), 0)
+    outer_mask_draw = ImageDraw.Draw(outer_mask)
+    
+    # Vẽ hình asymmetric bo góc phải trên và trái dưới
+    outer_mask_draw.rectangle([(banner_x0, banner_y0), (banner_x1, banner_y1)], fill=255)
+    # Bo góc phải trên
+    outer_mask_draw.rectangle([(banner_x1 - R, banner_y0), (banner_x1, banner_y0 + R)], fill=0)
+    outer_mask_draw.ellipse([(banner_x1 - 2*R, banner_y0), (banner_x1, banner_y0 + 2*R)], fill=255)
+    # Bo góc trái dưới
+    outer_mask_draw.rectangle([(banner_x0, banner_y1 - R), (banner_x0 + R, banner_y1)], fill=0)
+    outer_mask_draw.ellipse([(banner_x0, banner_y1 - 2*R), (banner_x0 + 2*R, banner_y1)], fill=255)
+    
+    # Tạo ảnh nền viền trắng
+    white_banner = Image.new("RGBA", (width, content_bar_h), (255, 255, 255, 255))
+    content_box.paste(white_banner, (0, 0), outer_mask)
+
+    # 2. Vẽ Inner Shape (Gradient màu) thụt vào 18px để lộ ra 18px viền trắng ngoài
+    inner_x0 = banner_x0 + 18
+    inner_y0 = banner_y0 + 18
+    inner_x1 = banner_x1 - 18
+    inner_y1 = banner_y1 - 18
+    R_inner = max(0, R - 18)
+    
+    inner_mask = Image.new("L", (width, content_bar_h), 0)
+    inner_mask_draw = ImageDraw.Draw(inner_mask)
+    
+    inner_mask_draw.rectangle([(inner_x0, inner_y0), (inner_x1, inner_y1)], fill=255)
+    # Bo góc phải trên inner
+    inner_mask_draw.rectangle([(inner_x1 - R_inner, inner_y0), (inner_x1, inner_y0 + R_inner)], fill=0)
+    inner_mask_draw.ellipse([(inner_x1 - 2*R_inner, inner_y0), (inner_x1, inner_y0 + 2*R_inner)], fill=255)
+    # Bo góc trái dưới inner
+    inner_mask_draw.rectangle([(inner_x0, inner_y1 - R_inner), (inner_x0 + R_inner, inner_y1)], fill=0)
+    inner_mask_draw.ellipse([(inner_x0, inner_y1 - 2*R_inner), (inner_x0 + 2*R_inner, inner_y1)], fill=255)
+
+    # Chiều cao thực tế của vùng chứa gradient bên trong banner
+    grad_h = inner_y1 - inner_y0
+    
+    # Gradient dưới đậm trên nhạt (màu xanh nhạt cực kỳ premium)
+    # RGB top: (150, 215, 255) / RGB bottom: (12, 60, 140)
+    R1, G1, B1 = 150, 215, 255
+    R2, G2, B2 = 12, 60, 140
+    
+    grad_img = Image.new("RGBA", (width, content_bar_h), (0, 0, 0, 0))
+    grad_draw = ImageDraw.Draw(grad_img)
+    for y in range(inner_y0, inner_y1):
+        pct = (y - inner_y0) / grad_h if grad_h > 0 else 0
+        r = int(R1 + (R2 - R1) * pct)
+        g = int(G1 + (G2 - G1) * pct)
+        b = int(B1 + (B2 - B1) * pct)
+        grad_draw.line([(inner_x0, y), (inner_x1, y)], fill=(r, g, b, 255), width=1)
+
+    # Dán đè gradient lên trên nền viền trắng của content_box
+    content_box.paste(grad_img, (0, 0), inner_mask)
 
     # Nội dung text
     if not subtitle_text:
@@ -4109,8 +4280,9 @@ def generate_thumbnail(
     except Exception:
         content_font = ImageFont.load_default()
 
-    # Word wrap cho nội dung
-    max_text_w = width - 80
+    # Word wrap cho nội dung với padding X rộng rãi so với viền banner (padding_x = 90)
+    padding_x = 90
+    max_text_w = (inner_x1 - inner_x0) - (padding_x * 2)
     words = subtitle_text.split()
     lines = []
     current_line = ""
@@ -4131,18 +4303,51 @@ def generate_thumbnail(
         lines = lines[:3]
         lines[-1] = lines[-1][:30] + "..."
 
-    # Vẽ text nội dung căn giữa trong khung
-    line_height = content_font_size + 8
+    # Vẽ text nội dung căn giữa trong khung với bóng đổ đen và chữ trắng nổi bật, tăng line_height lên làm giãn dòng (padding Y)
+    line_height = content_font_size + 15
     total_text_h = len(lines) * line_height
-    text_start_y = (content_bar_h - total_text_h) // 2
+    text_start_y = inner_y0 + (grad_h - total_text_h) // 2
     for i, line in enumerate(lines):
         bbox = content_draw.textbbox((0, 0), line, font=content_font)
         lw = bbox[2] - bbox[0]
-        lx = (width - lw) // 2
+        lx = inner_x0 + ((inner_x1 - inner_x0) - lw) // 2
         ly = text_start_y + i * line_height
-        content_draw.text((lx, ly), line, fill=(30, 30, 30, 255), font=content_font)
+        # Bóng đổ tối màu phía sau (xanh đậm / đen)
+        content_draw.text((lx + 3, ly + 3), line, fill=(5, 20, 60, 200), font=content_font)
+        # Chữ màu trắng chính thức ở trên
+        content_draw.text((lx, ly), line, fill=(255, 255, 255, 255), font=content_font)
 
     canvas.paste(content_box, (0, content_y), content_box)
+
+    # ── Bước 6b: Chèn logo tròn lớn đè lên góc trên bên trái của banner ────────────────
+    if logo_img:
+        # Bán kính badge hình tròn trắng to lên thêm 1 tí (9% chiều rộng video)
+        badge_r = max(60, int(width * 0.09))
+        # Dịch logo vào bên trong thêm (badge_cx = banner_x0 + badge_r - 20) để hiển thị hoàn toàn trên màn hình, không bị cắt xén
+        badge_cx = banner_x0 + badge_r - 20
+        badge_cy = content_y + banner_y0 + 15
+        
+        # Vẽ badge nền tròn trắng đè lên trên viền góc (giảm độ dày đường viền ngoài)
+        draw.ellipse(
+            [(badge_cx - badge_r, badge_cy - badge_r), (badge_cx + badge_r, badge_cy + badge_r)],
+            fill=(255, 255, 255, 255),
+            outline=(255, 255, 255, 255),
+            width=1
+        )
+        
+        # Resize logo để khít hơn trong hình tròn (tăng logo_size từ 1.6 lên 1.88 lần badge_r để giảm viền trắng bao quanh logo)
+        logo_size = int(badge_r * 1.88)
+        logo_resized = logo_img.resize((logo_size, logo_size), Image.LANCZOS)
+        
+        # Tạo mask tròn cho logo
+        mask = Image.new("L", (logo_size, logo_size), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse([(0, 0), (logo_size, logo_size)], fill=255)
+        
+        # Paste logo
+        logo_x = badge_cx - logo_size // 2
+        logo_y = badge_cy - logo_size // 2
+        canvas.paste(logo_resized, (logo_x, logo_y), mask)
 
     # ── Bước 7: Lưu output ───────────────────────────────────────────────────
     # Convert to RGB nếu output là JPG

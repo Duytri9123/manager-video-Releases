@@ -936,6 +936,7 @@ def generate_thumbnail_route():
     width = int(data.get("width") or 1080)
     height = int(data.get("height") or 1920)
     corner_radius = int(data.get("corner_radius") or 40)
+    logo_path = str(data.get("logo_path") or data.get("frame_logo_path") or "").strip()
 
     if not video_path_str:
         return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
@@ -964,6 +965,7 @@ def generate_thumbnail_route():
         width=width,
         height=height,
         corner_radius=corner_radius,
+        logo_path=logo_path,
     )
 
     if ok:
@@ -1032,7 +1034,28 @@ def generate_thumbnail_ai():
     title = str(data.get("title") or "").strip()
     style = str(data.get("style") or "youtube").strip()
     custom_prompt = str(data.get("custom_prompt") or "").strip()
+    
+    # Auto-detect aspect ratio from video dimensions if available
     aspect_ratio = str(data.get("aspect_ratio") or "9:16").strip()
+    if video_path_str:
+        try:
+            from core.video_processor import find_ffmpeg
+            ffmpeg = find_ffmpeg()
+            if ffmpeg:
+                vp = Path(video_path_str).expanduser()
+                if not vp.is_absolute():
+                    vp = ROOT / vp
+                if vp.exists():
+                    import subprocess, re
+                    _vr = subprocess.run([ffmpeg, "-i", str(vp)],
+                        capture_output=True, text=True, encoding="utf-8", errors="replace")
+                    _vm = re.search(r"(\d{2,5})x(\d{2,5})", _vr.stderr or "")
+                    if _vm:
+                        _vw, _vh = int(_vm.group(1)), int(_vm.group(2))
+                        aspect_ratio = "9:16" if _vw < _vh else "16:9"
+        except Exception:
+            pass
+
     subtitle_text = str(data.get("subtitle_text") or "").strip()
 
     # Get API keys (need at least 1 of: 9Router or Gemini)

@@ -184,6 +184,10 @@
       0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,.4); }
       50% { box-shadow: 0 0 0 6px rgba(192,57,43,0); }
     }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
   </style>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -198,6 +202,7 @@
         <div class="platform-tab active" data-source="mangadex" onclick="storySwitchSource('mangadex')">🌐 Tìm truyện online</div>
         <div class="platform-tab" data-source="urls"     onclick="storySwitchSource('urls')">🔗 Link chương trực tiếp</div>
         <div class="platform-tab" data-source="comic"    onclick="storySwitchSource('comic')">🗂 Upload ZIP (OCR)</div>
+        <div class="platform-tab" data-source="novel"    onclick="storySwitchSource('novel')">📖 Tìm truyện chữ</div>
         <div class="platform-tab" data-source="text"     onclick="storySwitchSource('text')">🤖 Tạo truyện AI</div>
       </div>
 
@@ -309,15 +314,145 @@
         </div>
       </div>
 
+      <!-- ── 1E. Web Novel (Truyện chữ) Search & Import ───────────────── -->
+      <div class="story-source hidden" data-source="novel">
+        <div class="provider-bar" style="align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+          <input id="sn-query" type="text"
+                 placeholder="Nhập tên truyện chữ (vd: Đấu Phá Thương Khung, Phàm Nhân Tu Tiên...)"
+                 style="flex:1;min-width:240px"
+                 onkeydown="if(event.key==='Enter')storyNovelSearch()">
+          <label class="check-item" style="margin:0;font-size:12px;display:flex;align-items:center;gap:4px" title="Bật AI để tự động sửa lỗi chính tả, nhận diện tên gốc từ tên truyện tranh">
+            <input type="checkbox" id="sn-ai-search" checked>
+            <span>🤖 Tìm bằng AI</span>
+          </label>
+          <button class="btn btn-primary btn-sm" type="button" onclick="storyNovelSearch()">🔎 Tìm kiếm</button>
+          <span id="sn-search-meta" class="text-xs text-muted"></span>
+        </div>
+
+        <div class="alert-info text-sm" style="margin-top:8px">
+          Tìm kiếm và tự động import nội dung chương từ <strong>TruyenFull</strong> — cổng tiểu thuyết chữ lớn nhất Việt Nam.
+        </div>
+
+        <div id="sn-results"
+             style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:10px;max-height:400px;overflow-y:auto">
+          <div class="empty-state" style="grid-column:1/-1">Nhập tên truyện rồi bấm "Tìm kiếm".</div>
+        </div>
+
+        <!-- Selected Novel Details & Chapter list -->
+        <div id="sn-detail-card" class="card hidden" style="margin-top:12px;box-shadow:none;border:1px solid var(--border)">
+          <div class="card-header" style="padding:8px 12px;background:var(--bg3)">
+            <span class="card-title" id="sn-detail-title" style="font-size:14px;font-weight:700">📘 Chi tiết truyện</span>
+          </div>
+          <div class="card-body" style="padding:10px">
+            <div id="sn-detail-body" style="display:grid;grid-template-columns:90px 1fr;gap:12px;align-items:start">
+              <img id="sn-detail-cover" src="" style="width:90px;aspect-ratio:2/3;object-fit:cover;border-radius:4px;background:var(--bg3)">
+              <div>
+                <div id="sn-detail-author" style="font-size:12px;font-weight:600;color:var(--text2)"></div>
+                <div id="sn-detail-desc" style="font-size:11px;color:var(--text-muted);margin-top:4px;max-height:80px;overflow-y:auto;line-height:1.4"></div>
+              </div>
+            </div>
+            
+            <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+                <label style="font-weight:700;margin:0;font-size:12px;display:flex;align-items:center;gap:4px">
+                  📚 Chọn chương truyện
+                  <span id="sn-chapter-meta" class="text-xs text-muted" style="font-weight:normal"></span>
+                </label>
+                <!-- Toggle Button to collapse/expand chapters grid -->
+                <button type="button" class="btn btn-outline-info btn-xs" id="sn-toggle-chapters-btn" onclick="storyToggleChaptersGrid()" style="font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid var(--border)">
+                  📋 Hiện danh sách chương
+                </button>
+              </div>
+              
+              <!-- Legacy dropdown for backwards compatibility (hidden) -->
+              <div style="display:none">
+                <select id="sn-chapter-select" style="font-size:12px;padding:4px 8px;min-width:200px" onchange="storyNovelLoadChapter()"></select>
+              </div>
+
+              <!-- Collapsible Chapters Grid Panel -->
+              <div id="sn-chapters-grid-panel" style="margin-top:8px;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--bg2)">
+                <!-- Grid Container: 3 columns (3 chương 1 hàng) -->
+                <div id="sn-chapters-grid" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;max-height:220px;overflow-y:auto;padding:2px">
+                  <div class="text-xs text-muted" style="grid-column:1/-1;text-align:center;padding:12px">Chọn một truyện để xem danh sách chương.</div>
+                </div>
+                
+                <!-- Pagination controls -->
+                <div id="sn-chapters-pagination" style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);position:relative;z-index:9999 !important;pointer-events:auto !important">
+                  <!-- Dynamic pagination buttons -->
+                </div>
+              </div>
+            </div>
+            
+            <!-- Imported Chapters Container -->
+            <div id="sn-imported-container" class="card" style="margin-top:12px;box-shadow:none;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+              <div class="card-header" style="padding:8px 12px;background:var(--bg3);display:flex;justify-content:space-between;align-items:center;border-top-left-radius:6px;border-top-right-radius:6px;border-bottom:1px solid var(--border)">
+                <span class="card-title" style="font-size:12px;font-weight:700">📘 Chương đang chọn & nội dung nạp</span>
+                <button type="button" class="btn btn-outline-danger btn-xs" onclick="storyNovelClearImported()" style="font-size:10px;padding:2px 6px;border-radius:4px">🧹 Xóa sạch</button>
+              </div>
+              <div class="card-body" style="padding:10px">
+                <div style="margin-bottom:8px">
+                  <span style="font-size:11px;font-weight:700;color:var(--text2)">Chương đã nạp:</span>
+                  <div id="sn-imported-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+                    <span class="text-xs text-muted" id="sn-no-imported-hint">Chưa có chương nào được nạp. Hãy chọn một chương ở trên!</span>
+                  </div>
+                </div>
+                
+                <div class="field" style="margin-top:10px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                    <label style="font-size:11px;font-weight:700;margin:0">Nội dung tiểu thuyết của chương đã chọn:</label>
+                    <span id="sn-imported-char-count" class="text-xs text-muted" style="font-weight:normal">0 ký tự</span>
+                  </div>
+                  <textarea id="sn-imported-text" rows="12" style="font-size:12px;line-height:1.5;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;width:100%;padding:8px" placeholder="Nội dung chương sẽ tự động tải và gộp vào đây..."></textarea>
+                </div>
+
+                <div class="field" style="margin-top:10px">
+                  <label style="font-size:11px;font-weight:700;color:var(--text2)">Tên truyện để tối ưu hóa tìm kiếm ảnh tham chiếu:</label>
+                  <input type="text" id="sn-char-novel-title" class="form-control" style="font-size:12px;padding:6px 8px;width:100%;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text)" placeholder="Nhập tên truyện chuẩn để AI và Bing đối chiếu ảnh (Ví dụ: Ma Hoàng Đại Quản Gia)...">
+                </div>
+                
+                <div style="margin-top:10px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="storyNovelLoadSavedCharacters()" style="font-size:12px;padding:6px 12px;border-radius:4px">
+                    📚 Tải bộ nhân vật đã lưu
+                  </button>
+                  <button type="button" class="btn btn-outline-info btn-sm" id="sn-char-analyze-btn" onclick="storyNovelAnalyzeCharacters()" style="font-size:12px;padding:6px 12px;border-radius:4px">
+                    🤖 Phân tích nhân vật & Tìm ảnh tham chiếu
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="storyNovelSendToAiScript()" style="font-size:12px;padding:6px 12px;border-radius:4px">
+                    🤖 Tạo kịch bản phân cảnh từ nội dung này
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Novel Characters Analysis Results -->
+            <div id="sn-characters-analysis-card" class="card hidden" style="margin-top:12px;box-shadow:none;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+              <div class="card-header" style="padding:8px 12px;background:var(--bg3);display:flex;justify-content:space-between;align-items:center;border-top-left-radius:6px;border-top-right-radius:6px;border-bottom:1px solid var(--border)">
+                <span class="card-title" style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px">👤 Nhân vật & Ảnh tham chiếu từ AI</span>
+                <button type="button" class="btn btn-outline-info btn-xs" onclick="storyNovelImportCharactersToAi()" style="font-size:10px;padding:3px 8px;border-radius:4px">📥 Đồng bộ sang Tạo truyện AI</button>
+              </div>
+              <div class="card-body" style="padding:12px">
+                <div class="alert-info text-xs" style="margin-bottom:10px">
+                  Dưới đây là các nhân vật được trích xuất từ nội dung các chương. Nhấp vào ảnh thu nhỏ của nhân vật để chọn làm ảnh mẫu đại diện, sau đó bấm <b>Đồng bộ</b> để đẩy thẳng vào cài đặt nâng cao!
+                </div>
+                <div id="sn-characters-list" style="display:flex;flex-direction:column;gap:12px">
+                  <span class="text-xs text-muted">Chưa chạy phân tích nhân vật. Hãy bấm nút phân tích ở trên!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── 1D. AI Story Generation — Full Pipeline ─────────────────── -->
       <div class="story-source hidden" data-source="text">
 
         <!-- Main: just the idea -->
         <div class="card" style="margin-bottom:12px;border:1.5px solid var(--accent);box-shadow:none">
-          <div class="card-header" style="border-bottom-color:var(--accent-light)">
+          <div class="card-header" style="border-bottom-color:var(--accent-light);display:flex;justify-content:space-between;align-items:center;gap:8px">
             <span class="card-title">🤖 Tạo truyện AI</span>
+            <button type="button" class="btn btn-secondary btn-xs" id="sw-ai-main-toggle" onclick="storyToggleSection('sw-ai-main-body','sw-ai-main-toggle')" aria-expanded="true">▾ Thu gọn</button>
           </div>
-          <div class="card-body">
+          <div class="card-body" id="sw-ai-main-body">
             <div class="alert-info text-sm" style="margin-bottom:10px">
               Chỉ cần nhập ý tưởng → AI tự viết truyện, tự tạo nhân vật, chọn bối cảnh và sinh ảnh cho từng cảnh.
               Mở "Tuỳ chỉnh nâng cao" nếu muốn kiểm soát chi tiết hơn.
@@ -359,6 +494,19 @@
               </div>
             </div>
 
+            <div class="grid-2" style="margin-top:10px;margin-bottom:8px">
+              <label class="check-item"
+                     title="Gom nhiều phân cảnh vào một ảnh dọc dạng trang manhua/storyboard nhiều khung. Mỗi nhóm phân cảnh sẽ gọi API sinh một ảnh.">
+                <input type="checkbox" id="sw-ai-comic-page-mode">
+                <span>📖 Tạo ảnh dạng trang manhua nhiều khung</span>
+              </label>
+              <div class="field" style="margin:0">
+                <label>Số khung / trang manhua</label>
+                <input id="sw-ai-comic-panels-per-page" type="number" min="2" max="16" value="12" step="1">
+                <div id="sw-ai-comic-page-estimate" class="text-xs text-muted" style="margin-top:4px"></div>
+              </div>
+            </div>
+
             <!-- Advanced options (collapsed by default) -->
             <details style="margin-top:10px">
               <summary class="text-sm" style="cursor:pointer;color:var(--accent);font-weight:600">⚙️ Tuỳ chỉnh nâng cao (nhân vật, phong cách, địa điểm...)</summary>
@@ -371,10 +519,23 @@
                     <button class="btn btn-secondary btn-sm" type="button" onclick="storyAiAddChar()">＋ Thêm</button>
                   </div>
                   <div id="sw-ai-chars">
-                    <div class="sw-ai-char-row" style="display:grid;grid-template-columns:140px 1fr 36px;gap:6px;margin-bottom:5px;align-items:center">
-                      <input type="text" placeholder="Tên" class="sw-ai-char-name" style="font-size:12px;padding:6px 8px">
-                      <input type="text" placeholder="Mô tả ngoại hình (vd: nam 25t, tóc đen, áo hoodie xám)" class="sw-ai-char-desc" style="font-size:12px;padding:6px 8px">
-                      <button class="btn btn-danger btn-sm" type="button" onclick="this.closest('.sw-ai-char-row').remove()" style="padding:4px 8px">✕</button>
+                    <div class="sw-ai-char-row" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:8px">
+                      <div style="display:grid;grid-template-columns:120px 1fr 32px;gap:8px;align-items:center">
+                        <input type="text" placeholder="Tên nhân vật" class="sw-ai-char-name" style="font-size:12px;padding:6px 8px;font-weight:700">
+                        <input type="text" placeholder="Mô tả ngoại hình (vd: nam 25t, tóc đen, áo hoodie xám)" class="sw-ai-char-desc" style="font-size:12px;padding:6px 8px">
+                        <button class="btn btn-danger btn-sm" type="button" onclick="this.closest('.sw-ai-char-row').remove()" style="padding:4px 8px" title="Xoá nhân vật">✕</button>
+                      </div>
+                      <div class="char-refs-container" style="display:flex;flex-direction:column;gap:4px;padding-top:4px;border-top:1px dashed var(--border)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                          <span class="text-xs font-semibold text-muted">🖼️ Ảnh tham chiếu nhân vật (Style/Face References):</span>
+                          <div style="display:flex;gap:4px">
+                            <input class="sw-ai-char-ref-file" type="file" accept="image/*" multiple style="display:none" onchange="storyAiUploadCharRef(this)">
+                            <button class="btn btn-secondary btn-sm" type="button" onclick="this.previousElementSibling.click()" style="font-size:10px;padding:2px 8px">📤 Thêm ảnh</button>
+                          </div>
+                        </div>
+                        <div class="sw-ai-char-refs-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"></div>
+                        <input type="hidden" class="sw-ai-char-ref-urls" value="[]">
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -385,6 +546,7 @@
                     <label>🎨 Phong cách hình ảnh <span class="text-xs text-muted">(để mặc định = AI tự chọn)</span></label>
                     <select id="sw-ai-art-style">
                       <option value="" selected>— AI tự chọn phù hợp —</option>
+                      <option value="manga page layout, multi-panel comic strip, split panels with speech bubbles and action frames">📖 Ảnh truyện tranh nhiều khung hình (Multi-panel Comic)</option>
                       <option value="realistic photography">📷 Ảnh thực tế</option>
                       <option value="anime illustration">🎨 Anime / Manga</option>
                       <option value="3D render, Pixar style">🧊 3D Cartoon (Pixar)</option>
@@ -407,6 +569,20 @@
                 <div class="field">
                   <label>📝 Ghi chú thêm cho ảnh <span class="text-xs text-muted">(tuỳ chọn)</span></label>
                   <input id="sw-ai-img-note" type="text" placeholder="vd: ánh sáng ấm, tone lạnh, góc nhìn cao...">
+                </div>
+
+                <!-- Reference Image -->
+                <div class="field" style="margin-bottom:12px">
+                  <label style="font-weight:700">🖼️ Ảnh tham chiếu <span class="text-xs text-muted">(Dùng làm style hoặc gương mặt nhân vật mẫu)</span></label>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <input id="sw-ai-ref-image-url" type="text" placeholder="Dán link ảnh hoặc upload bên phải..." style="flex:1;font-size:12px;padding:6px 8px">
+                    <input id="sw-ai-ref-image-file" type="file" accept="image/*" style="display:none" onchange="storyAiUploadRefImage()">
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('sw-ai-ref-image-file').click()" style="padding:6px 12px;font-size:12px">📤 Chọn ảnh</button>
+                    <button class="btn btn-danger btn-sm hidden" id="sw-ai-ref-image-clear" type="button" onclick="storyAiClearRefImage()" style="padding:6px 12px;font-size:12px">✕</button>
+                  </div>
+                  <div id="sw-ai-ref-image-preview-wrap" class="hidden" style="margin-top:8px">
+                    <img id="sw-ai-ref-image-preview" src="" style="max-height:120px;border-radius:6px;border:1px solid var(--border);object-fit:cover">
+                  </div>
                 </div>
 
                 <!-- Image model -->
@@ -473,6 +649,32 @@
         <div class="field">
           <label>Nội dung truyện <span class="text-xs text-muted">(mỗi đoạn = 1 cảnh, có thể chỉnh sửa)</span></label>
           <textarea id="sw-text" rows="10" placeholder="Truyện AI sẽ xuất hiện ở đây... Bạn cũng có thể tự nhập/dán văn bản."></textarea>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="storyNovelSplitScenes()">
+              🛠️ Phân cảnh & Cấu hình chi tiết từng cảnh
+            </button>
+          </div>
+        </div>
+
+        <!-- Scene Editor: configure character references and detail prompts individually -->
+        <div id="sw-scenes-editor-card" class="card hidden" style="box-shadow:none;margin-top:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+          <div class="card-header" style="padding:8px 12px;background:var(--bg3);display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)">
+            <span class="card-title" style="font-size:12px;font-weight:700">🎞️ Cấu hình chi tiết & Xử lý ảnh từng cảnh</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button type="button" class="btn btn-secondary btn-xs" id="sw-scenes-editor-toggle" onclick="storyToggleSection('sw-scenes-editor-body','sw-scenes-editor-toggle')" aria-expanded="true">▾ Thu gọn</button>
+              <button type="button" class="btn btn-secondary btn-xs" onclick="storyAiAutoAssignSceneCharacters()">🔎 Tự gắn nhân vật</button>
+              <button type="button" class="btn btn-secondary btn-xs" id="sw-gen-comic-pages-btn" onclick="storyAiGenerateComicPages()">📖 Sinh trang manhua</button>
+              <button type="button" class="btn btn-primary btn-xs" id="sw-gen-all-scenes-btn" onclick="storyAiGenerateAllScenesImages()">🎨 Sinh toàn bộ ảnh cảnh</button>
+            </div>
+          </div>
+          <div class="card-body" id="sw-scenes-editor-body" style="padding:12px">
+            <div class="alert-info text-xs" style="margin-bottom:12px">
+              Dưới đây là danh sách phân cảnh. Bạn có thể thay đổi mô tả chi tiết prompt và chọn nhân vật cụ thể xuất hiện ở từng cảnh để đảm bảo sự đồng bộ gương mặt tốt nhất!
+            </div>
+            <div id="sw-scenes-editor-list" style="display:flex;flex-direction:column;gap:12px">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
         </div>
 
         <!-- Scene preview (generated images + text) -->
@@ -480,6 +682,7 @@
           <div class="card-header">
             <span class="card-title">🎞 Preview các cảnh</span>
             <div class="card-actions" style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-secondary btn-sm" type="button" id="sw-ai-scenes-toggle" onclick="storyToggleSection('sw-ai-scenes-body','sw-ai-scenes-toggle')" aria-expanded="true">▾ Thu gọn</button>
               <button class="btn btn-secondary btn-sm" type="button"
                       onclick="storyAiGenerateAllEndFrames()"
                       title="Sinh ảnh kết thúc cho mọi cảnh để có hiệu ứng chuyển động trong panel khi render">
@@ -489,7 +692,7 @@
               <button class="btn btn-primary btn-sm" type="button" onclick="storyAiCreateVideo()">🎬 Tạo video ngay</button>
             </div>
           </div>
-          <div class="card-body">
+          <div class="card-body" id="sw-ai-scenes-body">
             <div class="alert-info text-xs" style="margin-bottom:8px;line-height:1.5">
               💡 Mỗi cảnh hiển thị ảnh start (hoặc start+end nếu đã sinh).
               Bấm <b>✨ Sinh ảnh end</b> trên một cảnh để tạo ảnh kết thúc → renderer sẽ

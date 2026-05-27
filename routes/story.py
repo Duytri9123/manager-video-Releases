@@ -859,6 +859,36 @@ def _call_image_api(
     }
 
 
+@bp.route("/api/story/ai_upload_ref", methods=["POST"])
+def ai_upload_ref():
+    """Upload an image to be used as a reference image in the AI story pipeline."""
+    upl = request.files.get("file")
+    if not upl:
+        return jsonify({"ok": False, "error": "Thiếu file."}), 400
+    name = secure_filename(upl.filename or "ref.png")
+    # Make sure it's an image
+    if not any(name.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp")):
+        return jsonify({"ok": False, "error": "Chỉ chấp nhận ảnh (.png, .jpg, .jpeg, .webp)"}), 400
+    
+    cfg = _cfg()
+    ref_dir = _ai_images_root(cfg) / "ref_images"
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate unique filename to avoid collision
+    import uuid
+    ext = Path(name).suffix or ".png"
+    filename = f"ref_{uuid.uuid4().hex[:8]}{ext}"
+    out_path = ref_dir / filename
+    upl.save(str(out_path))
+    
+    serve_url = f"/api/story/ai_image/ref_images/{filename}"
+    return jsonify({
+        "ok": True,
+        "image_url": serve_url,
+        "filename": filename
+    })
+
+
 @bp.route("/api/story/ai_generate_image", methods=["POST"])
 def ai_generate_image():
     """Generate a single image via 9Router, optionally with reference images.
@@ -998,9 +1028,17 @@ def ai_generate_anchor():
     filename = f"anchor_{uuid.uuid4().hex[:8]}.png"
     out_path = out_dir / filename
 
+    # Resolve any reference URLs → real local paths
+    ref_urls = data.get("reference_image_urls") or []
+    ref_paths = []
+    for u in ref_urls:
+        p = _resolve_image_url_to_path(u, out_dir)
+        if p:
+            ref_paths.append(p)
+
     ok, info = _call_image_api(
         prompt=prompt, model=model, quality=quality, ratio=ratio, seed=seed,
-        out_path=out_path, reference_image_paths=None,
+        out_path=out_path, reference_image_paths=ref_paths,
     )
     if not ok:
         return jsonify({"ok": False, "error": info.get("error", "Lỗi không rõ"),
@@ -1073,9 +1111,15 @@ def ai_generate_portrait():
     out_path = out_dir / filename
 
     ref_paths = []
+    # Support generic custom reference image URLs
+    ref_urls = data.get("reference_image_urls") or []
+    for u in ref_urls:
+        p = _resolve_image_url_to_path(u, out_dir)
+        if p and p not in ref_paths:
+            ref_paths.append(p)
     if anchor_url:
         p = _resolve_image_url_to_path(anchor_url, out_dir)
-        if p:
+        if p and p not in ref_paths:
             ref_paths.append(p)
 
     ok, info = _call_image_api(
@@ -2665,3 +2709,1600 @@ def mangaplus_chapter_pages_id():
         "pages": pages,
         "source": "mangaplus",
     })
+
+
+def _call_llm_multi_tier(system_msg: str, user_msg: str, temperature: float = 0.7, max_tokens: int = 2000, json_mode: bool = False) -> str:
+    import requests as _requests
+    cfg = _cfg()
+    
+    # Tier 1: Local 9Router (default config)
+    nr_cfg = cfg.get("nine_router") or {}
+    api_key = (nr_cfg.get("api_key") or "").strip()
+    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+    model = (nr_cfg.get("default_model") or "duytris").strip()
+    
+    if api_key:
+        try:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg}
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": False
+            }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
+                
+            resp = _requests.post(f"{endpoint}/chat/completions", json=payload, headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }, timeout=15)
+            if resp.status_code == 200:
+                body = resp.json()
+                content = ((body.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
+                if content:
+                    return content
+        except Exception:
+            pass
+
+    # Tier 2: Public DeepSeek API
+    deepseek_key = cfg.get("translation", {}).get("deepseek_key", "").strip()
+    if deepseek_key:
+        try:
+            payload = {
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg}
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": False
+            }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
+                
+            resp = _requests.post("https://api.deepseek.com/chat/completions", json=payload, headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {deepseek_key}"
+            }, timeout=25)
+            if resp.status_code == 200:
+                body = resp.json()
+                content = ((body.get("choices") or [{}])[0].get("message") or {}).get("content", "").strip()
+                if content:
+                    return content
+        except Exception:
+            pass
+
+    # Tier 3: Public Gemini API
+    gemini_key = cfg.get("gemini_video", {}).get("api_key", "").strip()
+    if gemini_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+            combined_prompt = f"{system_msg}\n\nYêu cầu:\n{user_msg}"
+            payload = {
+                "contents": [
+                    {"parts": [{"text": combined_prompt}]}
+                ],
+                "generationConfig": {
+                    "temperature": temperature,
+                    "maxOutputTokens": max_tokens
+                }
+            }
+            if json_mode:
+                payload["generationConfig"]["responseMimeType"] = "application/json"
+                
+            resp = _requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+            if resp.status_code == 200:
+                body = resp.json()
+                content = (((body.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}])[0].get("text", "").strip()
+                if content:
+                    return content
+        except Exception:
+            pass
+
+    return ""
+
+
+def _ai_correct_novel_query(keyword: str) -> dict:
+    system_msg = """You are a smart Vietnamese web novel expert assistant.
+Your task is to identify standard Vietnamese web novel titles and their common alternative names or comic/manga names from user queries.
+Users might search using comic names (e.g., 'Đại quản gia là ma hoàng'), typos, or shortened names.
+Identify the correct standard text novel title (tiểu thuyết chữ) in Vietnamese (e.g. 'Ma Hoàng Đại Quản Gia') and all popular alternative/comic names (e.g., 'Đại Quản Gia Là Ma Hoàng').
+
+You MUST return strictly a JSON object with this exact schema:
+{
+  "corrected_title": "standard text novel title in Vietnamese",
+  "alternatives": ["alternative name 1", "alternative name 2"],
+  "explanation": "Brief explanation in Vietnamese of why it was corrected"
+}
+Do not include any markdown formatting, code fences, or additional text. Return only the raw JSON string."""
+
+    user_msg = f"User query: '{keyword}'. Return the JSON object now."
+    try:
+        content = _call_llm_multi_tier(system_msg, user_msg, temperature=0.3, max_tokens=500, json_mode=True)
+        if content:
+            if "```" in content:
+                import re
+                m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+                if m:
+                    content = m.group(1)
+            s_idx = content.find("{")
+            e_idx = content.rfind("}")
+            if s_idx >= 0 and e_idx > s_idx:
+                content = content[s_idx:e_idx + 1]
+            import json
+            return json.loads(content)
+    except Exception:
+        pass
+    return {"corrected_title": keyword, "alternatives": [], "explanation": ""}
+
+
+def _strip_accents(text: str) -> str:
+    import unicodedata
+    nfkd_form = unicodedata.normalize('NFKD', text)
+    s = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    s = s.replace("đ", "d").replace("Đ", "D")
+    return " ".join(s.split())
+
+
+@bp.route("/api/story/novel/search", methods=["POST", "GET"])
+def api_novel_search():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+    else:
+        data = {k: v for k, v in request.args.items()}
+    keyword = (data.get("keyword") or data.get("q") or "").strip()
+    if not keyword:
+        return jsonify({"ok": False, "error": "Thiếu từ khóa."}), 400
+        
+    ai_search = data.get("ai_search", False) or (data.get("ai") in (True, "true", 1, "1"))
+    ai_note = ""
+    original_keyword = keyword
+    
+    try:
+        from core.novel_scraper import search_novels
+        from utils.web_search import search as web_search_func
+        
+        # We will collect sources from multiple scraper bases and Google search!
+        all_items = []
+        seen_urls = set()
+        
+        def add_item(title, url, author, cover, source_name, is_scrapable=True, chapters_est=0):
+            norm_url = url.rstrip("/")
+            if norm_url in seen_urls:
+                # If already seen, update estimated chapters if the new one is higher
+                for item in all_items:
+                    if item["url"].rstrip("/") == norm_url:
+                        if chapters_est > 0:
+                            item["chapters_est"] = max(item.get("chapters_est") or 0, chapters_est)
+                return
+            seen_urls.add(norm_url)
+            
+            # Estimate chapter count from title or snippet if not provided
+            if not chapters_est:
+                import re
+                m1 = re.search(r"(\d+)\s*chương", title.lower()) or re.search(r"chương\s*(\d+)", title.lower())
+                if m1:
+                    chapters_est = int(m1.group(1))
+            
+            all_items.append({
+                "title": title,
+                "url": url,
+                "author": author or "Ẩn danh",
+                "cover": cover or "/static/img/cover_fallback.png",
+                "source_name": source_name,
+                "chapters_est": chapters_est,
+                "is_scrapable": is_scrapable
+            })
+
+        # Step 1: Intelligent query correction (if AI search checked or initially empty)
+        search_keywords = [keyword]
+        if ai_search:
+            ai_res = _ai_correct_novel_query(keyword)
+            corrected = ai_res.get("corrected_title") or keyword
+            explanation = ai_res.get("explanation") or ""
+            alternatives = ai_res.get("alternatives") or []
+            
+            # Gather all unique terms for extensive search
+            seen_kws = set()
+            search_keywords = []
+            for kw in [keyword, corrected] + alternatives:
+                clean_kw = " ".join(kw.strip().split()).lower()
+                if clean_kw and clean_kw not in seen_kws:
+                    seen_kws.add(clean_kw)
+                    search_keywords.append(kw.strip())
+            
+            if corrected.lower() != keyword.lower():
+                ai_note = explanation or f"Đã tự động chuyển đổi từ khóa tìm kiếm sang tên tiểu thuyết gốc: '{corrected}'."
+
+        # Tier 1: Search via TruyenMoi (truyenmoiii.org) - primary updated source
+        for skw in search_keywords:
+            try:
+                tm_items = search_novels(skw)
+                for it in tm_items:
+                    display_title = f"{it['title']} [truyenmoiii.org]"
+                    add_item(display_title, it['url'], it['author'], it['cover'], "truyenmoiii.org", is_scrapable=True, chapters_est=it.get("chapters_est", 0))
+            except Exception:
+                pass
+
+        # Tier 2: Search via TruyenFull
+        for skw in search_keywords:
+            try:
+                import urllib.parse
+                import requests as _requests
+                from bs4 import BeautifulSoup
+                
+                tf_url = f"https://truyenfull.today/tim-kiem/?tukhoa={urllib.parse.quote_plus(skw)}"
+                r = _requests.get(tf_url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }, timeout=15, verify=False)
+                if r.status_code == 200:
+                    soup = BeautifulSoup(r.text, "html.parser")
+                    rows = soup.select(".list-truyen .row")
+                    for row in rows:
+                        title_el = row.select_one(".truyen-title a")
+                        if title_el:
+                            title = title_el.text.strip()
+                            link = title_el["href"]
+                            author_el = row.select_one(".author")
+                            author = author_el.text.strip() if author_el else "Ẩn danh"
+                            img_el = row.select_one(".lazyimg") or row.select_one("img")
+                            cover = ""
+                            if img_el:
+                                cover = img_el.get("data-image") or img_el.get("src") or ""
+                            
+                            # Estimate chapter count from row
+                            chapters_est = 0
+                            chap_el = row.select_one(".text-info a") or row.select_one(".chapter-text") or row.select_one("span.chapter-text")
+                            if chap_el:
+                                m = re.search(r"(\d+)", chap_el.text)
+                                if m:
+                                    chapters_est = int(m.group(1))
+                            if not chapters_est:
+                                m = re.search(r"chương\s*(\d+)", row.text.lower()) or re.search(r"(\d+)\s*chương", row.text.lower())
+                                if m:
+                                    chapters_est = int(m.group(1))
+
+                            add_item(f"{title} [truyenfull.vn]", link, author, cover, "truyenfull.vn", is_scrapable=True, chapters_est=chapters_est)
+            except Exception:
+                pass
+
+        # Tier 3: Search Web (Google Grounding) to discover all other available web portals
+        if search_keywords:
+            primary_search_kw = search_keywords[0]
+            try:
+                web_results = web_search_func(f"{primary_search_kw} đọc truyện chữ", limit=8)
+                for r in web_results:
+                    title = r.get("title") or ""
+                    url = r.get("url") or ""
+                    domain = r.get("source") or ""
+                    snippet = r.get("snippet") or ""
+                    
+                    if any(k in domain.lower() for k in ("google", "facebook", "youtube", "wikipedia")):
+                        continue
+                        
+                    is_scr = False
+                    if any(k in domain.lower() for k in ("truyenfull", "truyenmoi")):
+                        is_scr = True
+                        
+                    display_title = f"{title} [{domain}]"
+                    chapters_est = 0
+                    import re
+                    m2 = re.search(r"(\d+)\s*chương", snippet.lower()) or re.search(r"chương\s*(\d+)", snippet.lower())
+                    if m2:
+                        chapters_est = int(m2.group(1))
+                        
+                    add_item(display_title, url, None, None, domain, is_scrapable=is_scr, chapters_est=chapters_est)
+            except Exception:
+                pass
+
+        # Step 4: If still no results, try unaccented query fallback on search_novels
+        if not all_items:
+            for skw in search_keywords:
+                stripped = _strip_accents(skw)
+                if stripped.lower() != skw.lower():
+                    try:
+                        tm_items = search_novels(stripped)
+                        for it in tm_items:
+                            add_item(f"{it['title']} [truyenmoiii.org]", it['url'], it['author'], it['cover'], "truyenmoiii.org", is_scrapable=True, chapters_est=it.get("chapters_est", 0))
+                    except Exception:
+                        pass
+
+        # Sort results:
+        # 1. Scrapable platforms first.
+        # 2. Then by estimated chapter count descending (so highly updated ones are at the very top).
+        # 3. Then by domain name.
+        all_items.sort(key=lambda x: (not x["is_scrapable"], -x["chapters_est"]))
+
+        # For display, let's prepend chapter counts to titles if estimated
+        for it in all_items:
+            est = it.get("chapters_est") or 0
+            if est > 0 and "chương" not in it["title"].lower():
+                # We can append it to the title for extremely clean visual clarity
+                it["title"] = f"{it['title']} ({est} chương)"
+
+        return jsonify({
+            "ok": True, 
+            "items": all_items, 
+            "count": len(all_items),
+            "ai_note": ai_note,
+            "original_query": original_keyword
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:300]}), 502
+
+
+@bp.route("/api/story/novel/chapters", methods=["POST", "GET"])
+def api_novel_chapters():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+    else:
+        data = {k: v for k, v in request.args.items()}
+    novel_url = (data.get("url") or "").strip()
+    page = int(data.get("page") or 1)
+    if not novel_url:
+        return jsonify({"ok": False, "error": "Thiếu URL truyện."}), 400
+
+    try:
+        if page <= 1:
+            # Trang 1: lấy đầy đủ metadata + chương
+            from core.novel_scraper import get_novel_details
+            details = get_novel_details(novel_url)
+            return jsonify({"ok": True, **details, "current_page": 1})
+        else:
+            # Trang > 1: chỉ cần danh sách chương (nhiều chiến lược scraping)
+            from core.novel_scraper import get_chapters_page
+            result = get_chapters_page(novel_url, page)
+            chapters = result.get("chapters") or []
+            total_pages = result.get("total_pages") or page
+            if not chapters:
+                return jsonify({
+                    "ok": False,
+                    "error": f"Không tìm thấy chương ở trang {page}. Có thể trang web thay đổi cấu trúc hoặc URL."
+                }), 404
+            return jsonify({
+                "ok": True,
+                "chapters": chapters,
+                "total_pages": total_pages,
+                "current_page": page,
+            })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:300]}), 502
+
+
+def _ai_generate_chapter_content(novel_title: str, chapter_title: str) -> str:
+    system_msg = """Bạn là một nhà văn mạng viết truyện chữ xuất sắc. 
+Hãy viết lại/tái tạo chi tiết nội dung chương truyện chữ này bằng tiếng Việt dựa theo tên tiểu thuyết và tên chương được cung cấp.
+Hãy viết khoảng 1000 - 1500 từ, đầy đủ diễn biến cốt truyện kịch tính của chương đó, hành văn cuốn hút, đúng văn phong của tác phẩm.
+CHỈ trả về nội dung chương truyện chữ dạng văn bản thuần túy, không có tiêu đề chương, không thêm bất kỳ lời thoại ngoài hay định dạng markdown, không dùng code block.
+Bắt đầu trực tiếp bằng nội dung chương truyện."""
+
+    user_msg = f"Tiểu thuyết: '{novel_title}'\nChương: '{chapter_title}'\nHãy viết nội dung chương truyện."
+    return _call_llm_multi_tier(system_msg, user_msg, temperature=0.7, max_tokens=2500, json_mode=False)
+
+
+@bp.route("/api/story/novel/chapter_content", methods=["POST", "GET"])
+def api_novel_chapter_content():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+    else:
+        data = {k: v for k, v in request.args.items()}
+    chapter_url = (data.get("url") or "").strip()
+    novel_title = (data.get("novel_title") or "").strip()
+    chapter_title = (data.get("chapter_title") or "").strip()
+    
+    if not chapter_url:
+        return jsonify({"ok": False, "error": "Thiếu URL chương."}), 400
+        
+    try:
+        from core.novel_scraper import get_chapter_content
+        res = get_chapter_content(chapter_url)
+        return jsonify({"ok": True, **res, "ai_generated": False})
+    except Exception as e:
+        # Check if we can trigger AI fallback
+        if novel_title and chapter_title:
+            try:
+                ai_content = _ai_generate_chapter_content(novel_title, chapter_title)
+                if ai_content:
+                    return jsonify({
+                        "ok": True,
+                        "title": chapter_title,
+                        "content": ai_content,
+                        "ai_generated": True
+                    })
+            except Exception:
+                pass
+        return jsonify({"ok": False, "error": f"Lỗi cào chương và AI backup thất bại: {str(e)[:200]}"}), 502
+
+
+def _scrape_google_images_mobile(query: str, limit: int = 8) -> list[dict]:
+    import re
+    import html as _html
+    import requests as _requests
+    import urllib.parse as _urlparse
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3 like Mac OS X) AppleWebKit/602.1.50 (KHTML, like Gecko) CriOS/56.0.2924.75 Mobile/14E5239e Safari/602.1",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    search_url = f"https://www.google.com/search?q={_urlparse.quote(query)}&tbm=isch"
+    
+    char_images = []
+    try:
+        r = _requests.get(search_url, headers=headers, timeout=6, verify=False)
+        if r.status_code == 200:
+            img_urls = re.findall(r'(https://encrypted-tbn\d\.gstatic\.com/images\?q=tbn:[^"\']+\b)', r.text)
+            for url in img_urls:
+                clean_url = _html.unescape(url).replace("\\", "")
+                if clean_url and not any(img["url"] == clean_url for img in char_images):
+                    char_images.append({
+                        "url": clean_url,
+                        "thumbnail": clean_url
+                    })
+                    if len(char_images) >= limit:
+                        break
+    except Exception:
+        pass
+
+    return char_images
+
+
+def _image_search_headers(referer: str = "https://www.bing.com/") -> dict:
+    return {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": referer,
+    }
+
+
+def _duckduckgo_image_headers(referer: str) -> dict:
+    return {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": referer or "https://duckduckgo.com/",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+
+
+def _normalize_image_search_text(value: str) -> str:
+    import html as _html
+    import unicodedata
+
+    value = _html.unescape(value or "").lower()
+    normalized = unicodedata.normalize("NFD", value)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    return normalized.replace("đ", "d")
+
+
+def _image_query_terms(query: str) -> tuple[list[str], list[str]]:
+    import re
+
+    normalized = _normalize_image_search_text(query)
+    stop_words = {
+        "anh", "hinh", "truyen", "tranh", "nhan", "vat",
+        "manga", "manhua", "comic", "comics", "avatar",
+        "wallpaper", "wallpapers", "official", "fanart",
+        "png", "jpg", "jpeg", "webp", "hd", "4k",
+    }
+    terms: list[str] = []
+    for term in re.findall(r"[a-z0-9]+", normalized):
+        if len(term) < 2 or term in stop_words or term in terms:
+            continue
+        terms.append(term)
+
+    cjk_stop_words = {"漫画", "角色", "图片", "高清", "壁纸", "头像"}
+    cjk_terms = []
+    for term in re.findall(r"[\u3400-\u9fff]{2,}", query or ""):
+        if term in cjk_stop_words:
+            continue
+        if term not in cjk_terms:
+            cjk_terms.append(term)
+    return terms, cjk_terms
+
+
+def _latin_tokens(value: str) -> set[str]:
+    import re
+
+    return set(re.findall(r"[a-z0-9]+", _normalize_image_search_text(value or "")))
+
+
+def _known_character_aliases(name: str = "") -> list[str]:
+    normalized = _normalize_image_search_text(name or "")
+    aliases: dict[str, list[str]] = {
+        "tu nghien": ["Zi Yan", "Ziyan", "紫妍"],
+        "tieu viem": ["Xiao Yan", "萧炎", "Yan Xiao"],
+        "huan nhi": ["Xun Er", "Xun'er", "Gu Xun Er", "古薰儿", "萧薰儿"],
+        "co huan nhi": ["Gu Xun Er", "Xun Er", "古薰儿", "萧薰儿"],
+        "duoc lao": ["Yao Lao", "Yao Chen", "药老", "药尘"],
+        "my do toa": ["Medusa", "Cai Lin", "美杜莎", "彩鳞"],
+        "van van": ["Yun Yun", "云韵"],
+        "nap lan yen nhien": ["Nalan Yanran", "纳兰嫣然"],
+        "tieu chien": ["Xiao Zhan", "萧战"],
+        "tieu mi": ["Xiao Mei", "萧美"],
+    }
+    return aliases.get(normalized, [])
+
+
+def _reference_subject_groups(query: str = "", *, name: str = "",
+                              pinyin_name: str = "",
+                              chinese_name: str = "") -> tuple[list[list[str]], list[str]]:
+    groups: list[list[str]] = []
+    _, cjk_terms = _image_query_terms(chinese_name)
+
+    for value in (name, pinyin_name):
+        terms, _ = _image_query_terms(value)
+        if terms and terms not in groups:
+            groups.append(terms[:3])
+
+    for value in _known_character_aliases(name) + _known_character_aliases(pinyin_name):
+        terms, alias_cjk = _image_query_terms(value)
+        if terms and terms[:3] not in groups:
+            groups.append(terms[:3])
+        for term in alias_cjk:
+            if term not in cjk_terms:
+                cjk_terms.append(term)
+
+    if not groups and not cjk_terms and query:
+        terms, query_cjk = _image_query_terms(query)
+        title_terms = {
+            "dau", "pha", "thuong", "khung",
+            "battle", "through", "heavens",
+            "doupo", "cangqiong",
+        }
+        inferred = [term for term in terms if term not in title_terms]
+        if 1 <= len(inferred) <= 3:
+            groups.append(inferred)
+        elif len(inferred) > 3:
+            groups.append(inferred[:2])
+        cjk_terms = query_cjk
+
+    return groups, cjk_terms
+
+
+def _candidate_matches_subject(candidate: dict, subject_groups: list[list[str]],
+                               subject_cjk_terms: list[str]) -> bool:
+    if not subject_groups and not subject_cjk_terms:
+        return True
+
+    text = " ".join(
+        str(candidate.get(key) or "")
+        for key in ("title", "url", "thumbnail", "page_url")
+    )
+    tokens = _latin_tokens(text)
+    raw_text = (text or "").lower()
+
+    for group in subject_groups:
+        if group and all(term in tokens for term in group):
+            return True
+    for term in subject_cjk_terms:
+        if term.lower() in raw_text:
+            return True
+    return False
+
+
+def _reference_context_groups(query: str = "", novel_title: str = "") -> tuple[list[list[str]], list[str]]:
+    groups: list[list[str]] = []
+    cjk_terms: list[str] = []
+
+    terms, cjk = _image_query_terms(novel_title or "")
+    if terms:
+        groups.append(terms[:4])
+    cjk_terms.extend(cjk)
+
+    query_tokens = _latin_tokens(query)
+    title_aliases = [
+        ["dau", "pha", "thuong", "khung"],
+        ["battle", "through", "heavens"],
+        ["doupo", "cangqiong"],
+    ]
+    for alias in title_aliases:
+        if any(term in query_tokens for term in alias) or any(term in _latin_tokens(novel_title) for term in alias):
+            if alias not in groups:
+                groups.append(alias)
+
+    _, query_cjk = _image_query_terms(query)
+    for term in query_cjk:
+        if term in {"斗破苍穹"} and term not in cjk_terms:
+            cjk_terms.append(term)
+
+    return groups, cjk_terms
+
+
+def _candidate_matches_context(candidate: dict, context_groups: list[list[str]],
+                               context_cjk_terms: list[str]) -> bool:
+    if not context_groups and not context_cjk_terms:
+        return True
+
+    text = " ".join(
+        str(candidate.get(key) or "")
+        for key in ("title", "url", "thumbnail", "page_url")
+    )
+    tokens = _latin_tokens(text)
+    raw_text = (text or "").lower()
+
+    for group in context_groups:
+        if not group:
+            continue
+        required = min(2, len(group))
+        if sum(1 for term in group if term in tokens) >= required:
+            return True
+    for term in context_cjk_terms:
+        if term.lower() in raw_text:
+            return True
+    return False
+
+
+def _score_image_candidate(candidate: dict, query: str) -> int:
+    text = " ".join(
+        str(candidate.get(key) or "")
+        for key in ("title", "url", "thumbnail", "page_url")
+    )
+    normalized_text = _normalize_image_search_text(text)
+    raw_text = (text or "").lower()
+    normalized_query = _normalize_image_search_text(query).strip()
+    terms, cjk_terms = _image_query_terms(query)
+    text_tokens = _latin_tokens(text)
+
+    score = 0
+    if normalized_query and len(normalized_query) >= 5 and normalized_query in normalized_text:
+        score += 4
+    for term in terms:
+        if term in text_tokens:
+            score += 1
+    for term in cjk_terms:
+        if term.lower() in raw_text:
+            score += 3
+
+    title = _normalize_image_search_text(str(candidate.get("title") or ""))
+    title_tokens = _latin_tokens(title)
+    if title and terms and all(term in title_tokens for term in terms[:2]):
+        score += 2
+    image_url = str(candidate.get("url") or "")
+    image_url_tokens = _latin_tokens(image_url)
+    if image_url and terms and all(term in image_url_tokens for term in terms[:2]):
+        score += 2
+    if any(word in normalized_text for word in ("manhua", "manga", "comic", "truyen tranh")):
+        score += 1
+    if "漫画" in raw_text:
+        score += 1
+    return score
+
+
+def _image_min_score(query: str) -> int:
+    terms, cjk_terms = _image_query_terms(query)
+    if cjk_terms:
+        return 3
+    if len(terms) >= 3:
+        return 3
+    if len(terms) >= 1:
+        return 1
+    return 0
+
+
+def _add_image_candidate(results: list[dict], seen: set[str], candidate: dict,
+                         query: str, source: str, *, strict: bool = True,
+                         subject_groups: list[list[str]] | None = None,
+                         subject_cjk_terms: list[str] | None = None,
+                         context_groups: list[list[str]] | None = None,
+                         context_cjk_terms: list[str] | None = None) -> None:
+    import html as _html
+
+    url = _html.unescape(str(candidate.get("url") or "")).replace("\\/", "/").strip()
+    thumb = _html.unescape(str(candidate.get("thumbnail") or "")).replace("\\/", "/").strip()
+    if not url.startswith(("http://", "https://")):
+        return
+    if url.startswith("data:") or ".svg" in url.lower():
+        return
+
+    key = url.split("#", 1)[0]
+    if key in seen:
+        return
+
+    item = {
+        "url": url,
+        "thumbnail": thumb or url,
+        "title": str(candidate.get("title") or "").strip(),
+        "page_url": str(candidate.get("page_url") or "").strip(),
+        "source": source,
+    }
+    if not _candidate_matches_subject(item, subject_groups or [], subject_cjk_terms or []):
+        return
+    if not _candidate_matches_context(item, context_groups or [], context_cjk_terms or []):
+        return
+    score = _score_image_candidate(item, query)
+    if strict and score < _image_min_score(query):
+        return
+
+    item["score"] = score
+    seen.add(key)
+    results.append(item)
+
+
+def _parse_bing_image_html(text: str) -> list[dict]:
+    import html as _html
+    import json as _json
+    import re
+
+    parsed: list[dict] = []
+    for raw in re.findall(r'(?:\s|data-)m="([^"]+)"', text or ""):
+        try:
+            data = _json.loads(_html.unescape(raw))
+        except Exception:
+            continue
+        murl = data.get("murl") or data.get("mediaurl")
+        if not murl:
+            continue
+        parsed.append({
+            "url": murl,
+            "thumbnail": data.get("turl") or data.get("thumb") or murl,
+            "title": data.get("t") or data.get("desc") or "",
+            "page_url": data.get("purl") or data.get("surl") or "",
+        })
+
+    # Bing sometimes leaves only escaped JSON fragments in the page.
+    fragment_pattern = (
+        r"&quot;murl&quot;:&quot;(?P<murl>.*?)&quot;.*?"
+        r"&quot;turl&quot;:&quot;(?P<turl>.*?)&quot;"
+    )
+    for match in re.finditer(fragment_pattern, text or "", re.DOTALL):
+        parsed.append({
+            "url": _html.unescape(match.group("murl")),
+            "thumbnail": _html.unescape(match.group("turl")),
+            "title": "",
+            "page_url": "",
+        })
+    return parsed
+
+
+def _scrape_bing_images(session, query: str, results: list[dict],
+                        seen: set[str], *, limit: int,
+                        subject_groups: list[list[str]] | None = None,
+                        subject_cjk_terms: list[str] | None = None,
+                        context_groups: list[list[str]] | None = None,
+                        context_cjk_terms: list[str] | None = None) -> None:
+    import urllib.parse as _urlparse
+
+    if len(results) >= limit:
+        return
+    params = {
+        "q": query,
+        "first": "1",
+        "count": "35",
+        "mkt": "vi-VN",
+        "setlang": "vi",
+        "cc": "VN",
+        "adlt": "off",
+    }
+    search_url = "https://www.bing.com/images/search?" + _urlparse.urlencode(params)
+    try:
+        response = session.get(
+            search_url,
+            headers=_image_search_headers("https://www.bing.com/"),
+            timeout=4,
+            verify=False,
+        )
+    except Exception:
+        return
+
+    if response.status_code != 200:
+        return
+    for candidate in _parse_bing_image_html(response.text):
+        _add_image_candidate(
+            results,
+            seen,
+            candidate,
+            query,
+            "bing",
+            strict=True,
+            subject_groups=subject_groups,
+            subject_cjk_terms=subject_cjk_terms,
+            context_groups=context_groups,
+            context_cjk_terms=context_cjk_terms,
+        )
+        if len(results) >= limit:
+            return
+
+
+def _duckduckgo_vqd(session, query: str) -> tuple[str, str]:
+    import re
+
+    try:
+        response = session.get(
+            "https://duckduckgo.com/",
+            params={"q": query},
+            headers=_image_search_headers("https://duckduckgo.com/"),
+            timeout=4,
+            verify=False,
+        )
+    except Exception:
+        return "", ""
+    if response.status_code not in (200, 202):
+        return "", ""
+
+    patterns = (
+        r"vqd=([\d-]+)&",
+        r'vqd="([\d-]+)"',
+        r"vqd='([\d-]+)'",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, response.text)
+        if match:
+            return match.group(1), response.url
+    return "", response.url
+
+
+def _scrape_duckduckgo_images(session, query: str, results: list[dict],
+                              seen: set[str], *, limit: int,
+                              subject_groups: list[list[str]] | None = None,
+                              subject_cjk_terms: list[str] | None = None,
+                              context_groups: list[list[str]] | None = None,
+                              context_cjk_terms: list[str] | None = None) -> None:
+    if len(results) >= limit:
+        return
+
+    vqd, referer = _duckduckgo_vqd(session, query)
+    if not vqd:
+        return
+
+    params = {
+        "l": "wt-wt",
+        "o": "json",
+        "q": query,
+        "vqd": vqd,
+        "f": ",,,",
+        "p": "-1",
+    }
+    try:
+        response = session.get(
+            "https://duckduckgo.com/i.js",
+            params=params,
+            headers=_duckduckgo_image_headers(referer or "https://duckduckgo.com/"),
+            timeout=4,
+            verify=False,
+        )
+        payload = response.json() if response.status_code == 200 else {}
+    except Exception:
+        return
+
+    for item in payload.get("results") or []:
+        candidate = {
+            "url": item.get("image") or "",
+            "thumbnail": item.get("thumbnail") or item.get("image") or "",
+            "title": item.get("title") or "",
+            "page_url": item.get("url") or "",
+        }
+        _add_image_candidate(
+            results,
+            seen,
+            candidate,
+            query,
+            "duckduckgo",
+            strict=True,
+            subject_groups=subject_groups,
+            subject_cjk_terms=subject_cjk_terms,
+            context_groups=context_groups,
+            context_cjk_terms=context_cjk_terms,
+        )
+        if len(results) >= limit:
+            return
+
+
+def _parse_brave_image_html(text: str) -> list[dict]:
+    import html as _html
+    import re
+
+    parsed: list[dict] = []
+    for tag in re.findall(r"<img\b[^>]*\bdata-rank=\"\d+\"[^>]*>", text or ""):
+        src_match = re.search(r'\bsrc="([^"]+)"', tag)
+        if not src_match:
+            continue
+        alt_match = re.search(r'\balt="([^"]*)"', tag)
+        src = _html.unescape(src_match.group(1))
+        title = _html.unescape(alt_match.group(1)) if alt_match else ""
+        parsed.append({
+            "url": src,
+            "thumbnail": src,
+            "title": title,
+            "page_url": "",
+        })
+    return parsed
+
+
+def _scrape_brave_images(session, query: str, results: list[dict],
+                         seen: set[str], *, limit: int,
+                         subject_groups: list[list[str]] | None = None,
+                         subject_cjk_terms: list[str] | None = None,
+                         context_groups: list[list[str]] | None = None,
+                         context_cjk_terms: list[str] | None = None) -> None:
+    if len(results) >= limit:
+        return
+    try:
+        response = session.get(
+            "https://search.brave.com/images",
+            params={"q": query},
+            headers=_image_search_headers("https://search.brave.com/"),
+            timeout=4,
+            verify=False,
+        )
+    except Exception:
+        return
+    if response.status_code != 200:
+        return
+
+    for candidate in _parse_brave_image_html(response.text):
+        _add_image_candidate(
+            results,
+            seen,
+            candidate,
+            query,
+            "brave",
+            strict=True,
+            subject_groups=subject_groups,
+            subject_cjk_terms=subject_cjk_terms,
+            context_groups=context_groups,
+            context_cjk_terms=context_cjk_terms,
+        )
+        if len(results) >= limit:
+            return
+
+
+def _scrape_wordpress_reference_images(session, subject_queries: list[str],
+                                       results: list[dict], seen: set[str],
+                                       *, limit: int,
+                                       subject_groups: list[list[str]] | None = None,
+                                       subject_cjk_terms: list[str] | None = None,
+                                       context_groups: list[list[str]] | None = None,
+                                       context_cjk_terms: list[str] | None = None) -> None:
+    if len(results) >= limit:
+        return
+
+    endpoints = [
+        "https://thuvienanime.net/wp-json/wp/v2/search",
+        "https://nhanvat.wiki/wp-json/wp/v2/search",
+        "https://www.wikitruyen.com/wp-json/wp/v2/search",
+    ]
+    headers = _image_search_headers("https://www.google.com/")
+    for query in _unique_image_queries(subject_queries)[:3]:
+        for endpoint in endpoints:
+            if len(results) >= limit:
+                return
+            try:
+                response = session.get(
+                    endpoint,
+                    params={"search": query, "per_page": 5},
+                    headers=headers,
+                    timeout=3,
+                    verify=False,
+                )
+                items = response.json() if response.status_code == 200 else []
+            except Exception:
+                continue
+
+            for item in items or []:
+                links = item.get("_links") or {}
+                href = ""
+                for link in links.get("self") or []:
+                    href = link.get("href") or ""
+                    if href:
+                        break
+                if not href:
+                    continue
+                try:
+                    detail = session.get(
+                        href,
+                        params={"_embed": "1"},
+                        headers=headers,
+                        timeout=3,
+                        verify=False,
+                    )
+                    post = detail.json() if detail.status_code == 200 else {}
+                except Exception:
+                    continue
+
+                media = ((post.get("_embedded") or {}).get("wp:featuredmedia") or [{}])[0]
+                image_url = media.get("source_url") or ""
+                sizes = ((media.get("media_details") or {}).get("sizes") or {})
+                thumbnail = (
+                    (sizes.get("medium") or {}).get("source_url")
+                    or (sizes.get("thumbnail") or {}).get("source_url")
+                    or image_url
+                )
+                title = (
+                    ((post.get("title") or {}).get("rendered"))
+                    or item.get("title")
+                    or ""
+                )
+                if not image_url:
+                    continue
+                _add_image_candidate(
+                    results,
+                    seen,
+                    {
+                        "url": image_url,
+                        "thumbnail": thumbnail,
+                        "title": title,
+                        "page_url": item.get("url") or "",
+                    },
+                    query,
+                    "wordpress",
+                    strict=True,
+                    subject_groups=subject_groups,
+                    subject_cjk_terms=subject_cjk_terms,
+                    context_groups=context_groups,
+                    context_cjk_terms=context_cjk_terms,
+                )
+                if len(results) >= min(3, limit):
+                    return
+
+
+def _unique_image_queries(queries: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for query in queries:
+        query = " ".join(str(query or "").split())
+        key = _normalize_image_search_text(query)
+        if not query or key in seen:
+            continue
+        seen.add(key)
+        unique.append(query)
+    return unique
+
+
+def _reference_image_queries(query: str = "", *, name: str = "",
+                             pinyin_name: str = "", chinese_name: str = "",
+                             novel_title: str = "") -> list[str]:
+    queries: list[str] = []
+    if query:
+        query_norm = _normalize_image_search_text(query)
+        queries.append(query)
+        if "manhua" not in query_norm:
+            queries.append(f"{query} manhua")
+        if "truyen" not in query_norm and "tranh" not in query_norm:
+            queries.append(f"{query} truyện tranh")
+        if "manga" not in query_norm:
+            queries.append(f"{query} manga")
+
+    if chinese_name:
+        title_has_cjk = any("\u3400" <= ch <= "\u9fff" for ch in novel_title or "")
+        if novel_title and title_has_cjk:
+            queries.append(f"{chinese_name} {novel_title} 漫画")
+        queries.append(f"{chinese_name} 漫画")
+        queries.append(f"{chinese_name} 角色")
+        if novel_title and not title_has_cjk:
+            queries.append(f"{chinese_name} {novel_title} 漫画")
+
+    if pinyin_name:
+        if novel_title:
+            queries.append(f"{pinyin_name} {novel_title} manhua")
+            queries.append(f"{pinyin_name} {novel_title} manga")
+        queries.append(f"{pinyin_name} manhua")
+        queries.append(f"{pinyin_name} manga")
+
+    if name:
+        if novel_title:
+            queries.append(f"{name} {novel_title} manhua")
+            queries.append(f"{name} {novel_title} truyện tranh")
+        queries.append(f"{name} truyện tranh")
+        queries.append(f"{name} manhua")
+        queries.append(name)
+
+    return _unique_image_queries(queries)
+
+
+def _search_reference_images(queries: list[str], *, limit: int = 12,
+                             subject_groups: list[list[str]] | None = None,
+                             subject_cjk_terms: list[str] | None = None,
+                             context_groups: list[list[str]] | None = None,
+                             context_cjk_terms: list[str] | None = None) -> list[dict]:
+    import requests as _requests
+    import urllib3 as _urllib3
+
+    _urllib3.disable_warnings(_urllib3.exceptions.InsecureRequestWarning)
+    results: list[dict] = []
+    seen: set[str] = set()
+    session = _requests.Session()
+    if subject_groups:
+        subject_queries = [" ".join(group) for group in subject_groups if group]
+        ctx_groups = context_groups
+        ctx_cjk_terms = context_cjk_terms
+        if ctx_groups is None and ctx_cjk_terms is None:
+            ctx_groups, ctx_cjk_terms = _reference_context_groups(" ".join(queries))
+        _scrape_wordpress_reference_images(
+            session,
+            subject_queries,
+            results,
+            seen,
+            limit=limit,
+            subject_groups=subject_groups,
+            subject_cjk_terms=subject_cjk_terms,
+            context_groups=ctx_groups,
+            context_cjk_terms=ctx_cjk_terms,
+        )
+        if len(results) >= limit and (ctx_groups or ctx_cjk_terms):
+            results.sort(key=lambda item: item.get("score", 0), reverse=True)
+            return [
+                {
+                    "url": item["url"],
+                    "thumbnail": item.get("thumbnail") or item["url"],
+                    "title": item.get("title", ""),
+                    "source": item.get("source", ""),
+                    "score": item.get("score", 0),
+                }
+                for item in results[:limit]
+            ]
+
+    for query in _unique_image_queries(queries)[:6]:
+        groups = subject_groups
+        cjk_terms = subject_cjk_terms
+        if groups is None and cjk_terms is None:
+            groups, cjk_terms = _reference_subject_groups(query)
+        ctx_groups = context_groups
+        ctx_cjk_terms = context_cjk_terms
+        if ctx_groups is None and ctx_cjk_terms is None:
+            ctx_groups, ctx_cjk_terms = _reference_context_groups(query)
+        _scrape_bing_images(
+            session,
+            query,
+            results,
+            seen,
+            limit=limit,
+            subject_groups=groups,
+            subject_cjk_terms=cjk_terms,
+            context_groups=ctx_groups,
+            context_cjk_terms=ctx_cjk_terms,
+        )
+        if len(results) < max(4, limit // 2):
+            _scrape_duckduckgo_images(
+                session,
+                query,
+                results,
+                seen,
+                limit=limit,
+                subject_groups=groups,
+                subject_cjk_terms=cjk_terms,
+                context_groups=ctx_groups,
+                context_cjk_terms=ctx_cjk_terms,
+            )
+        if len(results) < max(4, limit // 2):
+            _scrape_brave_images(
+                session,
+                query,
+                results,
+                seen,
+                limit=limit,
+                subject_groups=groups,
+                subject_cjk_terms=cjk_terms,
+                context_groups=ctx_groups,
+                context_cjk_terms=ctx_cjk_terms,
+            )
+        if len(results) >= limit:
+            break
+
+    results.sort(key=lambda item: item.get("score", 0), reverse=True)
+    return [
+        {
+            "url": item["url"],
+            "thumbnail": item.get("thumbnail") or item["url"],
+            "title": item.get("title", ""),
+            "source": item.get("source", ""),
+            "score": item.get("score", 0),
+        }
+        for item in results[:limit]
+    ]
+
+
+def _story_character_analysis_excerpt(story_text: str, max_chars: int = 12000) -> str:
+    """Keep broad story coverage for character analysis without sending huge chapters."""
+    text = (story_text or "").strip()
+    if len(text) <= max_chars:
+        return text
+
+    chunk = max(1200, max_chars // 3)
+    middle_start = max(0, (len(text) // 2) - (chunk // 2))
+    return "\n\n".join([
+        text[:chunk].strip(),
+        "[... middle excerpt ...]",
+        text[middle_start:middle_start + chunk].strip(),
+        "[... ending excerpt ...]",
+        text[-chunk:].strip(),
+    ])
+
+
+def _find_character_by_terms(characters: list[dict], terms: list[str]) -> dict | None:
+    normalized_terms = [
+        _normalize_image_search_text(term).strip()
+        for term in terms
+        if str(term or "").strip()
+    ]
+    for char in characters:
+        aliases = char.get("aliases") or []
+        if not isinstance(aliases, list):
+            aliases = []
+        haystack = " ".join([str(char.get("name") or ""), *[str(a) for a in aliases]])
+        haystack = _normalize_image_search_text(haystack)
+        if any(term and term in haystack for term in normalized_terms):
+            return char
+    return None
+
+
+def _canonical_character_name(name: str) -> str:
+    key = _normalize_image_search_text(name).strip()
+    known = {
+        "ly van tieu": "Lý Vân Tiêu",
+    }
+    return known.get(key, str(name or "").strip())
+
+
+def _append_character_detail(char: dict, detail: str) -> None:
+    detail = str(detail or "").strip()
+    if not detail:
+        return
+    desc = str(char.get("description") or "").strip()
+    if _normalize_image_search_text(detail) not in _normalize_image_search_text(desc):
+        char["description"] = (desc + " " + detail).strip()[:1200]
+
+
+def _augment_scene_entities_from_text(characters: list[dict], story_text: str) -> list[dict]:
+    """Patch common visual entities that LLMs often skip as 'not people'."""
+    text_norm = _normalize_image_search_text(story_text)
+
+    xiao = _find_character_by_terms(characters, ["Tieu Viem", "Xiao Yan", "Tiêu Viêm"])
+    if "cu anh" in text_norm and "tieu viem" in text_norm:
+        if xiao is None:
+            xiao = {
+                "name": "Tiêu Viêm",
+                "pinyin_name": "Xiao Yan",
+                "chinese_name": "萧炎",
+                "aliases": ["Cự ảnh", "cự ảnh linh hồn"],
+                "description": "",
+                "role": "Nhân vật chính",
+            }
+            characters.append(xiao)
+        aliases = xiao.setdefault("aliases", [])
+        for alias in ("Cự ảnh", "cự ảnh linh hồn"):
+            if alias not in aliases:
+                aliases.append(alias)
+        _append_character_detail(
+            xiao,
+            "Trong đoạn này Tiêu Viêm dùng linh hồn Đế cảnh hóa thành cự ảnh khổng lồ giống bản thể, tỏa uy áp như đế vương linh hồn và dùng cự chưởng trấn áp Lôi Long.",
+        )
+
+    if ("loi long" in text_norm or "cuu huyen kim loi" in text_norm) and not _find_character_by_terms(
+        characters, ["Lôi Long", "Cửu Huyền Kim Lôi", "Cuu Huyen Kim Loi"]
+    ):
+        characters.append({
+            "name": "Cửu Huyền Kim Lôi / Lôi Long",
+            "pinyin_name": "Jiu Xuan Jin Lei",
+            "chinese_name": "",
+            "aliases": ["Lôi Long", "kim sắc Lôi Long", "Cửu Huyền Kim Lôi"],
+            "description": (
+                "Thực thể năng lượng lôi đình màu vàng kim, hiện thành Lôi Long dài hàng nghìn trượng, "
+                "không có trí tuệ nhưng cực kỳ cuồng bạo. Nó phóng lôi cầu, giãy dụa trước cự ảnh linh hồn "
+                "của Tiêu Viêm và bị bóp vỡ thành kim dịch để luyện Lôi Kiếp Đan."
+            ),
+            "role": "Thực thể năng lượng",
+        })
+
+    if "tieu y" in text_norm and not _find_character_by_terms(characters, ["Tiểu Y", "Tieu Y"]):
+        characters.append({
+            "name": "Tiểu Y",
+            "pinyin_name": "Xiao Yi",
+            "chinese_name": "",
+            "aliases": [],
+            "description": "Linh thể nhỏ ở trên vai Tiêu Viêm, phun Cửu Huyền Kim Lôi ra ngoài rồi hóa thành hỏa đỉnh ngàn trượng để hỗ trợ luyện đan.",
+            "role": "Linh thể phụ trợ",
+        })
+
+    if "huyet dao" in text_norm and not _find_character_by_terms(characters, ["Huyết Đao", "Huyet Dao"]):
+        characters.append({
+            "name": "Huyết Đao thánh giả",
+            "pinyin_name": "Xue Dao Sheng Zhe",
+            "chinese_name": "",
+            "aliases": ["Huyết Đao"],
+            "description": "Năng lượng thể mặc huyết y trong Thiên Mộ, được Tiêu Viêm tin tưởng giao nhiệm vụ hộ pháp và quản lý trật tự khi hắn luyện hóa Cửu Huyền Kim Lôi.",
+            "role": "Thuộc hạ",
+        })
+
+    return characters
+
+
+def _clip_story_snippet(value: str, max_chars: int = 420) -> str:
+    value = " ".join(str(value or "").split())
+    if len(value) <= max_chars:
+        return value
+    return value[:max_chars - 1].rstrip() + "..."
+
+
+def _story_snippet_for_name(story_text: str, name: str) -> str:
+    import re
+
+    name_norm = _normalize_image_search_text(name)
+    if not name_norm:
+        return ""
+    parts = re.split(r"(?<=[.!?。！？])\s+|\n{1,}", story_text or "")
+    for part in parts:
+        if name_norm in _normalize_image_search_text(part):
+            return _clip_story_snippet(part)
+    return ""
+
+
+def _name_candidate_has_character_context(story_text: str, start: int, end: int) -> bool:
+    after = _normalize_image_search_text(story_text[start:min(len(story_text), end + 100)])
+    before = _normalize_image_search_text(story_text[max(0, start - 80):end])
+    after_markers = (
+        " noi", " cuoi noi", " hoi", " quat", " het", " lanh lung noi",
+        " nhin", " hinh nhu", " muon", " dinh", " cam", " nam", " phong",
+        " bay", " chem", " danh", " chinh la", " hien ra", " bien sac",
+        " kho coi", " mung ro", " ngac nhien", " tuc gian", " xoay",
+        " hieu", " khien", " cung bi", " bi ", " duoc ", " thang", " thua",
+    )
+    before_markers = (
+        "nhin qua ", "nhin ve phia ", "ben canh ", "chi vao ", "goi ",
+        "ve phia ", "cua ", "voi ",
+    )
+    return any(marker in after for marker in after_markers) or any(marker in before for marker in before_markers)
+
+
+def _is_probably_non_character_name(candidate: str) -> bool:
+    norm = _normalize_image_search_text(candidate).strip()
+    if not norm:
+        return True
+    blocked_exact = {
+        "thien mo", "trung chau", "dau thanh", "de canh", "linh hon de canh",
+        "cuu huyen kim loi", "loi kiep dan", "tam khong chi", "thien dia vo phap",
+        "chan long kiem", "yeu dan", "hoa khi toan qua",
+    }
+    if norm in blocked_exact:
+        return True
+    blocked_suffixes = (" dan", " kiem", " chi", " mo", " de canh", " dau thanh")
+    return any(norm.endswith(suffix) for suffix in blocked_suffixes)
+
+
+def _supplement_named_characters_from_text(characters: list[dict], story_text: str) -> list[dict]:
+    """Add obvious named characters that the LLM skipped."""
+    import re
+
+    upper = "A-ZÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ"
+    lower = "a-zàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
+    token = rf"[{upper}][{lower}]+"
+    pattern = re.compile(rf"(?<![\w]){token}(?:\s+{token}){{1,3}}(?![\w])")
+
+    candidates: list[tuple[str, int, int]] = []
+    seen: set[str] = set()
+    for match in pattern.finditer(story_text or ""):
+        name = " ".join(match.group(0).split())
+        key = _normalize_image_search_text(name)
+        if key in seen or _is_probably_non_character_name(name):
+            continue
+        if not _name_candidate_has_character_context(story_text, match.start(), match.end()):
+            continue
+        seen.add(key)
+        candidates.append((name, match.start(), match.end()))
+
+    for name, _, _ in candidates:
+        name = _canonical_character_name(name)
+        if _normalize_image_search_text(name) == "lao long":
+            continue
+        if _find_character_by_terms(characters, [name]):
+            continue
+        snippet = _story_snippet_for_name(story_text, name)
+        desc = f"Nhân vật được nhắc trực tiếp trong đoạn trích."
+        if snippet:
+            desc += f" Ngữ cảnh: {snippet}"
+        characters.append({
+            "name": name,
+            "pinyin_name": "",
+            "chinese_name": "",
+            "aliases": [],
+            "description": desc,
+            "role": "Nhân vật",
+        })
+
+    if any(_normalize_image_search_text(name) == "lao long" for name, _, _ in candidates):
+        xa_vuu = _find_character_by_terms(characters, ["Xa Vưu", "Xa Vuu"])
+        if xa_vuu is not None:
+            aliases = xa_vuu.setdefault("aliases", [])
+            if "Lão Long" not in aliases:
+                aliases.append("Lão Long")
+            _append_character_detail(xa_vuu, "Trong đoạn này Lý Vân Tiêu gọi Xa Vưu là Lão Long khi ném kiếm cho hắn.")
+
+    return characters
+
+
+@bp.route("/api/story/novel/analyze_characters", methods=["POST"])
+def api_novel_analyze_characters():
+    """Analyze characters from selected chapters and search reference thumbnails.
+
+    Body:
+      story_text  (str)
+      novel_title (str)
+    """
+    import re
+    import json as _json
+
+    data = request.get_json(silent=True) or {}
+    story_text = (data.get("story_text") or "").strip()
+    novel_title = (data.get("novel_title") or "").strip()
+    
+    if not story_text:
+        return jsonify({"ok": False, "error": "Thiếu nội dung tiểu thuyết để phân tích."}), 400
+
+    # Clean legacy title indicators
+    if "Chi tiết truyện: " in novel_title:
+        novel_title = novel_title.replace("Chi tiết truyện: ", "")
+    if "📘" in novel_title:
+        novel_title = novel_title.replace("📘", "")
+    novel_title = novel_title.strip()
+
+    system_msg = """Bạn là một chuyên gia phân tích tiểu thuyết chữ và truyện tranh xuất sắc.
+Nhiệm vụ của bạn là đọc kỹ đoạn trích truyện và trích xuất danh sách tất cả các nhân vật xuất hiện trong đó.
+Với mỗi nhân vật, hãy trích xuất:
+1. "name": Tên nhân vật bằng tiếng Việt (ví dụ: 'Trác Phàm', 'Sở Khuynh Thành', 'Tiêu Viêm').
+2. "pinyin_name": Phiên âm Pinyin/tiếng Anh chuẩn quốc tế của nhân vật (ví dụ: 'Zhuo Fan', 'Xiao Yan'). Đây là trường quan trọng để tìm ảnh minh họa trên quốc tế.
+3. "chinese_name": Tên chữ Hán của nhân vật (ví dụ: '卓凡', '萧炎').
+4. "description": Mô tả ngắn gọn về ngoại hình, tính cách, bối cảnh (ví dụ: 'nam, 25 tuổi, ma hoàng đại quản gia, tóc đen, mắt sắc lạnh, quyết đoán, mưu trí').
+5. "role": Vai trò ('Nhân vật chính', 'Phản diện', 'Phụ').
+
+Hãy trả về kết quả dưới dạng JSON object có chứa khóa duy nhất "characters" là danh sách các nhân vật dạng:
+{
+  "characters": [
+    {
+      "name": "Tiêu Viêm",
+      "pinyin_name": "Xiao Yan",
+      "chinese_name": "萧炎",
+      "description": "Thiếu niên thuộc hỏa thuộc tính, trầm tĩnh, mưu trí, sở hữu dị hỏa.",
+      "role": "Nhân vật chính"
+    }
+  ]
+}
+CHỈ trả về duy nhất chuỗi JSON hợp lệ, không kèm giải thích hay định dạng markdown, không đặt trong code block. Nếu không có nhân vật nào, trả về mảng rỗng."""
+
+    system_msg += """
+
+Additional rules for visual continuity:
+- Extract scene-critical visual entities, not only normal human characters.
+- Include souls, avatars/projections, spirit bodies, beasts/dragons, living flames/thunder/lightning and other entities when they act or affect the scene.
+- If a form is explicitly the same person, do not duplicate it as a new character. Put that form in "aliases" and explain it in "description".
+- "description" must be 2-4 concrete Vietnamese sentences covering identity, relation to others, visible appearance/form, powers and the specific actions in this excerpt.
+- Use "role" freely when needed, for example "Thuc the nang luong", "Hoa than", "Linh the phu tro", "Thuoc ha".
+- For the example pattern "cu anh nhin Loi Long", treat "cu anh" as Tiêu Viêm's soul projection and "Lôi Long/Cửu Huyền Kim Lôi" as a separate visual energy entity.
+- Return valid JSON only. Extra optional fields such as "aliases" and "entity_type" are allowed.
+"""
+
+    story_excerpt = _story_character_analysis_excerpt(story_text, max_chars=12000)
+    user_msg = (
+        f"Tieu thuyet: {novel_title}\n"
+        f"Do dai noi dung goc: {len(story_text)} ky tu. "
+        "Neu qua dai, phan duoi la mau dau/giua/cuoi de giu ngu canh rong.\n"
+        f"Noi dung doan trich:\n{story_excerpt}"
+    )
+    
+    try:
+        raw_res = _call_llm_multi_tier(system_msg, user_msg, temperature=0.2, max_tokens=3200, json_mode=True)
+        
+        # Clean markdown code blocks if the LLM outputted them despite guidelines
+        clean_res = raw_res.strip()
+        if clean_res.startswith("```json"):
+            clean_res = clean_res[7:]
+        elif clean_res.startswith("```"):
+            clean_res = clean_res[3:]
+        if clean_res.endswith("```"):
+            clean_res = clean_res[:-3]
+        clean_res = clean_res.strip()
+
+        try:
+            parsed = _json.loads(clean_res)
+            if isinstance(parsed, list):
+                characters = parsed
+            else:
+                characters = parsed.get("characters") or []
+        except Exception:
+            # Fallback regex parsing in case of a malformed JSON string
+            characters = []
+            name_matches = re.findall(r'"name"\s*:\s*"([^"]+)"', raw_res)
+            desc_matches = re.findall(r'"description"\s*:\s*"([^"]+)"', raw_res)
+            role_matches = re.findall(r'"role"\s*:\s*"([^"]+)"', raw_res)
+            for i in range(len(name_matches)):
+                characters.append({
+                    "name": name_matches[i],
+                    "description": desc_matches[i] if i < len(desc_matches) else "",
+                    "role": role_matches[i] if i < len(role_matches) else "Phụ"
+                })
+
+        characters = [char for char in characters if isinstance(char, dict)]
+        for char in characters:
+            char["name"] = _canonical_character_name(char.get("name") or "")
+        characters = _augment_scene_entities_from_text(characters, story_text)
+        characters = _supplement_named_characters_from_text(characters, story_text)
+
+        for char in characters:
+            name = char.get("name") or ""
+            pinyin_name = char.get("pinyin_name") or ""
+            chinese_name = char.get("chinese_name") or ""
+            if not name:
+                continue
+
+            queries = _reference_image_queries(
+                name=name,
+                pinyin_name=pinyin_name,
+                chinese_name=chinese_name,
+                novel_title=novel_title,
+            )
+            subject_groups, subject_cjk_terms = _reference_subject_groups(
+                name=name,
+                pinyin_name=pinyin_name,
+                chinese_name=chinese_name,
+            )
+            context_groups, context_cjk_terms = _reference_context_groups(
+                query=" ".join(queries),
+                novel_title=novel_title,
+            )
+            char["images"] = _search_reference_images(
+                queries,
+                limit=12,
+                subject_groups=subject_groups,
+                subject_cjk_terms=subject_cjk_terms,
+                context_groups=context_groups,
+                context_cjk_terms=context_cjk_terms,
+            )
+
+        return jsonify({"ok": True, "characters": characters})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Lỗi phân tích nhân vật: {str(e)}"}), 500
+
+
+@bp.route("/api/story/novel/search_character_images", methods=["POST"])
+def api_novel_search_character_images():
+    """Search reference image thumbnails for a specific custom query."""
+    data = request.get_json(silent=True) or {}
+    query = (data.get("query") or "").strip()
+    name = (data.get("name") or "").strip()
+    pinyin_name = (data.get("pinyin_name") or "").strip()
+    chinese_name = (data.get("chinese_name") or "").strip()
+    novel_title = (data.get("novel_title") or "").strip()
+    if not query:
+        return jsonify({"ok": False, "error": "Thiếu từ khóa tìm kiếm."}), 400
+
+    queries = _reference_image_queries(
+        query,
+        name=name,
+        pinyin_name=pinyin_name,
+        chinese_name=chinese_name,
+        novel_title=novel_title,
+    )
+    subject_groups, subject_cjk_terms = _reference_subject_groups(
+        query,
+        name=name,
+        pinyin_name=pinyin_name,
+        chinese_name=chinese_name,
+    )
+    context_groups, context_cjk_terms = _reference_context_groups(
+        query,
+        novel_title=novel_title,
+    )
+    char_images = _search_reference_images(
+        queries,
+        limit=12,
+        subject_groups=subject_groups,
+        subject_cjk_terms=subject_cjk_terms,
+        context_groups=context_groups,
+        context_cjk_terms=context_cjk_terms,
+    )
+
+    return jsonify({"ok": True, "images": char_images})
+
+

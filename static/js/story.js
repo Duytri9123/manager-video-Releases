@@ -25,6 +25,8 @@
       if (k === 'class') e.className = attrs[k];
       else if (k === 'style') e.style.cssText = attrs[k];
       else if (k === 'onclick') e.addEventListener('click', attrs[k]);
+      else if (k === 'disabled') { if (attrs[k]) e.disabled = true; }  // only set if truthy
+      else if (k === 'checked')  { if (attrs[k]) e.checked  = true; }
       else e.setAttribute(k, attrs[k]);
     }
     for (const c of kids) if (c != null) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
@@ -1265,21 +1267,174 @@
     rows.forEach(row => {
       const name = (row.querySelector('.sw-ai-char-name')?.value || '').trim();
       const desc = (row.querySelector('.sw-ai-char-desc')?.value || '').trim();
-      if (name) chars.push({ name, description: desc });
+      const urlsInput = row.querySelector('.sw-ai-char-ref-urls');
+      let refUrls = [];
+      try {
+        refUrls = urlsInput ? JSON.parse(urlsInput.value || '[]') : [];
+      } catch (_) {
+        refUrls = [];
+      }
+      if (name) chars.push({ name, description: desc, reference_images: refUrls });
     });
     return chars;
+  }
+
+  function _referenceUrlsForCharacter(c, maxCount = 3) {
+    const urls = [];
+    const pushUrl = (url) => {
+      url = String(url || '').trim();
+      if (url && !urls.includes(url)) urls.push(url);
+    };
+    pushUrl(c?.selected_image_url);
+    (c?.reference_images || []).forEach(pushUrl);
+    (c?.images || []).forEach(img => pushUrl(img?.url || img?.image_url || img?.thumbnail));
+    return urls.slice(0, maxCount);
+  }
+
+  function _detectSceneCharacterNames(text, characters = _getCharacters()) {
+    const haystack = _normalizeCharacterKey(text);
+    if (!haystack) return [];
+    const names = [];
+    for (const c of (characters || [])) {
+      const name = c.name || '';
+      const needle = _normalizeCharacterKey(name);
+      if (needle && haystack.includes(needle) && !names.includes(name)) {
+        names.push(name);
+      }
+    }
+    return names;
+  }
+
+  function _sceneItemText(scene) {
+    return typeof scene === 'string' ? scene : (scene?.text || '');
+  }
+
+  function _sceneItemCharacters(scene, characters = _getCharacters()) {
+    if (scene && typeof scene === 'object' && Array.isArray(scene.characters) && scene.characters.length) {
+      return scene.characters.filter(Boolean);
+    }
+    return _detectSceneCharacterNames(_sceneItemText(scene), characters);
+  }
+
+  function _sceneItemsFromScenes(scenes, characters = _getCharacters()) {
+    return (scenes || [])
+      .map(scene => {
+        const text = _sceneItemText(scene).trim();
+        if (!text) return null;
+        const imagePrompt = typeof scene === 'object' ? (scene.image_prompt || '') : '';
+        const detectedCharacters = _sceneItemCharacters(scene, characters);
+        return {
+          text,
+          image_prompt: imagePrompt,
+          characters: detectedCharacters,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function _uniqueSceneCharacterNames(sceneItems, characters = _getCharacters()) {
+    const names = [];
+    for (const scene of (sceneItems || [])) {
+      for (const name of _sceneItemCharacters(scene, characters)) {
+        if (name && !names.includes(name)) names.push(name);
+      }
+    }
+    if (!names.length) {
+      for (const name of _characterNamesInTexts((sceneItems || []).map(_sceneItemText), characters)) {
+        if (name && !names.includes(name)) names.push(name);
+      }
+    }
+    return names;
   }
 
   function addChar() {
     const wrap = document.getElementById('sw-ai-chars');
     if (!wrap) return;
-    const row = _el('div', { class: 'sw-ai-char-row', style: 'display:grid;grid-template-columns:150px 1fr 40px;gap:8px;margin-bottom:6px;align-items:start' });
-    row.appendChild(_el('input', { type: 'text', placeholder: 'Tên nhân vật', class: 'sw-ai-char-name' }));
-    row.appendChild(_el('input', { type: 'text', placeholder: 'Mô tả ngoại hình', class: 'sw-ai-char-desc' }));
-    const btn = _el('button', { class: 'btn btn-danger btn-sm', type: 'button' }, '✕');
-    btn.addEventListener('click', () => row.remove());
-    row.appendChild(btn);
-    wrap.appendChild(row);
+    
+    const card = _el('div', {
+      class: 'sw-ai-char-row',
+      style: 'background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:8px'
+    });
+
+    const topRow = _el('div', {
+      style: 'display:grid;grid-template-columns:120px 1fr 32px;gap:8px;align-items:center'
+    });
+    const nameInput = _el('input', {
+      type: 'text',
+      placeholder: 'Tên nhân vật',
+      class: 'sw-ai-char-name',
+      style: 'font-size:12px;padding:6px 8px;font-weight:700'
+    });
+    const descInput = _el('input', {
+      type: 'text',
+      placeholder: 'Mô tả ngoại hình (vd: nam 25t, tóc đen, áo hoodie xám)',
+      class: 'sw-ai-char-desc',
+      style: 'font-size:12px;padding:6px 8px'
+    });
+    const delBtn = _el('button', {
+      class: 'btn btn-danger btn-sm',
+      type: 'button',
+      style: 'padding:4px 8px',
+      title: 'Xoá nhân vật'
+    }, '✕');
+    delBtn.addEventListener('click', () => card.remove());
+    
+    topRow.appendChild(nameInput);
+    topRow.appendChild(descInput);
+    topRow.appendChild(delBtn);
+
+    const refsContainer = _el('div', {
+      class: 'char-refs-container',
+      style: 'display:flex;flex-direction:column;gap:4px;padding-top:4px;border-top:1px dashed var(--border)'
+    });
+    
+    const labelRow = _el('div', {
+      style: 'display:flex;align-items:center;justify-content:space-between;gap:8px'
+    });
+    const labelSpan = _el('span', {
+      class: 'text-xs font-semibold text-muted'
+    }, '🖼️ Ảnh tham chiếu nhân vật (Style/Face References):');
+    
+    const btnWrap = _el('div', { style: 'display:flex;gap:4px' });
+    const fileInput = _el('input', {
+      class: 'sw-ai-char-ref-file',
+      type: 'file',
+      accept: 'image/*',
+      multiple: 'multiple',
+      style: 'display:none'
+    });
+    fileInput.addEventListener('change', () => uploadCharRef(fileInput));
+    
+    const addBtn = _el('button', {
+      class: 'btn btn-secondary btn-sm',
+      type: 'button',
+      style: 'font-size:10px;padding:2px 8px'
+    }, '📤 Thêm ảnh');
+    addBtn.addEventListener('click', () => fileInput.click());
+    
+    btnWrap.appendChild(fileInput);
+    btnWrap.appendChild(addBtn);
+    labelRow.appendChild(labelSpan);
+    labelRow.appendChild(btnWrap);
+    
+    const previewDiv = _el('div', {
+      class: 'sw-ai-char-refs-preview',
+      style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:4px'
+    });
+    const hiddenUrls = _el('input', {
+      type: 'hidden',
+      class: 'sw-ai-char-ref-urls',
+      value: '[]'
+    });
+    
+    refsContainer.appendChild(labelRow);
+    refsContainer.appendChild(previewDiv);
+    refsContainer.appendChild(hiddenUrls);
+
+    card.appendChild(topRow);
+    card.appendChild(refsContainer);
+    
+    wrap.appendChild(card);
   }
 
   async function aiGenerate() {
@@ -1306,6 +1461,7 @@
       if (!r.ok) throw new Error(r.error || 'AI generation failed');
       const textArea = document.getElementById('sw-text');
       if (textArea) textArea.value = r.text || '';
+      _updateComicPageEstimate();
       const model = r.model || '';
       const usage = r.usage || {};
       const tokens = usage.total_tokens || (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
@@ -1455,7 +1611,7 @@
     if (location) _log(`Địa điểm: ${location}`, 'detail');
     _log(`Hình ảnh: model=${imgModel} · style=${artStyle || 'AI tự chọn'} · ratio=${imgRatio} · seed=${storySeed}`, 'detail');
 
-    const totalSteps = numPanels + 2; // 1 text + 1 prompts + N images
+    let totalSteps = numPanels + 2; // 1 text + 1 prompts + N images
     let step = 0;
     function updateProgress(msg) {
       step++;
@@ -1478,12 +1634,40 @@
       if (!textRes.ok) throw new Error(textRes.error || 'Text generation failed');
       const storyText = textRes.text || '';
       document.getElementById('sw-text').value = storyText;
+      _updateComicPageEstimate();
       _log(`  ✓ Hoàn tất sau ${((Date.now() - t1) / 1000).toFixed(1)}s · ${storyText.length} ký tự · ${textRes.usage?.total_tokens || '?'} tokens`, 'success');
 
       // Parse scenes
       const scenes = _parseScenes(storyText);
       if (!scenes.length) throw new Error('AI không tạo được đoạn nào.');
       _log(`  📑 Đã chia thành ${scenes.length} cảnh`, 'detail');
+
+      const comicPageMode = !!document.getElementById('sw-ai-comic-page-mode')?.checked;
+      if (comicPageMode) {
+        const panelsPerPage = _getComicPanelsPerPage();
+        const pageCount = Math.ceil(scenes.length / panelsPerPage);
+        totalSteps = 1 + pageCount;
+        _log(`▶ Bước 2/2: Sinh ${pageCount} trang manhua, mỗi trang tối đa ${panelsPerPage} khung`, 'info');
+        await _generateComicPageImagesFromScenes(scenes, {
+          characters, location, genre, artStyle, imgNote, imgModel, imgQuality,
+          imgRatio, storySeed, updateProgress, status
+        });
+
+        progressBar.style.width = '100%';
+        progressPct.textContent = '100%';
+        progressMsg.textContent = '✓ Hoàn tất!';
+        if (status) status.textContent = `✓ Xong ${_aiScenes.length} trang manhua · ${imgModel}`;
+        _log('🎉 Đã sinh xong trang manhua nhiều khung. Bấm "Tạo video ngay" để render MP4.', 'banner');
+        _toast(`Đã tạo ${_aiScenes.length} trang manhua nhiều khung.`, 'success');
+
+        _autoSaveSession({
+          prompt, genre, numPanels, language, characters, location,
+          artStyle, imgRatio: document.getElementById('sw-ai-img-ratio')?.value || '9:16', imgNote, imgModel, imgQuality,
+          storyText, scenes: _aiScenes, comicPageMode: true, panelsPerPage,
+        });
+        _log('💾 Đã lưu session để có thể tái tạo lần sau.', 'detail');
+        return;
+      }
 
       // Step 2: Generate consistent image prompts (one LLM call, all scenes)
       if (_aiCancelled) throw new Error('CANCELLED');
@@ -1537,10 +1721,12 @@
         if (status) status.textContent = '⏳ Tạo ảnh anchor (master shot)...';
         _log('▶ Bước 2.5/3: Sinh ảnh anchor (master shot) — dùng làm tham chiếu xuyên suốt câu chuyện', 'info');
         const tA = Date.now();
+        const customRef = document.getElementById('sw-ai-ref-image-url')?.value?.trim() || '';
         const anchorRes = await API.post('/api/story/ai_generate_anchor', {
           characters, location, art_style: artStyle, genre,
           model: imgModel, quality: imgQuality, ratio: imgRatio, seed: storySeed,
           session_id: window._aiSessionId || '',
+          reference_image_urls: customRef ? [customRef] : [],
         }, { silent: true });
         if (anchorRes.ok && anchorRes.image_url) {
           anchorUrl = anchorRes.image_url;
@@ -1565,11 +1751,13 @@
           if (!c.name) return;
           try {
             const tP = Date.now();
+            const customRef = document.getElementById('sw-ai-ref-image-url')?.value?.trim() || '';
             const r = await API.post('/api/story/ai_generate_portrait', {
               name: c.name, description: c.description || '',
               art_style: artStyle, model: imgModel, quality: imgQuality,
               ratio: '1:1', seed: storySeed, anchor_url: anchorUrl,
               session_id: window._aiSessionId || '',
+              reference_image_urls: customRef ? [customRef] : [],
             }, { silent: true });
             if (r.ok && r.image_url) {
               portraits[c.name] = r.image_url;
@@ -1607,11 +1795,36 @@
 
       function _buildRefs(sceneIdx, prevImageUrl) {
         const refs = [];
-        if (anchorUrl) refs.push(anchorUrl);
-        for (const name of _charsInScene(scenes[sceneIdx])) {
-          if (refs.length >= 3) break;
-          if (portraits[name]) refs.push(portraits[name]);
+        const customRef = document.getElementById('sw-ai-ref-image-url')?.value?.trim() || '';
+        if (customRef) {
+          refs.push(customRef);
         }
+        if (anchorUrl) refs.push(anchorUrl);
+
+        // Find character names appearing in this scene
+        const detectedNames = _charsInScene(scenes[sceneIdx]);
+        
+        // For each detected character, add their user-provided reference images
+        for (const name of detectedNames) {
+          const charData = characters.find(c => (c.name || '').toLowerCase() === name.toLowerCase());
+          if (charData && Array.isArray(charData.reference_images)) {
+            for (const imgUrl of charData.reference_images) {
+              if (refs.length >= 3) break;
+              if (imgUrl && !refs.includes(imgUrl)) {
+                refs.push(imgUrl);
+              }
+            }
+          }
+        }
+
+        // Fallback to AI-generated portraits if we still have space
+        for (const name of detectedNames) {
+          if (refs.length >= 3) break;
+          if (portraits[name] && !refs.includes(portraits[name])) {
+            refs.push(portraits[name]);
+          }
+        }
+
         if (prevImageUrl && refs.length < 4) refs.push(prevImageUrl);
         return refs;
       }
@@ -1619,8 +1832,33 @@
       async function _genSingleScene(i, prevImageUrl) {
         const refs = _buildRefs(i, prevImageUrl);
         const ti = Date.now();
+        
+        const nTitle = document.getElementById('sn-char-novel-title')?.value?.trim() || '';
+        let basePrompt = imgPrompts[i] || '';
+        if (!basePrompt) {
+          let text = scenes[i].slice(0, 150);
+          const detectedNames = _charsInScene(scenes[i]);
+          if (detectedNames.length > 0 && nTitle) {
+            detectedNames.forEach(name => {
+              const regex = new RegExp(`\\b${name}\\b`, 'gi');
+              if (regex.test(text)) {
+                text = text.replace(regex, `${name} from ${nTitle} manhua`);
+              } else {
+                text = `${name} from ${nTitle} manhua, ${text}`;
+              }
+            });
+          } else if (nTitle) {
+            text = `${nTitle} manhua comic style, ${text}`;
+          }
+          basePrompt = `${artStyle || 'cinematic film still'}, ${text}`;
+        } else if (nTitle) {
+          if (!basePrompt.toLowerCase().includes(nTitle.toLowerCase())) {
+            basePrompt = `${basePrompt}, in the style of ${nTitle} manhua`;
+          }
+        }
+
         const imgRes = await API.post('/api/story/ai_generate_image', {
-          prompt: imgPrompts[i] || `${artStyle || 'cinematic film still'}, ${scenes[i].slice(0, 100)}`,
+          prompt: basePrompt,
           model: imgModel,
           quality: imgQuality,
           ratio: imgRatio,
@@ -1763,6 +2001,1887 @@
     _toast('Đang hủy... đợi step hiện tại kết thúc.', 'warning');
   }
 
+  function toggleSection(bodyId, btnId) {
+    const body = document.getElementById(bodyId);
+    if (!body) return;
+    const btn = btnId ? document.getElementById(btnId) : null;
+    const shouldHide = !body.classList.contains('hidden');
+    body.classList.toggle('hidden', shouldHide);
+    if (btn) {
+      btn.textContent = shouldHide ? '▸ Mở' : '▾ Thu gọn';
+      btn.setAttribute('aria-expanded', String(!shouldHide));
+    }
+  }
+
+  async function aiUploadRefImage() {
+    const f = document.getElementById('sw-ai-ref-image-file').files[0];
+    if (!f) return;
+    const urlInput = document.getElementById('sw-ai-ref-image-url');
+    const previewWrap = document.getElementById('sw-ai-ref-image-preview-wrap');
+    const previewImg = document.getElementById('sw-ai-ref-image-preview');
+    const clearBtn = document.getElementById('sw-ai-ref-image-clear');
+
+    const fd = new FormData();
+    fd.append('file', f);
+
+    try {
+      LoadingUI.start && LoadingUI.start('Đang tải ảnh lên...');
+      const csrf = document.cookie.match(/dt_csrf=([^;]*)/)?.[1] || '';
+      const headers = csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {};
+      const r = await fetch('/api/story/ai_upload_ref', { method: 'POST', body: fd, headers })
+        .then(res => res.json());
+
+      if (!r.ok) throw new Error(r.error || 'Upload thất bại');
+      
+      urlInput.value = r.image_url;
+      previewImg.src = r.image_url;
+      previewWrap.classList.remove('hidden');
+      clearBtn.classList.remove('hidden');
+      _toast('Tải ảnh tham chiếu lên thành công!', 'success');
+      _log(`  ✓ Đã upload ảnh tham chiếu: ${r.image_url}`, 'success');
+    } catch (e) {
+      _toast(String(e.message || e), 'error');
+      _log(`✗ Lỗi tải ảnh tham chiếu: ${e.message || e}`, 'error');
+    } finally {
+      LoadingUI.stop && LoadingUI.stop();
+    }
+  }
+
+  function aiClearRefImage() {
+    const fileInput = document.getElementById('sw-ai-ref-image-file');
+    const urlInput = document.getElementById('sw-ai-ref-image-url');
+    const previewWrap = document.getElementById('sw-ai-ref-image-preview-wrap');
+    const previewImg = document.getElementById('sw-ai-ref-image-preview');
+    const clearBtn = document.getElementById('sw-ai-ref-image-clear');
+
+    if (fileInput) fileInput.value = '';
+    if (urlInput) urlInput.value = '';
+    if (previewImg) previewImg.src = '';
+    if (previewWrap) previewWrap.classList.add('hidden');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    _toast('Đã xoá ảnh tham chiếu.', 'info');
+  }
+
+  function _initRefImagePreview() {
+    const urlInput = document.getElementById('sw-ai-ref-image-url');
+    const previewWrap = document.getElementById('sw-ai-ref-image-preview-wrap');
+    const previewImg = document.getElementById('sw-ai-ref-image-preview');
+    const clearBtn = document.getElementById('sw-ai-ref-image-clear');
+
+    if (!urlInput) return;
+
+    const updatePreview = () => {
+      const val = urlInput.value.trim();
+      if (val) {
+        previewImg.src = val;
+        previewWrap.classList.remove('hidden');
+        clearBtn.classList.remove('hidden');
+      } else {
+        previewImg.src = '';
+        previewWrap.classList.add('hidden');
+        clearBtn.classList.add('hidden');
+      }
+    };
+
+    urlInput.addEventListener('input', updatePreview);
+    urlInput.addEventListener('change', updatePreview);
+  }
+
+  // ── Novel (Truyện chữ) Scraper Logic ────────────────────────────────────
+  let _selectedNovelUrl = '';
+  let _selectedNovelPage = 1;
+  let _totalChaptersPages = 1;
+  let _chaptersCache = {}; // Cache chapter lists by page number: { 1: [...], 2: [...] }
+  let _currentSelectedChapterUrl = '';
+  let _importedChapters = []; // Selected and loaded chapters [{ url, title, content }]
+
+  async function novelSearch() {
+    const q = (document.getElementById('sn-query')?.value || '').trim();
+    if (!q) return _toast('Nhập từ khoá tìm truyện chữ.', 'warning');
+    const results = document.getElementById('sn-results');
+    const meta = document.getElementById('sn-search-meta');
+    const aiSearch = !!document.getElementById('sn-ai-search')?.checked;
+    
+    if (results) {
+      results.innerHTML = '<div class="empty-state" style="grid-column:1/-1">⏳ Đang tìm kiếm...</div>';
+    }
+    if (meta) meta.textContent = 'Đang tìm...';
+
+    try {
+      const r = await API.post('/api/story/novel/search', { q, ai_search: aiSearch }, { silent: true });
+      if (!r.ok) throw new Error(r.error || 'Tìm kiếm thất bại');
+      
+      if (meta) meta.textContent = `Tìm thấy ${r.count} kết quả`;
+      
+      if (!r.items || !r.items.length) {
+        results.innerHTML = '<div class="empty-state" style="grid-column:1/-1">Không tìm thấy kết quả nào.</div>';
+        if (r.ai_note) {
+          results.replaceChildren();
+          const noteBox = _el('div', {
+            class: 'alert-info text-sm',
+            style: 'grid-column: 1 / -1; margin-bottom: 8px; border: 1px solid var(--accent); border-left-width: 4px; padding: 10px; border-radius: 6px'
+          });
+          noteBox.innerHTML = `🤖 <b>Gợi ý từ AI:</b> ${r.ai_note}`;
+          results.appendChild(noteBox);
+          results.appendChild(_el('div', { class: 'empty-state', style: 'grid-column: 1 / -1' }, 'Không tìm thấy kết quả nào với tên này.'));
+        }
+        return;
+      }
+
+      results.replaceChildren();
+      if (r.ai_note) {
+        const noteBox = _el('div', {
+          class: 'alert-info text-sm',
+          style: 'grid-column: 1 / -1; margin-bottom: 8px; border: 1px solid var(--accent); border-left-width: 4px; padding: 10px; border-radius: 6px'
+        });
+        noteBox.innerHTML = `🤖 <b>Trí tuệ nhân tạo (AI) gợi ý:</b> ${r.ai_note}`;
+        results.appendChild(noteBox);
+      }
+      r.items.forEach(novel => {
+        const card = _el('div', {
+          class: 'manga-card',
+          style: 'padding:8px;display:flex;flex-direction:column;gap:6px'
+        });
+        const img = _el('img', {
+          class: 'manga-thumb',
+          src: novel.cover || '/static/img/cover_fallback.png',
+          style: 'width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:4px'
+        });
+        const title = _el('div', {
+          class: 'manga-title',
+          style: 'font-weight:700;font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden'
+        }, novel.title);
+        const author = _el('div', {
+          class: 'manga-meta',
+          style: 'font-size:10px;color:var(--text-muted)'
+        }, `Tác giả: ${novel.author}`);
+
+        card.appendChild(img);
+        card.appendChild(title);
+        card.appendChild(author);
+
+        card.addEventListener('click', () => {
+          document.querySelectorAll('#sn-results .manga-card').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+          selectNovel(novel);
+        });
+
+        results.appendChild(card);
+      });
+    } catch (e) {
+      _toast(String(e.message || e), 'error');
+      if (results) {
+        results.innerHTML = `<div class="empty-state" style="grid-column:1/-1;color:var(--error)">Lỗi: ${e.message || e}</div>`;
+      }
+      if (meta) meta.textContent = 'Lỗi';
+    } finally {
+    }
+  }
+
+  async function selectNovel(novel) {
+    _selectedNovelUrl = novel.url;
+    _selectedNovelPage = 1;
+    _totalChaptersPages = 1;
+    _chaptersCache = {};
+    _currentSelectedChapterUrl = '';
+    _importedChapters = []; // Clear previous selection when a new novel is loaded
+    
+    const card = document.getElementById('sn-detail-card');
+    const title = document.getElementById('sn-detail-title');
+    const cover = document.getElementById('sn-detail-cover');
+    const author = document.getElementById('sn-detail-author');
+    const desc = document.getElementById('sn-detail-desc');
+    const select = document.getElementById('sn-chapter-select');
+    const meta = document.getElementById('sn-chapter-meta');
+
+    if (card) card.classList.remove('hidden');
+    if (title) title.textContent = novel.title;
+    if (cover) cover.src = novel.cover || '';
+    if (author) author.textContent = `Tác giả: ${novel.author}`;
+    if (desc) desc.textContent = 'Đang tải chi tiết truyện...';
+
+    const charNovelTitleInput = document.getElementById('sn-char-novel-title');
+    if (charNovelTitleInput) {
+      let cleanTitle = novel.title || '';
+      cleanTitle = cleanTitle.replace(/\[[^\]]+\]/g, '').trim();
+      cleanTitle = cleanTitle.replace(/\(\d+\s*chương\)/g, '').trim();
+      charNovelTitleInput.value = cleanTitle;
+    }
+    if (select) select.replaceChildren();
+    if (meta) meta.textContent = 'Đang tải danh sách chương...';
+
+    // Expand chapters panel by default
+    const panel = document.getElementById('sn-chapters-grid-panel');
+    const btn = document.getElementById('sn-toggle-chapters-btn');
+    if (panel) {
+      panel.classList.remove('hidden');
+      panel.style.display = 'block';
+    }
+    if (btn) btn.textContent = '✕ Ẩn danh sách chương';
+
+    // Render empty imported view initially
+    _renderImportedChapters();
+
+    try {
+      // Bước 1: Tải trang 1 để lấy metadata (mô tả, tổng số trang)
+      const r = await API.post('/api/story/novel/chapters', { url: novel.url, page: 1 }, { silent: true });
+      if (!r.ok) throw new Error(r.error || 'Tải chi tiết thất bại');
+
+      if (desc) desc.textContent = r.description || '(Không có mô tả)';
+      _totalChaptersPages = parseInt(r.total_pages, 10) || 1;
+      _chaptersCache[1] = r.chapters;
+
+      // Bước 2: Tải trang cuối để hiển thị chương mới nhất
+      const lastPage = _totalChaptersPages;
+      if (lastPage > 1) {
+        if (meta) meta.textContent = `Đang tải trang cuối (${lastPage})...`;
+        try {
+          const rLast = await API.post('/api/story/novel/chapters', { url: novel.url, page: lastPage }, { silent: true });
+          if (rLast.ok && rLast.chapters && rLast.chapters.length > 0) {
+            _chaptersCache[lastPage] = rLast.chapters;
+            _selectedNovelPage = lastPage;
+            if (select) {
+              select.replaceChildren();
+              rLast.chapters.forEach(c => {
+                select.appendChild(_el('option', { value: c.url }, c.title));
+              });
+            }
+            if (meta) meta.textContent = `(Trang ${lastPage}/${lastPage} - ${rLast.chapters.length} ch. mới nhất)`;
+            _renderChaptersGrid(lastPage);
+            _renderChaptersPagination();
+            return; // Không auto-import chương nào
+          }
+        } catch (_lastErr) { /* fallback trang 1 */ }
+      }
+
+      // Fallback: 1 trang duy nhất
+      _selectedNovelPage = 1;
+      if (select) {
+        select.replaceChildren();
+        r.chapters.forEach(c => {
+          select.appendChild(_el('option', { value: c.url }, c.title));
+        });
+      }
+      if (meta) meta.textContent = `(Trang 1/${_totalChaptersPages} - ${r.chapters.length} ch.)`;
+      _renderChaptersGrid(1);
+      _renderChaptersPagination();
+      // Không auto-import chương nào
+    } catch (e) {
+      _toast(String(e.message || e), 'error');
+      if (desc) desc.textContent = 'Lỗi tải chi tiết: ' + (e.message || e);
+    }
+  }
+
+  async function novelLoadChapter() {
+    const select = document.getElementById('sn-chapter-select');
+    if (!select) return;
+    const url = select.value;
+    const title = select.options[select.selectedIndex]?.textContent || '';
+    if (url) {
+      _loadChapterByUrl(url, title);
+    }
+  }
+
+  function toggleChaptersGrid() {
+    const panel = document.getElementById('sn-chapters-grid-panel');
+    const btn = document.getElementById('sn-toggle-chapters-btn');
+    if (!panel) return;
+    if (panel.classList.contains('hidden') || panel.style.display === 'none') {
+      panel.classList.remove('hidden');
+      panel.style.display = 'block';
+      if (btn) btn.textContent = '✕ Ẩn danh sách chương';
+    } else {
+      panel.classList.add('hidden');
+      panel.style.display = 'none';
+      if (btn) btn.textContent = '📋 Hiện danh sách chương';
+    }
+  }
+
+  let _chaptersPageLoading = false; // guard against concurrent requests
+
+  function _renderChaptersGrid(page, isLoading = false) {
+    const grid = document.getElementById('sn-chapters-grid');
+    if (!grid) return;
+
+    grid.replaceChildren();
+    const chapters = _chaptersCache[page] || [];
+    if (isLoading || chapters.length === 0) {
+      grid.innerHTML = isLoading
+        ? '<div class="text-xs text-muted" style="grid-column:1/-1;text-align:center;padding:15px"><span style="display:inline-block;animation:spin 1s linear infinite;margin-right:6px">⏳</span> Đang tải danh sách chương trang ' + page + '...</div>'
+        : '<div class="text-xs text-muted" style="grid-column:1/-1;text-align:center;padding:15px">Không có chương nào.</div>';
+      return;
+    }
+
+    chapters.forEach(c => {
+      // Highlight: btn-primary if currently loading, btn-info if in imported list, btn-outline-secondary if default
+      const isImported = _importedChapters.some(item => item.url === c.url);
+      const isActive = (c.url === _currentSelectedChapterUrl);
+      
+      let btnClass = 'btn-outline-secondary';
+      if (isActive) {
+        btnClass = 'btn-primary';
+      } else if (isImported) {
+        btnClass = 'btn-info';
+      }
+
+      const btn = _el('button', {
+        type: 'button',
+        class: 'btn btn-xs ' + btnClass,
+        style: 'font-size:11px;padding:6px 8px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%;border-radius:4px;border:1px solid var(--border);cursor:pointer',
+        title: c.title
+      }, c.title);
+
+      btn.addEventListener('click', () => {
+        _loadChapterByUrl(c.url, c.title);
+      });
+
+      grid.appendChild(btn);
+    });
+  }
+
+  function _renderChaptersPagination() {
+    const pag = document.getElementById('sn-chapters-pagination');
+    if (!pag) return;
+    pag.replaceChildren();
+
+    const tot = parseInt(_totalChaptersPages, 10) || 1;
+    if (tot <= 1) return;
+
+    const cur = parseInt(_selectedNovelPage, 10) || 1;
+
+    const addBtn = (label, targetPage, isCurrent = false, isDisabled = false) => {
+      const btn = _el('button', {
+        type: 'button',
+        class: 'btn btn-xs ' + (isCurrent ? 'btn-primary' : 'btn-light'),
+        style: 'font-size:11px;padding:4px 8px;min-width:28px;border:1px solid var(--border);cursor:pointer;pointer-events:auto !important;position:relative;z-index:999',
+        disabled: isDisabled
+      }, label);
+      
+      if (!isDisabled && !isCurrent) {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          _changeChaptersPage(targetPage);
+        });
+      }
+      pag.appendChild(btn);
+    };
+
+    // First & Prev
+    addBtn('«', 1, false, cur === 1);
+    addBtn('‹', cur - 1, false, cur === 1);
+
+    // Dynamic page numbers display
+    let pages = [];
+    if (tot <= 7) {
+      for (let i = 1; i <= tot; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      
+      let start = Math.max(2, cur - 1);
+      let end = Math.min(tot - 1, cur + 1);
+
+      if (cur <= 3) {
+        end = 4;
+      }
+      if (cur >= tot - 2) {
+        start = tot - 3;
+      }
+
+      if (start > 2) {
+        pages.push('...');
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      if (end < tot - 1) {
+        pages.push('...');
+      }
+
+      pages.push(tot);
+    }
+
+    pages.forEach(p => {
+      if (p === '...') {
+        const span = _el('span', { style: 'font-size:11px;padding:4px;color:var(--text-muted)' }, '...');
+        pag.appendChild(span);
+      } else {
+        addBtn(p.toString(), p, p === cur);
+      }
+    });
+
+    // Next & Last
+    addBtn('›', cur + 1, false, cur === tot);
+    addBtn('»', tot, false, cur === tot);
+  }
+
+  async function _changeChaptersPage(targetPage) {
+    // Prevent concurrent page-load requests
+    if (_chaptersPageLoading) return;
+
+    const pageNum = parseInt(targetPage, 10);
+    const totalPages = parseInt(_totalChaptersPages, 10) || 1;
+
+    if (isNaN(pageNum) || pageNum < 1 || pageNum > totalPages) return;
+
+    _selectedNovelPage = pageNum;
+
+    const meta = document.getElementById('sn-chapter-meta');
+    if (meta) meta.textContent = `(Trang ${pageNum}/${totalPages} - Đang tải...)`;
+
+    // Re-render pagination (marks current page as active)
+    _renderChaptersPagination();
+
+    // Use cached list if available — instant, no spinner needed
+    if (_chaptersCache[pageNum]) {
+      _renderChaptersGrid(pageNum);
+      if (meta) meta.textContent = `(Trang ${pageNum}/${_totalChaptersPages} - ${_chaptersCache[pageNum].length} ch.)`;
+      return;
+    }
+
+    // Show loading spinner in grid + disable pagination buttons
+    _chaptersPageLoading = true;
+    _renderChaptersGrid(pageNum, true);
+    _setPaginationDisabled(true);
+    _toast(`⏳ Đang tải chương trang ${pageNum}... (vài giây)`, 'info');
+
+    try {
+      const r = await API.post('/api/story/novel/chapters', { url: _selectedNovelUrl, page: pageNum }, { silent: true });
+      if (!r.ok) throw new Error(r.error || 'Tải trang chương thất bại');
+
+      const chapters = r.chapters || [];
+      _chaptersCache[pageNum] = chapters;
+
+      // Update total pages if backend returned a better value
+      if (r.total_pages && parseInt(r.total_pages, 10) > _totalChaptersPages) {
+        _totalChaptersPages = parseInt(r.total_pages, 10);
+      }
+
+      const select = document.getElementById('sn-chapter-select');
+      if (select) {
+        select.replaceChildren();
+        chapters.forEach(c => {
+          select.appendChild(_el('option', { value: c.url }, c.title));
+        });
+      }
+
+      _renderChaptersGrid(pageNum);
+      _renderChaptersPagination();
+      if (meta) meta.textContent = `(Trang ${pageNum}/${_totalChaptersPages} - ${chapters.length} ch.)`;
+      if (chapters.length === 0) {
+        _toast(`Trang ${pageNum} không có chương nào.`, 'warning');
+      }
+    } catch (e) {
+      _toast(`Lỗi tải trang ${pageNum}: ${e.message || e}`, 'error');
+      if (meta) meta.textContent = `(Trang ${pageNum}/${_totalChaptersPages} - Lỗi tải)`;
+      _renderChaptersGrid(pageNum); // clear spinner
+    } finally {
+      _chaptersPageLoading = false;
+      _setPaginationDisabled(false);
+    }
+  }
+
+  function _setPaginationDisabled(disabled) {
+    const pag = document.getElementById('sn-chapters-pagination');
+    if (!pag) return;
+    pag.querySelectorAll('button').forEach(btn => {
+      btn.disabled = disabled;
+      btn.style.opacity = disabled ? '0.5' : '';
+    });
+  }
+
+  async function _loadChapterByUrl(url, title) {
+    _currentSelectedChapterUrl = url;
+    
+    // Add to imported list if not already present
+    let chapterItem = _importedChapters.find(item => item.url === url);
+    if (!chapterItem) {
+      chapterItem = {
+        url: url,
+        title: title,
+        content: ''
+      };
+      _importedChapters.push(chapterItem);
+    }
+    
+    const select = document.getElementById('sn-chapter-select');
+    if (select) {
+      select.value = url;
+    }
+
+    // Render grid to update highlighting classes immediately
+    _renderChaptersGrid(_selectedNovelPage);
+    _renderImportedChapters();
+
+    // If content is already fetched and cached, just render it immediately
+    if (chapterItem.content) {
+      const txt = document.getElementById('sn-imported-text');
+      const cnt = document.getElementById('sn-imported-char-count');
+      if (txt) txt.value = chapterItem.content;
+      if (cnt) cnt.textContent = `${chapterItem.content.length} ký tự`;
+      _renderImportedChapters(); // Refresh highlight active badge
+      return;
+    }
+
+    // Otherwise, fetch it from the server
+    const txt = document.getElementById('sn-imported-text');
+    if (txt) txt.value = '⏳ Đang tải nội dung chương truyện...';
+
+    try {
+      const r = await API.post('/api/story/novel/chapter_content', { 
+        url: url,
+        novel_title: document.getElementById('sn-detail-title')?.textContent || '',
+        chapter_title: title
+      });
+      if (!r.ok) throw new Error(r.error || 'Tải nội dung chương thất bại');
+      
+      chapterItem.content = r.content || '';
+      
+      // If this chapter is still the currently active visible chapter, update text
+      if (_currentSelectedChapterUrl === url) {
+        if (txt) txt.value = chapterItem.content;
+        const cnt = document.getElementById('sn-imported-char-count');
+        if (cnt) cnt.textContent = `${chapterItem.content.length} ký tự`;
+      }
+      
+      _renderImportedChapters();
+      
+      if (r.ai_generated) {
+        _toast('⚠️ Không thể kết nối TruyenFull. Nội dung chương đã được tự động tái tạo bằng AI!', 'warning');
+      } else {
+        _toast(`Đã tải xong & nạp chương: ${title}!`, 'success');
+      }
+    } catch (e) {
+      _toast(String(e.message || e), 'error');
+      if (_currentSelectedChapterUrl === url && txt) {
+        txt.value = 'Lỗi tải nội dung chương: ' + (e.message || e);
+      }
+    }
+  }
+
+  function _renderImportedChapters() {
+    const list = document.getElementById('sn-imported-list');
+    const txt = document.getElementById('sn-imported-text');
+    const cnt = document.getElementById('sn-imported-char-count');
+    const globalTxt = document.getElementById('sw-text');
+
+    if (!list) return;
+
+    if (_importedChapters.length === 0) {
+      list.replaceChildren(_el('span', { class: 'text-xs text-muted', id: 'sn-no-imported-hint' }, 'Chưa có chương nào được nạp. Hãy chọn một chương ở trên!'));
+      if (txt) txt.value = '';
+      if (cnt) cnt.textContent = '0 ký tự';
+      return;
+    }
+
+    list.replaceChildren();
+    _importedChapters.forEach(item => {
+      // Highlight: badge-accent (blue/glowing) if this is the currently visible active chapter preview, badge-info otherwise
+      const isActive = (item.url === _currentSelectedChapterUrl);
+      const badge = _el('span', {
+        class: 'badge ' + (isActive ? 'badge-accent' : 'badge-info'),
+        style: 'display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:11px;border-radius:4px;cursor:pointer;border:1px solid var(--border);transition:all .15s;' + 
+               (isActive ? 'background:var(--accent) !important;color:#fff !important;box-shadow:0 0 6px var(--accent-light)' : 'background:var(--accent-light);color:var(--accent-text)')
+      }, item.title);
+
+      // Clicking on the badge text loads/switches display to this chapter's content
+      badge.addEventListener('click', (e) => {
+        // Prevent trigger if clicking on the close cross button
+        if (e.target.closest('.sn-remove-badge-btn')) return;
+        _loadChapterByUrl(item.url, item.title);
+      });
+
+      const removeBtn = _el('span', {
+        class: 'sn-remove-badge-btn',
+        style: 'cursor:pointer;font-weight:bold;margin-left:6px;color:red;display:inline-block;padding:0 2px',
+        title: 'Xóa chương này khỏi danh sách đã chọn'
+      }, '✕');
+
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        storyNovelRemoveImported(item.url);
+      });
+
+      badge.appendChild(removeBtn);
+      list.appendChild(badge);
+    });
+
+    // Mirror current visible chapter content to global textarea if needed
+    const activeItem = _importedChapters.find(item => item.url === _currentSelectedChapterUrl);
+    if (activeItem) {
+      if (txt && txt.value !== '⏳ Đang tải nội dung chương truyện...') {
+        txt.value = activeItem.content || '';
+      }
+      if (cnt && activeItem.content) {
+        cnt.textContent = `${activeItem.content.length} ký tự`;
+      }
+    }
+
+    // Re-render grid to update highlighting classes
+    _renderChaptersGrid(_selectedNovelPage);
+  }
+
+  function removeImported(url) {
+    _importedChapters = _importedChapters.filter(item => item.url !== url);
+    _toast('Đã bỏ chọn chương!', 'info');
+    
+    // If the active visibly previewed chapter was removed, switch to another remaining chapter (if any)
+    if (_currentSelectedChapterUrl === url) {
+      if (_importedChapters.length > 0) {
+        _currentSelectedChapterUrl = _importedChapters[0].url;
+        _loadChapterByUrl(_importedChapters[0].url, _importedChapters[0].title);
+      } else {
+        _currentSelectedChapterUrl = '';
+      }
+    }
+    
+    _renderImportedChapters();
+  }
+
+  function clearImported() {
+    _importedChapters = [];
+    _currentSelectedChapterUrl = '';
+    _toast('Đã xóa sạch danh sách chương đã nạp!', 'info');
+    _renderImportedChapters();
+  }
+
+  function sendToAiScript() {
+    const txt = document.getElementById('sn-imported-text')?.value || '';
+    if (!txt) {
+      return _toast('Chưa có nội dung truyện chữ nào được gộp. Hãy nạp ít nhất một chương trước!', 'warning');
+    }
+    const globalTxt = document.getElementById('sw-text');
+    if (globalTxt) {
+      globalTxt.value = txt;
+    }
+    const novelTitle = document.getElementById('sn-detail-title')?.textContent || '';
+    const promptInput = document.getElementById('sw-ai-prompt');
+    if (promptInput) {
+      promptInput.value = `Chuyển thể nội dung tiểu thuyết "${novelTitle}" thành kịch bản phân cảnh chi tiết, có mô tả hình ảnh sống động và chuyển động camera mượt mà.`;
+    }
+    
+    // Switch active tab view to the text pipeline tab
+    switchSource('text');
+    _toast('Đã chuyển toàn bộ nội dung gộp sang tab Tạo kịch bản AI!', 'success');
+  }
+
+  let _analyzedCharacters = []; // Stores characters analyzed from the novel
+
+  const _CHAR_PROFILE_STORAGE_KEY = 'story_novel_character_profiles_v1';
+
+  function _normalizeCharacterKey(name) {
+    return String(name || '')
+      .replace(/[đĐ]/g, 'd')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function _canonicalCharacterName(name) {
+    const key = _normalizeCharacterKey(name);
+    const known = {
+      'ly van tieu': 'Lý Vân Tiêu',
+      'ly van tieu ': 'Lý Vân Tiêu',
+    };
+    return known[key] || String(name || '').trim();
+  }
+
+  function _getCurrentNovelProfileTitle() {
+    return (
+      document.getElementById('sn-char-novel-title')?.value?.trim()
+      || document.getElementById('sn-detail-title')?.textContent?.trim()
+      || document.getElementById('sw-ai-prompt')?.value?.trim()
+      || 'default'
+    );
+  }
+
+  function _characterImageItems(c) {
+    const items = [];
+    const pushUrl = (url, thumbnail) => {
+      url = String(url || '').trim();
+      if (!url || items.some(x => x.url === url)) return;
+      items.push({ url, thumbnail: String(thumbnail || url).trim() || url });
+    };
+    (c.images || []).forEach(img => pushUrl(img.url || img.image_url || img.thumbnail, img.thumbnail || img.url));
+    (c.reference_images || []).forEach(url => pushUrl(url, url));
+    pushUrl(c.selected_image_url, c.selected_image_url);
+    return items;
+  }
+
+  function _removeImageUrlFromCharacter(c, url) {
+    url = String(url || '').trim();
+    if (!c || !url) return;
+
+    if (Array.isArray(c.images)) {
+      c.images = c.images.filter(img => {
+        const imgUrl = String(img?.url || img?.image_url || '').trim();
+        const thumbUrl = String(img?.thumbnail || '').trim();
+        return imgUrl !== url && thumbUrl !== url;
+      });
+    }
+    if (Array.isArray(c.reference_images)) {
+      c.reference_images = c.reference_images.filter(u => String(u || '').trim() !== url);
+    }
+    if (String(c.selected_image_url || '').trim() === url) {
+      c.selected_image_url = _characterImageItems(c)[0]?.url || '';
+    }
+  }
+
+  function _mergeCharacterProfiles(existing = [], incoming = []) {
+    const byName = new Map();
+    const add = (c, preferSelected = false) => {
+      const key = _normalizeCharacterKey(c.name);
+      if (!key) return;
+      const prev = byName.get(key) || { images: [] };
+      const mergedImages = [..._characterImageItems(prev)];
+      for (const img of _characterImageItems(c)) {
+        if (!mergedImages.some(x => x.url === img.url)) mergedImages.push(img);
+      }
+      const selected = preferSelected
+        ? (c.selected_image_url || prev.selected_image_url || mergedImages[0]?.url || '')
+        : (prev.selected_image_url || c.selected_image_url || mergedImages[0]?.url || '');
+      byName.set(key, {
+        ...prev,
+        ...c,
+        name: prev.name || c.name,
+        description: c.description || prev.description || '',
+        role: c.role || prev.role || '',
+        images: mergedImages,
+        selected_image_url: selected,
+      });
+    };
+    existing.forEach(c => add(c, false));
+    incoming.forEach(c => add(c, true));
+    return Array.from(byName.values());
+  }
+
+  function _loadAllCharacterProfiles() {
+    try {
+      return JSON.parse(localStorage.getItem(_CHAR_PROFILE_STORAGE_KEY) || '{}') || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function _saveNovelCharacterProfile(title = _getCurrentNovelProfileTitle(), characters = _analyzedCharacters) {
+    const key = _normalizeCharacterKey(title);
+    if (!key || !characters.length) return;
+    const profiles = _loadAllCharacterProfiles();
+    profiles[key] = {
+      title,
+      updated_at: new Date().toISOString(),
+      characters,
+    };
+    localStorage.setItem(_CHAR_PROFILE_STORAGE_KEY, JSON.stringify(profiles));
+  }
+
+  function _loadNovelCharacterProfile(title = _getCurrentNovelProfileTitle()) {
+    const profile = _loadAllCharacterProfiles()[_normalizeCharacterKey(title)];
+    return profile?.characters || [];
+  }
+
+  function _charactersFromAiRows() {
+    return _getCharacters().map(c => ({
+      name: c.name,
+      description: c.description,
+      images: (c.reference_images || []).map(url => ({ url, thumbnail: url })),
+      selected_image_url: (c.reference_images || [])[0] || '',
+    }));
+  }
+
+  function _isProbablyNonCharacterName(name) {
+    const key = _normalizeCharacterKey(name);
+    const blocked = new Set([
+      'thien mo', 'trung chau', 'dau thanh', 'de canh', 'linh hon de canh',
+      'cuu huyen kim loi', 'loi kiep dan', 'tam khong chi', 'thien dia vo phap',
+      'chan long kiem', 'yeu dan', 'hoa khi toan qua'
+    ]);
+    if (blocked.has(key)) return true;
+    return [' dan', ' kiem', ' chi', ' mo', ' de canh', ' dau thanh'].some(suffix => key.endsWith(suffix));
+  }
+
+  function _nameCandidateHasCharacterContext(storyText, start, end) {
+    const after = _normalizeCharacterKey(storyText.slice(start, Math.min(storyText.length, end + 110)));
+    const before = _normalizeCharacterKey(storyText.slice(Math.max(0, start - 80), end));
+    const afterMarkers = [
+      ' noi', ' cuoi noi', ' hoi', ' quat', ' het', ' lanh lung noi',
+      ' nhin', ' muon', ' dinh', ' cam', ' phong', ' bay', ' chem',
+      ' danh', ' chinh la', ' hien ra', ' bien sac', ' kho coi',
+      ' mung ro', ' ngac nhien', ' tuc gian', ' xoay', ' bi ', ' duoc '
+    ];
+    const beforeMarkers = ['nhin qua ', 'nhin ve phia ', 'ben canh ', 'chi vao ', 'goi ', 've phia ', 'cua ', 'voi '];
+    return afterMarkers.some(marker => after.includes(marker)) || beforeMarkers.some(marker => before.includes(marker));
+  }
+
+  function _storySnippetForName(storyText, name) {
+    const key = _normalizeCharacterKey(name);
+    const parts = String(storyText || '').split(/(?<=[.!?。！？])\s+|\n+/);
+    const hit = parts.find(part => _normalizeCharacterKey(part).includes(key)) || '';
+    const clean = hit.replace(/\s+/g, ' ').trim();
+    return clean.length > 420 ? clean.slice(0, 419).trim() + '...' : clean;
+  }
+
+  function _supplementCharactersFromText(characters, storyText) {
+    const out = (characters || []).map(c => ({
+      ...c,
+      name: _canonicalCharacterName(c.name || '')
+    })).filter(c => c.name);
+    const hasName = (name) => out.some(c => _normalizeCharacterKey(c.name) === _normalizeCharacterKey(name));
+    const seen = new Set(out.map(c => _normalizeCharacterKey(c.name)));
+    const text = String(storyText || '');
+    const re = /(^|[^\p{L}\p{N}_])(\p{Lu}\p{Ll}+(?:\s+\p{Lu}\p{Ll}+){1,3})(?![\p{L}\p{N}_])/gu;
+    let m;
+    while ((m = re.exec(text))) {
+      let name = _canonicalCharacterName((m[2] || '').trim());
+      const start = m.index + (m[1] || '').length;
+      const end = start + (m[2] || '').length;
+      const key = _normalizeCharacterKey(name);
+      if (!key || seen.has(key) || _isProbablyNonCharacterName(name)) continue;
+      if (!_nameCandidateHasCharacterContext(text, start, end)) continue;
+      if (key === 'lao long') continue;
+      seen.add(key);
+      const snippet = _storySnippetForName(text, name);
+      out.push({
+        name,
+        pinyin_name: '',
+        chinese_name: '',
+        aliases: [],
+        description: snippet
+          ? `Nhân vật được nhắc trực tiếp trong đoạn trích. Ngữ cảnh: ${snippet}`
+          : 'Nhân vật được nhắc trực tiếp trong đoạn trích.',
+        role: 'Nhân vật',
+        images: [],
+        selected_image_url: ''
+      });
+    }
+    if (_normalizeCharacterKey(text).includes('lao long') && hasName('Xa Vưu')) {
+      const xaVuu = out.find(c => _normalizeCharacterKey(c.name) === 'xa vuu');
+      if (xaVuu) {
+        const aliases = Array.isArray(xaVuu.aliases) ? xaVuu.aliases : [];
+        if (!aliases.includes('Lão Long')) aliases.push('Lão Long');
+        xaVuu.aliases = aliases;
+      }
+    }
+    return out;
+  }
+
+  function _ensureSceneCharactersKnown() {
+    if (!_aiScenes.length) return false;
+    const sceneText = _aiScenes
+      .filter(s => s && !s.comic_page)
+      .map(s => `${s.text || ''}\n${s.image_prompt || ''}`)
+      .join('\n\n');
+    if (!sceneText.trim()) return false;
+
+    const currentRows = _charactersFromAiRows();
+    const supplemented = _supplementCharactersFromText(currentRows, sceneText);
+    if (supplemented.length <= currentRows.length) return false;
+
+    _analyzedCharacters = _mergeCharacterProfiles(_analyzedCharacters, supplemented);
+    _saveNovelCharacterProfile();
+    novelImportCharactersToAi(true, {
+      preserveCurrentRows: false,
+      skipSceneAutoFill: true
+    });
+    return true;
+  }
+
+  function novelLoadSavedCharacters() {
+    const saved = _loadNovelCharacterProfile();
+    if (!saved.length) return _toast('Chua co bo nhan vat da luu cho truyen nay.', 'info');
+    _analyzedCharacters = _mergeCharacterProfiles(_analyzedCharacters, saved);
+    _renderAnalyzedCharacters();
+    novelImportCharactersToAi(true);
+    _toast(`Da tai ${saved.length} nhan vat da luu cho truyen nay.`, 'success');
+  }
+
+  async function novelAnalyzeCharacters() {
+    // Gather all content from selected chapters
+    let combinedContent = '';
+    _importedChapters.forEach(ch => {
+      if (ch.content) {
+        combinedContent += `=== ${ch.title} ===\n\n${ch.content}\n\n`;
+      }
+    });
+
+    const cleanContent = combinedContent.trim();
+    if (!cleanContent) {
+      return _toast('Chưa có nội dung chương nào được tải. Vui lòng nạp ít nhất một chương ở danh sách phía trên trước!', 'warning');
+    }
+
+    const btn = document.getElementById('sn-char-analyze-btn');
+    let novelTitle = document.getElementById('sn-char-novel-title')?.value?.trim() || '';
+    if (!novelTitle) {
+      novelTitle = document.getElementById('sn-detail-title')?.textContent || '';
+    }
+    
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang phân tích bằng AI...';
+    }
+
+    _toast('Đang gọi AI phân tích nhân vật & tìm ảnh tham chiếu. Quá trình này có thể mất 15-30 giây...', 'info');
+
+    try {
+      const r = await API.post('/api/story/novel/analyze_characters', {
+        story_text: cleanContent,
+        novel_title: novelTitle
+      });
+
+      if (!r.ok) throw new Error(r.error || 'Phân tích nhân vật thất bại');
+
+      let extractedCharacters = r.characters || [];
+      
+      // Auto-set the first found image as the selected reference for each character
+      extractedCharacters.forEach(c => {
+        c.name = _canonicalCharacterName(c.name || '');
+        if (c.images && c.images.length > 0) {
+          c.selected_image_url = c.images[0].url;
+        } else {
+          c.selected_image_url = '';
+        }
+      });
+      extractedCharacters = _supplementCharactersFromText(extractedCharacters, cleanContent);
+      _analyzedCharacters = _mergeCharacterProfiles(
+        _loadNovelCharacterProfile(novelTitle),
+        extractedCharacters
+      );
+      _saveNovelCharacterProfile(novelTitle, _analyzedCharacters);
+
+      _renderAnalyzedCharacters();
+      _toast(`Thành công! Đã trích xuất được ${_analyzedCharacters.length} nhân vật.`, 'success');
+      
+      // Also automatically push them directly into the Advanced Settings form!
+      novelImportCharactersToAi(true); // silent = true
+
+    } catch (e) {
+      _toast(String(e.message || e), 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '🤖 Phân tích nhân vật & Tìm ảnh tham chiếu';
+      }
+    }
+  }
+
+  async function _searchCharacterImages(idx, queryText) {
+    const c = _analyzedCharacters[idx];
+    if (!c) return;
+
+    queryText = queryText.trim();
+    if (!queryText) {
+      _toast('Vui lòng nhập từ khóa tìm kiếm!', 'warning');
+      return;
+    }
+
+    try {
+      _toast(`Đang tìm kiếm ảnh cho "${queryText}"...`, 'info');
+      
+      const novelTitle = document.getElementById('sn-char-novel-title')?.value?.trim() || '';
+      const res = await API.post('/api/story/novel/search_character_images', {
+        query: queryText,
+        name: c.name || '',
+        pinyin_name: c.pinyin_name || '',
+        chinese_name: c.chinese_name || '',
+        novel_title: novelTitle
+      });
+      if (res.ok && Array.isArray(res.images)) {
+        c.images = res.images;
+        if (res.images.length > 0) {
+          c.selected_image_url = res.images[0].url;
+        } else {
+          c.selected_image_url = '';
+        }
+        _saveNovelCharacterProfile();
+        _renderAnalyzedCharacters();
+        novelImportCharactersToAi(true); // Sync silently
+        _toast(`Tìm thấy ${res.images.length} ảnh!`, 'success');
+      } else {
+        _toast(res.error || 'Không tìm thấy kết quả', 'error');
+      }
+    } catch (e) {
+      _toast(`Lỗi: ${e.message || e}`, 'error');
+    }
+  }
+
+  async function _uploadCharacterRefLocal(idx, fileInput) {
+    const c = _analyzedCharacters[idx];
+    if (!c) return;
+
+    const files = fileInput.files;
+    if (!files.length) return;
+
+    try {
+      LoadingUI.start && LoadingUI.start(`Đang tải ảnh lên...`);
+      const csrf = document.cookie.match(/dt_csrf=([^;]*)/)?.[1] || '';
+      const headers = csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {};
+      
+      for (let f of files) {
+        const fd = new FormData();
+        fd.append('file', f);
+        
+        const r = await fetch('/api/story/ai_upload_ref', { method: 'POST', body: fd, headers })
+          .then(res => res.json());
+
+        if (!r.ok) throw new Error(r.error || 'Upload thất bại');
+        
+        if (!Array.isArray(c.images)) c.images = [];
+        c.images.unshift({
+          url: r.image_url,
+          thumbnail: r.image_url
+        });
+        c.selected_image_url = r.image_url;
+      }
+
+      _saveNovelCharacterProfile();
+      _renderAnalyzedCharacters();
+      novelImportCharactersToAi(true); // Sync silently
+      _toast('Đã tải ảnh lên thành công!', 'success');
+    } catch (e) {
+      _toast(String(e.message || e), 'error');
+    } finally {
+      LoadingUI.stop && LoadingUI.stop();
+      fileInput.value = '';
+    }
+  }
+
+  function _renderAnalyzedCharacters() {
+    const card = document.getElementById('sn-characters-analysis-card');
+    const list = document.getElementById('sn-characters-list');
+    if (!card || !list) return;
+
+    card.classList.remove('hidden');
+    list.replaceChildren();
+
+    if (_analyzedCharacters.length === 0) {
+      list.innerHTML = '<div class="text-xs text-muted">Không tìm thấy nhân vật nào trong đoạn trích.</div>';
+      return;
+    }
+
+    _analyzedCharacters.forEach((c, idx) => {
+      const row = _el('div', {
+        style: 'background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:10px'
+      });
+
+      // Header Row
+      const titleRow = _el('div', { style: 'display:flex;align-items:center;justify-content:space-between' });
+      const name = _el('span', { style: 'font-weight:700;font-size:14px;color:var(--text)' }, `👤 ${c.name}`);
+      const role = _el('span', { class: 'badge badge-accent', style: 'font-size:10px;padding:2px 6px' }, c.role || 'Phụ');
+      titleRow.appendChild(name);
+      titleRow.appendChild(role);
+      row.appendChild(titleRow);
+
+      // Description Row
+      const desc = _el('div', { style: 'font-size:11px;color:var(--text2);line-height:1.4' }, `📝 ${c.description || 'Không có mô tả chi tiết'}`);
+      row.appendChild(desc);
+
+      // Custom Re-query Search Controls
+      const searchControls = _el('div', {
+        style: 'display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;background:var(--bg3);padding:6px;border-radius:6px;border:1px solid var(--border)'
+      });
+      const nTitle = document.getElementById('sn-char-novel-title')?.value?.trim() || '';
+      const initialQuery = `${c.name} ${nTitle ? nTitle + ' ' : ''}manhua`.replace(/\s+/g, ' ').trim();
+      const sInput = _el('input', {
+        type: 'text',
+        placeholder: 'Từ khóa tìm kiếm ảnh...',
+        value: initialQuery,
+        style: 'font-size:11px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text)'
+      });
+      const sBtn = _el('button', {
+        class: 'btn btn-secondary btn-xs',
+        type: 'button',
+        style: 'font-size:10px;padding:4px 8px'
+      }, '🔍 Tìm lại');
+      sBtn.addEventListener('click', () => {
+        _searchCharacterImages(idx, sInput.value);
+      });
+      searchControls.appendChild(sInput);
+      searchControls.appendChild(sBtn);
+      row.appendChild(searchControls);
+
+      // Upload and URL actions row
+      const actionRow = _el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' });
+      
+      const fileInput = _el('input', {
+        type: 'file',
+        accept: 'image/*',
+        multiple: 'multiple',
+        style: 'display:none'
+      });
+      fileInput.addEventListener('change', () => {
+        _uploadCharacterRefLocal(idx, fileInput);
+      });
+
+      const upBtn = _el('button', {
+        class: 'btn btn-outline-info btn-xs',
+        type: 'button',
+        style: 'font-size:10px;padding:4px 8px;border-radius:4px'
+      }, '📤 Tải ảnh lên');
+      upBtn.addEventListener('click', () => fileInput.click());
+      actionRow.appendChild(fileInput);
+      actionRow.appendChild(upBtn);
+
+      const urlBtn = _el('button', {
+        class: 'btn btn-outline-secondary btn-xs',
+        type: 'button',
+        style: 'font-size:10px;padding:4px 8px;border-radius:4px'
+      }, '🔗 Dán URL ảnh');
+      actionRow.appendChild(urlBtn);
+
+      // Toggleable URL input wrap
+      const urlInputWrap = _el('div', {
+        class: 'hidden',
+        style: 'display:grid;grid-template-columns:1fr auto;gap:6px;width:100%;margin-top:4px'
+      });
+      const urlInput = _el('input', {
+        type: 'text',
+        placeholder: 'Nhập link ảnh tham chiếu trực tiếp (https://...)',
+        style: 'font-size:11px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text)'
+      });
+      const urlSaveBtn = _el('button', {
+        class: 'btn btn-primary btn-xs',
+        type: 'button',
+        style: 'font-size:10px;padding:4px 8px'
+      }, 'Lưu');
+      
+      urlSaveBtn.addEventListener('click', () => {
+        const val = urlInput.value.trim();
+        if (val) {
+          if (!Array.isArray(c.images)) c.images = [];
+          c.images.unshift({ url: val, thumbnail: val });
+          c.selected_image_url = val;
+          urlInput.value = '';
+          urlInputWrap.classList.add('hidden');
+          _saveNovelCharacterProfile();
+          _renderAnalyzedCharacters();
+          novelImportCharactersToAi(true); // Sync silently
+        }
+      });
+      urlInputWrap.appendChild(urlInput);
+      urlInputWrap.appendChild(urlSaveBtn);
+
+      urlBtn.addEventListener('click', () => {
+        urlInputWrap.classList.toggle('hidden');
+      });
+
+      row.appendChild(actionRow);
+      row.appendChild(urlInputWrap);
+
+      // Gallery of images
+      const galleryContainer = _el('div', { style: 'display:flex;flex-direction:column;gap:4px;margin-top:4px' });
+      galleryContainer.appendChild(_el('span', { class: 'text-xs text-muted', style: 'font-weight:600' }, '🖼️ Ảnh tham chiếu đã tìm thấy/tải lên:'));
+
+      const gallery = _el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:4px' });
+      
+      if (c.images && c.images.length > 0) {
+        c.images.forEach((img, imgIdx) => {
+          const isSelected = (c.selected_image_url === img.url);
+          const thumbWrap = _el('div', {
+            style: 'position:relative;width:64px;height:64px;border-radius:6px;overflow:hidden;background:var(--bg3)'
+          });
+          const imgEl = _el('img', {
+            src: img.thumbnail || img.url,
+            style: 'width:100%;height:100%;object-fit:cover;border-radius:6px;border:2px solid ' + (isSelected ? 'var(--accent)' : 'transparent') + ';cursor:pointer;transition:all .12s;' +
+                   (isSelected ? 'box-shadow:0 0 6px var(--accent-light);transform:scale(1.05)' : ''),
+            title: 'Nhấp để chọn ảnh này'
+          });
+          const delImgBtn = _el('button', {
+            type: 'button',
+            style: 'position:absolute;top:2px;right:2px;width:18px;height:18px;border:0;border-radius:999px;background:rgba(0,0,0,.72);color:#fff;font-size:12px;line-height:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0',
+            title: 'Xoa anh tham chieu nay'
+          }, 'x');
+
+          imgEl.addEventListener('click', () => {
+            c.selected_image_url = img.url;
+            _saveNovelCharacterProfile();
+            _renderAnalyzedCharacters();
+            novelImportCharactersToAi(true); // Sync silently
+          });
+          delImgBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            _removeImageUrlFromCharacter(c, img.url);
+            _saveNovelCharacterProfile();
+            _renderAnalyzedCharacters();
+            novelImportCharactersToAi(true, { preserveCurrentRows: false }); // Sync silently
+            _toast('Da xoa anh tham chieu.', 'info');
+          });
+
+          thumbWrap.appendChild(imgEl);
+          thumbWrap.appendChild(delImgBtn);
+          gallery.appendChild(thumbWrap);
+        });
+      } else {
+        gallery.innerHTML = '<span class="text-xs text-muted" style="font-style:italic">Chưa có ảnh nào. Vui lòng bấm tìm ảnh hoặc tải ảnh từ máy lên!</span>';
+      }
+
+      galleryContainer.appendChild(gallery);
+      row.appendChild(galleryContainer);
+
+      list.appendChild(row);
+    });
+  }
+
+  function novelImportCharactersToAi(silent = false, options = {}) {
+    const wrap = document.getElementById('sw-ai-chars');
+    if (!wrap) return;
+
+    if (_analyzedCharacters.length === 0) {
+      if (!silent) _toast('Chưa có nhân vật nào được phân tích. Hãy chạy phân tích trước!', 'warning');
+      return;
+    }
+
+    if (options.preserveCurrentRows !== false) {
+      _analyzedCharacters = _mergeCharacterProfiles(_charactersFromAiRows(), _analyzedCharacters);
+    }
+    _saveNovelCharacterProfile();
+
+    wrap.replaceChildren();
+    _analyzedCharacters.forEach(c => {
+      const card = _el('div', {
+        class: 'sw-ai-char-row',
+        style: 'background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:8px'
+      });
+
+      const topRow = _el('div', {
+        style: 'display:grid;grid-template-columns:120px 1fr 32px;gap:8px;align-items:center'
+      });
+      const nameInput = _el('input', {
+        type: 'text',
+        placeholder: 'Tên nhân vật',
+        class: 'sw-ai-char-name',
+        value: c.name || '',
+        style: 'font-size:12px;padding:6px 8px;font-weight:700'
+      });
+      const descInput = _el('input', {
+        type: 'text',
+        placeholder: 'Mô tả ngoại hình',
+        class: 'sw-ai-char-desc',
+        value: c.description || '',
+        style: 'font-size:12px;padding:6px 8px'
+      });
+      const delBtn = _el('button', {
+        class: 'btn btn-danger btn-sm',
+        type: 'button',
+        style: 'padding:4px 8px',
+        title: 'Xoá nhân vật'
+      }, '✕');
+      delBtn.addEventListener('click', () => card.remove());
+
+      topRow.appendChild(nameInput);
+      topRow.appendChild(descInput);
+      topRow.appendChild(delBtn);
+
+      const refsContainer = _el('div', {
+        class: 'char-refs-container',
+        style: 'display:flex;flex-direction:column;gap:4px;padding-top:4px;border-top:1px dashed var(--border)'
+      });
+
+      const labelRow = _el('div', {
+        style: 'display:flex;align-items:center;justify-content:space-between;gap:8px'
+      });
+      const labelSpan = _el('span', {
+        class: 'text-xs font-semibold text-muted'
+      }, '🖼️ Ảnh tham chiếu nhân vật (Style/Face References):');
+
+      const btnWrap = _el('div', { style: 'display:flex;gap:4px' });
+      const fileInput = _el('input', {
+        class: 'sw-ai-char-ref-file',
+        type: 'file',
+        accept: 'image/*',
+        multiple: 'multiple',
+        style: 'display:none'
+      });
+      fileInput.addEventListener('change', () => uploadCharRef(fileInput));
+
+      const addBtn = _el('button', {
+        class: 'btn btn-secondary btn-sm',
+        type: 'button',
+        style: 'font-size:10px;padding:2px 8px'
+      }, '📤 Thêm ảnh');
+      addBtn.addEventListener('click', () => fileInput.click());
+
+      btnWrap.appendChild(fileInput);
+      btnWrap.appendChild(addBtn);
+      labelRow.appendChild(labelSpan);
+      labelRow.appendChild(btnWrap);
+
+      const previewDiv = _el('div', {
+        class: 'sw-ai-char-refs-preview',
+        style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:4px'
+      });
+
+      // Render thumbnails for image-search results so user sees them inside the Advanced Form as well.
+      if (c.images && c.images.length > 0) {
+        c.images.forEach((img, imgIdx) => {
+          const isSelected = (c.selected_image_url === img.url);
+          const thumbWrap = _el('div', {
+            style: 'position:relative;width:44px;height:44px;border-radius:4px;overflow:hidden;background:var(--bg3)'
+          });
+          const thumb = _el('img', {
+            src: img.thumbnail || img.url,
+            style: 'width:100%;height:100%;object-fit:cover;border-radius:4px;border:2px solid ' + (isSelected ? 'var(--accent)' : 'transparent') + ';cursor:pointer;transition:all .12s;' +
+                   (isSelected ? 'box-shadow:0 0 4px var(--accent-light)' : ''),
+            title: 'Chọn ảnh này làm ảnh tham chiếu mặt'
+          });
+          const delImgBtn = _el('button', {
+            type: 'button',
+            style: 'position:absolute;top:1px;right:1px;width:16px;height:16px;border:0;border-radius:999px;background:rgba(0,0,0,.72);color:#fff;font-size:10px;line-height:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0',
+            title: 'Xoa anh tham chieu nay'
+          }, 'x');
+          thumb.addEventListener('click', () => {
+            c.selected_image_url = img.url;
+            _saveNovelCharacterProfile();
+            _renderAnalyzedCharacters();
+            novelImportCharactersToAi(true);
+          });
+          delImgBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            _removeImageUrlFromCharacter(c, img.url);
+            _saveNovelCharacterProfile();
+            _renderAnalyzedCharacters();
+            novelImportCharactersToAi(true, { preserveCurrentRows: false });
+            _toast('Da xoa anh tham chieu.', 'info');
+          });
+          thumbWrap.appendChild(thumb);
+          thumbWrap.appendChild(delImgBtn);
+          previewDiv.appendChild(thumbWrap);
+        });
+      }
+
+      // Add a hidden input to hold selected + backup reference image URLs.
+      // The selected image stays first, while a few backups help the model keep
+      // face/clothing consistency when the provider accepts multiple refs.
+      const selectedUrls = _referenceUrlsForCharacter(c, 3);
+      const hiddenUrls = _el('input', {
+        type: 'hidden',
+        class: 'sw-ai-char-ref-urls',
+        value: JSON.stringify(selectedUrls)
+      });
+
+      refsContainer.appendChild(labelRow);
+      refsContainer.appendChild(previewDiv);
+      refsContainer.appendChild(hiddenUrls);
+
+      card.appendChild(topRow);
+      card.appendChild(refsContainer);
+      wrap.appendChild(card);
+    });
+
+    if (!options.skipSceneAutoFill) {
+      _autoFillMissingSceneCharacters();
+    }
+
+    if (!silent) {
+      switchSource('text');
+      // Automatically expand Advanced Settings Details element so they see their characters!
+      const details = document.querySelector('#page-story details');
+      if (details) details.open = true;
+      _toast('Đã đồng bộ thành công toàn bộ nhân vật và ảnh tham chiếu sang cấu hình AI!', 'success');
+    }
+  }
+
+  async function uploadCharRef(fileInput) {
+    const files = fileInput.files;
+    if (!files.length) return;
+    const row = fileInput.closest('.sw-ai-char-row');
+    const previewWrap = row.querySelector('.sw-ai-char-refs-preview');
+    const urlsInput = row.querySelector('.sw-ai-char-ref-urls');
+    let urls = JSON.parse(urlsInput.value || '[]');
+
+    for (let f of files) {
+      const fd = new FormData();
+      fd.append('file', f);
+
+      try {
+        LoadingUI.start && LoadingUI.start(`Đang tải ảnh lên...`);
+        const csrf = document.cookie.match(/dt_csrf=([^;]*)/)?.[1] || '';
+        const headers = csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {};
+        const r = await fetch('/api/story/ai_upload_ref', { method: 'POST', body: fd, headers })
+          .then(res => res.json());
+
+        if (!r.ok) throw new Error(r.error || 'Upload thất bại');
+        
+        urls.push(r.image_url);
+        
+        // Add thumbnail preview
+        const thumb = _el('div', {
+          style: 'position:relative;width:48px;height:48px;border-radius:4px;border:1px solid var(--border);overflow:hidden;background:var(--bg3)'
+        });
+        const img = _el('img', {
+          src: r.image_url,
+          style: 'width:100%;height:100%;object-fit:cover'
+        });
+        const delBtn = _el('button', {
+          type: 'button',
+          style: 'position:absolute;top:0;right:0;background:rgba(0,0,0,0.6);color:#fff;border:none;width:14px;height:14px;font-size:9px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0',
+          title: 'Xoá ảnh'
+        }, '✕');
+        
+        delBtn.addEventListener('click', () => {
+          thumb.remove();
+          urls = urls.filter(u => u !== r.image_url);
+          urlsInput.value = JSON.stringify(urls);
+        });
+        
+        thumb.appendChild(img);
+        thumb.appendChild(delBtn);
+        previewWrap.appendChild(thumb);
+        
+      } catch (e) {
+        _toast(String(e.message || e), 'error');
+        _log(`✗ Lỗi tải ảnh tham chiếu nhân vật: ${e.message || e}`, 'error');
+      } finally {
+        LoadingUI.stop && LoadingUI.stop();
+      }
+    }
+    
+    urlsInput.value = JSON.stringify(urls);
+    fileInput.value = ''; // Reset file input
+  }
+
+  // ── Scene splitting & detail configuration editor ─────────────────────
+  function novelSplitScenes() {
+    const textEl = document.getElementById('sw-text');
+    if (!textEl) return;
+    const storyText = textEl.value.trim();
+    if (!storyText) {
+      _toast('Vui lòng nhập nội dung truyện trước khi phân cảnh!', 'warning');
+      return;
+    }
+
+    const scenes = _parseScenes(storyText);
+    if (!scenes.length) {
+      _toast('Không thể phân tích cảnh nào từ nội dung truyện!', 'warning');
+      return;
+    }
+
+    // Adapt _aiScenes to match the split scenes
+    const newAiScenes = [];
+    const chars = _getCharacters();
+    scenes.forEach((text, i) => {
+      const existing = _aiScenes[i];
+      const detectedCharacters = _detectSceneCharacterNames(`${text} ${existing?.image_prompt || ''}`, chars);
+      if (existing && existing.text === text) {
+        newAiScenes.push({
+          text: text,
+          image_prompt: existing.image_prompt || '',
+          image_url: existing.image_url || '',
+          end_image_url: existing.end_image_url || '',
+          characters: (existing.characters && existing.characters.length) ? existing.characters : detectedCharacters
+        });
+      } else {
+        newAiScenes.push({
+          text: text,
+          image_prompt: '',
+          image_url: '',
+          end_image_url: '',
+          characters: detectedCharacters
+        });
+      }
+    });
+
+    _aiScenes = newAiScenes;
+    _updateComicPageEstimate();
+
+    // Show the editor card
+    const editorCard = document.getElementById('sw-scenes-editor-card');
+    if (editorCard) editorCard.classList.remove('hidden');
+
+    _renderScenesEditor();
+    _toast(`Đã phân tích ${scenes.length} cảnh. Hãy cấu hình chi tiết bên dưới!`, 'success');
+  }
+
+  function storyAiAutoAssignSceneCharacters(silent = false) {
+    _ensureSceneCharactersKnown();
+    const chars = _getCharacters();
+    if (!_aiScenes.length || !chars.length) {
+      if (!silent) _toast('Chua co canh hoac nhan vat de tu gan.', 'warning');
+      return;
+    }
+
+    let assigned = 0;
+    _aiScenes.forEach(scene => {
+      if (scene.comic_page) return;
+      const names = _detectSceneCharacterNames(`${scene.text || ''} ${scene.image_prompt || ''}`, chars);
+      scene.characters = names;
+      if (names.length) assigned++;
+    });
+    _renderScenesEditor();
+    if (!silent) _toast(`Da tu gan nhan vat cho ${assigned}/${_aiScenes.length} canh.`, 'success');
+  }
+
+  function _autoFillMissingSceneCharacters() {
+    _ensureSceneCharactersKnown();
+    const chars = _getCharacters();
+    if (!_aiScenes.length || !chars.length) return 0;
+    let filled = 0;
+    _aiScenes.forEach(scene => {
+      if (scene.comic_page || (Array.isArray(scene.characters) && scene.characters.length)) return;
+      const names = _detectSceneCharacterNames(`${scene.text || ''} ${scene.image_prompt || ''}`, chars);
+      if (names.length) {
+        scene.characters = names;
+        filled++;
+      }
+    });
+    if (filled) _renderScenesEditor();
+    return filled;
+  }
+
+  function _renderScenesEditor() {
+    const list = document.getElementById('sw-scenes-editor-list');
+    if (!list) return;
+    list.replaceChildren();
+
+    _ensureSceneCharactersKnown();
+    const chars = _getCharacters();
+
+    _aiScenes.forEach((scene, idx) => {
+      const card = _el('div', {
+        class: 'scene-editor-card',
+        style: 'background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px'
+      });
+
+      // Header row
+      const headerRow = _el('div', { style: 'display:flex;justify-content:space-between;align-items:center' });
+      const title = _el('span', { style: 'font-weight:700;font-size:13px;color:var(--text)' }, `🎬 Cảnh ${idx + 1}`);
+      
+      const statusSpan = _el('span', {
+        id: `scene-status-${idx}`,
+        style: 'font-size:11px;color:var(--text-muted)'
+      });
+      headerRow.appendChild(title);
+      headerRow.appendChild(statusSpan);
+      card.appendChild(headerRow);
+
+      // Text Area (Narration)
+      const textGroup = _el('div', { style: 'display:flex;flex-direction:column;gap:4px' });
+      textGroup.appendChild(_el('label', { style: 'font-size:11px;font-weight:600;color:var(--text2)' }, 'Lời thoại / Dẫn truyện:'));
+      const textInput = _el('textarea', {
+        rows: 2,
+        style: 'font-size:12px;padding:6px;width:100%;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);resize:vertical'
+      }, scene.text);
+      textInput.addEventListener('input', () => {
+        scene.text = textInput.value;
+        _updateMainStoryText();
+      });
+      textGroup.appendChild(textInput);
+      card.appendChild(textGroup);
+
+      // Image Prompt
+      const promptGroup = _el('div', { style: 'display:flex;flex-direction:column;gap:4px' });
+      promptGroup.appendChild(_el('label', { style: 'font-size:11px;font-weight:600;color:var(--text2)' }, 'Gợi ý vẽ ảnh (Prompt) - Nhập hoặc để tự động sinh:'));
+      const promptInput = _el('input', {
+        type: 'text',
+        placeholder: 'Mô tả bối cảnh, hành động nhân vật...',
+        style: 'font-size:12px;padding:6px 8px;width:100%;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text)'
+      });
+      promptInput.value = scene.image_prompt || '';
+      promptInput.addEventListener('input', () => {
+        scene.image_prompt = promptInput.value;
+      });
+      promptGroup.appendChild(promptInput);
+      card.appendChild(promptGroup);
+
+      // Character Checkboxes / Pills with Avatars
+      if (chars.length > 0) {
+        const charGroup = _el('div', { style: 'display:flex;flex-direction:column;gap:4px' });
+        charGroup.appendChild(_el('label', { style: 'font-size:11px;font-weight:600;color:var(--text2)' }, 'Nhân vật xuất hiện trong cảnh:'));
+        
+        const charList = _el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' });
+        chars.forEach(c => {
+          const isChecked = Array.isArray(scene.characters) && scene.characters.includes(c.name);
+          const wrapper = _el('label', {
+            style: 'display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;user-select:none;transition:all .12s;' +
+                   (isChecked ? 'border-color:var(--accent);background:rgba(var(--accent-rgb), 0.1)' : '')
+          });
+
+          if (c.reference_images && c.reference_images.length > 0) {
+            const avatar = _el('img', {
+              src: c.reference_images[0],
+              style: 'width:20px;height:20px;border-radius:50%;object-fit:cover;border:1px solid var(--border)'
+            });
+            wrapper.appendChild(avatar);
+          }
+
+          const cb = _el('input', {
+            type: 'checkbox',
+            checked: isChecked,
+            style: 'margin:0;cursor:pointer'
+          });
+          cb.addEventListener('change', () => {
+            if (!Array.isArray(scene.characters)) scene.characters = [];
+            if (cb.checked) {
+              if (!scene.characters.includes(c.name)) scene.characters.push(c.name);
+              wrapper.style.borderColor = 'var(--accent)';
+              wrapper.style.background = 'rgba(var(--accent-rgb), 0.1)';
+            } else {
+              scene.characters = scene.characters.filter(x => x !== c.name);
+              wrapper.style.borderColor = 'var(--border)';
+              wrapper.style.background = 'var(--bg3)';
+            }
+          });
+
+          wrapper.appendChild(cb);
+          wrapper.appendChild(document.createTextNode(c.name));
+          charList.appendChild(wrapper);
+        });
+        charGroup.appendChild(charList);
+        card.appendChild(charGroup);
+      }
+
+      // Preview row
+      const previewRow = _el('div', {
+        id: `scene-preview-${idx}`,
+        style: 'display:flex;gap:8px;margin-top:4px'
+      });
+      _renderSceneCardPreview(idx, previewRow);
+      card.appendChild(previewRow);
+
+      // Actions Row
+      const actionRow = _el('div', { style: 'display:flex;gap:6px' });
+      const genStartBtn = _el('button', {
+        class: 'btn btn-primary btn-sm',
+        style: 'font-size:11px;padding:6px 12px;border-radius:4px',
+        type: 'button'
+      }, scene.image_url ? '🔄 Vẽ lại ảnh start' : '🎨 Sinh ảnh start');
+      genStartBtn.addEventListener('click', () => {
+        storyAiGenerateSingleSceneImage(idx);
+      });
+
+      const genEndBtn = _el('button', {
+        class: 'btn btn-secondary btn-sm',
+        style: 'font-size:11px;padding:6px 12px;border-radius:4px',
+        type: 'button',
+        disabled: !scene.image_url
+      }, scene.end_image_url ? '🔄 Vẽ lại ảnh end' : '✨ Sinh ảnh end');
+      genEndBtn.addEventListener('click', () => {
+        storyAiGenerateSingleSceneImage(idx, true);
+      });
+
+      actionRow.appendChild(genStartBtn);
+      actionRow.appendChild(genEndBtn);
+      card.appendChild(actionRow);
+
+      list.appendChild(card);
+    });
+  }
+
+  function _renderSceneCardPreview(idx, container) {
+    const scene = _aiScenes[idx];
+    if (!scene) return;
+    container.replaceChildren();
+
+    const ratio = document.getElementById('sw-ai-img-ratio')?.value || '9:16';
+    const aspectCSS = ratio.replace(':', '/');
+
+    if (scene.image_url) {
+      const wrapA = _el('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:2px' });
+      const imgA = _el('img', {
+        src: scene.image_url,
+        style: `width:80px;aspect-ratio:${aspectCSS};object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer`
+      });
+      imgA.addEventListener('click', () => window.open(scene.image_url, '_blank'));
+      wrapA.appendChild(imgA);
+      wrapA.appendChild(_el('span', { style: 'font-size:9px;color:var(--text-muted)' }, 'Ảnh Start'));
+      container.appendChild(wrapA);
+    }
+    if (scene.end_image_url) {
+      const wrapB = _el('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:2px' });
+      const imgB = _el('img', {
+        src: scene.end_image_url,
+        style: `width:80px;aspect-ratio:${aspectCSS};object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer`
+      });
+      imgB.addEventListener('click', () => window.open(scene.end_image_url, '_blank'));
+      wrapB.appendChild(imgB);
+      wrapB.appendChild(_el('span', { style: 'font-size:9px;color:var(--text-muted)' }, 'Ảnh End'));
+      container.appendChild(wrapB);
+    }
+  }
+
+  function _updateMainStoryText() {
+    const textEl = document.getElementById('sw-text');
+    if (!textEl) return;
+    textEl.value = _aiScenes.map(s => s.text).join('\n\n');
+  }
+
+  async function storyAiGenerateSingleSceneImage(idx, endFrame = false) {
+    const scene = _aiScenes[idx];
+    if (!scene) return;
+
+    if (endFrame && !scene.image_url) {
+      _toast('Vui lòng sinh ảnh start trước khi sinh ảnh end!', 'warning');
+      return;
+    }
+
+    const statusEl = document.getElementById(`scene-status-${idx}`);
+    if (statusEl) statusEl.innerHTML = `<span class="spinner" style="display:inline-block;width:10px;height:10px;border:2px solid var(--text-muted);border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:4px"></span> Đang sinh ${endFrame ? 'end' : 'start'}...`;
+
+    const cardEl = document.querySelectorAll('.scene-editor-card')[idx];
+    const btns = cardEl ? cardEl.querySelectorAll('button') : [];
+    btns.forEach(btn => btn.disabled = true);
+
+    try {
+      const artStyle = document.getElementById('sw-ai-art-style')?.value || '';
+      const imgModel = (document.getElementById('sw-ai-img-model')?.value || 'cx/gpt-5.5-image').trim();
+      const imgQuality = document.getElementById('sw-ai-img-quality')?.value || 'standard';
+      const imgRatio = document.getElementById('sw-ai-img-ratio')?.value || '9:16';
+      
+      if (!window._aiSessionId) {
+        try {
+          const sidRes = await API.post('/api/story/ai_session_new', {}, { silent: true });
+          window._aiSessionId = (sidRes && sidRes.ok) ? sidRes.session_id : '';
+        } catch (_) {
+          window._aiSessionId = '';
+        }
+      }
+
+      if (endFrame) {
+        const seed = _hashSeed(scene.text + '|end');
+        const r = await API.post('/api/story/ai_generate_end_frame', {
+          start_image_url: scene.image_url,
+          scene_text: scene.text,
+          art_style: artStyle,
+          model: imgModel,
+          quality: imgQuality,
+          ratio: imgRatio,
+          seed,
+          session_id: window._aiSessionId || '',
+        }, { silent: true });
+
+        if (r.ok && r.image_url) {
+          scene.end_image_url = r.image_url;
+          _toast(`Đã sinh xong ảnh end cho cảnh ${idx + 1}`, 'success');
+        } else {
+          throw new Error(r.error || 'Lỗi sinh ảnh end');
+        }
+      } else {
+        const seed = _hashSeed(scene.text + '|start');
+        
+        const refs = [];
+        const customRef = document.getElementById('sw-ai-ref-image-url')?.value?.trim() || '';
+        if (customRef) refs.push(customRef);
+
+        const chars = _getCharacters();
+        let linkedCharNames = scene.characters || [];
+        if (linkedCharNames.length === 0) {
+          linkedCharNames = _detectSceneCharacterNames(`${scene.text || ''} ${scene.image_prompt || ''}`, chars);
+          scene.characters = linkedCharNames;
+        }
+
+        linkedCharNames.forEach(charName => {
+          const cData = chars.find(c => (c.name || '').toLowerCase() === charName.toLowerCase());
+          if (cData) {
+            _referenceUrlsForCharacter(cData, 3).forEach(imgUrl => {
+              if (refs.length < 3 && imgUrl && !refs.includes(imgUrl)) {
+                refs.push(imgUrl);
+              }
+            });
+          }
+        });
+
+        const nTitle = document.getElementById('sn-char-novel-title')?.value?.trim() || '';
+        let finalPrompt = scene.image_prompt || '';
+        if (!finalPrompt) {
+          let text = scene.text.slice(0, 150);
+          if (linkedCharNames.length > 0 && nTitle) {
+            linkedCharNames.forEach(charName => {
+              const regex = new RegExp(`\\b${charName}\\b`, 'gi');
+              if (regex.test(text)) {
+                text = text.replace(regex, `${charName} from ${nTitle} manhua`);
+              } else {
+                text = `${charName} from ${nTitle} manhua, ${text}`;
+              }
+            });
+          } else if (nTitle) {
+            text = `${nTitle} manhua comic style, ${text}`;
+          }
+          finalPrompt = `${artStyle || 'cinematic film still'}, ${text}`;
+        } else if (nTitle) {
+          if (!finalPrompt.toLowerCase().includes(nTitle.toLowerCase())) {
+            finalPrompt = `${finalPrompt}, in the style of ${nTitle} manhua`;
+          }
+        }
+        if (linkedCharNames.length) {
+          const charHints = linkedCharNames.map(charName => {
+            const cData = chars.find(c => (c.name || '').toLowerCase() === charName.toLowerCase());
+            return cData ? `${charName}: ${cData.description || ''}` : charName;
+          }).join('; ');
+          finalPrompt += `\nCharacters in this scene: ${charHints}. Must match the attached reference images for face, hair, outfit, age and identity. Do not invent a different character design.`;
+        }
+
+        const imgRes = await API.post('/api/story/ai_generate_image', {
+          prompt: finalPrompt,
+          model: imgModel,
+          quality: imgQuality,
+          ratio: imgRatio,
+          scene_index: idx + 1,
+          seed: seed,
+          reference_image_urls: refs,
+          session_id: window._aiSessionId || '',
+        }, { silent: true });
+
+        if (imgRes.ok && imgRes.image_url) {
+          scene.image_url = imgRes.image_url;
+          if (!scene.image_prompt && imgRes.prompt) {
+            scene.image_prompt = imgRes.prompt;
+            const pInput = cardEl.querySelector('input[type="text"]');
+            if (pInput) pInput.value = imgRes.prompt;
+          }
+          _toast(`Đã sinh xong ảnh start cho cảnh ${idx + 1}`, 'success');
+        } else {
+          throw new Error(imgRes.error || 'Lỗi sinh ảnh start');
+        }
+      }
+
+      const previewRow = document.getElementById(`scene-preview-${idx}`);
+      if (previewRow) _renderSceneCardPreview(idx, previewRow);
+
+      _renderAiScenes();
+
+    } catch (err) {
+      _toast(`Cảnh ${idx + 1}: ${err.message || err}`, 'error');
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--danger)">✗ Lỗi</span>`;
+    } finally {
+      if (statusEl) {
+        statusEl.innerHTML = scene.image_url ? '<span style="color:var(--success)">✓ Hoàn thành</span>' : '';
+      }
+      btns.forEach(btn => btn.disabled = false);
+      const endBtn = cardEl ? cardEl.querySelectorAll('button')[1] : null;
+      if (endBtn) endBtn.disabled = !scene.image_url;
+    }
+  }
+
+  async function storyAiGenerateAllScenesImages() {
+    if (!_aiScenes.length) {
+      _toast('Chưa có cảnh nào để sinh ảnh!', 'warning');
+      return;
+    }
+
+    _toast(`Bắt đầu sinh ảnh cho ${_aiScenes.length} cảnh...`, 'info');
+    
+    const bulkBtn = document.getElementById('sw-gen-all-scenes-btn');
+    if (bulkBtn) bulkBtn.disabled = true;
+
+    try {
+      for (let i = 0; i < _aiScenes.length; i++) {
+        if (_aiScenes[i].image_url) continue;
+
+        try {
+          await storyAiGenerateSingleSceneImage(i);
+        } catch (e) {
+          console.error(`Lỗi sinh ảnh cảnh ${i + 1}:`, e);
+        }
+      }
+      _toast('Đã hoàn thành sinh ảnh toàn bộ các cảnh!', 'success');
+    } finally {
+      if (bulkBtn) bulkBtn.disabled = false;
+    }
+  }
+
   // Convert string → 32-bit positive int (deterministic seed)
   function _hashSeed(str) {
     let h = 0;
@@ -1771,6 +3890,258 @@
       h |= 0;
     }
     return Math.abs(h) || 42;
+  }
+
+  function _getComicPanelsPerPage() {
+    const raw = parseInt(document.getElementById('sw-ai-comic-panels-per-page')?.value || '12', 10);
+    if (!Number.isFinite(raw)) return 12;
+    return Math.max(2, Math.min(16, raw));
+  }
+
+  function _getComicEstimateSceneCount() {
+    const storyText = document.getElementById('sw-text')?.value || '';
+    const parsedScenes = _parseScenes(storyText);
+    if (parsedScenes.length) return parsedScenes.length;
+
+    const normalScenes = _aiScenes.filter(s => !s.comic_page);
+    if (normalScenes.length) return normalScenes.length;
+
+    const comicPanelCount = _aiScenes.reduce((sum, s) => sum + (s.comic_page ? (s.panel_count || 0) : 0), 0);
+    if (comicPanelCount) return comicPanelCount;
+
+    const requested = parseInt(document.getElementById('sw-ai-panels')?.value || '0', 10);
+    return Number.isFinite(requested) && requested > 0 ? requested : 0;
+  }
+
+  function _updateComicPageEstimate() {
+    const el = document.getElementById('sw-ai-comic-page-estimate');
+    if (!el) return;
+    const panelsPerPage = _getComicPanelsPerPage();
+    const sceneCount = _getComicEstimateSceneCount();
+    if (!sceneCount) {
+      el.textContent = `Mỗi ảnh API sẽ chứa tối đa ${panelsPerPage} khung.`;
+      return;
+    }
+    const pageCount = Math.ceil(sceneCount / panelsPerPage);
+    const lastPagePanels = sceneCount % panelsPerPage || panelsPerPage;
+    const lastText = pageCount > 1 ? `, trang cuối ${lastPagePanels} khung` : '';
+    el.textContent = `${sceneCount} cảnh / ${panelsPerPage} khung mỗi trang = ${pageCount} ảnh API${lastText}. Mỗi khung lấy 1 cảnh.`;
+  }
+
+  function _initComicPageEstimate() {
+    ['sw-ai-comic-panels-per-page', 'sw-ai-panels', 'sw-text', 'sw-ai-comic-page-mode'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', _updateComicPageEstimate);
+      el.addEventListener('change', _updateComicPageEstimate);
+    });
+    _updateComicPageEstimate();
+  }
+
+  function _clipText(text, maxLen = 180) {
+    const s = String(text || '').replace(/\s+/g, ' ').trim();
+    return s.length > maxLen ? s.slice(0, maxLen - 1).trim() + '…' : s;
+  }
+
+  function _getNovelTitleForImage() {
+    return (
+      document.getElementById('sn-char-novel-title')?.value?.trim()
+      || document.getElementById('sn-detail-title')?.textContent?.trim()
+      || ''
+    );
+  }
+
+  function _chunkArray(items, size) {
+    const chunks = [];
+    for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+    return chunks;
+  }
+
+  function _characterNamesInTexts(texts, characters) {
+    const lower = texts.join('\n').toLowerCase();
+    return (characters || [])
+      .map(c => c.name || '')
+      .filter(name => name && lower.includes(name.toLowerCase()));
+  }
+
+  function _referenceImagesForComicPage(pageScenes, characters) {
+    const refs = [];
+    const customRef = document.getElementById('sw-ai-ref-image-url')?.value?.trim() || '';
+    if (customRef) refs.push(customRef);
+
+    const sceneItems = _sceneItemsFromScenes(pageScenes, characters);
+    const names = _uniqueSceneCharacterNames(sceneItems, characters);
+    for (const name of names) {
+      const c = (characters || []).find(x => (x.name || '').toLowerCase() === name.toLowerCase());
+      for (const imgUrl of _referenceUrlsForCharacter(c, 2)) {
+        if (refs.length >= 4) return refs;
+        if (imgUrl && !refs.includes(imgUrl)) refs.push(imgUrl);
+      }
+    }
+    return refs;
+  }
+
+  function _buildComicPagePrompt(pageScenes, pageIndex, totalPages, opts = {}) {
+    const novelTitle = _getNovelTitleForImage();
+    const location = (opts.location || '').trim();
+    const artStyle = (opts.artStyle || '').trim();
+    const imgNote = (opts.imgNote || '').trim();
+    const characters = opts.characters || [];
+    const sceneItems = _sceneItemsFromScenes(pageScenes, characters);
+    const pageCharNames = _uniqueSceneCharacterNames(sceneItems, characters);
+    const pageCharacters = pageCharNames
+      .map(name => characters.find(c => (c.name || '').toLowerCase() === name.toLowerCase()))
+      .filter(Boolean);
+    const pageTitle = totalPages > 1 ? `Trang ${pageIndex + 1}/${totalPages}` : 'Trang truyện';
+    const sceneLines = sceneItems.map((scene, i) => {
+      const names = _sceneItemCharacters(scene, characters);
+      const charHint = names.length
+        ? ` Nhân vật trong khung: ${names.join(', ')}. Giữ đúng gương mặt, tóc, trang phục theo ảnh tham chiếu.`
+        : '';
+      return `- Khung ${i + 1}: ${_clipText(scene.text, 220)}${charHint}`;
+    }).join('\n');
+    const dialogueLines = sceneItems.slice(0, 8).map((scene, i) => {
+      const line = _clipText(scene.text, 52).replace(/["“”]/g, '');
+      return `- Khung ${i + 1}: “${line}”`;
+    }).join('\n');
+    const charBlock = pageCharacters.length
+      ? pageCharacters.map(c => `- ${c.name}: ${_clipText(c.description || '', 140)}. Must match attached reference image exactly.`).join('\n')
+      : '- Không cố định nhân vật; giữ đúng nhân vật xuất hiện trong mô tả từng khung.';
+
+    return [
+      `Tạo một trang truyện tranh/manhua cinematic hoàn chỉnh (${pageTitle}) theo phong cách ${novelTitle || 'Chinese fantasy manhua'}, bố cục nhiều khung truyện như storyboard điện ảnh, tỷ lệ ảnh dọc.`,
+      '',
+      `Phong cách bắt buộc: Chinese fantasy manhua, wuxia xianxia, cinematic lighting, ultra detailed, volumetric light, dramatic atmosphere, realistic anime face, dynamic composition, movie storyboard, epic fantasy comic page, 4k.`,
+      artStyle ? `Phong cách bổ sung: ${artStyle}.` : '',
+      location ? `Bối cảnh chính: ${location}.` : '',
+      imgNote ? `Ghi chú thêm: ${imgNote}.` : '',
+      '',
+      'Nhân vật tham chiếu:',
+      charBlock,
+      pageCharacters.length ? 'Chỉ đưa nhân vật vào đúng khung được liệt kê. Không tự thay mặt, đổi giới tính, đổi tóc hoặc đổi trang phục của nhân vật đã có ảnh tham chiếu.' : '',
+      '',
+      'Các khung truyện phải xuất hiện theo thứ tự sau:',
+      sceneLines,
+      '',
+      'Chèn textbox tiếng Việt trong từng khung truyện giống manga/manhua, chữ đen rõ trên hộp trắng hoặc bong bóng thoại. Dùng ít chữ, dễ đọc, không che mặt nhân vật. Gợi ý textbox/hội thoại:',
+      dialogueLines,
+      '',
+      'Yêu cầu bố cục: nhiều panel rõ ràng, có đường viền phân tách khung, nhịp kể chuyện điện ảnh, không tạo một ảnh đơn lẻ. Mỗi khung là một khoảnh khắc khác nhau của cùng chuỗi phân cảnh. Giữ nhân vật, phục trang, ánh sáng và màu sắc nhất quán giữa các khung.',
+    ].filter(Boolean).join('\n');
+  }
+
+  async function _ensureAiSession() {
+    if (window._aiSessionId) return window._aiSessionId;
+    try {
+      const sidRes = await API.post('/api/story/ai_session_new', {}, { silent: true });
+      window._aiSessionId = (sidRes && sidRes.ok) ? sidRes.session_id : '';
+    } catch (_) {
+      window._aiSessionId = '';
+    }
+    return window._aiSessionId;
+  }
+
+  async function _generateComicPageImagesFromScenes(scenes, opts = {}) {
+    const panelsPerPage = _getComicPanelsPerPage();
+    const sceneItems = _sceneItemsFromScenes(scenes, opts.characters || []);
+    const groups = _chunkArray(sceneItems, panelsPerPage);
+    const imgRatio = ['9:16', '3:4'].includes(opts.imgRatio || '') ? opts.imgRatio : '9:16';
+    const ratioEl = document.getElementById('sw-ai-img-ratio');
+    if (ratioEl) ratioEl.value = imgRatio;
+    await _ensureAiSession();
+
+    _aiScenes = groups.map((group, i) => ({
+      text: group.map(scene => scene.text).join('\n\n'),
+      image_prompt: _buildComicPagePrompt(group, i, groups.length, opts),
+      image_url: '',
+      end_image_url: '',
+      comic_page: true,
+      panel_count: group.length,
+      characters: _uniqueSceneCharacterNames(group, opts.characters || []),
+    }));
+    _renderAiScenes();
+
+    let okCount = 0;
+    let failCount = 0;
+    for (let i = 0; i < _aiScenes.length; i++) {
+      if (_aiCancelled) throw new Error('CANCELLED');
+      opts.updateProgress && opts.updateProgress(`Đang sinh trang manhua ${i + 1}/${_aiScenes.length}...`);
+      if (opts.status) opts.status.textContent = `⏳ Sinh trang manhua ${i + 1}/${_aiScenes.length}...`;
+      const refs = _referenceImagesForComicPage(groups[i], opts.characters || []);
+      const t0 = Date.now();
+      try {
+        const imgRes = await API.post('/api/story/ai_generate_image', {
+          prompt: _aiScenes[i].image_prompt,
+          model: opts.imgModel || 'cx/gpt-5.5-image',
+          quality: opts.imgQuality || 'standard',
+          ratio: imgRatio,
+          scene_index: i + 1,
+          seed: (opts.storySeed || 42) + i,
+          reference_image_urls: refs,
+          session_id: window._aiSessionId || '',
+        }, { silent: true });
+        if (imgRes.ok && imgRes.image_url) {
+          _aiScenes[i].image_url = imgRes.image_url;
+          okCount++;
+          _log(`  ✓ Trang ${i + 1}/${_aiScenes.length}: ${((Date.now() - t0) / 1000).toFixed(1)}s · ${groups[i].length} khung · refs=${imgRes.used_references || 0}`, 'success');
+        } else {
+          failCount++;
+          _log(`  ✗ Trang ${i + 1}/${_aiScenes.length}: ${imgRes.error || 'unknown'}`, 'error');
+        }
+      } catch (err) {
+        failCount++;
+        _log(`  ✗ Trang ${i + 1}/${_aiScenes.length}: ${err.message || err}`, 'error');
+      }
+      _renderAiScenes();
+    }
+    _log(`  ─ Tổng kết trang manhua: ${okCount} thành công, ${failCount} lỗi`, okCount ? 'info' : 'error');
+    return _aiScenes;
+  }
+
+  async function storyAiGenerateComicPages() {
+    let sourceScenes = _aiScenes
+      .filter(s => s && !s.comic_page && (s.text || '').trim())
+      .map(s => ({
+        text: s.text || '',
+        image_prompt: s.image_prompt || '',
+        characters: Array.isArray(s.characters) ? s.characters : [],
+      }));
+    if (!sourceScenes.length) {
+      sourceScenes = _parseScenes(document.getElementById('sw-text')?.value || '');
+    }
+    if (!sourceScenes.length) return _toast('Chưa có phân cảnh nào để sinh trang manhua.', 'warning');
+
+    const btn = document.getElementById('sw-gen-comic-pages-btn');
+    if (btn) btn.disabled = true;
+    try {
+      const characters = _getCharacters();
+      const location = (document.getElementById('sw-ai-location')?.value || '').trim();
+      const genre = document.getElementById('sw-ai-genre')?.value || '';
+      const artStyle = document.getElementById('sw-ai-art-style')?.value || '';
+      const imgNote = (document.getElementById('sw-ai-img-note')?.value || '').trim();
+      const imgModel = (document.getElementById('sw-ai-img-model')?.value || 'cx/gpt-5.5-image').trim();
+      const imgQuality = document.getElementById('sw-ai-img-quality')?.value || 'standard';
+      const imgRatio = document.getElementById('sw-ai-img-ratio')?.value || '9:16';
+      const sourceSceneText = sourceScenes.map(_sceneItemText);
+      const storySeed = _hashSeed(sourceSceneText.join('|') + '|' + characters.map(c => c.name).join(','));
+      _toast(`Đang sinh trang manhua từ ${sourceScenes.length} phân cảnh...`, 'info');
+      await _generateComicPageImagesFromScenes(sourceScenes, {
+        characters, location, genre, artStyle, imgNote, imgModel, imgQuality,
+        imgRatio, storySeed,
+        updateProgress: null,
+        status: document.getElementById('sw-ai-status'),
+      });
+      _autoSaveSession({
+        prompt: document.getElementById('sw-ai-prompt')?.value || '',
+        genre, numPanels: sourceScenes.length, language: document.getElementById('sw-ai-lang')?.value || 'vi',
+        characters, location, artStyle, imgRatio: document.getElementById('sw-ai-img-ratio')?.value || '9:16',
+        imgNote, imgModel, imgQuality, storyText: document.getElementById('sw-text')?.value || sourceSceneText.join('\n\n'),
+        scenes: _aiScenes, comicPageMode: true, panelsPerPage: _getComicPanelsPerPage(),
+      });
+      _toast(`Đã sinh ${_aiScenes.length} trang manhua.`, 'success');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   function _renderAiScenes() {
@@ -1825,7 +4196,10 @@
       }
 
       const meta = _el('div', { style: 'padding:8px;display:flex;flex-direction:column;gap:6px;flex:1' });
-      meta.appendChild(_el('div', { class: 'badge badge-accent', style: 'align-self:flex-start' }, `Cảnh ${idx + 1}`));
+      const sceneLabel = scene.comic_page
+        ? `Trang ${idx + 1}${scene.panel_count ? ` · ${scene.panel_count} khung` : ''}`
+        : `Cảnh ${idx + 1}`;
+      meta.appendChild(_el('div', { class: 'badge badge-accent', style: 'align-self:flex-start' }, sceneLabel));
       meta.appendChild(_el('div', {
         style: 'font-size:11px;color:var(--text2);line-height:1.4;max-height:60px;overflow:hidden;flex:1',
       }, scene.text.slice(0, 120) + (scene.text.length > 120 ? '...' : '')));
@@ -2042,11 +4416,17 @@
         img_note: data.imgNote || '',
         img_model: data.imgModel || 'cx/gpt-5.5-image',
         img_quality: data.imgQuality || 'standard',
+        comic_page_mode: !!data.comicPageMode,
+        comic_panels_per_page: data.panelsPerPage || 12,
         story_text: data.storyText || '',
         scenes: (data.scenes || []).map(s => ({
           text: s.text || '',
           image_prompt: s.image_prompt || '',
           image_url: s.image_url || '',
+          end_image_url: s.end_image_url || '',
+          comic_page: !!s.comic_page,
+          panel_count: s.panel_count || 0,
+          characters: Array.isArray(s.characters) ? s.characters : [],
         })),
       };
       await API.post('/api/story/ai_sessions/save', payload);
@@ -2092,6 +4472,9 @@
     setVal('sw-ai-img-note', s.img_note);
     setVal('sw-ai-img-model', s.img_model);
     setVal('sw-ai-img-quality', s.img_quality);
+    const comicMode = document.getElementById('sw-ai-comic-page-mode');
+    if (comicMode) comicMode.checked = !!s.comic_page_mode;
+    setVal('sw-ai-comic-panels-per-page', s.comic_panels_per_page);
     setVal('sw-text', s.story_text);
 
     // Restore characters
@@ -2120,9 +4503,13 @@
         image_prompt: sc.image_prompt || '',
         image_url: sc.image_url || '',
         end_image_url: sc.end_image_url || '',
+        comic_page: !!sc.comic_page,
+        panel_count: sc.panel_count || 0,
+        characters: Array.isArray(sc.characters) ? sc.characters : [],
       }));
       _renderAiScenes();
     }
+    _updateComicPageEstimate();
   }
 
   // ── Export ─────────────────────────────────────────────────────────────
@@ -2149,10 +4536,28 @@
     storyAiGenerate: aiGenerate,
     storyAiFullPipeline: aiFullPipeline,
     storyAiAddChar: addChar,
+    storyAiUploadRefImage: aiUploadRefImage,
+    storyAiClearRefImage: aiClearRefImage,
+    storyAiUploadCharRef: uploadCharRef,
+    storyNovelSearch: novelSearch,
+    storyNovelLoadChapter: novelLoadChapter,
+    storyToggleChaptersGrid: toggleChaptersGrid,
+    storyNovelRemoveImported: removeImported,
+    storyNovelClearImported: clearImported,
+    storyNovelSendToAiScript: sendToAiScript,
+    storyNovelAnalyzeCharacters: novelAnalyzeCharacters,
+    storyNovelImportCharactersToAi: novelImportCharactersToAi,
+    storyNovelLoadSavedCharacters: novelLoadSavedCharacters,
+    storyNovelSplitScenes: novelSplitScenes,
+    storyAiAutoAssignSceneCharacters: storyAiAutoAssignSceneCharacters,
+    storyAiGenerateSingleSceneImage: storyAiGenerateSingleSceneImage,
+    storyAiGenerateAllScenesImages: storyAiGenerateAllScenesImages,
+    storyAiGenerateComicPages: storyAiGenerateComicPages,
     storyAiSendToPanels: aiSendToPanels,
     storyAiCreateVideo: aiCreateVideo,
     storyAiClear: aiClear,
     storyAiLoadSessions: aiLoadSessions,
+    storyToggleSection: toggleSection,
     storyAiCancel: aiCancel,
     // End-frame morph helpers (per-scene + bulk)
     storyAiGenerateEndFrame: aiGenerateEndFrame,
@@ -2242,6 +4647,8 @@
       _initSourcePills();
       loadVoices();
       _loadAiImageModels();
+      _initRefImagePreview();
+      _initComicPageEstimate();
     }
   });
 })();
