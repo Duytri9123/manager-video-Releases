@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -1119,6 +1120,11 @@ class BaseDownloader(ABC):
             # Lấy đúng engine và voice từ config
             tts_voice = vp_cfg.get("tts_voice") or "vi-VN-HoaiMyNeural"
             tts_engine = vp_cfg.get("tts_engine") or "edge-tts"
+            elevenlabs_api_key = (
+                str(vp_cfg.get("elevenlabs_api_key") or "").strip()
+                or os.environ.get("ELEVENLABS_API_KEY", "").strip()
+            )
+            elevenlabs_voice_id = str(vp_cfg.get("elevenlabs_voice_id") or "").strip()
             try:
                 ok, err = await convert_voice(
                     video_path=source,
@@ -1130,6 +1136,8 @@ class BaseDownloader(ABC):
                     tts_engine=tts_engine,
                     keep_bg_music=vp_cfg.get("keep_bg_music", vp_cfg.get("keep_bg", True)),
                     bg_volume=float(vp_cfg.get("bg_volume", 0.15)),
+                    elevenlabs_api_key=elevenlabs_api_key,
+                    elevenlabs_voice_id=elevenlabs_voice_id,
                 )
                 if ok:
                     logger.info("video_process: voice converted → %s", voice_out.name)

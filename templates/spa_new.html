@@ -513,15 +513,9 @@ tr:hover td{background:var(--accent-light)}
       <a class="nav-item" data-page="story" onclick="switchPage('story')">
         <span class="nav-icon">📖</span><span class="nav-label">Truyện → Video</span>
       </a>
-      <!-- <a class="nav-item" data-page="canva" onclick="switchPage('canva')">
-        <span class="nav-icon">🎨</span><span class="nav-label">Canva Auto</span>
-      </a> -->
       <a class="nav-item" data-page="ai_studio" onclick="switchPage('ai_studio')">
         <span class="nav-icon">�</span><span class="nav-label">AI Studio</span>
       </a>
-      <!-- <a class="nav-item" data-page="stickman" onclick="switchPage('stickman')">
-        <span class="nav-icon">🦴</span><span class="nav-label">Stickman Studio</span>
-      </a> -->
       <a class="nav-item" data-page="chat" onclick="switchPage('chat')">
         <span class="nav-icon">🤖</span><span class="nav-label">Chat Bot · 9Router</span>
       </a>
@@ -563,10 +557,8 @@ tr:hover td{background:var(--accent-light)}
       {% include 'components/page_history.html' %}
       {% include 'components/page_movie.html' %}
       {% include 'components/page_story.html' %}
-      {% include 'components/page_canva.html' %}
       {% include 'components/page_videogen.html' %}
       {% include 'components/page_ai_studio.html' %}
-      {% include 'components/page_stickman.html' %}
       {% include 'components/page_chat.html' %}
       {% include 'components/page_proxies.html' %}
       {% include 'components/page_config.html' %}
@@ -623,10 +615,8 @@ tr:hover td{background:var(--accent-light)}
 <script src="/static/js/proxies.js?v={{ jsv }}"></script>
 <script src="/static/js/movie.js?v={{ jsv }}"></script>
 <script src="/static/js/story.js?v={{ jsv }}"></script>
-<script src="/static/js/canva.js?v={{ jsv }}"></script>
 <script src="/static/js/videogen.js?v={{ jsv }}"></script>
 <script src="/static/js/ai_studio.js?v={{ jsv }}"></script>
-<script src="/static/js/stickman.js?v={{ jsv }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   switchPage('user');

@@ -65,11 +65,6 @@ def page_proxies():
     return _render_spa("proxies")
 
 
-@bp.route("/canva")
-def page_canva():
-    return _render_spa("canva")
-
-
 @bp.route("/videogen")
 def page_videogen():
     return _render_spa("videogen")

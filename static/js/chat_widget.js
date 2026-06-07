@@ -1965,7 +1965,7 @@
 
   async function _loadLocalEngines(){
     try {
-      const r = await fetch('/api/movie/voices');
+      const r = await fetch('/api/tts/engines?include_9router=0');
       const j = await r.json();
       if (j?.ok && Array.isArray(j.engines)){
         // Mark local engines so we can pick the right backend later.

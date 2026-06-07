@@ -2,6 +2,8 @@
 
 window._pubVideoFile = null;
 window._pubSubFile   = null;
+window._pubUploadedVideoPath = '';
+window._pubUploadPromise = null;
 window._pubEnabled   = { youtube: true, tiktok: true, facebook: true };
 window._pubActive    = 'youtube';
 
@@ -9,14 +11,90 @@ window._pubActive    = 'youtube';
 const _pubTabId  = p => ({ youtube:'yt', tiktok:'tt', facebook:'fb' }[p]);
 const _pubPlatforms = ['youtube','tiktok','facebook'];
 
+async function _pubUploadVideoFileToServer(file, opts = {}) {
+  if (!file) return '';
+  if (window._pubUploadPromise) return window._pubUploadPromise;
+
+  const pathInput = opts.pathInput || document.getElementById('pub-video-path');
+  const label = opts.label || null;
+  const setLabel = (txt) => {
+    if (label) label.textContent = txt;
+    else if (pathInput) pathInput.placeholder = txt;
+  };
+
+  window._pubUploadPromise = (async () => {
+    setLabel(`Đang import ${file.name}...`);
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/upload_process_video', { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok || !data.path) {
+      throw new Error(data.error || `Import video thất bại (HTTP ${res.status})`);
+    }
+    window._pubUploadedVideoPath = data.path;
+    window._publishLastOutputPath = data.path;
+    window._ytLastOutputPath = data.path;
+    window._pubVideoFile = null;
+    if (pathInput) pathInput.value = data.path;
+    setLabel(`${file.name} ✓ → ${data.dir || data.path}`);
+    return data.path;
+  })();
+
+  try {
+    return await window._pubUploadPromise;
+  } finally {
+    window._pubUploadPromise = null;
+  }
+}
+
+async function _pubEnsureVideoServerPath(opts = {}) {
+  const pathInput = document.getElementById('pub-video-path');
+  const currentPath = pathInput?.value?.trim() || '';
+  if (window._pubUploadedVideoPath) return window._pubUploadedVideoPath;
+  if (window._pubVideoFile) {
+    try {
+      return await _pubUploadVideoFileToServer(window._pubVideoFile, opts);
+    } catch (e) {
+      if (opts.requireDisk) {
+        toast('Không import được video: ' + (e.message || e), 'error');
+        return '';
+      }
+      console.warn('Publish video import failed:', e);
+      return '';
+    }
+  }
+  return currentPath;
+}
+
+window._pubUploadVideoFileToServer = _pubUploadVideoFileToServer;
+window._pubEnsureVideoServerPath = _pubEnsureVideoServerPath;
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('pub-video-path')?.addEventListener('input', function() {
+    const typed = this.value.trim();
+    if (typed && typed !== window._pubUploadedVideoPath) {
+      window._pubVideoFile = null;
+      window._pubUploadedVideoPath = '';
+    }
+  });
+});
+
 /* ── File inputs ── */
-function _pubSetVideoFile(input) {
+async function _pubSetVideoFile(input) {
   const file = input.files?.[0] || null;
   window._pubVideoFile = file;
+  window._pubUploadedVideoPath = '';
   const el = document.getElementById('pub-video-path');
   if (el) el.value = file ? file.name : '';
   input.value = '';
-  if (file) toast('✅ Đã chọn: ' + file.name, 'success');
+  if (!file) return;
+  toast('✅ Đã chọn: ' + file.name, 'success');
+  try {
+    await _pubUploadVideoFileToServer(file);
+    toast('✅ Đã import video, đường dẫn đăng đã cập nhật', 'success');
+  } catch (e) {
+    toast('Import video thất bại: ' + (e.message || e), 'error');
+  }
 }
 
 function _pubSetSubFile(input) {
@@ -213,8 +291,8 @@ function toggleYtScheduleFields() {
 
 /* ── YouTube Upload ── */
 async function pubUploadYouTube() {
+  const videoPath = await _pubEnsureVideoServerPath();
   const videoFile = window._pubVideoFile;
-  const videoPath = document.getElementById('pub-video-path')?.value?.trim();
   if (!videoFile && !videoPath) { toast('Vui lòng chọn file video trước', 'warning'); return; }
 
   const title = document.getElementById('yt-title')?.value?.trim();
@@ -271,20 +349,20 @@ async function pubUploadYouTube() {
       publish_at: publishAt
     };
 
-    if (videoFile) {
-      const form = new FormData();
-      form.append('video_file', videoFile);
-      for (const [k, v] of Object.entries(payload)) {
-        form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v || ''));
-      }
-      res = await fetch('/api/youtube_upload', { method: 'POST', body: form });
-    } else {
+    if (videoPath) {
       payload.video_path = videoPath;
       res = await fetch('/api/youtube_upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+    } else if (videoFile) {
+      const form = new FormData();
+      form.append('video_file', videoFile);
+      for (const [k, v] of Object.entries(payload)) {
+        form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v || ''));
+      }
+      res = await fetch('/api/youtube_upload', { method: 'POST', body: form });
     }
     if (!res.ok || !res.body) throw new Error('Không thể kết nối server');
 
@@ -316,7 +394,7 @@ async function pubUploadYouTube() {
 /* ── TikTok (semi-auto via Playwright) ── */
 async function pubOpenTikTok() {
   try {
-    const videoPath = document.getElementById('pub-video-path')?.value?.trim();
+    const videoPath = await _pubEnsureVideoServerPath({ requireDisk: true });
     // Use shared helper to dedup hashtags + strip inline tags from caption text
     const ttTitle = document.getElementById('tt-title')?.value?.trim() || '';
     const ttTags  = document.getElementById('tt-tags')?.value?.trim()  || '';
@@ -658,8 +736,8 @@ async function pubUploadFacebook() {
   const pageId = document.getElementById('pub-fb-page-select')?.value;
   if (!pageId) { toast('Vui lòng chọn Page', 'warning'); return; }
 
+  const videoPath = await _pubEnsureVideoServerPath();
   const videoFile = window._pubVideoFile;
-  const videoPath = document.getElementById('pub-video-path')?.value?.trim();
   if (!videoFile && !videoPath) { toast('Vui lòng chọn file video trước', 'warning'); return; }
 
   // Quick preflight: warn early if token is missing required scopes. The actual
@@ -739,8 +817,8 @@ async function pubUploadFacebook() {
     // Only the regular /videos endpoint accepts title and a file upload field
     if (postType !== 'reel') {
       form.append('title', title);
-      if (videoFile) form.append('video_file', videoFile);
-      else           form.append('video_path', videoPath);
+      if (videoPath) form.append('video_path', videoPath);
+      else           form.append('video_file', videoFile);
     } else {
       // Reel 3-phase flow requires a path on disk (no direct file_upload supported by our impl)
       if (!videoPath) {

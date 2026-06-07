@@ -51,7 +51,6 @@ youtube_token.pickle
 .tiktok_tokens/
 .tiktok_profile/
 .tiktok_sessions/
-.canva_profile/
 .facebook_token.json
 .accounts/
 .state/

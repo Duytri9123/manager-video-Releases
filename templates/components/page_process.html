@@ -30,9 +30,9 @@
 
           <!-- Aspect selector -->
           <div style="display:flex;align-items:center;gap:8px">
-            <label style="font-size:11px;color:var(--text-muted);margin:0;flex-shrink:0">Khung hình</label>
+            <label style="font-size:11px;color:var(--text-muted);margin:0;flex-shrink:0">Chế độ video</label>
             <select id="proc-preview-aspect" onchange="_onPreviewAspectChange()"
-              title="Khung hình hiển thị Preview & Thumbnail"
+              title="Chế độ video: chỉ chuyển khi video đang sai hướng"
               style="font-size:12px;padding:4px 8px;flex:1">
               <option value="auto" selected>🔍 Tự nhận diện</option>
               <option value="16x9">🖥 16:9 (ngang)</option>
@@ -333,6 +333,7 @@
               <select id="proc-tts-engine" onchange="_syncVoiceOptions('proc-tts-engine','proc-tts-voice')">
                 <option value="fpt-ai" selected>FPT AI TTS</option>
                 <option value="edge-tts">Edge TTS (Microsoft)</option>
+                <option value="elevenlabs">ElevenLabs TTS</option>
                 <option value="minimax">MiniMax TTS</option>
                 <option value="gtts">gTTS (Google)</option>
               </select>
@@ -961,14 +962,23 @@
     // Save edited content back to server
     const content = document.getElementById('proc-ass-review-content')?.value;
     const path    = window._procAssPath;
-    if (content && path) {
+    if (typeof content === 'string' && path) {
       try {
-        await fetch('/api/proc_save_ass', {
+        const res = await fetch('/api/proc_save_ass', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path, content })
         });
-      } catch (_) {}
+        const rd = await res.json().catch(() => ({}));
+        if (!res.ok || rd.ok === false) {
+          toast('Lưu ASS thất bại, chưa tiếp tục xử lý để tránh dùng file cũ', 'error');
+          return;
+        }
+        window._publishLastSubtitlePath = path;
+      } catch (_) {
+        toast('Lưu ASS thất bại, chưa tiếp tục xử lý để tránh dùng file cũ', 'error');
+        return;
+      }
     }
     // Hide review panel
     const card = document.getElementById('proc-ass-review-card');
@@ -2138,7 +2148,9 @@
       const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
       if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
     }
-    if (typeof _syncVoiceOptions === 'function') {
+    if (typeof _onTargetLangChange === 'function') {
+      _onTargetLangChange();
+    } else if (typeof _syncVoiceOptions === 'function') {
       _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
     }
     if (typeof _syncColorPicker === 'function') _syncColorPicker();
@@ -2265,7 +2277,9 @@
         if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
       }
       // Sync voice options after restore
-      if (typeof _syncVoiceOptions === 'function') {
+      if (typeof _onTargetLangChange === 'function') {
+        _onTargetLangChange();
+      } else if (typeof _syncVoiceOptions === 'function') {
         _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
       }
       // Sync frame controls visibility
@@ -2300,7 +2314,9 @@
           const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
           if (radio) radio.checked = true;
         }
-        if (typeof _syncVoiceOptions === 'function') {
+        if (typeof _onTargetLangChange === 'function') {
+          _onTargetLangChange();
+        } else if (typeof _syncVoiceOptions === 'function') {
           _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
         }
         if (typeof _syncColorPicker === 'function') _syncColorPicker();

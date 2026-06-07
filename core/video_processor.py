@@ -25,6 +25,12 @@ FPT_TTS_ENDPOINT = "https://api.fpt.ai/hmi/tts/v5"
 # FPT key must come from env (FPT_TTS_API_KEY) or config (video_process.fpt_api_key).
 # Hard-coded keys removed for security.
 FPT_TTS_DEFAULT_KEY = ""
+TTS_CACHE_VERSION = "tts-ass-merge-v1"
+
+# ElevenLabs TTS endpoint
+ELEVENLABS_TTS_ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+# Default ElevenLabs voice ID: Rachel (en) — overridable via config elevenlabs_voice_id
+ELEVENLABS_DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
 
 # ── ffmpeg helper ─────────────────────────────────────────────────────────────
@@ -859,16 +865,72 @@ def _parse_ass_file(ass_path: Path) -> list[dict]:
         if len(parts) < 10:
             continue
         try:
+            style = parts[3].strip().lower()
+            raw_text = parts[9].strip()
+            if style in {"titlebar", "titletext", "blurleft", "blurright"}:
+                continue
+            if re.search(r"\\p[1-9]", raw_text, flags=re.IGNORECASE):
+                continue
             start = _ass_time_to_sec(parts[1])
             end   = _ass_time_to_sec(parts[2])
-            text  = parts[9].strip()
+            text  = raw_text
             # Strip ASS override tags like {\an8}
             text  = re.sub(r'\{[^}]*\}', '', text).strip()
+            text  = text.replace("\\N", " ").replace("\\n", " ")
+            text  = re.sub(r"\s+", " ", text).strip()
             if text:
                 segments.append({"start": start, "end": end, "text": text})
         except Exception:
             continue
     return segments
+
+
+def _merge_segments_for_tts(
+    segments: list[dict],
+    max_gap: float = 0.08,
+    max_chars: int = 260,
+    max_duration: float = 12.0,
+) -> list[dict]:
+    """Merge display-oriented subtitle chunks into more natural TTS units."""
+    merged: list[dict] = []
+    current: dict | None = None
+    terminal_punct = tuple(".!?…。！？")
+
+    for seg in sorted(segments or [], key=lambda s: float(s.get("start", 0.0))):
+        text = re.sub(r"\s+", " ", str(seg.get("text") or "")).strip()
+        if not text:
+            continue
+        start = float(seg.get("start", 0.0))
+        end = float(seg.get("end", start))
+        if end <= start:
+            continue
+
+        item = {"start": start, "end": end, "text": text}
+        if current is None:
+            current = item
+            continue
+
+        gap = start - float(current.get("end", start))
+        combined_text = f"{current.get('text', '')} {text}".strip()
+        combined_duration = end - float(current.get("start", start))
+        prev_text = str(current.get("text") or "").rstrip()
+        can_merge = (
+            gap <= max_gap
+            and len(combined_text) <= max_chars
+            and combined_duration <= max_duration
+            and not prev_text.endswith(terminal_punct)
+        )
+
+        if can_merge:
+            current["end"] = max(float(current["end"]), end)
+            current["text"] = combined_text
+        else:
+            merged.append(current)
+            current = item
+
+    if current is not None:
+        merged.append(current)
+    return merged
 
 
 def _run_ffmpeg(args: list, desc: str = "") -> tuple[bool, str]:
@@ -1584,20 +1646,45 @@ def _burn_ass(
         if len(ass_esc) >= 2 and ass_esc[1] == ':':
             ass_esc = ass_esc[0] + "\\:" + ass_esc[2:]
 
-        # Check if ASS file has logo info embedded in comments
+        # Check if ASS file has frame/logo info embedded in comments
+        _ass_content = ""
         _logo_file = None
         _logo_size_pct = 6.0
         _logo_top_pct = 3.0
         _logo_left_pct = 3.0
         _logo_radius_pct = 50.0
         _logo_position = "top-left"
+        _frame_has_elements = False
+        _frame_blur_w_pct = 0.0
+        _frame_blur_top_pct = 0.0
+        _frame_blur_bottom_pct = 0.0
+        _frame_blur_opacity = 0.0
+
+        def _ass_comment_float(label: str, default: float = 0.0) -> float:
+            m = re.search(rf"^; {re.escape(label)}:\s*([\d.]+)", _ass_content, re.MULTILINE)
+            if not m:
+                return default
+            try:
+                return float(m.group(1))
+            except Exception:
+                return default
+
         try:
             _ass_content = tmp_ass.read_text(encoding="utf-8")
+            _frame_has_elements = bool(re.search(r"^; Frame elements embedded:", _ass_content, re.MULTILINE))
             _logo_match = re.search(r"^; Logo:\s*(.+)$", _ass_content, re.MULTILINE)
             if _logo_match:
                 _lp = _logo_match.group(1).strip()
                 if _lp and Path(_lp).exists():
                     _logo_file = Path(_lp)
+            if _frame_has_elements:
+                _frame_blur_w_pct = _clamp_float(_ass_comment_float("Blur width", 0.0) / 100.0, 0.0, 0.45)
+                _frame_blur_top_pct = _clamp_float(_ass_comment_float("Blur top", 0.0) / 100.0, 0.0, 0.60)
+                _frame_blur_bottom_pct = _clamp_float(_ass_comment_float("Blur bottom", 0.0) / 100.0, 0.0, 0.60)
+                _frame_blur_opacity = _ass_comment_float("Blur opacity", 0.0)
+                if _frame_blur_opacity > 1.0:
+                    _frame_blur_opacity = _frame_blur_opacity / 100.0
+                _frame_blur_opacity = _clamp_float(_frame_blur_opacity, 0.0, 1.0)
             _logo_size_match = re.search(r"^; Logo size:\s*([\d.]+)%", _ass_content, re.MULTILINE)
             if _logo_size_match:
                 _logo_size_pct = float(_logo_size_match.group(1))
@@ -1660,6 +1747,56 @@ def _burn_ass(
             )
             curr_label = next_label
             _log(f"🌫 Vùng che {idx+1}: từ {y*100:.0f}% → {(y+h)*100:.0f}%, rộng {w*100:.0f}%")
+
+        # Frame side/top/bottom panels need real pixel blur before ASS draws the
+        # semi-transparent dark overlays. Otherwise they only dim the video.
+        frame_blur_specs = []
+        if _frame_has_elements and _frame_blur_opacity > 0.001:
+            if _frame_blur_w_pct > 0.001:
+                side_w_expr = f"trunc(iw*{_frame_blur_w_pct:.4f}/2)*2"
+                frame_blur_specs.append((
+                    "left",
+                    f"crop={side_w_expr}:ih:0:0,gblur=sigma=12",
+                    "0",
+                    "0",
+                ))
+                frame_blur_specs.append((
+                    "right",
+                    f"crop={side_w_expr}:ih:iw-{side_w_expr}:0,gblur=sigma=12",
+                    "W-w",
+                    "0",
+                ))
+            if _frame_blur_top_pct > 0.001:
+                top_h_expr = f"trunc(ih*{_frame_blur_top_pct:.4f}/2)*2"
+                frame_blur_specs.append((
+                    "top",
+                    f"crop=iw:{top_h_expr}:0:0,gblur=sigma=12",
+                    "0",
+                    "0",
+                ))
+            if _frame_blur_bottom_pct > 0.001:
+                bottom_h_expr = f"trunc(ih*{_frame_blur_bottom_pct:.4f}/2)*2"
+                frame_blur_specs.append((
+                    "bottom",
+                    f"crop=iw:{bottom_h_expr}:0:ih-{bottom_h_expr},gblur=sigma=12",
+                    "0",
+                    "H-h",
+                ))
+
+        for fb_idx, (_name, crop_filter, overlay_x, overlay_y) in enumerate(frame_blur_specs):
+            next_label = f"fb{fb_idx}"
+            filter_complex_parts.append(f"[{curr_label}]split[frame_orig_{fb_idx}][frame_copy_{fb_idx}]")
+            filter_complex_parts.append(f"[frame_copy_{fb_idx}]{crop_filter}[frame_blurred_{fb_idx}]")
+            filter_complex_parts.append(
+                f"[frame_orig_{fb_idx}][frame_blurred_{fb_idx}]overlay={overlay_x}:{overlay_y}[{next_label}]"
+            )
+            curr_label = next_label
+
+        if frame_blur_specs:
+            _log(
+                f"Frame blur: side={_frame_blur_w_pct*100:.0f}%, "
+                f"top={_frame_blur_top_pct*100:.0f}%, bottom={_frame_blur_bottom_pct*100:.0f}%"
+            )
 
         # Finally, apply ASS subtitle filter
         filter_complex_parts.append(f"[{curr_label}]ass='{ass_esc}'[subbed]")
@@ -2126,7 +2263,7 @@ def write_ass_with_frame(
 
     All frame elements are OVERLAY on the original video (no size change):
     - Title bar: white rectangle at top covering title_bar_h_pct% of video height
-    - Side blur panels: semi-transparent dark rectangles on left/right sides
+    - Side blur panels: real FFmpeg blur plus semi-transparent dark overlays
 
     PlayRes should match the video's actual dimensions.
 
@@ -2203,7 +2340,10 @@ WrapStyle: 0
 ; Title color: {title_color} / {title_color_2} (split)
 ; Title bar height: {title_bar_h_pct}%
 ; Blur width: {blur_w_pct}%
+; Blur top: {blur_top_pct}%
+; Blur bottom: {blur_bottom_pct}%
 ; Blur opacity: {blur_opacity}
+; Blur color: {blur_color}
 ; Logo: {logo_path}
 ; Logo size: {logo_size_pct}%
 ; Logo top: {logo_top_pct}%
@@ -2347,10 +2487,79 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# TTS text chunker — tách text thành đoạn nhỏ theo dấu câu, language-aware
+# ══════════════════════════════════════════════════════════════════════════════
+def _split_text_for_tts(text: str, max_chars: int = 800) -> list[str]:
+    """Split long text into TTS-friendly chunks at sentence boundaries.
+
+    Handles Vietnamese, Chinese, Japanese and Latin punctuation.
+    Strategy:
+    1. Split at paragraph breaks.
+    2. Within each paragraph, split at sentence terminators (. ! ? … 。！？).
+    3. Greedily pack sentences into chunks ≤ max_chars.
+    4. Hard-split any sentence that still exceeds max_chars.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    # Regex: break after . ! ? … 。！？ or newline
+    sent_re = re.compile(r"(?<=[.!?…。！？\n])\s+")
+    raw_paragraphs = re.split(r"\n\s*\n", text)
+    sentences: list[str] = []
+    for para in raw_paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        for part in sent_re.split(para):
+            part = part.strip()
+            if part:
+                sentences.append(part)
+
+    chunks: list[str] = []
+    cur = ""
+    for s in sentences:
+        if len(s) > max_chars:
+            # flush current buffer first
+            if cur:
+                chunks.append(cur.strip())
+                cur = ""
+            # hard-split at max_chars
+            for i in range(0, len(s), max_chars):
+                chunks.append(s[i: i + max_chars].strip())
+            continue
+        if not cur:
+            cur = s
+        elif len(cur) + 1 + len(s) <= max_chars:
+            cur = cur + " " + s
+        else:
+            chunks.append(cur.strip())
+            cur = s
+    if cur:
+        chunks.append(cur.strip())
+    return [c for c in chunks if c]
+
+
+def _max_tts_chars_for_engine(engine: str) -> int:
+    """Return safe per-chunk character limit for each TTS engine."""
+    engine = (engine or "").strip().lower()
+    if engine == "fpt-ai":
+        return 700
+    if engine == "gtts":
+        return 200
+    if engine == "elevenlabs":
+        return 2500
+    if engine == "9router" or engine.startswith("9r:"):
+        return 1500
+    # edge-tts, openai-tts, and others
+    return 1500
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # MultiProviderTTS
 # ══════════════════════════════════════════════════════════════════════════════
 class MultiProviderTTS:
-    """Multi-provider TTS: FPT AI, OpenAI, Edge-TTS, gTTS."""
+    """Multi-provider TTS: FPT AI, OpenAI, Edge-TTS, gTTS, ElevenLabs."""
 
     def __init__(
         self,
@@ -2361,6 +2570,10 @@ class MultiProviderTTS:
         openai_api_key: str = "",
         openai_model: str = "tts-1",
         tts_lang: str = "vi",
+        elevenlabs_api_key: str = "",
+        elevenlabs_voice_id: str = "",
+        elevenlabs_model: str = "eleven_multilingual_v2",
+        fpt_fallback_elevenlabs: bool = True,
     ):
         self.voice = voice
         self.engine = engine
@@ -2369,15 +2582,69 @@ class MultiProviderTTS:
         self.openai_api_key = (openai_api_key or "").strip()
         self.openai_model = openai_model or "tts-1"
         self.tts_lang = tts_lang or "vi"
+        self.elevenlabs_api_key = (elevenlabs_api_key or "").strip() or os.getenv("ELEVENLABS_API_KEY", "").strip()
+        self.elevenlabs_voice_id = (elevenlabs_voice_id or "").strip() or ELEVENLABS_DEFAULT_VOICE_ID
+        self.elevenlabs_model = elevenlabs_model or "eleven_multilingual_v2"
+        # Tự động fallback FPT → ElevenLabs khi FPT hết token/quota
+        self.fpt_fallback_elevenlabs = fpt_fallback_elevenlabs and bool(self.elevenlabs_api_key)
 
-    async def generate(self, text: str, out_path: Path) -> bool:
-        """Generate TTS audio. Returns False if all providers fail."""
-        out_path = Path(out_path)
-        engine = str(self.engine).strip().lower()
-
+    async def _generate_single(self, text: str, out_path: Path, engine: str) -> bool:
+        """Generate TTS for a single text chunk (no splitting). Internal use only."""
         if engine == "fpt-ai":
             try:
                 ok = await _tts_fpt_ai(text, self.voice, out_path, self.fpt_api_key, self.fpt_speed)
+                if ok:
+                    return True
+            except Exception as fpt_err:
+                # FPT hết token hoặc lỗi → fallback sang ElevenLabs nếu có key
+                if self.fpt_fallback_elevenlabs:
+                    import logging as _log
+                    _log.getLogger(__name__).warning(
+                        "FPT TTS thất bại (%s), chuyển sang ElevenLabs voice_id=%s",
+                        fpt_err, self.elevenlabs_voice_id,
+                    )
+                    try:
+                        ok = await _tts_elevenlabs(
+                            text, self.elevenlabs_voice_id, out_path,
+                            api_key=self.elevenlabs_api_key,
+                            model_id=self.elevenlabs_model,
+                        )
+                        if ok:
+                            return True
+                    except Exception:
+                        pass
+
+        elif engine == "elevenlabs":
+            try:
+                selected_voice = (self.voice or "").strip()
+                voice_id = selected_voice if selected_voice and selected_voice not in {
+                    "banmai", "thuminh", "myan", "leminh", "linhsan", "giahuy", "lannhi"
+                } else self.elevenlabs_voice_id
+                ok = await _tts_elevenlabs(
+                    text, voice_id, out_path,
+                    api_key=self.elevenlabs_api_key,
+                    model_id=self.elevenlabs_model,
+                )
+                if ok:
+                    return True
+            except Exception:
+                pass
+
+        elif engine == "9router" or engine.startswith("9r:"):
+            try:
+                ok = await _tts_nine_router(
+                    text, self.voice, out_path,
+                    engine=engine,
+                    language=self.tts_lang,
+                )
+                if ok:
+                    return True
+            except Exception:
+                pass
+
+        elif engine == "minimax":
+            try:
+                ok = await _tts_minimax(text, self.voice, out_path, language=self.tts_lang)
                 if ok:
                     return True
             except Exception:
@@ -2407,10 +2674,56 @@ class MultiProviderTTS:
             except Exception:
                 pass
 
-        # NO fallback to other voices/engines — keep voice consistent.
-        # If the chosen engine fails, the segment is skipped rather than
-        # using a different voice that would break audio consistency.
         return False
+
+    async def generate(self, text: str, out_path: Path) -> bool:
+        """Generate TTS audio. Splits long text into sentence-boundary chunks,
+        generates each chunk separately, then concatenates with ffmpeg.
+        Returns False if all providers fail."""
+        out_path = Path(out_path)
+        engine = str(self.engine).strip().lower()
+
+        # Tách text thành các đoạn nhỏ theo dấu câu (language-aware)
+        max_chars = _max_tts_chars_for_engine(engine)
+        chunks = _split_text_for_tts(text, max_chars=max_chars)
+        if not chunks:
+            return False
+
+        # Nếu chỉ 1 chunk, không cần concat
+        if len(chunks) == 1:
+            return await self._generate_single(chunks[0], out_path, engine)
+
+        # Nhiều chunk → tạo từng file tạm, concat lại bằng ffmpeg
+        import tempfile as _tmp
+        with _tmp.TemporaryDirectory(prefix="tts_chunks_") as _td:
+            chunk_paths: list[Path] = []
+            tmp_dir = Path(_td)
+            for idx, chunk in enumerate(chunks):
+                chunk_path = tmp_dir / f"chunk_{idx:04d}.mp3"
+                ok = await self._generate_single(chunk, chunk_path, engine)
+                if not ok or not chunk_path.exists() or chunk_path.stat().st_size == 0:
+                    return False  # fail fast — partial audio would desync
+                chunk_paths.append(chunk_path)
+
+            if len(chunk_paths) == 1:
+                import shutil as _sh
+                _sh.copy2(str(chunk_paths[0]), str(out_path))
+                return out_path.exists() and out_path.stat().st_size > 0
+
+            # Dùng ffmpeg concat demuxer để nối các chunk lại
+            list_file = tmp_dir / "concat.txt"
+            list_file.write_text(
+                "\n".join(f"file '{p}'" for p in chunk_paths),
+                encoding="utf-8",
+            )
+            ffmpeg_bin = find_ffmpeg()
+            ok, _ = run_ffmpeg([
+                ffmpeg_bin, "-f", "concat", "-safe", "0",
+                "-i", str(list_file),
+                "-c", "copy",
+                str(out_path), "-y", "-loglevel", "error",
+            ], "concat_tts_chunks")
+            return ok and out_path.exists() and out_path.stat().st_size > 0
 
     async def generate_all(
         self,
@@ -2703,6 +3016,148 @@ async def _tts_openai(
             return out_path.exists() and out_path.stat().st_size > 0
 
 
+def _nine_router_cfg_for_tts() -> tuple[str, str, dict]:
+    cfg = {}
+    try:
+        from core_app import load_cfg as _load_cfg
+        cfg = _load_cfg() or {}
+    except Exception:
+        cfg = {}
+    nr = cfg.get("nine_router") or {}
+    endpoint = (
+        os.getenv("NINEROUTER_URL")
+        or nr.get("endpoint")
+        or "http://localhost:20128/v1"
+    )
+    endpoint = str(endpoint).strip().rstrip("/")
+    if not endpoint.endswith("/v1") and not re.search(r"/v1(/|$)", endpoint):
+        endpoint += "/v1"
+    api_key = str(os.getenv("NINEROUTER_KEY") or nr.get("api_key") or "").strip()
+    return endpoint, api_key, cfg
+
+
+def _nine_router_model_for_engine(engine: str, voice: str, cfg: dict) -> tuple[str, str, list[tuple[str, str]]]:
+    """Return (model, voice_param, fallback_candidates) for 9Router TTS."""
+    eng = (engine or "9router").strip().lower()
+    selected = (voice or "").strip()
+    fallbacks: list[tuple[str, str]] = []
+
+    if "|" in selected:
+        model, voice_param = selected.split("|", 1)
+        return model.strip(), voice_param.strip(), fallbacks
+
+    default_model = ""
+    provider = ""
+    try:
+        from core.tts_catalog import nine_router_tts_engines
+        engines, _ = nine_router_tts_engines(cfg)
+        found = next((e for e in engines if str(e.get("id") or "").lower() == eng), None)
+        if found:
+            default_model = str(found.get("defaultModel") or "").strip()
+            provider = str(found.get("provider") or "").strip().lower()
+    except Exception:
+        pass
+
+    if selected and "/" in selected and eng not in ("9r:openai", "9r:gemini"):
+        return selected, "", fallbacks
+
+    if eng in ("9r:openai", "9router-openai"):
+        return default_model or "openai/tts-1", selected or "nova", fallbacks
+
+    if eng in ("9r:gemini", "9router-gemini"):
+        return default_model or "gemini/gemini-2.5-flash-preview-tts", selected or "Kore", fallbacks
+
+    if eng in ("9r:elevenlabs", "9r:el", "9router-elevenlabs") or provider == "elevenlabs":
+        if selected:
+            if default_model:
+                fallbacks.append((default_model, selected))
+            return f"el/{selected}", "", fallbacks
+        return default_model or "el/eleven_multilingual_v2", "", fallbacks
+
+    if eng in ("9r:edge-tts", "9router", "9r", "9router-edge") or provider == "edge-tts":
+        if selected:
+            if selected.startswith("edge-tts/"):
+                return selected, "", fallbacks
+            fallbacks.append((selected, ""))
+            return f"edge-tts/{selected}", "", fallbacks
+        return default_model or "edge-tts/vi-VN-HoaiMyNeural", "", fallbacks
+
+    if eng in ("9r:google-tts", "9router-google") or provider == "google-tts":
+        return selected or default_model or "vi", "", fallbacks
+
+    if eng in ("minimax", "9r:minimax", "9router-minimax") or provider == "minimax":
+        return default_model or "minimax/speech-02-hd", selected or "English_expressive_narrator", fallbacks
+
+    if selected:
+        return selected, "", fallbacks
+    return default_model or "openai/tts-1", "", fallbacks
+
+
+async def _tts_nine_router(
+    text: str,
+    voice: str,
+    out_path: Path,
+    engine: str = "9router",
+    api_key: str = "",
+    endpoint: str = "",
+    response_format: str = "mp3",
+    language: str = "",
+) -> bool:
+    """Generate TTS through 9Router /v1/audio/speech."""
+    import aiohttp
+    import urllib.parse as _urlparse
+
+    payload_text = str(text or "").strip()
+    if not payload_text:
+        return False
+
+    cfg_endpoint, cfg_key, cfg = _nine_router_cfg_for_tts()
+    endpoint = (endpoint or cfg_endpoint).strip().rstrip("/")
+    api_key = (api_key or cfg_key).strip()
+    if not endpoint.endswith("/v1") and not re.search(r"/v1(/|$)", endpoint):
+        endpoint += "/v1"
+
+    model, voice_param, fallbacks = _nine_router_model_for_engine(engine, voice, cfg)
+    candidates = [(model, voice_param)] + fallbacks
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    headers = {"Content-Type": "application/json", "Accept": "audio/mpeg"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    fmt = (response_format or "mp3").strip().lower()
+    url = f"{endpoint}/audio/speech?{_urlparse.urlencode({'response_format': fmt})}"
+    timeout = aiohttp.ClientTimeout(total=120)
+    last_error = ""
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for cand_model, cand_voice in candidates:
+            payload = {"model": cand_model, "input": payload_text}
+            if cand_voice:
+                payload["voice"] = cand_voice
+            if language:
+                payload["language"] = str(language)
+            async with session.post(url, json=payload, headers=headers) as resp:
+                blob = await resp.read()
+                if resp.status < 400 and blob and len(blob) > 100:
+                    out_path.write_bytes(blob)
+                    return out_path.exists() and out_path.stat().st_size > 0
+                body = blob.decode("utf-8", "replace")[:300] if blob else ""
+                last_error = f"9Router TTS error {resp.status}: {body}"
+    raise RuntimeError(last_error or "9Router TTS returned empty audio")
+
+
+async def _tts_minimax(text: str, voice: str, out_path: Path, language: str = "") -> bool:
+    """Generate MiniMax TTS through 9Router when a MiniMax TTS model is configured."""
+    return await _tts_nine_router(
+        text,
+        voice or "English_expressive_narrator",
+        out_path,
+        engine="minimax",
+        language=language,
+    )
+
+
 def _tts_gtts(text: str, lang: str, out_path: Path) -> bool:
     """Fallback TTS using gTTS."""
     try:
@@ -2714,6 +3169,79 @@ def _tts_gtts(text: str, lang: str, out_path: Path) -> bool:
         raise RuntimeError(f"gTTS failed: {e}")
 
 
+async def _tts_elevenlabs(
+    text: str,
+    voice_id: str,
+    out_path: Path,
+    api_key: str = "",
+    model_id: str = "eleven_multilingual_v2",
+    stability: float = 0.5,
+    similarity_boost: float = 0.75,
+) -> bool:
+    """Generate TTS using ElevenLabs API.
+
+    Docs: https://elevenlabs.io/docs/eleven-api/guides/cookbooks/text-to-speech
+
+    Args:
+        text: Text to synthesize.
+        voice_id: ElevenLabs voice ID (e.g. "21m00Tcm4TlvDq8ikWAM" for Rachel).
+        out_path: Output MP3 file path.
+        api_key: ElevenLabs API key. Falls back to env ELEVENLABS_API_KEY.
+        model_id: Model to use — "eleven_multilingual_v2" supports Vietnamese.
+        stability: Voice stability (0.0-1.0).
+        similarity_boost: Voice similarity (0.0-1.0).
+    """
+    import aiohttp
+
+    key = (api_key or "").strip() or os.getenv("ELEVENLABS_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("Missing ElevenLabs API key (set ELEVENLABS_API_KEY or config)")
+
+    vid = (voice_id or ELEVENLABS_DEFAULT_VOICE_ID).strip()
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload_text = str(text or "").strip()
+    if not payload_text:
+        return False
+
+    url = ELEVENLABS_TTS_ENDPOINT.format(voice_id=vid)
+    headers = {
+        "xi-api-key": key,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
+    }
+    payload = {
+        "text": payload_text,
+        "model_id": model_id or "eleven_multilingual_v2",
+        "voice_settings": {
+            "stability": float(stability),
+            "similarity_boost": float(similarity_boost),
+        },
+    }
+
+    timeout = aiohttp.ClientTimeout(total=60)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(url, json=payload, headers=headers) as resp:
+            if resp.status == 401:
+                raise RuntimeError("ElevenLabs API key không hợp lệ (401 Unauthorized)")
+            if resp.status == 422:
+                body = await resp.text()
+                raise RuntimeError(f"ElevenLabs request không hợp lệ (422): {body}")
+            if resp.status == 429:
+                raise RuntimeError("ElevenLabs hết quota / rate limit (429)")
+            if resp.status != 200:
+                body = await resp.text()
+                raise RuntimeError(f"ElevenLabs TTS lỗi {resp.status}: {body[:200]}")
+
+            audio_bytes = await resp.read()
+            if not audio_bytes or len(audio_bytes) < 100:
+                raise RuntimeError("ElevenLabs trả về audio rỗng")
+
+            out_path.write_bytes(audio_bytes)
+            return out_path.exists() and out_path.stat().st_size > 0
+
+
 async def convert_voice(
     video_path: Path,
     segments: list[dict],          # [{start, end, text}] in ZH
@@ -2721,16 +3249,22 @@ async def convert_voice(
     output_path: Path,
     ffmpeg: str,
     tts_voice: str = "vi-VN-HoaiMyNeural",  # edge-tts voice
-    tts_engine: str = "edge-tts",   # "edge-tts" | "gtts"
+    tts_engine: str = "edge-tts",   # "edge-tts" | "gtts" | "fpt-ai" | "elevenlabs"
     keep_bg_music: bool = True,
     bg_volume: float = 0.15,        # background original audio volume
     tts_speed: float = 1.0,         # manual speed multiplier (1.0 = auto-fit)
     auto_speed: bool = True,        # auto-fit TTS duration to segment duration
+    fpt_api_key: str = "",          # FPT AI key (nếu engine=fpt-ai)
+    fpt_speed: int = 0,
+    elevenlabs_api_key: str = "",   # ElevenLabs key
+    elevenlabs_voice_id: str = "",  # ElevenLabs voice ID
 ) -> tuple[bool, str]:
     """
-    Replace original audio with Vietnamese TTS voice.
+    Replace original audio with TTS voice.
     Each segment gets its own TTS clip, placed at the correct timestamp.
     Background music from original is optionally kept at low volume.
+    Supports: edge-tts, gtts, fpt-ai, elevenlabs, openai-tts, minimax.
+    FPT AI tự động fallback sang ElevenLabs khi hết token.
     """
     video_path = Path(video_path)
     output_path = Path(output_path)
@@ -2738,6 +3272,10 @@ async def convert_voice(
 
     if not segments or not translated_texts:
         return False, "No segments to process"
+
+    # Resolve ElevenLabs key/voice from env nếu không truyền vào
+    el_key = (elevenlabs_api_key or "").strip() or os.getenv("ELEVENLABS_API_KEY", "").strip()
+    el_voice = (elevenlabs_voice_id or "").strip() or ELEVENLABS_DEFAULT_VOICE_ID
 
     with tempfile.TemporaryDirectory(prefix="voice_") as tmpdir:
         tmpdir = Path(tmpdir)
@@ -2761,6 +3299,18 @@ async def convert_voice(
         if video_duration <= 0:
             video_duration = segments[-1]['end'] + 2.0 if segments else 60.0
 
+        # Build MultiProviderTTS để xử lý tất cả engines + fallback
+        tts_provider = MultiProviderTTS(
+            voice=tts_voice,
+            engine=tts_engine,
+            fpt_api_key=fpt_api_key,
+            fpt_speed=fpt_speed,
+            tts_lang="vi",
+            elevenlabs_api_key=el_key,
+            elevenlabs_voice_id=el_voice,
+            fpt_fallback_elevenlabs=bool(el_key),
+        )
+
         # Generate TTS for each segment
         tts_clips = []
         for i, (seg, vi_text) in enumerate(zip(segments, translated_texts)):
@@ -2768,10 +3318,7 @@ async def convert_voice(
                 continue
             clip_path = tmpdir / f"tts_{i:04d}.mp3"
             try:
-                if tts_engine == "edge-tts":
-                    ok = await _tts_edge(vi_text.strip(), tts_voice, clip_path)
-                else:
-                    ok = _tts_gtts(vi_text.strip(), "vi", clip_path)
+                ok = await tts_provider.generate(vi_text.strip(), clip_path)
                 if ok:
                     seg_dur = seg["end"] - seg["start"]
                     # Get TTS clip duration
@@ -3135,6 +3682,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     vi_ass_path_cached   = out_dir / f"{stem}_{target_language}.ass"
     burned_path_cached   = out_dir / f"{stem}_subbed.mp4"
     voice_path_cached    = out_dir / f"{stem}_{target_language}_voice.mp4"
+    voice_meta_path_cached = out_dir / f"{stem}_{target_language}_voice.meta.json"
 
     # Bước 2: nếu SRT đã có → load lại, skip transcribe
     if source_srt_path.exists() and source_srt_path.stat().st_size > 0:
@@ -3235,25 +3783,17 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         _frame_enabled_check = _as_bool(data.get("frame_enabled", False), False)
         if not _frame_enabled_check and vi_ass_path_cached.exists() and vi_ass_path_cached.stat().st_size > 0 and segments:
             try:
-                cached_vi_segs = _parse_srt(vi_ass_path_cached) if vi_ass_path_cached.suffix == ".srt" else []
-                # Parse ASS để lấy text
-                if not cached_vi_segs:
-                    raw = vi_ass_path_cached.read_text(encoding="utf-8", errors="replace")
-                    cached_vi_segs = []
-                    for line in raw.splitlines():
-                        if line.startswith("Dialogue:"):
-                            parts = line.split(",", 9)
-                            if len(parts) >= 10:
-                                t_start = parts[1].strip(); t_end = parts[2].strip()
-                                def _ass_to_sec(t):
-                                    h, m, s = t.split(":")
-                                    return int(h)*3600 + int(m)*60 + float(s)
-                                cached_vi_segs.append({"start": _ass_to_sec(t_start), "end": _ass_to_sec(t_end), "text": parts[9].replace("\\N", "\n")})
+                if vi_ass_path_cached.suffix.lower() == ".srt":
+                    cached_vi_segs = _parse_srt(vi_ass_path_cached)
+                else:
+                    cached_vi_segs = _parse_ass_file(vi_ass_path_cached)
                 if cached_vi_segs:
-                    translated_texts = [s["text"] for s in cached_vi_segs]
+                    tts_vi_segs = _merge_segments_for_tts(cached_vi_segs)
+                    translated_texts = [s["text"] for s in tts_vi_segs]
+                    segments = tts_vi_segs
                     vi_ass_path = vi_ass_path_cached
                     srt_path = vi_ass_path
-                    yield send(log=f"[Bước 3/5] ♻ Dùng lại bản dịch cũ ({len(translated_texts)} đoạn): {vi_ass_path_cached.name}", level="info", subtitle_path=str(vi_ass_path_cached.resolve()))
+                    yield send(log=f"[Bước 3/5] ♻ Dùng lại bản dịch cũ ({len(cached_vi_segs)} dòng, gộp {len(translated_texts)} đoạn TTS): {vi_ass_path_cached.name}", level="info", subtitle_path=str(vi_ass_path_cached.resolve()))
                     yield send(overall=55, overall_lbl="Dùng lại bản dịch cũ")
             except Exception:
                 translated_texts = []
@@ -3416,6 +3956,23 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     # Re-read vi_ass_path in case user edited it
                     yield send(log=f"[Bước 3/5] ▶ Tiếp tục xử lý...", level="info")
 
+                    if vi_ass_path and vi_ass_path.exists():
+                        refreshed_vi_segs = _parse_ass_file(vi_ass_path)
+                        if refreshed_vi_segs:
+                            tts_vi_segs = _merge_segments_for_tts(refreshed_vi_segs)
+                            segments = tts_vi_segs
+                            translated_texts = [s.get("text", "") for s in tts_vi_segs]
+                            yield send(
+                                log=f"[Bước 3/5] ✓ Đã nạp ASS mới nhất sau chỉnh sửa ({len(refreshed_vi_segs)} dòng, gộp {len(translated_texts)} đoạn TTS)",
+                                level="success",
+                                subtitle_path=str(vi_ass_path.resolve()),
+                            )
+                        else:
+                            yield send(
+                                log=f"[Bước 3/5] ⚠ Không đọc được dialogue từ ASS đã chỉnh sửa: {vi_ass_path.name}",
+                                level="warning",
+                            )
+
                     if do_burn and do_burn_vi:
                         srt_path = vi_ass_path
                         yield send(log=f"[Bước 3/5] Sẽ burn: {srt_path.name}", level="info")
@@ -3502,12 +4059,29 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     burned_path = None
     # Resume: nếu file subbed đã có → dùng lại (BUT: skip if frame enabled to re-apply new frame settings)
     _frame_enabled_for_burn = _as_bool(data.get("frame_enabled", False), False)
+    _burn_cache_valid = False
+    _burn_cache_stale_reason = ""
     if do_burn and not _frame_enabled_for_burn and burned_path_cached.exists() and burned_path_cached.stat().st_size > 0:
+        try:
+            _burn_deps = [video_path]
+            if srt_path and Path(srt_path).exists():
+                _burn_deps.append(Path(srt_path))
+            _newest_burn_dep = max(p.stat().st_mtime for p in _burn_deps)
+            _burn_cache_valid = burned_path_cached.stat().st_mtime >= _newest_burn_dep
+            if not _burn_cache_valid:
+                _burn_cache_stale_reason = "ASS/video mới hơn cache"
+        except Exception:
+            _burn_cache_valid = False
+            _burn_cache_stale_reason = "không kiểm tra được thời gian cache"
+
+    if do_burn and not _frame_enabled_for_burn and _burn_cache_valid:
         burned_path = burned_path_cached
         final_output_path = burned_path
         yield send(log=f"[Bước 4/5] ♻ Dùng lại video phụ đề cũ: {burned_path.name}", level="info")
         yield send(overall=80, overall_lbl="Dùng lại video phụ đề cũ")
     elif do_burn and srt_path.exists():
+        if _burn_cache_stale_reason:
+            yield send(log=f"[Bước 4/5] ♻ Bỏ cache video phụ đề cũ ({_burn_cache_stale_reason}), burn lại từ ASS hiện tại", level="info")
         yield send(log=f"[Bước 4/5] 🔥 Đang burn phụ đề ASS vào video...", level="info")
         yield send(overall=65, overall_lbl="Đang burn phụ đề...")
         burned_path = out_dir / f"{stem}_subbed.mp4"
@@ -3595,14 +4169,24 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         except Exception:
             _src_w, _src_h = 1280, 720
 
-        _src_aspect = "9x16" if (_src_w / max(1, _src_h)) < 1.0 else "16x9"
-        if _src_aspect == _target_aspect:
-            yield send(log=f"[Aspect] ℹ Video đã đúng khung {_target_aspect}, bỏ qua convert", level="info")
+        src_is_vertical = _src_h > _src_w
+        target_w, target_h = (1080, 1920) if _target_aspect == "9x16" else (1920, 1080)
+        should_convert = (
+            (_target_aspect == "9x16" and not src_is_vertical)
+            or (_target_aspect == "16x9" and src_is_vertical)
+        )
+
+        if not should_convert:
+            mode_label = "doc" if _target_aspect == "9x16" else "ngang"
+            src_label = "doc" if src_is_vertical else "ngang"
+            yield send(
+                log=f"[Aspect] Mode {_target_aspect} ({mode_label}): video da {src_label} {_src_w}x{_src_h}, giu nguyen kich thuoc",
+                level="info",
+            )
         else:
-            target_w, target_h = (1080, 1920) if _target_aspect == "9x16" else (1920, 1080)
             aspect_video = out_dir / f"{stem}_subbed_{_target_aspect}.mp4"
             yield send(
-                log=f"[Aspect] 🔄 Đang chuyển khung hình: {_src_w}x{_src_h} → {target_w}x{target_h} ({_target_aspect})",
+                log=f"[Aspect] Chuyen huong video: {_src_w}x{_src_h} -> {target_w}x{target_h} ({_target_aspect})",
                 level="info",
             )
             vf = (
@@ -3731,11 +4315,38 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
     # ── Bước 5/5: Tạo giọng đọc (TTS) ───────────────────────────────────
     # Resume: nếu file voice đã có → dùng lại
+    _voice_cache_valid = False
+    _voice_cache_stale_reason = ""
     if do_voice and voice_path_cached.exists() and voice_path_cached.stat().st_size > 0:
+        try:
+            _voice_deps = [video_path]
+            if burned_path and Path(burned_path).exists():
+                _voice_deps.append(Path(burned_path))
+            if srt_path and Path(srt_path).exists():
+                _voice_deps.append(Path(srt_path))
+            _newest_voice_dep = max(p.stat().st_mtime for p in _voice_deps)
+            _voice_cache_valid = voice_path_cached.stat().st_mtime >= _newest_voice_dep
+            if not _voice_cache_valid:
+                _voice_cache_stale_reason = "ASS/video mới hơn cache"
+            if _voice_cache_valid:
+                try:
+                    voice_meta = json.loads(voice_meta_path_cached.read_text(encoding="utf-8"))
+                except Exception:
+                    voice_meta = {}
+                if voice_meta.get("tts_cache_version") != TTS_CACHE_VERSION:
+                    _voice_cache_valid = False
+                    _voice_cache_stale_reason = "cách gộp câu TTS đã cập nhật"
+        except Exception:
+            _voice_cache_valid = False
+            _voice_cache_stale_reason = "không kiểm tra được thời gian cache"
+
+    if do_voice and _voice_cache_valid:
         final_output_path = voice_path_cached
         yield send(log=f"[Bước 5/5] ♻ Dùng lại giọng {target_lang_name} cũ: {voice_path_cached.name}", level="info")
         yield send(overall=92, overall_lbl="Dùng lại giọng cũ")
     elif do_voice and translated_texts:
+        if _voice_cache_stale_reason:
+            yield send(log=f"[Bước 5/5] ♻ Bỏ cache giọng cũ ({_voice_cache_stale_reason}), tạo lại từ ASS hiện tại", level="info")
         yield send(log=f"[Bước 5/5] 🗣 Đang tạo giọng {target_lang_name}...", level="info")
         yield send(overall=85, overall_lbl="Đang tạo giọng nói...")
         source_for_voice = burned_path if burned_path else video_path
@@ -3760,6 +4371,27 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     ),
                     openai_model=str(data.get("openai_tts_model") or "tts-1"),
                     tts_lang=target_language,
+                    elevenlabs_api_key=(
+                        str(data.get("elevenlabs_api_key") or "").strip()
+                        or str((cfg_raw.get("video_process") or {}).get("elevenlabs_api_key") or "").strip()
+                        or os.getenv("ELEVENLABS_API_KEY", "").strip()
+                    ),
+                    elevenlabs_voice_id=(
+                        str(data.get("elevenlabs_voice_id") or "").strip()
+                        or str((cfg_raw.get("video_process") or {}).get("elevenlabs_voice_id") or "").strip()
+                    ),
+                    elevenlabs_model=str(
+                        data.get("elevenlabs_model")
+                        or (cfg_raw.get("video_process") or {}).get("elevenlabs_model")
+                        or "eleven_multilingual_v2"
+                    ),
+                    fpt_fallback_elevenlabs=_as_bool(
+                        data.get(
+                            "fpt_fallback_elevenlabs",
+                            (cfg_raw.get("video_process") or {}).get("fpt_fallback_elevenlabs", True),
+                        ),
+                        True,
+                    ),
                 )
                 tts_clips = asyncio.run(
                     tts.generate_all(
@@ -3809,6 +4441,21 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     tts_volume=_as_float(data.get("tts_volume", 1.8), 1.8),
                 )
             if ok:
+                try:
+                    voice_meta_path_cached.write_text(
+                        json.dumps(
+                            {
+                                "tts_cache_version": TTS_CACHE_VERSION,
+                                "subtitle_path": str(Path(srt_path).resolve()) if srt_path else "",
+                                "segments": len(translated_texts),
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    pass
                 yield send(log=f"[Bước 5/5] ✓ Giọng {target_lang_name}: {voice_path.name}", level="success")
                 yield send(overall=92, overall_lbl="Tạo giọng xong")
                 final_output_path = voice_path

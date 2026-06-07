@@ -94,6 +94,15 @@ async def _tts_fpt(text: str, voice: str, out_path: Path, api_key: str,
         return False
 
 
+async def _tts_ninerouter(text: str, voice: str, out_path: Path,
+                          engine: str, lang: str = "") -> bool:
+    try:
+        from core.video_processor import _tts_nine_router  # type: ignore
+        return await _tts_nine_router(text, voice, out_path, engine=engine, language=lang)
+    except Exception:
+        return False
+
+
 def _synthesize_line(text: str, *, engine: str, voice: str, lang: str,
                      rate: str, out_path: Path,
                      fpt_api_key: str = "", fpt_speed: int = 0) -> bool:
@@ -107,6 +116,9 @@ def _synthesize_line(text: str, *, engine: str, voice: str, lang: str,
             return True
     elif eng in ("fpt-ai", "fpt"):
         if asyncio.run(_tts_fpt(text, voice, out_path, fpt_api_key, fpt_speed)):
+            return True
+    elif eng == "9router" or eng.startswith("9r:"):
+        if asyncio.run(_tts_ninerouter(text, voice, out_path, engine=eng, lang=lang)):
             return True
     elif eng == "gtts":
         if _tts_gtts(text, lang, out_path):

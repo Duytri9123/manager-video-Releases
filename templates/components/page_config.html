@@ -164,6 +164,16 @@
         <div class="text-xs mt-4" id="cfg-fpt-status"></div>
       </div>
 
+      <!-- ElevenLabs -->
+      <div class="field mt-8">
+        <label>ElevenLabs API Key <span class="text-xs text-muted">(TTS đa ngôn ngữ, fallback khi FPT hết token)</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="cfg-elevenlabs-key" placeholder="sk_..." style="flex:1">
+          <button class="btn btn-secondary btn-sm" onclick="testApiKey('elevenlabs')">🧪 Test</button>
+        </div>
+        <div class="text-xs mt-4" id="cfg-elevenlabs-status"></div>
+      </div>
+
       <div class="check-grid mt-12">
         <label class="check-item"><input type="checkbox" id="cfg-naming-enabled" checked><span>Đặt tên file tự động (AI)</span></label>
       </div>

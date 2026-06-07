@@ -39,9 +39,7 @@ _BLUEPRINTS: List[Tuple[str, str, str]] = [
     ("routes.movie",      "bp", "movie"),
     ("routes.story",      "bp", "story"),
     ("routes.chatbot",    "bp", "chatbot"),
-    ("routes.canva",      "bp", "canva"),
     ("routes.videogen",   "bp", "videogen"),
-    ("routes.stickman",   "bp", "stickman"),
     ("routes.idea2video", "bp", "idea2video"),
     ("routes.ai_studio",  "bp", "ai_studio"),
 ]

@@ -2,6 +2,7 @@
 import asyncio
 import io
 import json
+import os
 import shutil
 import tempfile
 from datetime import datetime
@@ -11,6 +12,22 @@ from flask import stream_with_context
 from core_app import load_cfg, LOGGER, ROOT, VOICES_DIR
 
 bp = Blueprint("tts", __name__)
+
+
+@bp.route("/api/tts/engines", methods=["GET"])
+def tts_engines():
+    include_9router = str(request.args.get("include_9router", "1")).lower() not in ("0", "false", "no")
+    try:
+        from core.tts_catalog import all_tts_engines
+        engines, nine_router = all_tts_engines(load_cfg(), include_9router=include_9router)
+        return jsonify({"ok": True, "engines": engines, "nine_router": nine_router})
+    except Exception as exc:
+        from core.tts_catalog import local_tts_engines
+        return jsonify({
+            "ok": True,
+            "engines": local_tts_engines(),
+            "nine_router": {"reachable": False, "error": str(exc)},
+        })
 
 
 def _build_fx_filter(p: dict) -> str:
@@ -82,7 +99,7 @@ def tts_preview():
         return jsonify({"ok": False, "error": "Text preview is empty"}), 400
 
     try:
-        from core.video_processor import _tts_edge, _tts_gtts, _tts_fpt_ai, FPT_TTS_DEFAULT_KEY
+        from core.video_processor import _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs, _tts_nine_router, FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID
         cfg = load_cfg()
         vp_cfg = cfg.get("video_process") or {}
         fpt_api_key = (
@@ -91,6 +108,16 @@ def tts_preview():
             or FPT_TTS_DEFAULT_KEY
         )
         fpt_speed = int(data.get("fpt_speed") or 0)
+        elevenlabs_api_key = (
+            str(data.get("elevenlabs_api_key") or "").strip()
+            or str(vp_cfg.get("elevenlabs_api_key") or "").strip()
+            or os.environ.get("ELEVENLABS_API_KEY", "").strip()
+        )
+        elevenlabs_voice_id = (
+            str(data.get("elevenlabs_voice_id") or "").strip()
+            or str(vp_cfg.get("elevenlabs_voice_id") or "").strip()
+            or ELEVENLABS_DEFAULT_VOICE_ID
+        )
 
         fx_enabled = bool(data.get("fx_enabled", False))
         fx_params = {
@@ -106,13 +133,32 @@ def tts_preview():
         with tempfile.TemporaryDirectory(prefix="tts_preview_") as tmpdir:
             out_path = Path(tmpdir) / "preview.mp3"
             try:
-                if tts_engine == "gtts":
-                    ok = _tts_gtts(text, "vi", out_path)
+                if tts_engine == "9router" or tts_engine.startswith("9r:"):
+                    ok = asyncio.run(_tts_nine_router(
+                        text, tts_voice, out_path,
+                        engine=tts_engine,
+                        language=str(data.get("tts_lang") or data.get("language") or ""),
+                    ))
+                elif tts_engine == "gtts":
+                    ok = _tts_gtts(text, str(data.get("tts_lang") or data.get("language") or "vi"), out_path)
                 elif tts_engine == "fpt-ai":
-                    ok = asyncio.run(_tts_fpt_ai(text, tts_voice, out_path, fpt_api_key, fpt_speed))
+                    try:
+                        ok = asyncio.run(_tts_fpt_ai(text, tts_voice, out_path, fpt_api_key, fpt_speed))
+                    except Exception as fpt_err:
+                        # Fallback sang ElevenLabs nếu FPT thất bại và có key
+                        if elevenlabs_api_key:
+                            LOGGER.warning("FPT TTS preview thất bại (%s), fallback ElevenLabs", fpt_err)
+                            ok = asyncio.run(_tts_elevenlabs(text, elevenlabs_voice_id, out_path, elevenlabs_api_key))
+                        else:
+                            raise
+                elif tts_engine == "elevenlabs":
+                    ok = asyncio.run(_tts_elevenlabs(text, tts_voice, out_path, elevenlabs_api_key))
                 elif tts_engine == "minimax":
                     from core.video_processor import _tts_minimax
-                    ok = asyncio.run(_tts_minimax(text, tts_voice, out_path))
+                    ok = asyncio.run(_tts_minimax(
+                        text, tts_voice, out_path,
+                        language=str(data.get("tts_lang") or data.get("language") or ""),
+                    ))
                 elif tts_engine == "huggingface":
                     return jsonify({"ok": False, "error": "HuggingFace TTS not supported in this version"}), 400
                 else:
@@ -159,7 +205,8 @@ def tts_from_ass():
     import asyncio as _asyncio
     from core.video_processor import (
         find_ffmpeg, FPT_TTS_DEFAULT_KEY,
-        _parse_ass_file, MultiProviderTTS, _run_ffmpeg,
+        _parse_ass_file, _merge_segments_for_tts, MultiProviderTTS, _run_ffmpeg,
+        ELEVENLABS_DEFAULT_VOICE_ID,
     )
 
     data = {}
@@ -205,6 +252,16 @@ def tts_from_ass():
         or str(vp_cfg.get("fpt_api_key") or "").strip()
         or FPT_TTS_DEFAULT_KEY
     )
+    elevenlabs_api_key = (
+        str(data.get("elevenlabs_api_key") or "").strip()
+        or str(vp_cfg.get("elevenlabs_api_key") or "").strip()
+        or os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    )
+    elevenlabs_voice_id = (
+        str(data.get("elevenlabs_voice_id") or "").strip()
+        or str(vp_cfg.get("elevenlabs_voice_id") or "").strip()
+        or ""
+    )
 
     def _emit(log_lines: list, msg: str, level: str = "info", pct: int = None):
         log_lines.append(f"[{level.upper()}] {msg}")
@@ -243,14 +300,18 @@ def tts_from_ass():
             if not segments:
                 yield _emit(log_lines, "Không tìm thấy dialogue trong file .ass", "error", 0)
                 return
+            raw_count = len(segments)
+            segments = _merge_segments_for_tts(segments)
 
-            yield _emit(log_lines, f"✅ Đọc được {len(segments)} đoạn từ file .ass", "info", 5)
+            yield _emit(log_lines, f"✅ Đọc được {raw_count} dòng ASS, gộp thành {len(segments)} đoạn đọc tự nhiên", "info", 5)
 
             with tempfile.TemporaryDirectory(prefix="tts_ass_") as tmpdir:
                 tmpdir = Path(tmpdir)
                 tts = MultiProviderTTS(
                     voice=tts_voice, engine=tts_engine,
                     fpt_api_key=fpt_api_key, fpt_speed=0,
+                    elevenlabs_api_key=elevenlabs_api_key,
+                    elevenlabs_voice_id=elevenlabs_voice_id,
                 )
                 translations = [s.get("text", "") for s in segments]
 
@@ -390,13 +451,14 @@ def tts_to_mp3():
 
     Request JSON:
       text, tts_engine, tts_voice, tts_pitch, tts_rate, tts_emotion,
-      fx_*, fpt_api_key (optional)
+      fx_*, fpt_api_key, elevenlabs_api_key, elevenlabs_voice_id (optional)
 
     Returns: audio/mpeg stream (MP3) or JSON error.
     """
     import asyncio as _asyncio
     from core.video_processor import (
-        _tts_edge, _tts_gtts, _tts_fpt_ai, FPT_TTS_DEFAULT_KEY,
+        _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs, _tts_nine_router,
+        FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID,
         find_ffmpeg, _run_ffmpeg,
     )
 
@@ -419,6 +481,16 @@ def tts_to_mp3():
         or FPT_TTS_DEFAULT_KEY
     )
     fpt_speed = int(data.get("fpt_speed") or 0)
+    elevenlabs_api_key = (
+        str(data.get("elevenlabs_api_key") or "").strip()
+        or str(vp_cfg.get("elevenlabs_api_key") or "").strip()
+        or os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    )
+    elevenlabs_voice_id = (
+        str(data.get("elevenlabs_voice_id") or "").strip()
+        or str(vp_cfg.get("elevenlabs_voice_id") or "").strip()
+        or ELEVENLABS_DEFAULT_VOICE_ID
+    )
 
     fx_enabled = bool(data.get("fx_enabled", False))
     fx_params = {
@@ -431,11 +503,15 @@ def tts_to_mp3():
         "reverb": float(data.get("fx_reverb", 0)),
     }
 
-    # Pick chunk size by engine (FPT v5 has stricter limits than edge-tts)
+    # Pick chunk size by engine
     if tts_engine == "fpt-ai":
         max_chars = 700
     elif tts_engine == "gtts":
-        max_chars = 200  # gTTS has small per-request quota
+        max_chars = 200
+    elif tts_engine == "elevenlabs":
+        max_chars = 2500  # ElevenLabs supports up to 5000 chars
+    elif tts_engine == "9router" or tts_engine.startswith("9r:"):
+        max_chars = 1500
     else:
         max_chars = 1500
 
@@ -454,13 +530,32 @@ def tts_to_mp3():
             for idx, chunk in enumerate(chunks):
                 clip_path = tmpdir / f"chunk_{idx:04d}.mp3"
                 try:
-                    if tts_engine == "gtts":
-                        ok = _tts_gtts(chunk, "vi", clip_path)
+                    if tts_engine == "9router" or tts_engine.startswith("9r:"):
+                        ok = _asyncio.run(_tts_nine_router(
+                            chunk, tts_voice, clip_path,
+                            engine=tts_engine,
+                            language=str(data.get("tts_lang") or data.get("language") or ""),
+                        ))
+                    elif tts_engine == "gtts":
+                        ok = _tts_gtts(chunk, str(data.get("tts_lang") or data.get("language") or "vi"), clip_path)
+                    elif tts_engine == "elevenlabs":
+                        ok = _asyncio.run(_tts_elevenlabs(chunk, tts_voice, clip_path, elevenlabs_api_key))
                     elif tts_engine == "fpt-ai":
-                        ok = _asyncio.run(_tts_fpt_ai(chunk, tts_voice, clip_path, fpt_api_key, fpt_speed))
+                        try:
+                            ok = _asyncio.run(_tts_fpt_ai(chunk, tts_voice, clip_path, fpt_api_key, fpt_speed))
+                        except Exception as fpt_err:
+                            # Fallback FPT → ElevenLabs khi hết token
+                            if elevenlabs_api_key:
+                                LOGGER.warning("FPT hết token chunk %d, fallback ElevenLabs: %s", idx + 1, fpt_err)
+                                ok = _asyncio.run(_tts_elevenlabs(chunk, elevenlabs_voice_id, clip_path, elevenlabs_api_key))
+                            else:
+                                raise
                     elif tts_engine == "minimax":
                         from core.video_processor import _tts_minimax
-                        ok = _asyncio.run(_tts_minimax(chunk, tts_voice, clip_path))
+                        ok = _asyncio.run(_tts_minimax(
+                            chunk, tts_voice, clip_path,
+                            language=str(data.get("tts_lang") or data.get("language") or ""),
+                        ))
                     else:
                         # edge-tts (default)
                         ok = _asyncio.run(_tts_edge(
@@ -468,22 +563,10 @@ def tts_to_mp3():
                             rate=tts_rate, pitch=tts_pitch, style=tts_emotion,
                         ))
                 except Exception as inner_e:
-                    # Fallback: nếu edge-tts fail, thử FPT AI
-                    if tts_engine in ("edge-tts", "edge") and fpt_api_key:
-                        LOGGER.warning(f"edge-tts failed chunk {idx+1}, fallback to FPT AI: {inner_e}")
-                        try:
-                            fpt_voice = tts_voice if tts_voice in ("banmai", "leminh", "thuminh", "giahuy", "myan", "lannhi", "lianh") else "banmai"
-                            ok = _asyncio.run(_tts_fpt_ai(chunk, fpt_voice, clip_path, fpt_api_key, fpt_speed))
-                        except Exception as fpt_e:
-                            return jsonify({
-                                "ok": False,
-                                "error": f"TTS failed at chunk {idx + 1}/{len(chunks)}: edge-tts={inner_e}, fpt-ai={fpt_e}",
-                            }), 500
-                    else:
-                        return jsonify({
-                            "ok": False,
-                            "error": f"TTS failed at chunk {idx + 1}/{len(chunks)}: {inner_e}",
-                        }), 500
+                    return jsonify({
+                        "ok": False,
+                        "error": f"TTS failed at chunk {idx + 1}/{len(chunks)}: {inner_e}",
+                    }), 500
 
                 if not ok or (not clip_path.exists()) or clip_path.stat().st_size <= 0:
                     return jsonify({

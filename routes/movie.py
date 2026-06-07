@@ -798,6 +798,14 @@ def movie_render_status():
 @bp.route("/api/movie/voices", methods=["GET"])
 def movie_voices():
     """Return TTS engines + voice presets, structured for the dropdown."""
+    try:
+        from core.tts_catalog import all_tts_engines
+        engines, nine_router = all_tts_engines(_cfg())
+    except Exception:
+        from core.tts_catalog import local_tts_engines
+        engines, nine_router = local_tts_engines(), {"reachable": False, "error": "catalog_failed"}
+    return jsonify({"ok": True, "engines": engines, "nine_router": nine_router})
+
     engines = [
         {
             "id": "edge-tts",

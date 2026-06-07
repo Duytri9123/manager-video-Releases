@@ -149,7 +149,7 @@ def proc_save_ass():
     p = Path(path_str)
     try:
         p.write_text(content, encoding="utf-8")
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "path": str(p.resolve()), "mtime": p.stat().st_mtime})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

@@ -323,6 +323,24 @@ def test_api_key():
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)})
 
+    # ── ElevenLabs TTS ────────────────────────────────────────────────────────
+    elif provider == "elevenlabs":
+        try:
+            import asyncio
+            from core.video_processor import _tts_elevenlabs, ELEVENLABS_DEFAULT_VOICE_ID
+            import tempfile
+            from pathlib import Path as _Path
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out = _Path(tmpdir) / "test.mp3"
+                ok = asyncio.run(_tts_elevenlabs(
+                    "hello", ELEVENLABS_DEFAULT_VOICE_ID, out, api_key=key
+                ))
+            if ok:
+                return jsonify({"ok": True, "model": "eleven_multilingual_v2", "quota": "ElevenLabs TTS hoạt động"})
+            return jsonify({"ok": False, "error": "TTS thất bại — kiểm tra key"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
     return jsonify({"ok": False, "error": f"Provider không hỗ trợ: {provider}"}), 400
 
 

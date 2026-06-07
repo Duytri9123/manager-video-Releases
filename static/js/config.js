@@ -90,6 +90,8 @@ async function loadConfig() {
   setChk('cfg-naming-enabled', tr.naming_enabled !== false);
   // FPT AI key (stored in video_process)
   set('cfg-fpt-key', cfg.video_process?.fpt_api_key || '');
+  // ElevenLabs key (stored in video_process)
+  set('cfg-elevenlabs-key', cfg.video_process?.elevenlabs_api_key || '');
 
   // Upload defaults
   const upload = cfg.upload || {};
@@ -114,13 +116,36 @@ async function loadConfig() {
   setChk('vp-keep-bg', cfg.video_process?.keep_bg_music === true || cfg.video_process?.keep_bg === true);
   set('vp-process-mode', cfg.video_process?.process_mode || 'ai');
   set('vp-blur-zone', cfg.video_process?.blur_zone || 'bottom');
-  set('vp-tts-engine', cfg.video_process?.tts_engine || 'fpt-ai');
-  _syncVoiceOptions('vp-tts-engine', 'vp-tts-voice');
-  set('vp-tts-voice', cfg.video_process?.tts_voice || 'banmai');
-  // Sync proc page dropdowns too
-  set('proc-tts-engine', cfg.video_process?.tts_engine || 'fpt-ai');
-  _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
-  set('proc-tts-voice', cfg.video_process?.tts_voice || 'banmai');
+  // Đảm bảo catalog đã load trước khi set engine + sync voice
+  const _applyTtsEngineFromConfig = () => {
+    const eng = cfg.video_process?.tts_engine || 'fpt-ai';
+    const voice = cfg.video_process?.tts_voice || 'banmai';
+    const setVoiceIfPresent = (id, value) => {
+      const el = document.getElementById(id);
+      if (!el || !value) return;
+      if (Array.from(el.options || []).some(opt => opt.value === value)) el.value = value;
+    };
+    set('vp-tts-engine', eng);
+    _syncVoiceOptions('vp-tts-engine', 'vp-tts-voice');
+    setVoiceIfPresent('vp-tts-voice', voice);
+    set('proc-tts-engine', eng);
+    if (typeof _onTargetLangChange === 'function') _onTargetLangChange();
+    else _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+    setVoiceIfPresent('proc-tts-voice', voice);
+  };
+  if (typeof TTS_ENGINE_CATALOG !== 'undefined' && TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
+    _refreshTtsEngineSelects();
+    _applyTtsEngineFromConfig();
+  } else if (typeof _loadTtsEngineCatalog === 'function') {
+    _loadTtsEngineCatalog().then(() => {
+      requestAnimationFrame(() => {
+        _refreshTtsEngineSelects();
+        _applyTtsEngineFromConfig();
+      });
+    });
+  } else {
+    _applyTtsEngineFromConfig();
+  }
   set('vp-tts-speed', cfg.video_process?.tts_speed ?? 1.0);
   const speedVal = parseFloat(document.getElementById('vp-tts-speed')?.value || '1.0');
   if (document.getElementById('vp-tts-speed-val')) document.getElementById('vp-tts-speed-val').textContent = speedVal.toFixed(1) + 'x';
@@ -250,6 +275,10 @@ async function saveConfig() {
       tts_rate: get('vp-tts-rate') || '+0%',
       tts_emotion: get('vp-tts-emotion') || 'default',
       fpt_api_key: get('cfg-fpt-key') || '',
+      elevenlabs_api_key: get('cfg-elevenlabs-key') || '',
+      elevenlabs_voice_id: '21m00Tcm4TlvDq8ikWAM',
+      elevenlabs_model: 'eleven_multilingual_v2',
+      fpt_fallback_elevenlabs: true,
       subtitle_format: 'ass',
       anti_fingerprint: {
         enabled: getChk('vp-afp-enabled'),
@@ -271,11 +300,12 @@ async function saveConfig() {
 
 /* ── API Key Test ─────────────────────────────────────────────────────────── */
 const _API_KEY_IDS = {
-  deepseek:    { inputId: 'cfg-deepseek-key',  statusId: 'cfg-deepseek-status' },
-  groq:        { inputId: 'cfg-groq-key',       statusId: 'cfg-groq-status' },
-  openai:      { inputId: 'cfg-openai-key',     statusId: 'cfg-openai-status' },
-  huggingface: { inputId: 'cfg-hf-token',       statusId: 'cfg-hf-status' },
-  fpt:         { inputId: 'cfg-fpt-key',        statusId: 'cfg-fpt-status' },
+  deepseek:    { inputId: 'cfg-deepseek-key',    statusId: 'cfg-deepseek-status' },
+  groq:        { inputId: 'cfg-groq-key',         statusId: 'cfg-groq-status' },
+  openai:      { inputId: 'cfg-openai-key',       statusId: 'cfg-openai-status' },
+  huggingface: { inputId: 'cfg-hf-token',         statusId: 'cfg-hf-status' },
+  fpt:         { inputId: 'cfg-fpt-key',          statusId: 'cfg-fpt-status' },
+  elevenlabs:  { inputId: 'cfg-elevenlabs-key',   statusId: 'cfg-elevenlabs-status' },
 };
 
 function _setKeyStatus(statusId, state, msg) {

@@ -13,6 +13,17 @@ const TTS_VOICE_PRESETS = {
     { value: 'vi-VN-HoaiMyNeural', label: 'Hoai My (Edge - Nữ)' },
     { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Edge - Nam)' },
   ],
+  'elevenlabs': [
+    { value: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel (ElevenLabs - Nữ EN)' },
+    { value: 'AZnzlk1XvdvUeBnXmlld', label: 'Domi (ElevenLabs - Nữ EN)' },
+    { value: 'EXAVITQu4vr4xnSDxMaL', label: 'Bella (ElevenLabs - Nữ EN)' },
+    { value: 'ErXwobaYiN019PkySvjV', label: 'Antoni (ElevenLabs - Nam EN)' },
+    { value: 'MF3mGyEYCl7XYWbV9V6O', label: 'Elli (ElevenLabs - Nữ EN)' },
+    { value: 'TxGEqnHWrfWFTfGW9XjX', label: 'Josh (ElevenLabs - Nam EN)' },
+    { value: 'VR6AewLTigWG4xSOukaG', label: 'Arnold (ElevenLabs - Nam EN)' },
+    { value: 'pNInz6obpgDQGcFmaJgB', label: 'Adam (ElevenLabs - Nam EN)' },
+    { value: 'yoZ06aMxZJJ28mfd3POQ', label: 'Sam (ElevenLabs - Nam EN)' },
+  ],
   'minimax': [
     { value: 'Calm_Woman',      label: 'Calm Woman (MiniMax - Nữ)' },
     { value: 'Gentle_Woman',    label: 'Gentle Woman (MiniMax - Nữ)' },
@@ -31,11 +42,112 @@ const TTS_VOICE_PRESETS = {
 const TTS_DEFAULT_VOICE = {
   'fpt-ai':  'banmai',
   'edge-tts': 'vi-VN-HoaiMyNeural',
+  'elevenlabs': '21m00Tcm4TlvDq8ikWAM',
   'minimax': 'Calm_Woman',
   gtts: 'vi',
 };
 
 /* ── Edge TTS voices per target language ── */
+let TTS_ENGINE_CATALOG = null;
+let TTS_ENGINE_CATALOG_PROMISE = null;
+
+function _catalogVoicesToPreset(list) {
+  return (list || []).map(v => Array.isArray(v)
+    ? { value: v[0], label: v[1] || v[0] }
+    : { value: v.id || v.value || v.model || '', label: v.label || v.name || v.id || v.value || v.model || '' }
+  ).filter(v => v.value);
+}
+
+function _engineSupportsLang(eng, lang) {
+  if (!eng || !eng.voices) return false;
+  const id = String(eng.id || '').toLowerCase();
+  if (Array.isArray(eng.voices[lang]) && eng.voices[lang].length) return true;
+  if (Array.isArray(eng.voices.multi) && eng.voices.multi.length) return true;
+  if (id === 'edge-tts' && typeof EDGE_TTS_BY_LANG !== 'undefined' && EDGE_TTS_BY_LANG[lang]) return true;
+  if (id === 'gtts' && typeof GTTS_BY_LANG !== 'undefined' && GTTS_BY_LANG[lang]) return true;
+  return false;
+}
+
+function _getTtsTargetLangForSelect(engineSelectId) {
+  const id = String(engineSelectId || '');
+  if (id.startsWith('tr-')) return document.getElementById('tr-lang')?.value || 'vi';
+  if (id.startsWith('mv-')) return document.getElementById('mv-lang')?.value || 'vi';
+  if (id.startsWith('vp-')) return 'vi';
+  return document.getElementById('proc-target-lang')?.value || 'vi';
+}
+
+function _pickTtsEngineForLang(lang, currentId) {
+  const catalog = TTS_ENGINE_CATALOG || [];
+  const current = catalog.find(e => String(e.id || '').toLowerCase() === String(currentId || '').toLowerCase());
+  if (current && _engineSupportsLang(current, lang)) return current;
+  for (const id of ['edge-tts', 'gtts', 'elevenlabs', 'fpt-ai']) {
+    const found = catalog.find(e => String(e.id || '').toLowerCase() === id && _engineSupportsLang(e, lang));
+    if (found) return found;
+  }
+  return catalog.find(e => _engineSupportsLang(e, lang)) || catalog[0] || null;
+}
+
+function _ensureTtsEngineForLang(engineSelectId, lang) {
+  const sel = document.getElementById(engineSelectId);
+  if (!sel || !(TTS_ENGINE_CATALOG || []).length) return sel?.value || '';
+  const next = _pickTtsEngineForLang(lang, sel.value);
+  if (next && sel.value !== next.id) sel.value = next.id;
+  return sel.value || next?.id || '';
+}
+
+function _refreshTtsEngineSelects() {
+  const catalog = TTS_ENGINE_CATALOG || [];
+  if (!catalog.length) return;
+  ['proc-tts-engine', 'vp-tts-engine', 'tr-tts-engine'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const current = sel.value;
+    const lang = _getTtsTargetLangForSelect(id);
+    const fallback = _pickTtsEngineForLang(lang, current);
+    sel.innerHTML = '';
+    catalog.forEach(eng => {
+      const opt = document.createElement('option');
+      opt.value = eng.id;
+      opt.textContent = eng.label || eng.id;
+      // Mark selected nếu khớp với giá trị hiện tại hoặc fpt-ai là default
+      if (eng.id === current || (!current && fallback && eng.id === fallback.id)) {
+        opt.selected = true;
+      }
+      sel.appendChild(opt);
+    });
+    // Giữ giá trị hiện tại nếu còn trong catalog, không thì dùng fpt-ai hoặc edge-tts làm default
+    const currentEngine = catalog.find(e => e.id === current);
+    const targetValue = currentEngine && _engineSupportsLang(currentEngine, lang)
+      ? current
+      : fallback?.id || '';
+    sel.value = targetValue;
+  });
+}
+
+async function _loadTtsEngineCatalog() {
+  if (TTS_ENGINE_CATALOG) return TTS_ENGINE_CATALOG;
+  if (TTS_ENGINE_CATALOG_PROMISE) return TTS_ENGINE_CATALOG_PROMISE;
+  TTS_ENGINE_CATALOG_PROMISE = (async () => {
+    try {
+      const r = await fetch('/api/tts/engines');
+      const j = await r.json();
+      if (j?.ok && Array.isArray(j.engines) && j.engines.length) {
+        TTS_ENGINE_CATALOG = j.engines;
+        window._ttsNineRouterStatus = j.nine_router || {};
+        // Dùng requestAnimationFrame để đảm bảo DOM đã render xong trước khi refresh
+        requestAnimationFrame(() => {
+          _refreshTtsEngineSelects();
+          _onTargetLangChange();
+          _syncVoiceOptions('vp-tts-engine', 'vp-tts-voice');
+          _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+        });
+      }
+    } catch (_) {}
+    return TTS_ENGINE_CATALOG || [];
+  })();
+  return TTS_ENGINE_CATALOG_PROMISE;
+}
+
 const EDGE_TTS_BY_LANG = {
   vi: [
     { value: 'vi-VN-HoaiMyNeural', label: 'Hoài My (Nữ - VN)' },
@@ -110,6 +222,20 @@ const GTTS_BY_LANG = {
  */
 function _onTargetLangChange() {
   const lang = document.getElementById('proc-target-lang')?.value || 'vi';
+  const catalog = TTS_ENGINE_CATALOG || [];
+  const engineEl = document.getElementById('proc-tts-engine');
+
+  if (catalog.length && engineEl) {
+    _ensureTtsEngineForLang('proc-tts-engine', lang);
+    _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+    return;
+  }
+
+  if (!TTS_ENGINE_CATALOG_PROMISE) {
+    _loadTtsEngineCatalog().then(() => {
+      if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) _onTargetLangChange();
+    });
+  }
 
   // If target is Vietnamese, keep current engine (FPT AI works for vi)
   if (lang === 'vi') {
@@ -118,7 +244,6 @@ function _onTargetLangChange() {
   }
 
   // For non-Vietnamese: force Edge TTS (best multilingual support)
-  const engineEl = document.getElementById('proc-tts-engine');
   if (engineEl) engineEl.value = 'edge-tts';
 
   // Populate voice list for the target language
@@ -140,8 +265,75 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
   const voiceEl = document.getElementById(voiceSelectId);
   if (!engineEl || !voiceEl) return;
 
-  const engine = (engineEl.value || 'fpt-ai').toLowerCase();
-  const targetLang = document.getElementById('proc-target-lang')?.value || 'vi';
+  // Nếu engine select trống (chưa được populate), thử refresh trước
+  let engine = (engineEl.value || '').toLowerCase();
+  if (!engine && engineEl.options.length === 0) {
+    // Dropdown chưa có options — chờ catalog load
+    if (!TTS_ENGINE_CATALOG_PROMISE) {
+      _loadTtsEngineCatalog().then(() => {
+        _refreshTtsEngineSelects();
+        _syncVoiceOptions(engineSelectId, voiceSelectId);
+      });
+    }
+    return;
+  }
+  // Nếu value rỗng nhưng có options, chọn option đầu tiên
+  if (!engine && engineEl.options.length > 0) {
+    engineEl.selectedIndex = 0;
+    engine = engineEl.value.toLowerCase();
+  }
+  if (!engine) engine = 'fpt-ai';
+  const targetLang = _getTtsTargetLangForSelect(engineSelectId);
+  const catalog = TTS_ENGINE_CATALOG || [];
+
+  if (catalog.length) {
+    const adjusted = _ensureTtsEngineForLang(engineSelectId, targetLang);
+    if (adjusted) engine = adjusted.toLowerCase();
+  } else if (targetLang !== 'vi' && engine === 'fpt-ai' && engineEl.options.length > 0) {
+    const edgeOpt = Array.from(engineEl.options).find(opt => opt.value === 'edge-tts');
+    if (edgeOpt) {
+      engineEl.value = 'edge-tts';
+      engine = 'edge-tts';
+    }
+  }
+
+  const catalogEngine = catalog.find(e => String(e.id || '').toLowerCase() === engine);
+
+  if (catalogEngine && catalogEngine.voices) {
+    const voicesByLang = catalogEngine.voices || {};
+    let rawList = voicesByLang[targetLang] || voicesByLang.multi || [];
+    if (!rawList.length && engine === 'edge-tts' && EDGE_TTS_BY_LANG[targetLang]) {
+      rawList = EDGE_TTS_BY_LANG[targetLang];
+    }
+    if (!rawList.length && engine === 'gtts' && GTTS_BY_LANG[targetLang]) {
+      rawList = [[GTTS_BY_LANG[targetLang], `${targetLang} (gTTS)`]];
+    }
+    if (!rawList.length) {
+      const fallbackLang = voicesByLang.vi ? 'vi' : Object.keys(voicesByLang)[0];
+      rawList = voicesByLang[fallbackLang] || [];
+    }
+    const preset = _catalogVoicesToPreset(rawList);
+    if (preset.length) {
+      const current = voiceEl.value || '';
+      voiceEl.innerHTML = '';
+      preset.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.value;
+        opt.textContent = item.label;
+        voiceEl.appendChild(opt);
+      });
+      const keep = preset.some(item => item.value === current);
+      voiceEl.value = keep ? current : (catalogEngine.default || preset[0].value);
+      if (!preset.some(item => item.value === voiceEl.value)) voiceEl.value = preset[0].value;
+      return;
+    }
+  } else if (!TTS_ENGINE_CATALOG_PROMISE) {
+    _loadTtsEngineCatalog().then(() => {
+      if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
+        _syncVoiceOptions(engineSelectId, voiceSelectId);
+      }
+    });
+  }
 
   // For non-Vietnamese target: always use Edge TTS voices for that language
   if (targetLang !== 'vi' && engine === 'edge-tts') {
@@ -159,7 +351,9 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
     return;
   }
 
-  const preset = TTS_VOICE_PRESETS[engine] || TTS_VOICE_PRESETS['fpt-ai'];
+  const preset = engine === 'gtts' && GTTS_BY_LANG[targetLang]
+    ? [{ value: GTTS_BY_LANG[targetLang], label: `${targetLang} (gTTS)` }]
+    : (TTS_VOICE_PRESETS[engine] || TTS_VOICE_PRESETS['fpt-ai']);
   const current = voiceEl.value || '';
 
   voiceEl.innerHTML = '';
@@ -186,20 +380,32 @@ function switchPage(name) {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
     movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router',
-    canva:'Canva Auto', videogen:'Video AI', stickman:'Stickman Studio', ai_studio:'AI Studio'
+    videogen:'Video AI', ai_studio:'AI Studio'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
   if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
   if (name === 'cookies' && !window._cookiesLoaded) { loadCookieMode(); loadCookieFields(); window._cookiesLoaded = true; }
   if (name === 'history') { loadHistory(); if (typeof loadFiles === 'function') loadFiles(''); }
   if (name === 'content') cptSwitch('files');
-  if (name === 'process') loadQueue();
+  if (name === 'process') {
+    loadQueue();
+    // Refresh TTS engine dropdown mỗi khi switch sang trang process
+    // (catalog có thể đã load sau khi DOM render)
+    requestAnimationFrame(() => {
+      if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
+        _refreshTtsEngineSelects();
+        _onTargetLangChange();
+      } else {
+        _loadTtsEngineCatalog().then(() => {
+          _refreshTtsEngineSelects();
+          _onTargetLangChange();
+        });
+      }
+    });
+  }
   if (name === 'proxies') { if (typeof proxyLoadList === 'function') proxyLoadList(); if (typeof routerLoadList === 'function') routerLoadList(); }
   if (name === 'chat' && typeof chatInit === 'function') chatInit();
-  if (name === 'canva' && typeof canvaInit === 'function') canvaInit();
   if (name === 'videogen' && typeof vgInit === 'function') vgInit();
-  if (name === 'stickman' && typeof stkInit === 'function') stkInit();
-  if (name === 'stickman' && typeof stkInit === 'function') stkInit();
 }
 
 /* ── Content platform sub-tabs (defined here so inline onclick always works) ── */
@@ -236,8 +442,6 @@ function toggleMobileMenu() {
     ['transcribe','🎙','Phiên âm'],['publish','📤','Đăng video'],
     ['content','🗄','Quản lý nội dung'],
     ['movie','🎬','Review phim'],['story','📖','Truyện → Video'],
-    ['canva','🎨','Canva Auto'],
-    ['stickman','🦴','Stickman Studio'],
     ['proxies','🌐','Proxy & Router'],
     ['history','🗃','Lịch sử'],['config','⚙️','Cấu hình'],['cookies','🍪','Cookies']
   ];
@@ -257,6 +461,7 @@ function toggleCard(header) {
 /* ── Video Processing ── */
 window._procMode = localStorage.getItem('proc_mode') || 'ai';
 window._procSelectedFile = null;
+window._procUploadPromise = null;
 
 function setProcessMode(mode) {
   window._procMode = mode === 'model' ? 'model' : 'ai';
@@ -294,7 +499,7 @@ function startProcessVideo() {
   const videoPath = document.getElementById('proc-video')?.value?.trim();
   const videoUrl = document.getElementById('proc-url')?.value?.trim();
   const selectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
-  if (!videoPath && !videoUrl) {
+  if (!videoPath && !videoUrl && !selectedFile) {
     alert('Vui lòng nhập đường dẫn file video hoặc URL video');
     // Notify batch queue so _procRunning resets and queue can continue
     if (typeof window._onProcTaskFinished === 'function') {
@@ -306,6 +511,18 @@ function startProcessVideo() {
   // Preflight: nếu user bật tự-động-đăng, check trạng thái các nền tảng trước khi
   // bắt đầu pipeline xử lý dài. Người dùng có thể tắt nền tảng lỗi hoặc hủy.
   (async () => {
+    if (window._procUploadPromise) {
+      try {
+        await window._procUploadPromise;
+      } catch (e) {
+        toast('Upload file import chưa hoàn tất: ' + (e.message || e), 'error');
+        if (typeof window._onProcTaskFinished === 'function') {
+          window._onProcTaskFinished(false);
+        }
+        return;
+      }
+    }
+
     if (typeof window.pPubPreflightCheck === 'function'
         && document.getElementById('p-autopub-enabled')?.checked) {
       const ok = await window.pPubPreflightCheck({ interactive: true });
@@ -328,7 +545,9 @@ function startProcessVideo() {
         return;
       }
     }
-    _startProcessVideoInternal(videoPath, videoUrl, selectedFile);
+    const latestVideoPath = document.getElementById('proc-video')?.value?.trim() || videoPath;
+    const latestSelectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
+    _startProcessVideoInternal(latestVideoPath, videoUrl, latestSelectedFile);
   })();
 }
 
@@ -390,8 +609,6 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
       const pct = parseFloat(document.getElementById('proc-margin-v')?.value || '3');
       return Math.max(0, Math.round(720 * pct / 100));
     })(),
-    tts_engine:       document.getElementById('proc-tts-engine')?.value || 'fpt-ai',
-    tts_voice:        document.getElementById('proc-tts-voice')?.value || 'banmai',
     tts_speed:        parseFloat(document.getElementById('proc-tts-speed')?.value || '1.0'),
     auto_speed:       document.getElementById('proc-auto-speed')?.checked ?? true,
     process_mode:     window._procMode || 'ai',
@@ -418,7 +635,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     // CapCut settings
     capcut_enabled:   document.getElementById('proc-capcut-enabled')?.checked ?? false,
     capcut_auto_open: document.getElementById('proc-capcut-auto-open')?.checked ?? false,
-    // Aspect ratio: 'auto' = giữ nguyên, '9x16' = chuyển dọc, '16x9' = chuyển ngang
+    // Video mode: only convert when the source orientation differs from the selected mode.
     target_aspect: document.getElementById('proc-preview-aspect')?.value || 'auto',
     // Frame video (step 6)
     frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
@@ -1101,11 +1318,14 @@ async function previewProcessVoice() {
   if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo...'; }
 
   try {
+    const targetLang = document.getElementById('proc-target-lang')?.value || 'vi';
     const res = await fetch('/api/tts_preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
+        language: targetLang,
+        tts_lang: targetLang,
         tts_engine: document.getElementById('proc-tts-engine')?.value || 'edge-tts',
         tts_voice: document.getElementById('proc-tts-voice')?.value || 'vi-VN-HoaiMyNeural',
         tts_pitch: _sanitizeVoiceParam(document.getElementById('proc-tts-pitch')?.value || '+0Hz'),
@@ -1178,16 +1398,24 @@ async function publishQueueToTarget(target) {
     if (statusEl) statusEl.textContent = '⏳ Đang đăng...';
 
     try {
+      let serverPath = item.path || '';
+      if (!serverPath && item.file && typeof window._pubUploadVideoFileToServer === 'function') {
+        if (statusEl) statusEl.textContent = '⏳ Đang import...';
+        serverPath = await window._pubUploadVideoFileToServer(item.file);
+        item.path = serverPath;
+      }
+      const videoInput = serverPath || item.file;
       if (target === 'tiktok' || target === 'both') {
-        window._publishLastOutputPath = item.path || item.name;
+        if (!serverPath) throw new Error('TikTok cần đường dẫn file trên server, không thể dùng tên file local');
+        window._publishLastOutputPath = serverPath;
         window._procSelectedFile = item.file;
-        await publishToTikTok(item.path || item.file);
+        await publishToTikTok(serverPath);
       }
       if (target === 'youtube' || target === 'both') {
-        window._publishLastOutputPath = item.path || item.name;
-        window._ytLastOutputPath = item.path || item.name;
+        window._publishLastOutputPath = serverPath || item.name;
+        window._ytLastOutputPath = serverPath || item.name;
         window._procSelectedFile = item.file;
-        await uploadToYouTube(item.path || item.file);
+        await uploadToYouTube(videoInput);
       }
       if (statusEl) statusEl.textContent = '✓ Xong';
       // Remove from queue after success
@@ -1217,25 +1445,35 @@ document.addEventListener('DOMContentLoaded', () => {
     if (label) label.textContent = file ? file.name : '--';
     this.value = '';
 
-    // Upload file lên server (vào thư mục Downloaded) để xử lý frame, lấy path tuyệt đối
+    // Upload file len server de lay path tuyet doi, tranh viec cac buoc sau doan Downloaded/<ten file>.
     if (file) {
       if (label) label.textContent = `${file.name} (đang upload...)`;
-      try {
+      window._procUploadPromise = (async () => {
         const fd = new FormData();
         fd.append('file', file);
         const r = await fetch('/api/upload_process_video', { method: 'POST', body: fd });
         const data = await r.json();
         if (data.ok && data.path) {
           window._procUploadedPath = data.path;
+          window._procSelectedFile = null;
+          window._publishLastOutputPath = data.path;
+          window._ytLastOutputPath = data.path;
           if (pathBox) pathBox.value = data.path;
           if (label) label.textContent = `${file.name} ✓ → ${data.dir}`;
         } else {
           if (label) label.textContent = `${file.name} ⚠ upload thất bại`;
           if (typeof toast === 'function') toast('Upload file thất bại: ' + (data.error || ''), 'error');
+          throw new Error(data.error || 'Upload file thất bại');
         }
+        return data.path;
+      })();
+      try {
+        await window._procUploadPromise;
       } catch (e) {
         if (label) label.textContent = `${file.name} ⚠ ${e.message}`;
         if (typeof toast === 'function') toast('Lỗi upload: ' + e.message, 'error');
+      } finally {
+        window._procUploadPromise = null;
       }
     }
   });
@@ -1243,10 +1481,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('proc-tts-engine')?.addEventListener('change', function() {
     _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
   });
+  document.getElementById('proc-target-lang')?.addEventListener('change', function() {
+    _onTargetLangChange();
+  });
   document.getElementById('vp-tts-engine')?.addEventListener('change', function() {
     _syncVoiceOptions('vp-tts-engine', 'vp-tts-voice');
   });
-  _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+  _onTargetLangChange();
   _syncVoiceOptions('vp-tts-engine', 'vp-tts-voice');
 
   document.getElementById('tr-import-file')?.addEventListener('change', function() {
@@ -1836,8 +2077,17 @@ async function uploadToYouTube(videoInput) {
     return;
   }
 
-  const isFileInput = typeof File !== 'undefined' && videoInput instanceof File;
-  const videoPath = isFileInput ? videoInput.name : String(videoInput || '').trim();
+  let isFileInput = typeof File !== 'undefined' && videoInput instanceof File;
+  let videoPath = isFileInput ? videoInput.name : String(videoInput || '').trim();
+  if (isFileInput && typeof window._pubUploadVideoFileToServer === 'function') {
+    try {
+      videoPath = await window._pubUploadVideoFileToServer(videoInput);
+      videoInput = videoPath;
+      isFileInput = false;
+    } catch (_) {
+      videoPath = videoInput.name;
+    }
+  }
 
   if (!videoPath) {
     alert('Không có video để upload');
@@ -1936,7 +2186,16 @@ async function uploadToYouTube(videoInput) {
 }
 
 async function publishToTikTok(videoInput) {
-  const videoPath = typeof videoInput === 'string' ? videoInput.trim() : (videoInput?.name || '').trim();
+  let videoPath = typeof videoInput === 'string' ? videoInput.trim() : '';
+  if (!videoPath && typeof File !== 'undefined' && videoInput instanceof File && typeof window._pubUploadVideoFileToServer === 'function') {
+    try {
+      videoPath = await window._pubUploadVideoFileToServer(videoInput);
+    } catch (e) {
+      toast('Không import được video để đăng TikTok: ' + (e.message || e), 'error');
+      return;
+    }
+  }
+  if (!videoPath && videoInput?.name) videoPath = videoInput.name.trim();
   if (!videoPath) {
     alert('Không có video để đăng');
     return;
@@ -2043,8 +2302,17 @@ async function savePublishSettings() {
 }
 
 async function publishBothOrSingle(target) {
-  const videoPath = window._publishLastOutputPath || window._ytLastOutputPath || window._procSelectedFile || '';
-  if (!videoPath) {
+  let videoPath = window._publishLastOutputPath || window._ytLastOutputPath || '';
+  let videoInput = videoPath || window._procSelectedFile || '';
+  if (!videoPath && window._procSelectedFile && typeof window._pubUploadVideoFileToServer === 'function') {
+    try {
+      videoPath = await window._pubUploadVideoFileToServer(window._procSelectedFile);
+      videoInput = videoPath;
+    } catch (_) {
+      videoInput = window._procSelectedFile;
+    }
+  }
+  if (!videoInput) {
     toast('Chưa có file đầu ra để đăng', 'warning');
     return;
   }
@@ -2053,8 +2321,8 @@ async function publishBothOrSingle(target) {
   if (logBox) { logBox.innerHTML = ''; logBox.style.display = 'block'; }
 
   const t = target || window._publishPlatform || 'youtube';
-  if (t === 'tiktok' || t === 'both') await publishToTikTok(videoPath);
-  if (t === 'youtube' || t === 'both') await uploadToYouTube(videoPath);
+  if (t === 'tiktok' || t === 'both') await publishToTikTok(videoPath || videoInput);
+  if (t === 'youtube' || t === 'both') await uploadToYouTube(videoPath || videoInput);
 }
 
 async function publishSelectedPlatform() {

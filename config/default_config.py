@@ -116,6 +116,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "auto_speed": True,
         "pitch_semitones": 0.0,
         "fpt_api_key": "",  # Set via env FPT_TTS_API_KEY or video_process.fpt_api_key in config.yml
+        "elevenlabs_api_key": "",   # Set via env ELEVENLABS_API_KEY or config
+        "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM",  # Rachel — eleven_multilingual_v2 supports VI
+        "elevenlabs_model": "eleven_multilingual_v2",
+        "fpt_fallback_elevenlabs": True,  # Tự động fallback FPT → ElevenLabs khi FPT hết token
         "bg_volume": 0.15,
         "font_size": 18,
         "font_name": "Arial",

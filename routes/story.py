@@ -1969,6 +1969,14 @@ def manga_render_video():
 # ── TTS engines/voices catalogue (shared shape with /api/movie/voices) ─────
 @bp.route("/api/story/voices", methods=["GET"])
 def story_voices():
+    try:
+        from core.tts_catalog import all_tts_engines
+        engines, nine_router = all_tts_engines(_cfg())
+    except Exception:
+        from core.tts_catalog import local_tts_engines
+        engines, nine_router = local_tts_engines(), {"reachable": False, "error": "catalog_failed"}
+    return jsonify({"ok": True, "engines": engines, "nine_router": nine_router})
+
     engines = [
         {
             "id": "edge-tts",
