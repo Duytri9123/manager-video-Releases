@@ -1,0 +1,199 @@
+  <!-- ═════════════════ STEP 4: Đăng tự động & Lịch ═════════════════ -->
+  <section class="proc-step" data-proc-step="4" style="display:none">
+    <div class="proc-step-head">
+      <h2 class="proc-step-title">📤 Đăng tự động & Lịch</h2>
+      <p class="proc-step-sub">Tùy chọn: tự động đăng lên YouTube / TikTok / Facebook và đặt lịch theo lô sau khi video xử lý xong.</p>
+    </div>
+
+      <!-- ═══════════════════════════════════════════════════════════
+           AUTO-PUBLISH (after processing completes)
+      ═══════════════════════════════════════════════════════════ -->
+      <div class="card card-collapsible" id="proc-autopub-card">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">📤 Tự động đăng sau khi xử lý</span>
+          <div class="card-actions" onclick="event.stopPropagation()">
+            <label class="toggle-wrap">
+              <input type="checkbox" class="toggle-input" id="p-autopub-enabled">
+              <div class="toggle"></div>
+              <span class="toggle-label text-sm">Bật</span>
+            </label>
+          </div>
+        </div>
+        <div class="card-body">
+
+          <!-- ── Batch schedule distribution ── -->
+          <div class="alert-info mb-12" style="font-size:12px">
+            💡 AI sẽ đọc nội dung từ file phụ đề (ASS) và tự động điền tiêu đề/mô tả/hashtag khi bạn xác nhận.
+            <br>Khi video xử lý xong, hệ thống tự đăng lên các nền tảng đã bật.
+          </div>
+
+          <div class="field">
+            <label>🤖 AI Provider</label>
+            <select id="p-pub-ai-provider">
+              <option value="9router">🔀 9Router</option>
+              <option value="deepseek" selected>DeepSeek</option>
+              <option value="openai">OpenAI</option>
+              <option value="groq">Groq</option>
+            </select>
+          </div>
+
+          <hr class="divider">
+
+          <!-- Platform tabs -->
+          <div class="platform-tabs-header" style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+            <div class="platform-tab active" id="p-tab-yt" onclick="pPubSwitchTab('youtube')">
+              <span class="yt-color">▶</span><span>YouTube</span>
+              <div class="tab-toggle" id="p-toggle-yt" onclick="event.stopPropagation();pPubTogglePlatform('youtube')">✓</div>
+            </div>
+            <div class="platform-tab" id="p-tab-tt" onclick="pPubSwitchTab('tiktok')">
+              <span class="tt-color">🎵</span><span>TikTok</span>
+              <div class="tab-toggle" id="p-toggle-tt" onclick="event.stopPropagation();pPubTogglePlatform('tiktok')">✓</div>
+            </div>
+            <div class="platform-tab" id="p-tab-fb" onclick="pPubSwitchTab('facebook')">
+              <span class="fb-color">📘</span><span>Facebook</span>
+              <div class="tab-toggle" id="p-toggle-fb" onclick="event.stopPropagation();pPubTogglePlatform('facebook')">✓</div>
+            </div>
+          </div>
+
+          <!-- ── YouTube Panel ── -->
+          <div id="p-panel-youtube" class="platform-panel active" style="display:block">
+            <div class="field" style="margin-bottom:8px">
+              <label style="font-size:11px;color:var(--text-muted)">📺 Tài khoản YouTube</label>
+              <select id="p-yt-account-select" class="pub-select-sm" style="width:100%">
+                <option value="">Chưa có tài khoản</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Tiêu đề YouTube <span class="text-xs text-muted">(tối đa 100 ký tự)</span></label>
+              <input type="text" id="p-yt-title" placeholder="Nhập tiêu đề..." maxlength="100">
+              <div class="text-xs text-muted mt-4"><span id="p-yt-title-count">0</span>/100</div>
+            </div>
+
+            <div class="field">
+              <label>Mô tả video</label>
+              <textarea id="p-yt-desc" rows="3" placeholder="Mô tả..."></textarea>
+            </div>
+
+            <div class="field">
+              <label>Tags (cách nhau bằng dấu phẩy)</label>
+              <input type="text" id="p-yt-tags" placeholder="tag1, tag2, tag3...">
+            </div>
+
+            <div class="settings-grid">
+              <div class="field">
+                <label>Chế độ hiển thị</label>
+                <select id="p-yt-privacy">
+                  <option value="private" selected>🔒 Riêng tư</option>
+                  <option value="unlisted">🔗 Không công khai</option>
+                  <option value="public">🌐 Công khai</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>&nbsp;</label>
+                <label class="check-item w-full" style="height:38px;margin:0">
+                  <input type="checkbox" id="p-yt-is-short"><span>📱 YouTube Shorts</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── TikTok Panel ── -->
+          <div id="p-panel-tiktok" class="platform-panel" style="display:none">
+            <div class="field">
+              <label>Nội dung</label>
+              <textarea id="p-tt-title" rows="3" placeholder="Nhập nội dung video..."></textarea>
+            </div>
+            <div class="field">
+              <label>Hashtags <span class="text-xs text-muted">(tối đa 5 hashtag)</span></label>
+              <input type="text" id="p-tt-tags" placeholder="#xuhuong #fyp #viral">
+              <div class="text-xs text-muted mt-4"><span id="p-tt-tags-count">0</span>/5 hashtag</div>
+            </div>
+            <div class="alert-info" style="font-size:11px;margin-top:8px">
+              💡 Hệ thống mở TikTok Studio qua trình duyệt Chromium, tự gắn file và điền caption. Bạn chỉ kiểm tra rồi nhấn Post (hoặc Đặt lịch).
+            </div>
+          </div>
+
+          <!-- ── Facebook Panel ── -->
+          <div id="p-panel-facebook" class="platform-panel" style="display:none">
+            <div class="field" style="margin-bottom:8px">
+              <label style="font-size:11px;color:var(--text-muted)">📘 Tài khoản Facebook</label>
+              <select id="p-fb-account-select" class="pub-select-sm" style="width:100%">
+                <option value="">Chưa có tài khoản</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>📄 Đăng lên Page</label>
+              <select id="p-fb-page-select">
+                <option value="">-- Chọn Page --</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Tiêu đề video</label>
+              <input type="text" id="p-fb-title" placeholder="Tiêu đề...">
+            </div>
+            <div class="field">
+              <label>Hashtags</label>
+              <input type="text" id="p-fb-tags" placeholder="#viral #trending #video">
+            </div>
+            <div class="field">
+              <label>Định dạng</label>
+              <select id="p-fb-post-type">
+                <option value="auto" selected>Tự động (9:16 → Reel)</option>
+                <option value="reel">🎬 Reel (yêu cầu 9:16, 540x960+)</option>
+                <option value="video">📹 Video thường</option>
+              </select>
+            </div>
+            <div class="text-xs text-muted mt-4">
+              💡 Bài đăng trên Page luôn công khai. Reel yêu cầu: MP4, tỷ lệ 9:16, tối thiểu 540x960, 3-90 giây.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════
+           BATCH SCHEDULE — spread N videos over N days
+      ═══════════════════════════════════════════════════════════ -->
+      <div class="card card-collapsible collapsed" id="proc-batchsched-card">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">🗓 Đặt lịch đăng theo lô</span>
+          <div class="card-actions" onclick="event.stopPropagation()">
+            <label class="toggle-wrap">
+              <input type="checkbox" class="toggle-input" id="p-bsched-enabled" onchange="pBschedToggle()">
+              <div class="toggle"></div>
+              <span class="toggle-label text-sm">Bật</span>
+            </label>
+          </div>
+        </div>
+        <div class="card-body" id="p-bsched-body">
+          <div class="alert-info mb-8" style="font-size:12px">
+            💡 Khi bật, hệ thống sẽ chia đều thời gian đăng cho các video trong hàng chờ.
+            <br>Ví dụ: 10 video + khoảng cách 1 ngày → mỗi ngày 1 video.
+          </div>
+          <div class="settings-grid">
+            <div class="field">
+              <label>Bắt đầu lúc</label>
+              <input type="datetime-local" id="p-bsched-start">
+            </div>
+            <div class="field">
+              <label>Khoảng cách (giờ)</label>
+              <input type="number" id="p-bsched-interval" value="24" min="0.25" step="0.25">
+            </div>
+          </div>
+          <div class="field mt-8">
+            <label>Chế độ</label>
+            <select id="p-bsched-mode" onchange="pBschedRecalcPreview()">
+              <option value="interval" selected>Theo khoảng cách cố định</option>
+              <option value="spread">Chia đều trong khoảng thời gian</option>
+            </select>
+          </div>
+          <div class="field" id="p-bsched-spread-wrap" style="display:none">
+            <label>Tổng số ngày chia đều</label>
+            <input type="number" id="p-bsched-spread-days" value="7" min="1" step="1" oninput="pBschedRecalcPreview()">
+          </div>
+          <div class="text-xs text-muted mt-4" id="p-bsched-preview">
+            Chưa có video trong hàng chờ.
+          </div>
+        </div>
+      </div>
+  </section><!-- /step 4 -->

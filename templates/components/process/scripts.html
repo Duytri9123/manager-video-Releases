@@ -1,0 +1,2001 @@
+  <!-- Wizard stepper logic (UI-only — không đụng pipeline xử lý) -->
+  <script>
+  (function(){
+    window._procWizStep = window._procWizStep || 1;
+    var MAX = 5;
+    window.procWizGo = function(n){
+      n = Math.max(1, Math.min(MAX, n));
+      window._procWizStep = n;
+      var root = document.getElementById('page-process');
+      if (!root) return;
+      root.querySelectorAll('.proc-step').forEach(function(s){
+        s.style.display = (parseInt(s.dataset.procStep, 10) === n) ? 'block' : 'none';
+      });
+      root.querySelectorAll('.proc-wiz-item').forEach(function(it){
+        var sn = parseInt(it.dataset.step, 10);
+        it.classList.toggle('active', sn === n);
+        it.classList.toggle('done', sn < n);
+      });
+      var prev = document.getElementById('proc-wiz-prev');
+      var next = document.getElementById('proc-wiz-next');
+      var hint = document.getElementById('proc-wiz-hint');
+      if (prev) prev.style.visibility = (n === 1) ? 'hidden' : 'visible';
+      if (next) next.textContent = (n === MAX) ? '✓ Hoàn tất' : 'Tiếp theo →';
+      if (hint) hint.textContent = 'Bước ' + n + ' / ' + MAX;
+      var c = document.getElementById('content'); if (c) c.scrollTop = 0;
+    };
+    window.procWizNext = function(){ if (window._procWizStep < MAX) window.procWizGo(window._procWizStep + 1); };
+    window.procWizPrev = function(){ if (window._procWizStep > 1) window.procWizGo(window._procWizStep - 1); };
+    // Initialise immediately (all step nodes precede this script in the DOM).
+    window.procWizGo(1);
+  })();
+  </script>
+
+  <!-- Batch queue JS -->
+  <script>
+  window._batchQueue = window._batchQueue || [];
+  window._procRunning = false;       // currently processing a task?
+  window._procAutoDrain = false;     // auto-drain mode
+  window._procCurrentTaskId = null;  // id of task currently in progress
+  function _addProcTask(type) {
+    const urlEl = document.getElementById('proc-url');
+    const pathEl = document.getElementById('proc-video');
+    const val = (type === 'url') ? urlEl?.value.trim() : pathEl?.value.trim();
+    if (!val) { toast('Vui lòng nhập URL hoặc chọn file', 'warning'); return; }
+    window._batchQueue.push({ id: 'bt-'+Date.now(), type, val, status: 'pending' });
+    if (type === 'url' && urlEl) urlEl.value = '';
+    _renderBatchQueue();
+    toast('Đã thêm vào hàng chờ', 'success');
+    // If auto-drain is on and idle, kick off processing
+    if (window._procAutoDrain && !window._procRunning) {
+      _runBatchQueueFlow();
+    }
+  }
+  function _renderBatchQueue() {
+    const list = document.getElementById('batch-queue-list');
+    const cnt = document.getElementById('batch-count');
+    if (cnt) cnt.textContent = window._batchQueue.length;
+    if (!list) return;
+    if (!window._batchQueue.length) {
+      list.innerHTML = '<div class="empty-state text-xs">Chưa có task nào.</div>';
+      if (typeof pBschedRecalcPreview === 'function') pBschedRecalcPreview();
+      return;
+    }
+    list.innerHTML = window._batchQueue.map((t,i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
+        <span style="color:var(--text-muted)">${t.type==='url'?'🔗':'📄'}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
+        <span class="badge ${t.status==='done'?'badge-green':t.status==='error'?'badge-red':t.status==='processing'?'badge-yellow':'badge-gray'}">${t.status}</span>
+        <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px" ${t.status==='processing'?'disabled':''}>✕</button>
+      </div>`).join('');
+    if (typeof pBschedRecalcPreview === 'function') pBschedRecalcPreview();
+  }
+
+  function _onAutoDrainToggle() {
+    const on = document.getElementById('batch-auto-drain')?.checked;
+    window._procAutoDrain = !!on;
+    const status = document.getElementById('batch-drain-status');
+    if (status) {
+      status.textContent = on
+        ? '🔁 Đang bật — sẽ tự động xử lý video mới thêm vào.'
+        : '';
+    }
+    if (on && !window._procRunning) {
+      // Start draining the current queue
+      _runBatchQueueFlow();
+    }
+  }
+
+  function _pickNextPendingTask() {
+    return window._batchQueue.find(t => t.status !== 'done' && t.status !== 'error' && t.status !== 'processing');
+  }
+
+  function _runBatchQueueFlow() {
+    if (window._procRunning) {
+      // Safety: if the button says "Xử lý Video" (not disabled), the previous
+      // task likely finished without properly resetting _procRunning (e.g. network
+      // error, preflight cancel, or empty path). Force-reset so queue can continue.
+      const btn = document.getElementById('btn-proc');
+      if (btn && !btn.disabled) {
+        console.warn('[BatchQueue] _procRunning was stuck — force resetting');
+        window._procRunning = false;
+        // Also mark the "processing" task as error so it doesn't block
+        const stuck = window._batchQueue.find(t => t.status === 'processing');
+        if (stuck) stuck.status = 'error';
+        _renderBatchQueue();
+      } else {
+        toast('Đang xử lý — vui lòng đợi', 'info');
+        return;
+      }
+    }
+    const next = _pickNextPendingTask();
+    if (!next) {
+      if (window._procAutoDrain) {
+        // Keep waiting for new items
+        toast('Hàng chờ trống — đang chờ video mới...', 'info');
+      } else {
+        toast('Hàng chờ trống', 'warning');
+      }
+      return;
+    }
+
+    // Reset batch schedule counter only at the start of a fresh batch
+    // (auto-drain keeps counter incremented across videos for consistent scheduling)
+    if (window._pBschedCounter == null) window._pBschedCounter = 0;
+    // Reset cancel flag at start of each batch — user can cancel via upload error modal
+    window._pPubCancelled = false;
+
+    next.status = 'processing';
+    window._procCurrentTaskId = next.id;
+    window._procRunning = true;
+    _renderBatchQueue();
+
+    toast(`Bắt đầu xử lý: ${next.desc || next.val}`, 'info');
+
+    if (next.type === 'url') {
+      const urlEl = document.getElementById('proc-url');
+      const pathEl = document.getElementById('proc-video');
+      if (urlEl) urlEl.value = next.val;
+      if (pathEl) pathEl.value = '';
+    } else {
+      const pathEl = document.getElementById('proc-video');
+      const urlEl = document.getElementById('proc-url');
+      if (pathEl) pathEl.value = next.val;
+      if (urlEl) urlEl.value = '';
+    }
+    startProcessVideo();
+  }
+
+  /** Called from app.js when a video finishes processing (success OR error) */
+  window._onProcTaskFinished = function(ok) {
+    const id = window._procCurrentTaskId;
+    if (id) {
+      const t = window._batchQueue.find(x => x.id === id);
+      if (t) {
+        t.status = ok ? 'done' : 'error';
+        if (!ok) {
+          _appendProcLog?.(`⚠ Task "${t.desc || t.val}" thất bại — chuyển sang task tiếp theo`, 'warning');
+        }
+      }
+    }
+    window._procCurrentTaskId = null;
+    window._procRunning = false;
+    _renderBatchQueue();
+
+    // Auto-drain: immediately pick the next pending task (or wait if none)
+    if (window._procAutoDrain) {
+      const next = _pickNextPendingTask();
+      if (next) {
+        // Small delay to let UI breathe
+        setTimeout(() => _runBatchQueueFlow(), 800);
+      } else {
+        const status = document.getElementById('batch-drain-status');
+        if (status) status.textContent = '🔁 Đang chờ video mới...';
+      }
+    } else {
+      // Reset session-only skip flag when a manual batch ends
+      // (so "Bỏ qua" doesn't carry over to the next separate batch)
+      window._procSkipReviewSession = false;
+    }
+  };
+
+  /* ── ASS Review ── */
+  // Session-only skip flag: resets when user manually starts a fresh batch
+  // (auto-drain keeps it across videos so "Bỏ qua" applies to the rest of the run)
+  window._procSkipReviewSession = false;
+  window._procReviewResolve = null; // Promise resolver waiting for user confirm
+  window._procAssPath = '';
+  // Remove legacy persistent flag (migration from previous version)
+  try { localStorage.removeItem('proc_skip_review'); } catch (_) {}
+
+  function procAssReviewSkipAlways() {
+    window._procSkipReviewSession = true;
+    toast('Đã bỏ qua — các video tiếp theo trong lần chạy này sẽ không hỏi nữa', 'info');
+    procAssReviewContinue();
+  }
+
+  async function procAssReviewContinue() {
+    // Save edited content back to server
+    const content = document.getElementById('proc-ass-review-content')?.value;
+    const path    = window._procAssPath;
+    if (typeof content === 'string' && path) {
+      try {
+        const res = await fetch('/api/proc_save_ass', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, content })
+        });
+        const rd = await res.json().catch(() => ({}));
+        if (!res.ok || rd.ok === false) {
+          toast('Lưu ASS thất bại, chưa tiếp tục xử lý để tránh dùng file cũ', 'error');
+          return;
+        }
+        window._publishLastSubtitlePath = path;
+      } catch (_) {
+        toast('Lưu ASS thất bại, chưa tiếp tục xử lý để tránh dùng file cũ', 'error');
+        return;
+      }
+    }
+    // Hide review panel
+    const card = document.getElementById('proc-ass-review-card');
+    if (card) card.style.display = 'none';
+
+    // ── Auto-publish hook: let AI read ASS and fill publish form ──
+    if (typeof pPubOnAssConfirmed === 'function') {
+      // Fire-and-forget — don't block pipeline resume
+      pPubOnAssConfirmed(path, content).catch(() => {});
+    }
+
+    // Show thumbnail picker (instead of resuming directly)
+    const thumbCard = document.getElementById('proc-thumb-pick-card');
+    if (thumbCard) {
+      thumbCard.style.display = 'block';
+      thumbCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      // Fallback: no thumbnail picker → resume directly
+      _procDoResume();
+    }
+  }
+
+  async function _procDoResume() {
+    if (window._procReviewResolve) {
+      window._procReviewResolve('continue');
+      window._procReviewResolve = null;
+    }
+    try {
+      await fetch('/api/proc_resume', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'continue' })
+      });
+    } catch (_) {}
+  }
+
+  // ── Thumbnail picker (after ASS review) ────────────────────────────
+  function procThumbPickModeChange() {
+    const mode = document.querySelector('input[name="proc-thumb-pick-mode"]:checked')?.value || 'none';
+    const frameOpts  = document.getElementById('proc-thumb-pick-frame-opts');
+    const importOpts = document.getElementById('proc-thumb-pick-import-opts');
+    const common     = document.getElementById('proc-thumb-pick-common');
+    if (frameOpts)  frameOpts.style.display  = (mode === 'frame') ? 'block' : 'none';
+    if (importOpts) importOpts.style.display = (mode === 'import') ? 'block' : 'none';
+    if (common)     common.style.display     = (mode !== 'none') ? 'block' : 'none';
+  }
+
+  function procThumbPickPreview() {
+    const file = document.getElementById('proc-thumb-pick-file')?.files?.[0];
+    const img  = document.getElementById('proc-thumb-pick-preview');
+    if (!file || !img) return;
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; img.style.display = 'block'; };
+    reader.readAsDataURL(file);
+  }
+
+  async function procThumbPickContinue() {
+    const mode = document.querySelector('input[name="proc-thumb-pick-mode"]:checked')?.value || 'none';
+    const cfg = { thumb_enabled: mode !== 'none', thumb_mode: mode };
+
+    if (mode === 'frame') {
+      cfg.thumb_timestamp = parseFloat(document.getElementById('proc-thumb-pick-ts')?.value || 5);
+    } else if (mode === 'import') {
+      const file = document.getElementById('proc-thumb-pick-file')?.files?.[0];
+      if (!file) {
+        toast('Vui lòng chọn file ảnh', 'warning');
+        return;
+      }
+      // Upload the file first
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('type', 'thumbnail');
+        const r = await fetch('/api/upload_anti_fp_image', { method: 'POST', body: form });
+        const d = await r.json();
+        if (!d.ok) {
+          toast('Upload ảnh thất bại: ' + (d.error || ''), 'error');
+          return;
+        }
+        cfg.thumb_path = d.path;
+      } catch (e) {
+        toast('Lỗi upload ảnh: ' + e.message, 'error');
+        return;
+      }
+    }
+
+    if (mode !== 'none') {
+      cfg.thumb_title    = document.getElementById('proc-thumb-pick-title')?.value || '';
+      cfg.thumb_duration = parseFloat(document.getElementById('proc-thumb-pick-duration')?.value || 2);
+    }
+
+    // Send config to server, then resume
+    try {
+      await fetch('/api/proc_set_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg)
+      });
+    } catch (_) {}
+
+    const card = document.getElementById('proc-thumb-pick-card');
+    if (card) card.style.display = 'none';
+    await _procDoResume();
+  }
+
+  async function procThumbPickSkip() {
+    try {
+      await fetch('/api/proc_set_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thumb_enabled: false, thumb_mode: 'none' })
+      });
+    } catch (_) {}
+    const card = document.getElementById('proc-thumb-pick-card');
+    if (card) card.style.display = 'none';
+    await _procDoResume();
+  }
+
+  // ── Thumbnail failure recovery (when AI thumbnail fails mid-pipeline) ──
+  function _showThumbFailCard() {
+    const card = document.getElementById('proc-thumb-fail-card');
+    if (card) {
+      card.style.display = 'block';
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function _hideThumbFailCard() {
+    const card = document.getElementById('proc-thumb-fail-card');
+    if (card) card.style.display = 'none';
+    const fileInput = document.getElementById('proc-thumb-fail-file');
+    if (fileInput) fileInput.value = '';
+    const preview = document.getElementById('proc-thumb-fail-preview');
+    if (preview) { preview.src = ''; preview.style.display = 'none'; }
+  }
+
+  async function procThumbFailRetry() {
+    _hideThumbFailCard();
+    toast('🔄 Đang thử tạo lại thumbnail AI...', 'info');
+    try {
+      await fetch('/api/proc_retry_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retry' })
+      });
+    } catch (e) {
+      toast('Lỗi gửi yêu cầu retry: ' + e.message, 'error');
+    }
+  }
+
+  async function procThumbFailUpload() {
+    const file = document.getElementById('proc-thumb-fail-file')?.files?.[0];
+    if (!file) return;
+    // Show preview
+    try {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = document.getElementById('proc-thumb-fail-preview');
+        if (img) { img.src = e.target.result; img.style.display = 'block'; }
+      };
+      reader.readAsDataURL(file);
+    } catch (_) {}
+
+    // Upload to server
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('type', 'thumbnail');
+      const r = await fetch('/api/upload_anti_fp_image', { method: 'POST', body: form });
+      const d = await r.json();
+      if (!d.ok) {
+        toast('Upload ảnh thất bại: ' + (d.error || ''), 'error');
+        return;
+      }
+      // Tell pipeline to use this image
+      await fetch('/api/proc_retry_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'upload', path: d.path })
+      });
+      _hideThumbFailCard();
+      toast('✓ Đã gửi ảnh thay thế cho pipeline', 'success');
+    } catch (e) {
+      toast('Lỗi upload ảnh: ' + e.message, 'error');
+    }
+  }
+
+  async function procThumbFailSkip() {
+    _hideThumbFailCard();
+    try {
+      await fetch('/api/proc_retry_thumb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'skip' })
+      });
+    } catch (_) {}
+    toast('Đã bỏ qua thumbnail', 'info');
+  }
+
+  async function _triggerFrameVideo() {
+    // Get the current video being processed
+    const videoPath = window._publishLastOutputPath
+                   || document.getElementById('proc-video')?.value?.trim();
+    if (!videoPath) return;
+
+    // Upload logo if selected
+    let logoPath = '';
+    if (window._frameLogoFile) {
+      try {
+        const form = new FormData();
+        form.append('file', window._frameLogoFile);
+        form.append('type', 'logo');
+        const r = await fetch('/api/upload_anti_fp_image', { method: 'POST', body: form });
+        const d = await r.json();
+        if (d.ok) logoPath = d.path;
+      } catch (_) {}
+    }
+
+    const payload = {
+      video_path:     videoPath,
+      title:          document.getElementById('frame-title')?.value || '',
+      title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
+      title_color:    document.getElementById('frame-title-color')?.value || '#000000',
+      blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
+      blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
+      blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
+      logo_path:      logoPath,
+      logo_size_pct:  parseFloat(document.getElementById('frame-logo-size')?.value || 12),
+      logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
+      logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
+      logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
+    };
+
+    _appendProcLog('🎞 Đang tạo khung video...', 'info');
+    try {
+      const res  = await fetch('/api/make_vertical_video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.ok) {
+        _appendProcLog('✅ Khung video: ' + data.output_path, 'success');
+        window._publishLastOutputPath = data.output_path;
+      } else {
+        _appendProcLog('❌ Tạo khung thất bại: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      _appendProcLog('❌ Lỗi tạo khung: ' + e.message, 'error');
+    }
+  }
+
+  function _showAssReview(assPath, content) {
+    window._procAssPath = assPath;
+    const card = document.getElementById('proc-ass-review-card');
+    const pathEl = document.getElementById('proc-ass-review-path');
+    const ta = document.getElementById('proc-ass-review-content');
+    if (pathEl) pathEl.textContent = '📄 ' + assPath;
+    if (ta) ta.value = content || '';
+    if (card) { card.style.display = 'block'; card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  }
+
+  /* ── Pause / Resume ── */
+  window._procPaused = false;
+  window._procReader = null; // current stream reader
+
+  function procTogglePause() {
+    const btn = document.getElementById('btn-proc-pause');
+    if (!window._procPaused) {
+      window._procPaused = true;
+      if (btn) { btn.textContent = '▶ Tiếp tục'; btn.style.background = 'var(--success)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--success)'; }
+      toast('⏸ Đã dừng — bấm Tiếp tục để tiếp tục', 'info');
+      // Signal server to pause
+      fetch('/api/proc_resume', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause' })
+      }).catch(() => {});
+    } else {
+      window._procPaused = false;
+      if (btn) { btn.textContent = '⏸ Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; }
+      toast('▶ Tiếp tục xử lý', 'info');
+      fetch('/api/proc_resume', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resume' })
+      }).catch(() => {});
+    }
+  }
+
+  function _procShowPauseBtn(show) {
+    const btn = document.getElementById('btn-proc-pause');
+    if (btn) btn.style.display = show ? 'inline-flex' : 'none';
+    if (!show) { window._procPaused = false; if (btn) { btn.textContent = '⏸ Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; } }
+  }
+
+  /* ── Subtitle Preview ── */
+  let _subPreviewTimer = null;
+
+  function subPreviewUpdate() {
+    if (document.getElementById('frame-enabled')?.checked) {
+      framePreviewUpdate(); // re-draw canvas including subtitle
+    } else {
+      _renderSubOverlay();
+    }
+  }
+
+  // ── Color picker sync ──
+  const _colorPresets = { white:'#ffffff', yellow:'#ffff00', cyan:'#00ffff' };
+  function _syncColorPicker() {
+    const sel = document.getElementById('proc-font-color');
+    const picker = document.getElementById('proc-font-color-picker');
+    if (!sel || !picker) return;
+    if (sel.value !== 'custom') {
+      picker.value = _colorPresets[sel.value] || '#ffffff';
+    }
+    subPreviewUpdate();
+  }
+  function _onColorPickerChange() {
+    const sel = document.getElementById('proc-font-color');
+    if (sel) sel.value = 'custom';
+    subPreviewUpdate();
+  }
+  function _getSubtitleColor() {
+    const sel = document.getElementById('proc-font-color');
+    const picker = document.getElementById('proc-font-color-picker');
+    if (sel?.value === 'custom' && picker) return picker.value;
+    return _colorPresets[sel?.value] || '#ffffff';
+  }
+  // Init picker on load
+  document.addEventListener('DOMContentLoaded', () => { _syncColorPicker(); });
+
+  function _getPreviewVideoPath() {
+    // Priority: uploaded file path → first item in batch queue (file type) → proc-video field
+    if (window._procUploadedPath) {
+      return { type: 'file', val: window._procUploadedPath };
+    }
+    if (window._batchQueue && window._batchQueue.length > 0) {
+      const first = window._batchQueue[0];
+      if (first.type === 'file' && first.val) return { type: 'file', val: first.val };
+      if (first.type === 'url'  && first.val) return { type: 'url',  val: first.val };
+    }
+    const v = document.getElementById('proc-video')?.value?.trim();
+    if (v) return { type: 'file', val: v };
+    return null;
+  }
+
+  function _renderSubOverlay() {
+    const wrap    = document.getElementById('sub-preview-wrap');
+    const overlay = document.getElementById('sub-preview-text');
+    const blurEl  = document.getElementById('sub-preview-blur');
+    if (!overlay || !wrap) return;
+
+    // Trạng thái "Ghi phụ đề"
+    const burnOn   = document.getElementById('proc-burn')?.checked ?? true;
+    const burnViOn = document.getElementById('proc-burn-vi')?.checked ?? true;
+
+    // Khi frame mode bật, subtitle + vùng che được vẽ trên canvas → bỏ DOM overlay
+    if (document.getElementById('frame-enabled')?.checked) {
+      if (overlay) overlay.style.display = 'none';
+      if (blurEl)  blurEl.style.display  = 'none';
+      const blurC = document.getElementById('sub-preview-blur-canvas');
+      if (blurC) blurC.style.display = 'none';
+      // Xoá các div vùng che bổ sung của DOM để không bị hiển thị 2 lớp (canvas + DOM)
+      wrap.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
+      return;
+    }
+
+    const img = document.getElementById('sub-preview-img');
+    if (!img || img.style.display === 'none') return; // no frame yet
+
+    const sample   = document.getElementById('sub-preview-sample')?.value || 'Phụ đề mẫu';
+    const fontSize = parseInt(document.getElementById('proc-font-size')?.value || 32);
+    const color    = document.getElementById('proc-font-color')?.value || 'white';
+    const marginV  = parseInt(document.getElementById('proc-margin-v')?.value || 20);
+    const pos      = document.getElementById('proc-sub-pos')?.value || 'bottom';
+    const blurOn   = document.getElementById('proc-blur-original')?.checked || false;
+
+    // Actual rendered image dimensions — use getBoundingClientRect for accuracy
+    const imgW = img.naturalWidth  || 1280;
+    const imgH = img.naturalHeight || 720;
+    const rect  = img.getBoundingClientRect();
+    // getBoundingClientRect returns 0 if element not visible — fallback to offsetWidth
+    const dispW = (rect.width  > 0 ? rect.width  : img.offsetWidth)  || wrap.offsetWidth || 640;
+    const dispH = (rect.height > 0 ? rect.height : img.offsetHeight) || Math.round(dispW * imgH / imgW);
+
+    // font_size and margin_v are % of video height.
+    // Apply same % to dispH → preview always matches real video proportionally.
+    const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
+    const marginPct = parseFloat(document.getElementById('proc-margin-v')?.value  || 3);
+    const scaledFont   = Math.max(6, Math.round(dispH * fontPct   / 100));
+    const scaledMargin = Math.max(2, Math.round(dispH * marginPct / 100));
+
+    const colorMap = { white: '#ffffff', yellow: '#ffff00', cyan: '#00ffff' };
+    const cssColor = (typeof _getSubtitleColor === 'function')
+      ? _getSubtitleColor()
+      : (colorMap[color] || '#ffffff');
+
+    // ── Blur zone: covers original subtitle area ──
+    const blurH    = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
+    const blurW    = 0.80;
+    const blurYOverride = document.getElementById('proc-blur-y')?.value?.trim();
+    // Calculate blur position
+    const videoH = imgH || 720;
+    const subHeightPx = Math.round(videoH * fontPct / 100) + 4;
+    const marginVPx   = Math.round(videoH * marginPct / 100);
+
+    let blurTopPct; // position from top as fraction (0-1)
+    if (blurYOverride !== '' && blurYOverride !== undefined) {
+      // Manual override: Y% = position of center of blur zone from top
+      blurTopPct = Math.max(0, Math.min(1, parseFloat(blurYOverride) / 100 - blurH / 2));
+    } else {
+      // Auto: center around subtitle position
+      if (pos === 'bottom') {
+        const subY = videoH - marginVPx - Math.round(subHeightPx / 2);
+        blurTopPct = Math.max(0, (subY - Math.round(videoH * blurH / 2)) / videoH);
+      } else {
+        const subY = marginVPx + Math.round(subHeightPx / 2);
+        blurTopPct = Math.max(0, (subY - Math.round(videoH * blurH / 2)) / videoH);
+      }
+    }
+
+    const bH    = Math.round(dispH * blurH);
+    const bW    = Math.round(dispW * blurW);
+    const bLeft = Math.round(dispW * (1 - blurW) / 2);
+    const bTop  = Math.round(dispH * blurTopPct);
+
+    // Canvas-based pixel blur (matches real FFmpeg blur effect)
+    const canvas = document.getElementById('sub-preview-blur-canvas');
+    const _posBlur = (el) => {
+      el.style.width  = bW + 'px';
+      el.style.height = bH + 'px';
+      el.style.left   = bLeft + 'px';
+      el.style.right  = 'auto';
+      el.style.top    = bTop + 'px';
+      el.style.bottom = 'auto';
+    };
+
+    if (blurOn && canvas && img.complete && img.naturalWidth > 0) {
+      canvas.width  = bW;
+      canvas.height = bH;
+      canvas.style.display = 'block';
+      _posBlur(canvas);
+
+      // Compute source region in natural image coords
+      const wrapRect = wrap.getBoundingClientRect();
+      const imgRect  = img.getBoundingClientRect();
+      // img may be offset inside wrap (e.g. flex centering)
+      const imgOffX = imgRect.left - wrapRect.left;
+      const imgOffY = imgRect.top  - wrapRect.top;
+      const scaleX  = imgW / (imgRect.width  || dispW);
+      const scaleY  = imgH / (imgRect.height || dispH);
+
+      const canvasLeft   = bLeft - imgOffX;
+      const canvasTop    = bTop - imgOffY;
+
+      const sx = Math.round(canvasLeft * scaleX);
+      const sy = Math.round(canvasTop  * scaleY);
+      const sw = Math.round(bW * scaleX);
+      const sh = Math.round(bH * scaleY);
+
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, bW, bH);
+      ctx.filter = 'blur(10px)';
+      ctx.drawImage(img, Math.max(0,sx), Math.max(0,sy), Math.max(1,sw), Math.max(1,sh),
+                    -10, -10, bW + 20, bH + 20);
+      ctx.filter = 'none';
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(0, 0, bW, bH);
+      if (blurEl) blurEl.style.display = 'none';
+    } else if (blurOn && blurEl) {
+      blurEl.style.display = 'block';
+      _posBlur(blurEl);
+      if (canvas) canvas.style.display = 'none';
+    } else {
+      if (blurEl) blurEl.style.display = 'none';
+      if (canvas) canvas.style.display = 'none';
+    }
+
+    // ── Subtitle text: positioned by margin_v from edge, above blur zone ──
+    overlay.style.display    = (burnOn && burnViOn) ? 'block' : 'none';
+    overlay.style.fontSize   = scaledFont + 'px';
+    overlay.style.color      = cssColor;
+    // Outline via text-shadow (matches FFmpeg outline rendering)
+    overlay.style.textShadow = [
+      '1px 1px 2px #000', '-1px -1px 2px #000',
+      '1px -1px 2px #000', '-1px 1px 2px #000',
+      '0 2px 4px rgba(0,0,0,0.8)'
+    ].join(',');
+    overlay.style.fontWeight  = '700';
+    overlay.style.fontFamily  = 'Arial, sans-serif';
+    overlay.style.lineHeight  = '1.3';
+    overlay.style.wordBreak   = 'break-word';
+    overlay.style.padding     = '0 12px';
+    overlay.style.background  = 'none';
+
+    if (pos === 'top') {
+      overlay.style.top    = scaledMargin + 'px';
+      overlay.style.bottom = 'auto';
+    } else {
+      overlay.style.bottom = scaledMargin + 'px';
+      overlay.style.top    = 'auto';
+    }
+    overlay.textContent = sample;
+
+    // ── Render extra blur zones on preview ──
+    // Remove old extra blur elements
+    wrap.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
+    if (blurOn && window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
+      window._procExtraBlurZones.forEach(zone => {
+        const zH = (zone.height || 12) / 100;
+        const zY = (zone.position || 50) / 100 - zH / 2;
+        const zW = (zone.width || 80) / 100;
+        const zXc = ((zone.x === undefined || zone.x === null) ? 50 : zone.x) / 100;
+        const zLeftFrac = Math.max(0, Math.min(1 - zW, zXc - zW / 2));
+        const ezH = Math.round(dispH * zH);
+        const ezW = Math.round(dispW * zW);
+        const ezLeft = Math.round(dispW * zLeftFrac);
+        const ezTop = Math.round(dispH * Math.max(0, Math.min(1 - zH, zY)));
+        const div = document.createElement('div');
+        div.className = 'extra-blur-zone';
+        div.dataset.zoneId = zone.id;
+        div.style.cssText = `position:absolute;left:${ezLeft}px;top:${ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);`;
+        ['e','s','se'].forEach(function(edge){
+          const hd = document.createElement('div');
+          hd.className = 'pe2-handle ' + edge;
+          hd.dataset.pe2handle = edge;
+          div.appendChild(hd);
+        });
+        wrap.appendChild(div);
+      });
+    }
+    if (typeof window.pe2ApplySelection === 'function') window.pe2ApplySelection();
+  }
+
+  async function subPreviewFetchFrame() {
+    const source = _getPreviewVideoPath();
+    if (!source) { toast('Chưa có video trong hàng chờ hoặc chưa chọn file', 'warning'); return; }
+
+    const ts  = parseFloat(document.getElementById('sub-preview-ts')?.value || 5);
+    const img = document.getElementById('sub-preview-img');
+    const ph  = document.getElementById('sub-preview-placeholder');
+    const btn = document.querySelector('[onclick="subPreviewFetchFrame()"]');
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    if (ph)  ph.textContent = 'Đang tải frame...';
+
+    try {
+      let endpoint, body;
+
+      if (source.type === 'file') {
+        endpoint = '/api/video_frame';
+        body = { video_path: source.val, timestamp: ts };
+      } else {
+        // URL: find latest downloaded mp4 in Downloaded folder
+        endpoint = '/api/video_frame_from_url';
+        body = { url: source.val, timestamp: ts };
+      }
+
+      const res  = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.ok && data.image) {
+        if (img) {
+          img.onload = () => {
+            // ── Detect aspect ratio of source video and auto-apply preset ──
+            try {
+              const w = img.naturalWidth || 0;
+              const h = img.naturalHeight || 0;
+              if (w && h) {
+                const detected = _classifyAspect(w, h);
+                const override = (typeof _getAspectOverride === 'function') ? _getAspectOverride() : 'auto';
+                const target   = (override === 'auto') ? detected : override;
+                if (target !== window._procActiveAspect) {
+                  window._procActiveAspect = target;
+                  // Auto-apply matching preset (silent if not yet saved)
+                  if (typeof _applyPresetForActiveAspect === 'function') {
+                    _applyPresetForActiveAspect({ silent: true });
+                  }
+                }
+                if (typeof _updateAspectBadge === 'function') _updateAspectBadge();
+              }
+
+              // If preview-aspect select is in 'auto' mode, re-apply layout
+              const aspectSel = document.getElementById('proc-preview-aspect');
+              if (aspectSel?.value === 'auto' && typeof _onPreviewAspectChange === 'function') {
+                _onPreviewAspectChange();
+              }
+            } catch (_) {}
+
+            const frameOn = document.getElementById('frame-enabled')?.checked;
+            const cv = document.getElementById('frame-preview-canvas');
+            if (frameOn) {
+              // Frame mode: hide img visually but keep it rendered for naturalWidth
+              img.style.display = 'block';
+              img.style.position = 'absolute';
+              img.style.opacity = '0';
+              img.style.pointerEvents = 'none';
+              if (cv) cv.style.display = 'block';
+              framePreviewUpdate();
+            } else {
+              // Subtitle mode: show img normally
+              img.style.display = 'block';
+              img.style.position = '';
+              img.style.opacity = '';
+              img.style.pointerEvents = '';
+              if (cv) cv.style.display = 'none';
+              _renderSubOverlay();
+            }
+          };
+          img.src = data.image;
+          img.style.display = 'block';
+          // Lưu ảnh gốc không có logo để dùng cho AI thumbnail
+          if (data.image && data.image.startsWith('data:image/')) {
+            window._rawFrameB64 = data.image.split(',')[1] || null;
+          } else {
+            window._rawFrameB64 = null;
+          }
+        }
+        if (ph) ph.style.display = 'none';
+        if (data.source === 'thumbnail') {
+          toast('📷 Đã lấy thumbnail từ URL', 'success');
+        }
+      } else {
+        if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'Không lấy được frame'; }
+        toast('Không lấy được frame: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
+      toast('Lỗi: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '📷 Lấy frame'; }
+    }
+  }
+
+  function _addCurrentToQueue() {
+    const urlEl  = document.getElementById('proc-url');
+    const pathEl = document.getElementById('proc-video');
+    const url    = urlEl?.value?.trim();
+    const path   = pathEl?.value?.trim();
+
+    if (!url && !path) { toast('Vui lòng nhập URL hoặc chọn file video', 'warning'); return; }
+
+    if (url) {
+      window._batchQueue.push({ id: 'bt-' + Date.now(), type: 'url', val: url, status: 'pending' });
+      urlEl.value = '';
+      toast('✅ Đã thêm URL vào hàng chờ', 'success');
+    } else {
+      window._batchQueue.push({ id: 'bt-' + Date.now(), type: 'file', val: path, status: 'pending' });
+      toast('✅ Đã thêm file vào hàng chờ', 'success');
+    }
+    _renderBatchQueue();
+
+    // Auto-fetch preview frame from first queue item
+    setTimeout(() => subPreviewFetchFrame(), 300);
+  }
+
+  // Re-render overlay on resize
+  window.addEventListener('resize', () => {
+    if (document.getElementById('sub-preview-img')?.style.display !== 'none') _renderSubOverlay();
+    framePreviewUpdate();
+  });
+
+  // Re-render when "Che phụ đề gốc" or "Ghi phụ đề" checkbox changes
+  document.addEventListener('DOMContentLoaded', () => {
+    const blurChk = document.getElementById('proc-blur-original');
+    if (blurChk) blurChk.addEventListener('change', () => _renderSubOverlay());
+    const burnChk = document.getElementById('proc-burn');
+    if (burnChk) burnChk.addEventListener('change', () => _renderSubOverlay());
+    const burnViChk = document.getElementById('proc-burn-vi');
+    if (burnViChk) burnViChk.addEventListener('change', () => _renderSubOverlay());
+  });
+
+  /* ════════════════════════════════════════════════════════
+     FRAME VIDEO EDITOR — Canvas Preview
+  ════════════════════════════════════════════════════════ */
+  window._frameLogoImg  = null;
+  window._frameLogoFile = null;
+  window._rawFrameB64   = null; // Ảnh gốc từ video (không có logo) — dùng cho AI thumbnail
+
+  function frameSetLogo(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    window._frameLogoFile = file;
+    document.getElementById('frame-logo-path').value = file.name;
+
+    // Upload to server immediately so backend can use it
+    const form = new FormData();
+    form.append('file', file);
+    form.append('type', 'logo');
+    fetch('/api/upload_anti_fp_image', { method: 'POST', body: form })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          // Store server path as data attribute
+          document.getElementById('frame-logo-path').dataset.serverPath = d.path;
+        }
+      }).catch(() => {});
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => { window._frameLogoImg = img; framePreviewUpdate(); };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  function _roundRect(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y,     x + w, y + r,     r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x,     y + h, x,     y + h - r, r);
+    ctx.lineTo(x,     y + r);
+    ctx.arcTo(x,     y,     x + r, y,         r);
+    ctx.closePath();
+  }
+
+  function framePreviewUpdate() {
+    if (!document.getElementById('frame-enabled')?.checked) return;
+    const srcImg = document.getElementById('sub-preview-img');
+    if (!srcImg || !srcImg.complete || !srcImg.naturalWidth) return;
+    _drawFramePreview(srcImg);
+  }
+
+  function _drawFramePreview(srcImg) {
+    const canvas = document.getElementById('frame-preview-canvas');
+    if (!canvas) return;
+
+    const titleEnabled = document.getElementById('frame-title-enabled')?.checked ?? true;
+    const title       = titleEnabled ? (document.getElementById('frame-title')?.value || '') : '';
+    const titleSizePct= parseFloat(document.getElementById('frame-title-size')?.value || 5);
+    const titleColor  = document.getElementById('frame-title-color')?.value || '#000000';
+    const titleColor2 = document.getElementById('frame-title-color-2')?.value || '#ff0000';
+    const titleSplit  = document.getElementById('frame-title-split-color')?.checked ?? true;
+    const blurWPct    = parseFloat(document.getElementById('frame-blur-w')?.value || 15) / 100;
+    const blurOpacity = parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100;
+    const logoSizePct = parseFloat(document.getElementById('frame-logo-size')?.value || 12) / 100;
+    const logoTopPct  = parseFloat(document.getElementById('frame-logo-top')?.value || 3) / 100;
+    const logoLeftPct = parseFloat(document.getElementById('frame-logo-left')?.value || 3) / 100;
+    const logoRadiusPct = parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50) / 100;
+    const blurMode    = document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay';
+
+    const srcNW = srcImg.naturalWidth  || 640;
+    const srcNH = srcImg.naturalHeight || 360;
+    const wrap  = document.getElementById('sub-preview-wrap');
+    // Dùng độ phân giải video làm gốc vẽ (ổn định, không phụ thuộc kích thước hiển thị)
+    const wrapW = srcImg.naturalWidth || wrap?.offsetWidth || 640;
+
+    // Title bar — chỉ hiện nếu titleEnabled
+    const titleFontPx = titleEnabled ? Math.max(10, Math.round(wrapW * titleSizePct / 100)) : 0;
+    const titleBarH   = titleEnabled ? Math.round(titleFontPx * 2.4) : 0;
+
+    // Side blur width in preview pixels
+    const sideW = Math.round(wrapW * blurWPct);
+
+    // ── Mode: overlay — blur overlaps video, canvas = wrapW × (titleBarH + vidH) ──
+    // ── Mode: expand  — blur outside video, canvas = wrapW × (titleBarH + vidH),
+    //                    video shrinks to fit center ──
+    let cW, cH, vidX, vidY, vidW, vidH;
+
+    if (blurMode === 'expand') {
+      // Video area = wrapW - 2*sideW, keep AR
+      vidW = Math.max(10, wrapW - 2 * sideW);
+      vidH = Math.round(vidW * srcNH / srcNW);
+      vidX = sideW;
+      vidY = titleBarH;
+      cW   = wrapW;
+      cH   = titleBarH + vidH;
+    } else {
+      // overlay: video fills full width, blur overlaps
+      vidW = wrapW;
+      vidH = Math.round(wrapW * srcNH / srcNW);
+      vidX = 0;
+      vidY = titleBarH;
+      cW   = wrapW;
+      cH   = titleBarH + vidH;
+    }
+
+    canvas.width  = cW;
+    canvas.height = cH;
+    canvas.style.width  = '100%';
+    canvas.style.height = 'auto';
+    canvas.style.maxWidth = '100%';
+    // Khung preview tự co theo bố cục khung (có thanh tiêu đề / blur → tỉ lệ đổi)
+    if (wrap) wrap.style.aspectRatio = cW + ' / ' + cH;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, cW, cH);
+
+    // ── Draw main video ──
+    ctx.drawImage(srcImg, vidX, vidY, vidW, vidH);
+
+    // ── Draw blur panels ──
+    if (sideW > 0 && blurOpacity > 0) {
+      if (blurMode === 'expand') {
+        // Blur fills the side strips (outside video)
+        // Left: stretch left edge of video
+        ctx.save();
+        ctx.filter = 'blur(12px)';
+        // Draw a stretched slice of the video's left edge
+        ctx.drawImage(srcImg, 0, 0, Math.min(20, srcNW), srcNH,
+          0, vidY, sideW + 16, vidH);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        ctx.fillRect(0, vidY, sideW, vidH);
+
+        // Right
+        ctx.save();
+        ctx.filter = 'blur(12px)';
+        ctx.drawImage(srcImg, Math.max(0, srcNW - 20), 0, Math.min(20, srcNW), srcNH,
+          cW - sideW - 16, vidY, sideW + 16, vidH);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        ctx.fillRect(cW - sideW, vidY, sideW, vidH);
+      } else {
+        // overlay: blur overlaps left/right of video
+        // Left panel: draw blurred portion of video
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, vidY, sideW, vidH);
+        ctx.clip();
+        ctx.filter = 'blur(12px)';
+        ctx.drawImage(srcImg, vidX - 8, vidY, vidW + 16, vidH);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        ctx.fillRect(0, vidY, sideW, vidH);
+
+        // Right panel
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(cW - sideW, vidY, sideW, vidH);
+        ctx.clip();
+        ctx.filter = 'blur(12px)';
+        ctx.drawImage(srcImg, vidX - 8, vidY, vidW + 16, vidH);
+        ctx.restore();
+        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        ctx.fillRect(cW - sideW, vidY, sideW, vidH);
+      }
+    }
+
+    // ── Draw top/bottom blur strips ──
+    const blurTopPct    = parseFloat(document.getElementById('frame-blur-top')?.value || 0) / 100;
+    const blurBottomPct = parseFloat(document.getElementById('frame-blur-bottom')?.value || 0) / 100;
+
+    if (blurTopPct > 0 && blurOpacity > 0) {
+      const topH = Math.round(vidH * blurTopPct);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(vidX, vidY, vidW, topH);
+      ctx.clip();
+      ctx.filter = 'blur(12px)';
+      ctx.drawImage(srcImg, vidX - 8, vidY - 8, vidW + 16, topH + 16);
+      ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+      ctx.fillRect(vidX, vidY, vidW, topH);
+    }
+
+    if (blurBottomPct > 0 && blurOpacity > 0) {
+      const bottomH = Math.round(vidH * blurBottomPct);
+      const bottomY = vidY + vidH - bottomH;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(vidX, bottomY, vidW, bottomH);
+      ctx.clip();
+      ctx.filter = 'blur(12px)';
+      ctx.drawImage(srcImg, vidX - 8, bottomY - 8, vidW + 16, bottomH + 16);
+      ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+      ctx.fillRect(vidX, bottomY, vidW, bottomH);
+    }
+
+    // ── Title bar (chỉ vẽ nếu titleEnabled) ──
+    if (titleEnabled && titleBarH > 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, cW, titleBarH);
+    }
+
+    if (titleEnabled && title) {
+      ctx.font = `bold ${titleFontPx}px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const maxW = cW * 0.9;
+      const upper = title.toUpperCase();
+
+      // Build lines with word wrap
+      const words = upper.split(' ');
+      let lines = [], line = '';
+      for (const w of words) {
+        const test = line ? line + ' ' + w : w;
+        if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+        else line = test;
+      }
+      if (line) lines.push(line);
+      const lH = titleFontPx * 1.3;
+      const startY = (titleBarH - lines.length * lH) / 2 + lH / 2;
+
+      if (titleSplit && upper.length > 1) {
+        // Split-color rendering: split at "|" or at word midpoint across the full title
+        let part1, part2;
+        if (upper.includes('|')) {
+          const p = upper.split('|');
+          part1 = p[0].trim();
+          part2 = p.slice(1).join('|').trim();
+        } else {
+          const ws = upper.split(/\s+/).filter(Boolean);
+          if (ws.length >= 2) {
+            const mid = Math.floor(ws.length / 2);
+            part1 = ws.slice(0, mid).join(' ');
+            part2 = ws.slice(mid).join(' ');
+          } else {
+            part1 = upper; part2 = '';
+          }
+        }
+        const fullText = part2 ? part1 + ' ' + part2 : part1;
+
+        // Re-wrap fullText (without "|") for rendering
+        const rwWords = fullText.split(' ');
+        const rwLines = [];
+        let rl = '';
+        for (const w of rwWords) {
+          const test = rl ? rl + ' ' + w : w;
+          if (ctx.measureText(test).width > maxW && rl) { rwLines.push(rl); rl = w; }
+          else rl = test;
+        }
+        if (rl) rwLines.push(rl);
+        const sY = (titleBarH - rwLines.length * lH) / 2 + lH / 2;
+
+        // Render: walk through words; switch color when we pass part1's length
+        const part1Words = part1.split(' ').length;
+        let wordIdx = 0;
+
+        rwLines.forEach((l, i) => {
+          const lineWords = l.split(' ');
+          // Compute widths per word
+          const widths = lineWords.map(w => ctx.measureText(w).width);
+          const spaceW = ctx.measureText(' ').width;
+          const totalW = widths.reduce((a, b) => a + b, 0) + spaceW * (lineWords.length - 1);
+          let x = (cW - totalW) / 2;
+          const y = sY + i * lH;
+          lineWords.forEach((w, j) => {
+            ctx.fillStyle = (wordIdx < part1Words) ? titleColor : titleColor2;
+            ctx.textAlign = 'left';
+            ctx.fillText(w, x, y);
+            x += widths[j] + spaceW;
+            wordIdx++;
+          });
+        });
+        ctx.textAlign = 'center';
+      } else {
+        ctx.fillStyle = titleColor;
+        lines.forEach((l, i) => ctx.fillText(l, cW / 2, startY + i * lH));
+      }
+    }
+
+    // ── Logo: % of video height, keep original aspect ratio, position by % ──
+    if (window._frameLogoImg && logoSizePct > 0) {
+      const logoNW = window._frameLogoImg.naturalWidth  || window._frameLogoImg.width;
+      const logoNH = window._frameLogoImg.naturalHeight || window._frameLogoImg.height;
+      const logoAR = logoNW / (logoNH || 1);
+      const lH = Math.max(8, Math.round(vidH * logoSizePct));
+      const lW = Math.round(lH * logoAR);
+      const lX = Math.round(cW * logoLeftPct);
+      const lY = vidY + Math.round(vidH * logoTopPct);
+      // Border radius: % of shorter side (0%=square, 50%=circle)
+      const r  = Math.round(Math.min(lW, lH) * logoRadiusPct);
+      ctx.save();
+      ctx.beginPath();
+      _roundRect(ctx, lX, lY, lW, lH, r);
+      ctx.clip();
+      ctx.drawImage(window._frameLogoImg, lX, lY, lW, lH);
+      ctx.restore();
+    }
+
+    // ── Subtitle overlay on canvas (same as subtitle-only mode) ──
+    _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
+  }
+
+  function _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH) {
+    const sample    = document.getElementById('sub-preview-sample')?.value || '';
+    const burnOn    = document.getElementById('proc-burn')?.checked ?? true;
+    const burnViOn  = document.getElementById('proc-burn-vi')?.checked ?? true;
+
+    const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
+    const marginPct = parseFloat(document.getElementById('proc-margin-v')?.value  || 3);
+    const pos       = document.getElementById('proc-sub-pos')?.value || 'bottom';
+    const cssColor  = (typeof _getSubtitleColor === 'function') ? _getSubtitleColor() : '#ffffff';
+    const blurOn    = document.getElementById('proc-blur-original')?.checked || false;
+
+    // ── Draw blur zone (che phụ đề gốc) ──
+    if (blurOn) {
+      const blurZone = document.getElementById('proc-blur-zone')?.value || 'bottom';
+      if (blurZone !== 'none') {
+        const blurH = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
+        const blurW = 0.80;  // 80% of video width
+        const blurLift = 0.06;
+
+        const bH = Math.round(vidH * blurH);
+        const bW = Math.round(vidW * blurW);
+        const bX = vidX + Math.round(vidW * (1 - blurW) / 2);
+        const liftPx = Math.round(vidH * blurLift);
+
+        let bY;
+        const blurYOverride = document.getElementById('proc-blur-y')?.value?.trim();
+        if (blurYOverride !== '' && blurYOverride !== undefined) {
+          const blurTopPct = Math.max(0, Math.min(1, parseFloat(blurYOverride) / 100 - blurH / 2));
+          bY = vidY + Math.round(vidH * blurTopPct);
+        } else {
+          if (blurZone === 'top') {
+            bY = vidY + liftPx;
+          } else {
+            bY = vidY + vidH - bH - liftPx;
+          }
+        }
+
+        // Draw blurred region (simulate with semi-transparent dark overlay)
+        ctx.save();
+        ctx.filter = 'blur(8px)';
+        ctx.drawImage(ctx.canvas, bX, bY, bW, bH, bX - 4, bY - 4, bW + 8, bH + 8);
+        ctx.restore();
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(bX, bY, bW, bH);
+      }
+
+      // Draw extra blur zones
+      if (window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
+        window._procExtraBlurZones.forEach(zone => {
+          const zH = (zone.height || 12) / 100;
+          const zY = (zone.position || 50) / 100 - zH / 2;
+          const zW = (zone.width || 80) / 100;
+          const zXc = ((zone.x === undefined || zone.x === null) ? 50 : zone.x) / 100;
+          const zLeftFrac = Math.max(0, Math.min(1 - zW, zXc - zW / 2));
+
+          const ezH = Math.round(vidH * zH);
+          const ezW = Math.round(vidW * zW);
+          const ezX = vidX + Math.round(vidW * zLeftFrac);
+          const ezY = vidY + Math.round(vidH * Math.max(0, Math.min(1 - zH, zY)));
+
+          ctx.save();
+          ctx.filter = 'blur(8px)';
+          ctx.drawImage(ctx.canvas, ezX, ezY, ezW, ezH, ezX - 4, ezY - 4, ezW + 8, ezH + 8);
+          ctx.restore();
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.fillRect(ezX, ezY, ezW, ezH);
+        });
+      }
+    }
+
+    if (!sample || !burnOn || !burnViOn) return;
+
+    // Scale relative to video area height (same formula as _renderSubOverlay)
+    const scaledFont   = Math.max(6, Math.round(vidH * fontPct   / 100));
+    const scaledMargin = Math.max(2, Math.round(vidH * marginPct / 100));
+
+    ctx.font         = `bold ${scaledFont}px Arial, sans-serif`;
+    ctx.fillStyle    = cssColor;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = pos === 'top' ? 'top' : 'bottom';
+    ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur   = 4;
+    ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1;
+
+    const textX = vidX + vidW / 2;
+    const textY = pos === 'top'
+      ? vidY + scaledMargin
+      : vidY + vidH - scaledMargin;
+
+    // Word wrap within video width
+    const maxW = vidW * 0.9;
+    const words = sample.split(' ');
+    let lines = [], line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+      else line = test;
+    }
+    if (line) lines.push(line);
+
+    const lH = scaledFont * 1.3;
+    if (pos === 'top') {
+      lines.forEach((l, i) => ctx.fillText(l, textX, textY + i * lH));
+    } else {
+      // Draw from bottom up
+      lines.reverse().forEach((l, i) => ctx.fillText(l, textX, textY - i * lH));
+    }
+    ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     SAVE / RESTORE DEFAULTS — per aspect ratio (9:16 / 16:9)
+  ════════════════════════════════════════════════════════ */
+  const _PROC_DEFAULTS_KEY      = 'proc_settings_defaults_v1';      // legacy single preset
+  const _PROC_DEFAULTS_KEY_V2   = 'proc_settings_defaults_v2';      // { '9x16': {...}, '16x9': {...} }
+  const _PROC_ASPECT_OVERRIDE_K = 'proc_aspect_override_v1';        // 'auto' | '9x16' | '16x9'
+
+  // Currently active aspect ratio for save/restore. Set by:
+  //  - aspect override dropdown
+  //  - subPreviewFetchFrame() once it knows video dims
+  // Defaults to '16x9' until a video is detected.
+  window._procActiveAspect = '16x9';
+
+  /** Classify width/height into '9x16' (vertical) or '16x9' (horizontal/square). */
+  function _classifyAspect(w, h) {
+    if (!w || !h) return '16x9';
+    return (w / h) < 1.0 ? '9x16' : '16x9';
+  }
+
+  function _getAspectOverride() {
+    return document.getElementById('proc-aspect-override')?.value || 'auto';
+  }
+
+  function _updateAspectBadge() {
+    const badge = document.getElementById('proc-active-aspect-badge');
+    if (!badge) return;
+    const a = window._procActiveAspect;
+    const override = _getAspectOverride();
+    const label = a === '9x16' ? '📱 9:16 (dọc)' : '🖥 16:9 (ngang)';
+    badge.textContent = override === 'auto' ? `📐 ${label} • tự nhận diện` : `📐 ${label} • thủ công`;
+    badge.style.display = 'inline-block';
+  }
+
+  /** Read all preset map from storage (v2). Migrates from v1 if needed. */
+  function _loadPresetsMap() {
+    try {
+      const rawV2 = localStorage.getItem(_PROC_DEFAULTS_KEY_V2);
+      if (rawV2) return JSON.parse(rawV2) || {};
+    } catch (_) {}
+    // Migrate from v1: copy single preset to both aspects
+    try {
+      const rawV1 = localStorage.getItem(_PROC_DEFAULTS_KEY);
+      if (rawV1) {
+        const data = JSON.parse(rawV1);
+        const map = { '9x16': data, '16x9': data };
+        localStorage.setItem(_PROC_DEFAULTS_KEY_V2, JSON.stringify(map));
+        return map;
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  function _savePresetsMap(map) {
+    try { localStorage.setItem(_PROC_DEFAULTS_KEY_V2, JSON.stringify(map || {})); } catch (_) {}
+  }
+
+  function _onAspectOverrideChange() {
+    const override = _getAspectOverride();
+    try { localStorage.setItem(_PROC_ASPECT_OVERRIDE_K, override); } catch (_) {}
+    if (override !== 'auto') {
+      window._procActiveAspect = override;
+      _applyPresetForActiveAspect({ silent: true });
+    } else {
+      // Re-detect from current frame if available
+      const img = document.getElementById('sub-preview-img');
+      if (img && img.naturalWidth) {
+        window._procActiveAspect = _classifyAspect(img.naturalWidth, img.naturalHeight);
+        _applyPresetForActiveAspect({ silent: true });
+      }
+    }
+    _updateAspectBadge();
+  }
+
+  /** Apply the saved preset for window._procActiveAspect to the form. */
+  function _applyPresetForActiveAspect(opts) {
+    opts = opts || {};
+    const map = _loadPresetsMap();
+    const data = map[window._procActiveAspect];
+    if (!data) {
+      if (!opts.silent) toast(`Chưa có cài đặt mặc định cho ${window._procActiveAspect.replace('x', ':')}`, 'warning');
+      return false;
+    }
+    _PROC_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el || !(f.id in data)) return;
+      if (f.type === 'checkbox') el.checked = data[f.id];
+      else el.value = data[f.id];
+      el.dispatchEvent(new Event('change'));
+      el.dispatchEvent(new Event('input'));
+    });
+    if (data['frame-blur-mode']) {
+      const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
+      if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+    }
+    if (typeof _onTargetLangChange === 'function') {
+      _onTargetLangChange();
+    } else if (typeof _syncVoiceOptions === 'function') {
+      _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+    }
+    if (typeof _syncColorPicker === 'function') _syncColorPicker();
+    if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    return true;
+  }
+
+  // All field IDs to save (id → type)
+  const _PROC_FIELDS = [
+    // Aspect / Preview
+    { id:'proc-preview-aspect', type:'value' },
+    // AI Model + Language
+    { id:'proc-model',          type:'value' },
+    { id:'proc-lang',           type:'value' },
+    { id:'proc-target-lang',    type:'value' },
+    // Subtitle
+    { id:'proc-burn',           type:'checkbox' },
+    { id:'proc-translate-subs', type:'checkbox' },
+    { id:'proc-burn-vi',        type:'checkbox' },
+    { id:'proc-blur-original',  type:'checkbox' },
+    { id:'proc-blur-height',    type:'value' },
+    { id:'proc-blur-zone',      type:'value' },
+    { id:'proc-blur-y',         type:'value' },
+    { id:'proc-font-size',      type:'value' },
+    { id:'proc-font-color',     type:'value' },
+    { id:'proc-font-color-picker', type:'value' },
+    { id:'proc-margin-v',       type:'value' },
+    { id:'proc-sub-pos',        type:'value' },
+    // Voice
+    { id:'proc-voice',          type:'checkbox' },
+    { id:'proc-tts-engine',     type:'value' },
+    { id:'proc-tts-voice',      type:'value' },
+    { id:'proc-tts-pitch',      type:'value' },
+    { id:'proc-tts-rate',       type:'value' },
+    { id:'proc-tts-emotion',    type:'value' },
+    { id:'proc-tts-speed',      type:'value' },
+    { id:'proc-auto-speed',     type:'checkbox' },
+    { id:'proc-keep-bg',        type:'checkbox' },
+    { id:'proc-bg-vol',         type:'value' },
+    // FX
+    { id:'proc-fx-enabled',     type:'checkbox' },
+    { id:'proc-fx-pitch',       type:'value' },
+    { id:'proc-fx-speed',       type:'value' },
+    { id:'proc-fx-bass',        type:'value' },
+    { id:'proc-fx-mid',         type:'value' },
+    { id:'proc-fx-treble',      type:'value' },
+    { id:'proc-fx-comp',        type:'value' },
+    { id:'proc-fx-reverb',      type:'value' },
+    // Frame video
+    { id:'frame-enabled',       type:'checkbox' },
+    { id:'frame-title',         type:'value' },
+    { id:'frame-title-enabled', type:'checkbox' },
+    { id:'frame-title-size',    type:'value' },
+    { id:'frame-title-color',   type:'value' },
+    { id:'frame-title-color-hex', type:'value' },
+    { id:'frame-title-color-2', type:'value' },
+    { id:'frame-title-color-2-hex', type:'value' },
+    { id:'frame-title-split-color', type:'checkbox' },
+    { id:'frame-blur-w',        type:'value' },
+    { id:'frame-blur-top',      type:'value' },
+    { id:'frame-blur-bottom',   type:'value' },
+    { id:'frame-blur-opacity',  type:'value' },
+    { id:'frame-logo-size',     type:'value' },
+    { id:'frame-logo-top',      type:'value' },
+    { id:'frame-logo-left',     type:'value' },
+    { id:'frame-logo-radius',   type:'value' },
+    // Thumbnail
+    { id:'thumb-title',         type:'value' },
+    { id:'sub-preview-sample',  type:'value' },
+    { id:'sub-preview-ts',      type:'value' },
+    // CapCut
+    { id:'proc-capcut-enabled', type:'checkbox' },
+    { id:'proc-capcut-auto-open', type:'checkbox' },
+    // Output dir
+    { id:'proc-out',            type:'value' },
+  ];
+
+  function procSaveDefaults() {
+    const data = {};
+    _PROC_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      data[f.id] = f.type === 'checkbox' ? el.checked : el.value;
+    });
+    // Save blur mode radio
+    const blurMode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value;
+    if (blurMode) data['frame-blur-mode'] = blurMode;
+
+    try {
+      const map = _loadPresetsMap();
+      const aspect = window._procActiveAspect || '16x9';
+      map[aspect] = data;
+      _savePresetsMap(map);
+      // Keep legacy v1 in sync with the most recently saved preset for backward compat
+      try { localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data)); } catch (_) {}
+      toast(`✅ Đã lưu cài đặt mặc định cho ${aspect.replace('x', ':')}`, 'success');
+      _updateAspectBadge();
+    } catch (e) {
+      toast('Lỗi lưu: ' + e.message, 'error');
+    }
+  }
+
+  function procRestoreDefaults() {
+    try {
+      const map = _loadPresetsMap();
+      const aspect = window._procActiveAspect || '16x9';
+      const data = map[aspect];
+      if (!data) {
+        toast(`Chưa có cài đặt mặc định cho tỉ lệ ${aspect.replace('x', ':')}`, 'warning');
+        return;
+      }
+      _PROC_FIELDS.forEach(f => {
+        const el = document.getElementById(f.id);
+        if (!el || !(f.id in data)) return;
+        if (f.type === 'checkbox') el.checked = data[f.id];
+        else el.value = data[f.id];
+        // Trigger change events for dependent UI
+        el.dispatchEvent(new Event('change'));
+        el.dispatchEvent(new Event('input'));
+      });
+      // Restore blur mode radio
+      if (data['frame-blur-mode']) {
+        const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
+        if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+      }
+      // Sync voice options after restore
+      if (typeof _onTargetLangChange === 'function') {
+        _onTargetLangChange();
+      } else if (typeof _syncVoiceOptions === 'function') {
+        _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+      }
+      // Sync frame controls visibility
+      if (typeof frameToggle === 'function') frameToggle();
+      // Sync preview aspect layout
+      if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
+      toast(`✅ Đã khôi phục cài đặt cho tỉ lệ ${aspect.replace('x', ':')}`, 'success');
+    } catch (e) {
+      toast('Lỗi khôi phục: ' + e.message, 'error');
+    }
+  }
+
+  // Auto-restore on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      // Pick initial preset to apply on first load
+      const map = _loadPresetsMap();
+      // Check if saved preset has proc-preview-aspect
+      const initialAspect = '16x9';
+      window._procActiveAspect = initialAspect;
+      const data = map[initialAspect] || map['9x16'];
+
+      if (data) {
+        _PROC_FIELDS.forEach(f => {
+          const el = document.getElementById(f.id);
+          if (!el || !(f.id in data)) return;
+          if (f.type === 'checkbox') el.checked = data[f.id];
+          else el.value = data[f.id];
+        });
+        // Restore blur mode radio (not in _PROC_FIELDS because it's a radio group)
+        if (data['frame-blur-mode']) {
+          const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
+          if (radio) radio.checked = true;
+        }
+        if (typeof _onTargetLangChange === 'function') {
+          _onTargetLangChange();
+        } else if (typeof _syncVoiceOptions === 'function') {
+          _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+        }
+        if (typeof _syncColorPicker === 'function') _syncColorPicker();
+      }
+      _updateAspectBadge();
+      // Sync frame controls visibility on page load
+      if (typeof frameToggle === 'function') frameToggle();
+      // Apply preview aspect on page load (reads from proc-preview-aspect select which was restored above)
+      if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
+    } catch (_) {}
+  });
+
+  // ── Đổi khung hình Preview/Thumbnail (16:9, 9:16, hoặc auto) ───────────
+  function _onPreviewAspectChange() {
+    const sel = document.getElementById('proc-preview-aspect');
+    const value = sel?.value || 'auto';
+
+    // Resolve effective aspect:
+    //  - 'auto' → dùng aspect của video frame đã load (nếu có), mặc định 16x9
+    //  - '16x9' / '9x16' → ép buộc
+    let aspect = value;
+    if (value === 'auto') {
+      const img = document.getElementById('sub-preview-img');
+      if (img && img.naturalWidth && img.naturalHeight) {
+        aspect = (img.naturalHeight > img.naturalWidth) ? '9x16' : '16x9';
+      } else {
+        aspect = '16x9';  // default fallback when no video loaded yet
+      }
+    }
+    const isVertical = aspect === '9x16';
+
+    const subWrap   = document.getElementById('sub-preview-wrap');
+    const thumbWrap = document.getElementById('thumb-preview-wrap');
+
+    // Khung xem trước LUÔN theo tỉ lệ video GỐC (mục tiêu: chỉnh sửa trên video gốc).
+    // "Chế độ video" (16:9 / 9:16) chỉ là tỉ lệ ĐÍCH để scale/xoay khi XUẤT, không
+    // làm méo khung preview ở bước chỉnh sửa.
+    const _imgEl = document.getElementById('sub-preview-img');
+    let origAspect = '16 / 9';
+    if (_imgEl && _imgEl.naturalWidth && _imgEl.naturalHeight) {
+      origAspect = _imgEl.naturalWidth + ' / ' + _imgEl.naturalHeight;
+    }
+    if (subWrap)   subWrap.style.aspectRatio   = origAspect;
+    // Thumbnail là ảnh cho nền tảng đăng → giữ theo tỉ lệ đích.
+    if (thumbWrap) thumbWrap.style.aspectRatio = isVertical ? '9 / 16' : '16 / 9';
+
+    // Sync với window._procActiveAspect để các logic khác dùng
+    window._procActiveAspect = aspect;
+    if (typeof _updateAspectBadge === 'function') _updateAspectBadge();
+
+    // Re-render preview overlays
+    if (typeof _renderSubOverlay === 'function') _renderSubOverlay();
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+  }
+
+  function frameToggle() {
+    const enabled = document.getElementById('frame-enabled')?.checked;
+    const controls = document.getElementById('frame-controls');
+    if (controls) controls.style.display = enabled ? 'block' : 'none';
+
+    const img    = document.getElementById('sub-preview-img');
+    const canvas = document.getElementById('frame-preview-canvas');
+    const blurC  = document.getElementById('sub-preview-blur-canvas');
+    const blurD  = document.getElementById('sub-preview-blur');
+    const text   = document.getElementById('sub-preview-text');
+
+    if (enabled) {
+      // Frame mode: hide subtitle DOM overlays (subtitle drawn on canvas instead)
+      if (blurC)  blurC.style.display  = 'none';
+      if (blurD)  blurD.style.display  = 'none';
+      if (text)   text.style.display   = 'none';
+      if (canvas) canvas.style.display = 'block';
+      // Bỏ các div vùng che DOM còn sót (đã thêm ở chế độ phụ đề) để không bị
+      // hiển thị 2 lớp với vùng che vẽ trên canvas khung.
+      const _w = document.getElementById('sub-preview-wrap');
+      if (_w) _w.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
+      window._pe2Sel = null;
+      // Keep img rendered but invisible (needed for naturalWidth/drawImage)
+      if (img && img.src && img.naturalWidth) {
+        img.style.display = 'block';
+        img.style.position = 'absolute';
+        img.style.opacity = '0';
+        img.style.pointerEvents = 'none';
+      }
+      framePreviewUpdate();
+    } else {
+      // Subtitle mode: hide frame canvas, show img + overlays
+      if (canvas) canvas.style.display = 'none';
+      if (img && img.src && img.src !== window.location.href) {
+        img.style.display = 'block';
+        img.style.position = '';
+        img.style.opacity = '';
+        img.style.pointerEvents = '';
+        // Trả lại tỉ lệ khung theo video (bỏ tỉ lệ do khung video áp vào)
+        if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
+        _renderSubOverlay();
+      }
+    }
+  }
+
+  // Auto-update frame preview when frame-enabled toggled
+  document.addEventListener('DOMContentLoaded', () => {
+    // frame-enabled change is handled by inline onchange="frameToggle()"
+    const blurChk = document.getElementById('proc-blur-original');
+    if (blurChk) blurChk.addEventListener('change', () => _renderSubOverlay());
+    const burnChk2 = document.getElementById('proc-burn');
+    if (burnChk2) burnChk2.addEventListener('change', () => _renderSubOverlay());
+    const burnViChk2 = document.getElementById('proc-burn-vi');
+    if (burnViChk2) burnViChk2.addEventListener('change', () => _renderSubOverlay());
+  });
+
+  // ── Thumbnail preview (chỉ hiển thị, không lưu file) ─────────────────────
+  async function generateThumbnailPreview() {
+    const source = _getPreviewVideoPath();
+    if (!source) {
+      toast('Chưa có video — hãy chọn file hoặc nhập URL', 'warning');
+      return;
+    }
+
+    const ts = parseFloat(document.getElementById('sub-preview-ts')?.value || 2);
+
+    const img = document.getElementById('thumb-preview-img');
+    const ph  = document.getElementById('thumb-placeholder');
+    const info = document.getElementById('thumb-output-info');
+    const btn = document.querySelector('[onclick="generateThumbnailPreview()"]');
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+    if (ph) { ph.style.display = 'block'; ph.textContent = 'Đang lấy preview...'; }
+    if (img) img.style.display = 'none';
+    if (info) info.style.display = 'none';
+
+    try {
+      let res, data;
+
+      if (source.type === 'file') {
+        // Chỉ lấy frame preview (không tạo file thumbnail)
+        res = await fetch('/api/video_frame', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video_path: source.val, timestamp: ts }),
+        });
+        data = await res.json();
+      } else {
+        // URL — lấy cover từ URL
+        res = await fetch('/api/video_frame_from_url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: source.val }),
+        });
+        data = await res.json();
+      }
+
+      if (data.ok && data.image) {
+        if (img) {
+          img.src = data.image;
+          img.style.display = 'block';
+        }
+        if (ph) ph.style.display = 'none';
+        // Save state — frame mode means: server will extract frame at runtime, no path needed
+        window._thumbState = { mode: 'frame', path: '', b64: data.image };
+        toast('✓ Preview thumbnail', 'success');
+      } else {
+        if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'Không lấy được frame'; }
+        toast('Lỗi: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
+      toast('Lỗi: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🎨'; }
+    }
+  }
+
+  // ── Thumbnail helpers: Import / Clear / Toggle / Source tracking ─────────
+  // window._thumbState: { mode: 'import'|'ai'|'frame'|'none', path: string, b64: string }
+  window._thumbState = { mode: 'none', path: '', b64: '' };
+
+  // ── Multiple blur zones ────────────────────────────────────────────────────
+  window._procExtraBlurZones = [];
+  let _blurZoneCounter = 0;
+
+  function procAddBlurZone() {
+    _blurZoneCounter++;
+    const id = _blurZoneCounter;
+    window._procExtraBlurZones.push({ id, height: 12, position: 50, width: 80, x: 50, start: '', end: '', zone: 'custom' });
+    _renderExtraBlurZones();
+    subPreviewUpdate();
+  }
+
+  function procRemoveBlurZone(id) {
+    window._procExtraBlurZones = window._procExtraBlurZones.filter(z => z.id !== id);
+    _renderExtraBlurZones();
+    subPreviewUpdate();
+  }
+
+  function _renderExtraBlurZones() {
+    const container = document.getElementById('proc-blur-extra-list');
+    if (!container) return;
+    container.innerHTML = window._procExtraBlurZones.map(z => {
+      var st = (z.start === '' || z.start == null) ? '' : z.start;
+      var en = (z.end === '' || z.end == null) ? '' : z.end;
+      var rangeTxt = '⏱ Burn ' + (st !== '' ? ('từ ' + st + 's') : 'từ đầu') + ' ' + (en !== '' ? ('đến ' + en + 's') : 'đến cuối');
+      return `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px" data-blur-id="${z.id}">
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
+          <div class="field"><label>Cao %</label><input type="number" value="${z.height}" min="3" max="40" step="1" style="height:36px" onchange="procUpdateBlurZone(${z.id},'height',this.value)" oninput="subPreviewUpdate()"></div>
+          <div class="field"><label>Y %</label><input type="number" value="${z.position}" min="0" max="100" step="1" style="height:36px" onchange="procUpdateBlurZone(${z.id},'position',this.value)" oninput="subPreviewUpdate()"></div>
+          <div class="field"><label>X %</label><input type="number" value="${z.x ?? 50}" min="0" max="100" step="1" style="height:36px" onchange="procUpdateBlurZone(${z.id},'x',this.value)" oninput="subPreviewUpdate()"></div>
+          <div class="field"><label>Rộng %</label><input type="number" value="${z.width ?? 80}" min="20" max="100" step="5" style="height:36px" onchange="procUpdateBlurZone(${z.id},'width',this.value)" oninput="subPreviewUpdate()"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;margin-top:6px">
+          <div class="field"><label>Từ (s)</label><input type="number" value="${st}" min="0" step="0.5" placeholder="đầu" style="height:36px" onchange="procUpdateBlurZone(${z.id},'start',this.value)"></div>
+          <div class="field"><label>Đến (s)</label><input type="number" value="${en}" min="0" step="0.5" placeholder="cuối" style="height:36px" onchange="procUpdateBlurZone(${z.id},'end',this.value)"></div>
+          <button class="btn btn-secondary btn-sm" style="height:36px;padding:0 10px;font-size:14px" onclick="procRemoveBlurZone(${z.id})" title="Xóa vùng che">🗑</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:5px">${rangeTxt}</div>
+      </div>`;
+    }).join('');
+    if (window.pe2RenderRanges) window.pe2RenderRanges();
+  }
+
+  function procUpdateBlurZone(id, key, val) {
+    const zone = window._procExtraBlurZones.find(z => z.id === id);
+    if (!zone) return;
+    if (key === 'start' || key === 'end') {
+      zone[key] = (val === '' || val === null || val === undefined) ? '' : (parseFloat(val) || 0);
+      _renderExtraBlurZones();   // cập nhật dòng "Burn từ … đến …"
+    } else {
+      zone[key] = parseFloat(val) || 0;
+    }
+  }
+
+
+  function thumbImportFile(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast('Chỉ hỗ trợ file ảnh', 'error');
+      return;
+    }
+    // Upload file to server
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('type', 'thumbnail');
+    fetch('/api/upload_anti_fp_image', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok && data.path) {
+          window._thumbState = { mode: 'import', path: data.path, b64: '' };
+          // Show preview from local FileReader
+          const reader = new FileReader();
+          reader.onload = e => {
+            const img = document.getElementById('thumb-preview-img');
+            const ph  = document.getElementById('thumb-placeholder');
+            const info = document.getElementById('thumb-output-info');
+            if (img) { img.src = e.target.result; img.style.display = 'block'; }
+            if (ph) ph.style.display = 'none';
+            if (info) { info.style.display = 'block'; info.textContent = '📁 ' + data.path; }
+          };
+          reader.readAsDataURL(file);
+          toast('✓ Đã import thumbnail', 'success');
+        } else {
+          toast('Lỗi upload: ' + (data.error || ''), 'error');
+        }
+      })
+      .catch(e => toast('Lỗi: ' + e.message, 'error'))
+      .finally(() => { input.value = ''; });
+  }
+
+  function thumbClear() {
+    const img = document.getElementById('thumb-preview-img');
+    const ph  = document.getElementById('thumb-placeholder');
+    const info = document.getElementById('thumb-output-info');
+    if (img) { img.src = ''; img.style.display = 'none'; }
+    if (ph) { ph.style.display = 'block'; ph.textContent = '📁 Import / 🎨 Tạo / 🤖 AI'; }
+    if (info) info.style.display = 'none';
+    window._thumbState = { mode: 'none', path: '', b64: '' };
+    toast('Đã xóa thumbnail', 'info');
+  }
+
+  function thumbToggleEnabled() {
+    const enabled = document.getElementById('thumb-enabled')?.checked;
+    const wrap = document.getElementById('thumb-preview-wrap');
+    if (wrap) wrap.style.opacity = enabled ? '1' : '0.4';
+    if (!enabled) {
+      toast('Đã tắt thumbnail (sẽ không chèn vào video)', 'info');
+    }
+  }
+
+
+  async function generateThumbnailAI() {
+    const source = _getPreviewVideoPath();
+    const ts = parseFloat(document.getElementById('sub-preview-ts')?.value || 2);
+    const title = document.getElementById('thumb-title')?.value?.trim() || '';
+    let sample = document.getElementById('sub-preview-sample')?.value?.trim() || '';
+    if (sample === 'Đây là phụ đề tiếng Việt mẫu') {
+      sample = ''; // Bỏ qua phụ đề mẫu mặc định để tránh làm nhiễu AI
+    }
+
+    // Ưu tiên 1: Lấy ảnh đang có sẵn ở Thumbnail để chỉnh sửa / vẽ tiếp lên chính nó
+    const existingThumbImg = document.getElementById('thumb-preview-img');
+    const previewImg = document.getElementById('sub-preview-img');
+    
+    let frameB64 = null;
+    let isEditingExistingThumb = false;
+
+    if (existingThumbImg && existingThumbImg.src && existingThumbImg.src.startsWith('data:image/')) {
+      // Chỉnh sửa thumbnail hiện tại: dùng chính thumbnail đó làm ảnh tham chiếu
+      const parts = existingThumbImg.src.split(',');
+      if (parts.length > 1) {
+        frameB64 = parts[1];
+        isEditingExistingThumb = true;
+      }
+    }
+    // Ưu tiên 2: Tạo mới — luôn dùng ảnh frame gốc (không có logo) từ window._rawFrameB64
+    else if (window._rawFrameB64) {
+      frameB64 = window._rawFrameB64;
+    }
+    // Fallback cuối: lấy từ src của sub-preview-img (trường hợp không có _rawFrameB64)
+    else if (previewImg && previewImg.src && previewImg.src.startsWith('data:image/')) {
+      const parts = previewImg.src.split(',');
+      if (parts.length > 1) {
+        frameB64 = parts[1];
+      }
+    }
+
+    // Bắt buộc phải có ảnh tham chiếu khi bấm tạo bằng nút AI ở Thumbnail
+    if (!frameB64) {
+      toast('⚠️ Vui lòng lấy frame Preview hoặc import/tạo sẵn 1 thumbnail trước để AI có ảnh làm dữ liệu tham chiếu!', 'warning');
+      return;
+    }
+
+    const img = document.getElementById('thumb-preview-img');
+    const ph  = document.getElementById('thumb-placeholder');
+    const info = document.getElementById('thumb-output-info');
+    const btn = document.querySelector('[onclick="generateThumbnailAI()"]');
+
+    const loadingMsg = isEditingExistingThumb
+      ? '✏️ AI đang chỉnh sửa thumbnail hiện tại...'
+      : '🤖 AI đang phân tích video và tạo thumbnail...';
+    const btnLabel  = isEditingExistingThumb ? '⏳ AI đang sửa...' : '⏳ AI đang tạo...';
+
+    if (btn) { btn.disabled = true; btn.textContent = btnLabel; }
+    if (ph) { ph.style.display = 'block'; ph.textContent = loadingMsg; }
+    if (img) img.style.display = 'none';
+    if (info) info.style.display = 'none';
+
+    try {
+      const body = {
+        timestamp: ts,
+        title: title,
+        subtitle_text: sample,
+        style: 'youtube',
+        aspect_ratio: '9:16',
+        frame_b64: frameB64,
+        is_editing_existing_thumb: isEditingExistingThumb,
+      };
+
+      // Add video_path if source is file
+      if (source && source.type === 'file') {
+        body.video_path = source.val;
+      }
+
+      const res = await fetch('/api/generate_thumbnail_ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.ok && data.image) {
+        if (img) {
+          img.src = data.image;
+          img.style.display = 'block';
+        }
+        if (ph) ph.style.display = 'none';
+        if (info) {
+          info.style.display = 'block';
+          let infoText = '';
+          if (data.output_path) infoText += '📁 ' + data.output_path;
+          if (data.prompt_used) infoText += '\n💡 Prompt: ' + data.prompt_used;
+          info.textContent = infoText;
+        }
+        // Save state for batch processing
+        window._thumbState = {
+          mode: 'ai',
+          path: data.output_path || '',
+          b64: data.image || ''
+        };
+        const successMsg = isEditingExistingThumb
+          ? '✓ AI đã chỉnh sửa thumbnail thành công!'
+          : '✓ AI đã tạo thumbnail mới!';
+        toast(successMsg, 'success');
+      } else {
+        if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'AI thumbnail thất bại'; }
+        toast('Lỗi AI thumbnail: ' + (data.error || ''), 'error');
+      }
+    } catch (e) {
+      if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
+      toast('Lỗi: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🤖'; }
+    }
+  }
+
+  // Listen for thumbnail_path in NDJSON stream from /api/process_video
+  // (Auto-display when pipeline finishes generating thumbnail)
+  window._displayProcThumbnail = function(thumbPath, thumbImage) {
+    const img = document.getElementById('thumb-preview-img');
+    const ph  = document.getElementById('thumb-placeholder');
+    const info = document.getElementById('thumb-output-info');
+    if (img && thumbImage) {
+      img.src = thumbImage;
+      img.style.display = 'block';
+    }
+    if (ph) {
+      if (thumbImage) {
+        ph.style.display = 'none';
+      } else {
+        ph.style.display = 'block';
+        ph.textContent = 'Thumbnail đã tạo: ' + (thumbPath || '').split(/[\\/]/).pop();
+      }
+    }
+    if (info && thumbPath) {
+      info.style.display = 'block';
+      info.textContent = '📁 ' + thumbPath;
+    }
+  };
+  </script>

@@ -212,6 +212,107 @@ def video_frame():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@bp.route("/api/video_filmstrip", methods=["POST"])
+def video_filmstrip():
+    """Extract N evenly-spaced small thumbnails from a local video for the
+    editor timeline filmstrip. Returns the duration and a list of base64 JPEGs.
+
+    Body: { video_path: str, count?: int }
+    Resp: { ok, duration, count, frames: [dataURL, ...] }
+    """
+    import base64
+    import subprocess
+    import shutil
+    from core.video_processor import find_ffmpeg
+    from utils.ffprobe import probe_video
+
+    data = request.json or {}
+    video_path_str = str(data.get("video_path") or "").strip()
+    try:
+        count = int(data.get("count") or 12)
+    except (TypeError, ValueError):
+        count = 12
+    count = max(4, min(40, count))
+
+    if not video_path_str:
+        return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
+
+    vp = Path(video_path_str).expanduser()
+    if not vp.is_absolute():
+        vp = ROOT / vp
+    if not vp.exists():
+        return jsonify({"ok": False, "error": f"Video không tồn tại: {vp}"}), 404
+
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
+
+    # Duration (best effort)
+    try:
+        _w, _h, duration = probe_video(vp)
+    except Exception:
+        duration = 0.0
+    if not duration or duration <= 0:
+        duration = 0.0
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="vstrip_") as tmpdir:
+            tmp_video = Path(tmpdir) / f"input{vp.suffix}"
+            shutil.copy2(str(vp), str(tmp_video))
+
+            frames: list[str] = []
+
+            if duration > 0:
+                # Single pass: evenly spaced frames via fps filter.
+                fps_expr = f"{count}/{duration:.6f}"
+                out_pat = Path(tmpdir) / "f_%03d.jpg"
+                subprocess.run([
+                    ffmpeg, "-i", str(tmp_video),
+                    "-vf", f"fps={fps_expr},scale=160:-1",
+                    "-frames:v", str(count),
+                    "-q:v", "5",
+                    str(out_pat), "-y", "-loglevel", "error"
+                ], capture_output=True, text=True, encoding="utf-8",
+                   errors="replace", timeout=60)
+                for i in range(1, count + 1):
+                    fp = Path(tmpdir) / f"f_{i:03d}.jpg"
+                    if fp.exists() and fp.stat().st_size > 0:
+                        with open(fp, "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode()
+                        frames.append(f"data:image/jpeg;base64,{b64}")
+            else:
+                # Unknown duration: grab a few frames by seeking small offsets.
+                for i in range(count):
+                    ts = i * 2.0
+                    fp = Path(tmpdir) / f"f_{i:03d}.jpg"
+                    subprocess.run([
+                        ffmpeg, "-ss", str(ts), "-i", str(tmp_video),
+                        "-vframes", "1", "-q:v", "5",
+                        "-vf", "scale=160:-1",
+                        str(fp), "-y", "-loglevel", "error"
+                    ], capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", timeout=20)
+                    if fp.exists() and fp.stat().st_size > 0:
+                        with open(fp, "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode()
+                        frames.append(f"data:image/jpeg;base64,{b64}")
+
+            if not frames:
+                return jsonify({"ok": False, "error": "Không tạo được dải khung hình"}), 500
+
+        return jsonify({
+            "ok": True,
+            "duration": round(duration, 3),
+            "count": len(frames),
+            "frames": frames,
+        })
+
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "Timeout khi tạo filmstrip (>60s)"}), 500
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/api/video_frame_from_url", methods=["POST"])
 def video_frame_from_url():
     """Fetch thumbnail/cover from video URL via Douyin API."""

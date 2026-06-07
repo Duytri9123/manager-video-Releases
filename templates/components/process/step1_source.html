@@ -1,0 +1,36 @@
+  <!-- ═════════════════ STEP 1: Nguồn video ═════════════════ -->
+  <section class="proc-step" data-proc-step="1">
+    <div class="proc-step-head">
+      <h2 class="proc-step-title">📥 Nguồn video</h2>
+      <p class="proc-step-sub">Dán link video hoặc chọn file từ máy, rồi thêm vào hàng chờ. Có thể thêm nhiều video để xử lý hàng loạt.</p>
+    </div>
+
+      <!-- Source -->
+      <div class="card card-collapsible">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">📥 Nguồn Video</span>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label>Import file video</label>
+            <div class="flex-center gap-8">
+              <input type="text" id="proc-video" placeholder="./Downloaded/.../video.mp4" readonly style="flex:1">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('proc-file').click()">📂 Chọn</button>
+              <input type="file" id="proc-file" accept="video/*" style="display:none">
+            </div>
+            <div class="text-xs text-muted mt-4" id="proc-file-name">--</div>
+          </div>
+          <div class="field">
+            <label>URL video (tải và xử lý)</label>
+            <input type="text" id="proc-url" placeholder="https://www.douyin.com/video/...">
+          </div>
+          <div class="field">
+            <label>Thư mục xuất (để trống = cùng thư mục video)</label>
+            <input type="text" id="proc-out" placeholder="./output">
+          </div>
+          <div class="btn-group mt-8">
+            <button class="btn btn-primary" id="btn-proc" onclick="_addCurrentToQueue()">➕ Thêm vào hàng chờ</button>
+          </div>
+        </div>
+      </div>
+  </section><!-- /step 1 -->

@@ -1,0 +1,710 @@
+  <!-- ═════════════════ STEP 2: Xem & Chỉnh sửa (sau khi tải video) ═════════════════ -->
+  <section class="proc-step" data-proc-step="2" style="display:none">
+
+    <!-- ── Scoped styles cho editor (light theme, theo biến của app) ──────── -->
+    <style>
+      .pe2-editor{
+        background:var(--bg2,#fff); border:1px solid var(--border,#e3e3e8); border-radius:14px;
+        overflow:hidden; color:var(--text,#1f2430); display:flex; flex-direction:column;
+        box-shadow:var(--shadow,0 4px 16px rgba(0,0,0,.06));
+        height:calc(100vh - 230px); min-height:460px;
+      }
+
+      .pe2-body{ display:flex; align-items:stretch; flex:1 1 auto; min-height:0; }
+
+      /* ── Left panel (settings) ── */
+      .pe2-panel{
+        flex:0 0 400px; background:var(--bg2,#fff); border-right:1px solid var(--border,#e3e3e8);
+        display:flex; flex-direction:column; min-height:0;
+      }
+      .pe2-panel-head{
+        display:flex; align-items:center; justify-content:space-between; gap:8px;
+        padding:12px 14px; border-bottom:1px solid var(--border,#e3e3e8); flex-wrap:wrap;
+      }
+      .pe2-panel-title{ font-size:14px; font-weight:700; color:var(--text,#1f2430); }
+      .pe2-panel-actions{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+      /* ── Horizontal tabs ── */
+      .pe2-tabs{
+        display:flex; gap:6px; padding:10px 12px; border-bottom:1px solid var(--border,#e3e3e8);
+        background:var(--bg3,#f7f7f9);
+      }
+      .pe2-tab{
+        flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+        padding:7px 4px; border-radius:9px; border:1px solid transparent; background:transparent;
+        color:var(--text-muted,#6b7280); font-size:11px; cursor:pointer; transition:all .15s;
+      }
+      .pe2-tab span.ic{ font-size:16px; line-height:1; }
+      .pe2-tab:hover{ background:var(--bg2,#fff); color:var(--text,#1f2430); }
+      .pe2-tab.active{ background:var(--bg2,#fff); color:var(--accent,#1a73e8); border-color:var(--accent2,#9cc3ff); font-weight:700; }
+
+      .pe2-panel-body{ padding:14px; overflow-y:auto; flex:1 1 auto; }
+      .pe2-grp{
+        font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+        color:var(--text-muted,#8a8a93); font-weight:700; margin:16px 0 8px;
+      }
+      .pe2-grp:first-child{ margin-top:0; }
+
+      /* ── Aspect ratio grid ── */
+      .pe2-aspect-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:6px; }
+      .pe2-aspect-btn{
+        display:flex; flex-direction:column; align-items:center; gap:6px;
+        padding:10px 6px; border-radius:10px; border:1px solid var(--border,#d8d8de);
+        background:var(--bg2,#fff); color:var(--text,#333); font-size:11px; cursor:pointer; transition:all .15s;
+      }
+      .pe2-aspect-btn .box{
+        border:2px solid var(--text-muted,#9a9aa3); border-radius:3px; background:var(--bg3,#f0f0f2);
+      }
+      .pe2-aspect-btn:hover{ border-color:var(--accent2,#9cc3ff); }
+      .pe2-aspect-btn.active{ border-color:var(--accent,#1a73e8); color:var(--accent,#1a73e8); background:var(--accent-light,#eef3ff); }
+      .pe2-aspect-btn.active .box{ border-color:var(--accent,#1a73e8); }
+
+      /* ── Option cards (thẻ chọn có tích góc) ── */
+      .pe2-opts{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+      .pe2-optcard{
+        position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+        padding:14px 8px; border-radius:12px; border:1px solid var(--border,#d8d8de);
+        background:var(--bg2,#fff); cursor:pointer; text-align:center; transition:all .15s; min-height:74px;
+      }
+      .pe2-optcard input{ position:absolute; opacity:0; width:0; height:0; }
+      .pe2-optcard-ic{ font-size:20px; line-height:1; }
+      .pe2-optcard-lbl{ font-size:12.5px; font-weight:600; color:var(--text,#1f2430); line-height:1.25; }
+      .pe2-optcard-badge{
+        position:absolute; top:8px; right:8px; width:18px; height:18px; border-radius:50%;
+        border:2px solid var(--border,#cfcfd6); background:var(--bg2,#fff);
+        display:flex; align-items:center; justify-content:center; font-size:11px; color:transparent; transition:all .15s;
+      }
+      .pe2-optcard:hover{ border-color:var(--accent2,#9cc3ff); }
+      .pe2-optcard:has(input:checked){ border-color:var(--accent,#1a73e8); background:var(--accent-light,#eef3ff); }
+      .pe2-optcard input:checked ~ .pe2-optcard-badge{ background:var(--accent,#1a73e8); border-color:var(--accent,#1a73e8); color:#fff; }
+
+      /* ── Center (timeline + video) ── */
+      .pe2-center{ flex:1 1 auto; min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--bg2,#fff); }
+      .pe2-tlabel{ font-size:11px; color:var(--text-muted,#6b7280); margin:0; flex-shrink:0; }
+      .pe2-flex{ flex:1; }
+      .pe2-screen{
+        flex:1 1 auto; min-height:0; display:flex; align-items:center; justify-content:center;
+        padding:16px; overflow:auto;
+        background:var(--bg3,#f7f7f9);
+        background-image:radial-gradient(circle, rgba(0,0,0,.06) 1px, transparent 1px);
+        background-size:18px 18px;
+      }
+      .pe2-screen #proc-preview-col{
+        height:100%; width:auto; max-width:100%; min-width:0 !important; flex:0 1 auto !important;
+        display:flex; align-items:center; justify-content:center;
+      }
+      .pe2-screen #proc-preview-row{ height:100%; align-items:center; justify-content:center; }
+      .pe2-screen #sub-preview-wrap{ height:100% !important; width:auto !important; max-width:100%; }
+      .pe2-screen #sub-preview-wrap{ box-shadow:0 6px 18px rgba(0,0,0,.15); border:1px solid var(--border,#d8d8de); background:var(--bg3,#eef0f2) !important; }
+
+      /* Kéo-thả các thành phần overlay trong chế độ phụ đề */
+      .pe2-screen #sub-preview-text,
+      .pe2-screen #sub-preview-blur,
+      .pe2-screen #sub-preview-blur-canvas,
+      .pe2-screen .extra-blur-zone{ pointer-events:auto !important; cursor:move; }
+      .pe2-screen #sub-preview-text:hover,
+      .pe2-screen #sub-preview-blur:hover,
+      .pe2-screen #sub-preview-blur-canvas:hover,
+      .pe2-screen .extra-blur-zone:hover{ outline:2px dashed var(--accent,#3b82f6); outline-offset:1px; }
+      .pe2-screen .pe2-selected{ box-shadow:inset 0 0 0 2px var(--accent,#1a73e8), 0 0 0 2px rgba(26,115,232,.35) !important; }
+      .pe2-handle{
+        position:absolute; width:14px; height:14px; background:var(--accent,#1a73e8);
+        border:2px solid #fff; border-radius:50%; z-index:10; pointer-events:auto;
+        box-shadow:0 1px 3px rgba(0,0,0,.45); opacity:0; transition:opacity .12s;
+      }
+      .pe2-screen .extra-blur-zone:hover .pe2-handle,
+      .pe2-screen .extra-blur-zone.pe2-selected .pe2-handle{ opacity:1; }
+      .pe2-handle.e{ right:-7px; top:50%; transform:translateY(-50%); cursor:ew-resize; }
+      .pe2-handle.s{ bottom:-7px; left:50%; transform:translateX(-50%); cursor:ns-resize; }
+      .pe2-handle.se{ width:18px; height:18px; right:-9px; bottom:-9px; cursor:nwse-resize; background:var(--accent,#1a73e8); border-radius:4px; }
+      .pe2-dragging *{ cursor:move !important; }
+
+      .pe2-ts-badge{
+        font-family:monospace; font-size:12px; color:var(--text,#333); background:var(--bg3,#f0f0f2);
+        border:1px solid var(--border,#d4d4da); border-radius:6px; padding:5px 9px; min-width:54px; text-align:center;
+      }
+      .pe2-hint{ font-size:12px; color:var(--text-muted,#8a8a93); }
+
+      /* ── Timeline (filmstrip + ruler + playhead) — đặt phía trên video ── */
+      .pe2-timeline{ border-bottom:1px solid var(--border,#e3e3e8); background:var(--bg2,#fff); }
+      .pe2-tl-controls{
+        display:flex; align-items:center; gap:10px; padding:8px 14px; flex-wrap:wrap;
+        border-bottom:1px solid var(--border,#ececed);
+      }
+      .pe2-tl-dur{ font-family:monospace; font-size:12px; color:var(--text-muted,#8a8a93); }
+      .pe2-tl-track{
+        position:relative; height:84px; margin:10px 14px 14px; border-radius:8px;
+        background:var(--bg3,#f3f4f6); border:1px solid var(--border,#dcdce2); overflow:hidden; cursor:pointer;
+        user-select:none;
+      }
+      .pe2-tl-ruler{
+        position:absolute; top:0; left:0; right:0; height:18px; z-index:2;
+        pointer-events:none; border-bottom:1px solid var(--border,#e3e3e8);
+      }
+      .pe2-tl-tick{ position:absolute; top:0; height:18px; border-left:1px solid rgba(0,0,0,.12); }
+      .pe2-tl-tick span{ position:absolute; left:3px; top:2px; font-size:9px; color:var(--text-muted,#8a8a93); font-family:monospace; }
+      .pe2-tl-strip{
+        position:absolute; left:0; right:0; top:18px; bottom:0; display:flex; z-index:1;
+      }
+      .pe2-tl-strip img{ height:100%; width:auto; flex:0 0 auto; object-fit:cover; pointer-events:none; }
+      .pe2-tl-ranges{ position:absolute; left:0; right:0; top:18px; bottom:0; z-index:3; pointer-events:none; }
+      .pe2-tl-range{
+        position:absolute; top:2px; bottom:2px; background:rgba(26,115,232,.25);
+        border:1px solid var(--accent,#1a73e8); border-radius:4px;
+      }
+      .pe2-tl-range span{
+        position:absolute; top:1px; left:3px; font-size:9px; font-weight:700; color:var(--accent,#1a73e8);
+        background:rgba(255,255,255,.75); padding:0 3px; border-radius:2px; white-space:nowrap;
+      }
+      .pe2-tl-empty{
+        position:absolute; inset:18px 0 0 0; display:flex; align-items:center; justify-content:center;
+        color:var(--text-muted,#9a9aa3); font-size:12px; text-align:center; padding:0 12px;
+      }
+      .pe2-tl-playhead{
+        position:absolute; top:0; bottom:0; width:2px; background:var(--accent,#3b82f6); z-index:5; cursor:ew-resize;
+        box-shadow:0 0 6px rgba(59,130,246,.5);
+      }
+      .pe2-tl-playhead::before{
+        content:""; position:absolute; top:0; left:-6px; width:14px; height:12px;
+        background:var(--accent,#3b82f6); border-radius:3px;
+      }
+
+      /* ── Form controls: dùng style mặc định (light) của app, chỉ canh layout ── */
+      .pe2-editor .field{ display:flex; flex-direction:column; gap:4px; }
+      .pe2-editor .field>label{ font-size:11px; color:var(--text-muted,#6b7280); margin:0; line-height:1.2; }
+      .pe2-editor .field input[type=text],
+      .pe2-editor .field input[type=number],
+      .pe2-editor .field select{ height:38px; box-sizing:border-box; }
+      .pe2-panel #frame-controls > div[style*="grid"]{ grid-template-columns:repeat(2,1fr) !important; }
+      .pe2-pane{ display:none; }
+      .pe2-pane.active{ display:block; }
+
+      @media (max-width:900px){
+        .pe2-editor{ height:auto; }
+        .pe2-body{ flex-wrap:wrap; }
+        .pe2-panel{
+          flex-basis:100%; border-right:none; border-bottom:1px solid var(--border,#e3e3e8);
+        }
+        .pe2-center{ flex-basis:100%; }
+        .pe2-screen{ height:50vh; }
+      }
+    </style>
+
+    <div class="pe2-editor">
+
+      <!-- ── Editor body: panel (trái) | center (phải) ── -->
+      <div class="pe2-body">
+
+        <!-- LEFT PANEL: cài đặt theo nhóm -->
+        <div class="pe2-panel">
+          <div class="pe2-panel-head">
+            <span class="pe2-panel-title">⚙ Phụ đề &amp; Dịch</span>
+            <div class="pe2-panel-actions" onclick="event.stopPropagation()">
+              <button class="btn btn-secondary btn-sm" onclick="procRestoreDefaults()" title="Khôi phục cài đặt mặc định">↩ Khôi phục</button>
+              <button class="btn btn-primary btn-sm" onclick="procSaveDefaults()" title="Lưu cài đặt mặc định">💾 Lưu mặc định</button>
+              <label class="toggle-wrap">
+                <input type="checkbox" class="toggle-input" id="proc-burn" checked>
+                <div class="toggle"></div>
+                <span class="toggle-label text-sm">Ghi phụ đề</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Tab ngang -->
+          <div class="pe2-tabs">
+            <button class="pe2-tab active" data-pe2tab="subs"  onclick="pe2Tool('subs')"><span class="ic">💬</span>Phụ đề</button>
+            <button class="pe2-tab"        data-pe2tab="blur"  onclick="pe2Tool('blur')"><span class="ic">🛡</span>Vùng che</button>
+            <button class="pe2-tab"        data-pe2tab="frame" onclick="pe2Tool('frame')"><span class="ic">🎞</span>Khung</button>
+            <button class="pe2-tab"        data-pe2tab="thumb" onclick="pe2Tool('thumb')"><span class="ic">🖼</span>Thumb</button>
+          </div>
+
+          <div class="pe2-panel-body">
+
+            <!-- ══ PANE: Phụ đề & Dịch ══ -->
+            <div class="pe2-pane active" data-pe2pane="subs">
+
+              <!-- Chế độ video: lưới tỉ lệ (select ẩn giữ logic) -->
+              <div class="pe2-grp">Chế độ video</div>
+              <select id="proc-preview-aspect" onchange="_onPreviewAspectChange();if(window._syncAspectBtns)_syncAspectBtns()" style="display:none">
+                <option value="auto" selected>Tự nhận diện</option>
+                <option value="16x9">16:9 (ngang)</option>
+                <option value="9x16">9:16 (dọc)</option>
+              </select>
+              <div class="pe2-aspect-grid">
+                <button type="button" class="pe2-aspect-btn active" data-pe2aspect="auto" onclick="pe2SetAspect('auto')">
+                  <span class="box" style="width:22px;height:16px"></span>Tự nhận diện
+                </button>
+                <button type="button" class="pe2-aspect-btn" data-pe2aspect="16x9" onclick="pe2SetAspect('16x9')">
+                  <span class="box" style="width:26px;height:15px"></span>16:9
+                </button>
+                <button type="button" class="pe2-aspect-btn" data-pe2aspect="9x16" onclick="pe2SetAspect('9x16')">
+                  <span class="box" style="width:13px;height:22px"></span>9:16
+                </button>
+              </div>
+
+              <div class="pe2-grp">Phụ đề mẫu (xem trước)</div>
+              <input type="text" id="sub-preview-sample" value="Đây là phụ đề tiếng Việt mẫu"
+                style="width:100%;font-size:12px;height:38px;box-sizing:border-box" oninput="subPreviewUpdate()">
+
+              <div class="pe2-grp">Tuỳ chọn</div>
+              <div class="pe2-opts mb-8">
+                <label class="pe2-optcard"><input type="checkbox" id="proc-translate-subs" checked><span class="pe2-optcard-ic">🌐</span><span class="pe2-optcard-lbl">Dịch tiếng</span><span class="pe2-optcard-badge">✓</span></label>
+                <label class="pe2-optcard"><input type="checkbox" id="proc-burn-vi" checked><span class="pe2-optcard-ic">💬</span><span class="pe2-optcard-lbl">Ghi phụ đề</span><span class="pe2-optcard-badge">✓</span></label>
+                <label class="pe2-optcard"><input type="checkbox" id="proc-blur-original" checked><span class="pe2-optcard-ic">🛡</span><span class="pe2-optcard-lbl">Che phụ đề gốc</span><span class="pe2-optcard-badge">✓</span></label>
+              </div>
+
+              <div class="pe2-grp">Kiểu chữ</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
+                <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="proc-font-size" min="1" max="20" step="0.5" value="4.5" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Vị trí</label><select id="proc-sub-pos" onchange="subPreviewUpdate()"><option value="bottom" selected>Dưới</option><option value="top">Trên</option></select></div>
+                <div class="field" style="grid-column:1 / -1"><label>Màu chữ</label>
+                  <div style="display:flex;gap:4px;align-items:center;height:38px">
+                    <select id="proc-font-color" onchange="subPreviewUpdate();_syncColorPicker()" style="flex:1;font-size:12px;height:38px"><option value="white" selected>Trắng</option><option value="yellow">Vàng</option><option value="cyan">Cyan</option><option value="custom">Tùy chỉnh</option></select>
+                    <input type="color" id="proc-font-color-picker" value="#ffffff" style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:4px;cursor:pointer;flex-shrink:0;box-sizing:border-box" oninput="_onColorPickerChange()">
+                  </div>
+                </div>
+                <div class="field"><label>Đáy (%)</label><input type="number" id="proc-margin-v" min="0" max="50" step="0.5" value="3" oninput="subPreviewUpdate()"></div>
+              </div>
+            </div>
+
+            <!-- ══ PANE: Vùng che ══ -->
+            <div class="pe2-pane" data-pe2pane="blur">
+              <div class="pe2-grp">Che phụ đề gốc</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-bottom:10px">
+                <div class="field"><label>Che cao (%)</label><input type="number" id="proc-blur-height" min="3" max="45" step="1" value="15" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Che Y (%)</label><input type="number" id="proc-blur-y" min="0" max="100" step="1" value="" placeholder="auto" oninput="subPreviewUpdate()" title="Vị trí vùng che (0=trên, 100=dưới). Để trống = tự theo phụ đề"></div>
+              </div>
+
+              <div class="pe2-grp">Vùng che bổ sung</div>
+              <div id="proc-blur-extra-list" style="margin-bottom:10px"></div>
+              <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px" onclick="procAddBlurZone()">＋ Thêm vùng che</button>
+            </div>
+
+            <!-- ══ PANE: Khung video ══ -->
+            <div class="pe2-pane" data-pe2pane="frame">
+              <div class="flex-between mb-6">
+                <span style="font-size:12px;font-weight:700;color:var(--text,#1f2430)">🎞 Khung video</span>
+                <label class="toggle-wrap">
+                  <input type="checkbox" class="toggle-input" id="frame-enabled" onchange="frameToggle()">
+                  <div class="toggle"></div>
+                  <span class="toggle-label text-sm">Bật</span>
+                </label>
+              </div>
+
+              <div id="frame-controls" style="display:none">
+                <!-- Tiêu đề: 3 cột (title | hiện | cỡ chữ) -->
+                <div style="display:grid;grid-template-columns:3fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                  <div class="field"><label>📝 Tiêu đề</label><input type="text" id="frame-title" placeholder="Nhập tiêu đề..." style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Hiện</label><label class="check-item w-full" style="height:38px;margin:0;box-sizing:border-box;justify-content:center"><input type="checkbox" id="frame-title-enabled" checked onchange="framePreviewUpdate()"><span style="font-size:11px">Bật</span></label></div>
+                  <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="frame-title-size" value="5" min="1" max="15" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                </div>
+
+                <!-- Màu: 3 cột (màu1 | màu2 | chia màu) -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                  <div class="field"><label>Màu 1</label>
+                    <div style="display:flex;gap:3px;height:38px"><input type="color" id="frame-title-color" value="#000000" style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:4px;cursor:pointer;box-sizing:border-box" oninput="document.getElementById('frame-title-color-hex').value=this.value;framePreviewUpdate()"><input type="text" id="frame-title-color-hex" value="#000000" style="flex:1;font-family:monospace;font-size:11px;height:38px;box-sizing:border-box;min-width:0" oninput="document.getElementById('frame-title-color').value=this.value;framePreviewUpdate()"></div>
+                  </div>
+                  <div class="field"><label>Màu 2</label>
+                    <div style="display:flex;gap:3px;height:38px"><input type="color" id="frame-title-color-2" value="#ff0000" style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:4px;cursor:pointer;box-sizing:border-box" oninput="document.getElementById('frame-title-color-2-hex').value=this.value;framePreviewUpdate()"><input type="text" id="frame-title-color-2-hex" value="#ff0000" style="flex:1;font-family:monospace;font-size:11px;height:38px;box-sizing:border-box;min-width:0" oninput="document.getElementById('frame-title-color-2').value=this.value;framePreviewUpdate()"></div>
+                  </div>
+                  <div class="field"><label>Chia màu</label><label class="check-item w-full" style="height:38px;margin:0;box-sizing:border-box;justify-content:center"><input type="checkbox" id="frame-title-split-color" checked onchange="framePreviewUpdate()"><span style="font-size:11px">Bật (|)</span></label></div>
+                </div>
+
+                <!-- Blur: 4 cột -->
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+                  <div class="field"><label>Mờ trên (%)</label><input type="number" id="frame-blur-top" value="0" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Mờ dưới (%)</label><input type="number" id="frame-blur-bottom" value="0" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Mờ bên (%)</label><input type="number" id="frame-blur-w" value="15" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Độ mờ</label><input type="number" id="frame-blur-opacity" value="60" min="0" max="100" step="5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                </div>
+
+                <!-- Kiểu mờ: inline -->
+                <div style="display:flex;gap:12px;margin-bottom:8px;align-items:center">
+                  <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">Kiểu mờ:</span>
+                  <label class="check-item" style="margin:0"><input type="radio" name="frame-blur-mode" value="overlay" checked onchange="framePreviewUpdate()"><span style="font-size:11px">Đè lên</span></label>
+                  <label class="check-item" style="margin:0"><input type="radio" name="frame-blur-mode" value="expand" onchange="framePreviewUpdate()"><span style="font-size:11px">Đẩy ra ngoài</span></label>
+                </div>
+
+                <!-- Logo: 4 cột (file | size | top | left) -->
+                <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                  <div class="field"><label>🏷 Logo</label>
+                    <div style="display:flex;gap:3px;height:38px"><input type="text" id="frame-logo-path" placeholder="Chọn file..." readonly style="flex:1;font-size:11px;height:38px;box-sizing:border-box"><button class="btn btn-secondary btn-sm" style="padding:0 8px;height:38px;box-sizing:border-box" onclick="document.getElementById('frame-logo-file').click()">📂</button><input type="file" id="frame-logo-file" accept="image/*" style="display:none" onchange="frameSetLogo(this)"></div>
+                  </div>
+                  <div class="field"><label>Size%</label><input type="number" id="frame-logo-size" value="12" min="2" max="40" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Top%</label><input type="number" id="frame-logo-top" value="3" min="0" max="90" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Left%</label><input type="number" id="frame-logo-left" value="3" min="0" max="90" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                </div>
+
+                <!-- Bo tròn: full width -->
+                <div class="field"><label>Bo tròn (<span id="frame-logo-radius-val">50</span>%)</label><input type="range" id="frame-logo-radius" min="0" max="50" step="1" value="50" style="width:100%" oninput="document.getElementById('frame-logo-radius-val').textContent=this.value;framePreviewUpdate()"></div>
+              </div>
+            </div>
+
+            <!-- ══ PANE: Thumbnail ══ -->
+            <div class="pe2-pane" data-pe2pane="thumb">
+              <div class="sub-preview-box" style="padding:10px">
+                <div class="flex-between" style="margin-bottom:8px;flex-wrap:wrap;gap:4px">
+                  <span style="font-size:12px;font-weight:700;color:var(--text,#1f2430)">🖼 Thumbnail</span>
+                  <div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap">
+                    <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 7px" title="Import từ máy" onclick="document.getElementById('thumb-import-file').click()">📁</button>
+                    <input type="file" id="thumb-import-file" accept="image/*" style="display:none" onchange="thumbImportFile(this)">
+                    <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 7px" title="Tạo từ frame video" onclick="generateThumbnailPreview()">🎨</button>
+                    <button class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 7px" title="AI tạo từ frame + nội dung" onclick="generateThumbnailAI()">🤖</button>
+                    <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 7px" title="Xóa thumbnail" onclick="thumbClear()">🗑</button>
+                    <label class="toggle-wrap" title="Tắt/bật chèn thumbnail vào đầu video">
+                      <input type="checkbox" class="toggle-input" id="thumb-enabled" checked onchange="thumbToggleEnabled()">
+                      <div class="toggle"></div>
+                    </label>
+                  </div>
+                </div>
+                <input type="text" id="thumb-title" value="Trạm giải trí" placeholder="Tiêu đề kênh / nội dung gợi ý cho AI"
+                  style="font-size:11px;padding:3px 6px;width:100%;margin-bottom:6px">
+                <div id="thumb-preview-wrap" style="position:relative;width:100%;background:#111;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;aspect-ratio:16/9">
+                  <img id="thumb-preview-img" src="" alt="" style="max-width:100%;max-height:100%;display:none;border-radius:4px">
+                  <div id="thumb-placeholder" style="color:#666;font-size:11px;padding:16px;text-align:center">
+                    📁 Import / 🎨 Tạo / 🤖 AI
+                  </div>
+                </div>
+                <div id="thumb-output-info" style="display:none;font-size:10px;color:var(--text-muted);margin-top:4px;word-break:break-all"></div>
+              </div>
+            </div>
+
+          </div><!-- /panel-body -->
+        </div><!-- /panel -->
+
+        <!-- CENTER: timeline + video screen -->
+        <div class="pe2-center">
+
+          <!-- Timeline (filmstrip + ruler + playhead) — đặt phía trên video -->
+          <div class="pe2-timeline" id="pe2-timeline">
+            <div class="pe2-tl-controls">
+              <button class="btn btn-primary btn-sm" onclick="subPreviewFetchFrame()">📷 Lấy frame</button>
+              <button class="btn btn-secondary btn-sm" id="pe2-strip-btn" onclick="pe2BuildFilmstrip()">🎞 Tạo dải thời gian</button>
+              <span class="pe2-flex"></span>
+              <button class="btn btn-secondary btn-sm" onclick="pe2Zoom(-0.1)" title="Thu nhỏ">🔍−</button>
+              <span class="pe2-ts-badge" id="pe2-zoom-val" style="cursor:pointer;min-width:48px" onclick="pe2ZoomReset()" title="Bấm để về 100% (vừa khung)">100%</span>
+              <button class="btn btn-secondary btn-sm" onclick="pe2Zoom(0.1)" title="Phóng to">🔍+</button>
+              <span class="pe2-ts-badge" id="pe2-ts-badge">0:05</span>
+              <span class="pe2-tl-dur" id="pe2-tl-dur">/ --:--</span>
+              <label class="pe2-tlabel">Giây</label>
+              <input type="number" id="sub-preview-ts" min="0" step="1" value="5"
+                style="width:64px;font-size:12px"
+                oninput="if(window.pe2SyncPlayhead)pe2SyncPlayhead(); subPreviewFetchFrame()">
+            </div>
+            <div class="pe2-tl-track" id="pe2-tl-track" onmousedown="pe2TimelineDown(event)">
+              <div class="pe2-tl-ruler" id="pe2-tl-ruler"></div>
+              <div class="pe2-tl-strip" id="pe2-tl-strip"></div>
+              <div class="pe2-tl-ranges" id="pe2-tl-ranges"></div>
+              <div class="pe2-tl-empty" id="pe2-tl-empty">Bấm 🎞 Tạo dải thời gian để xem khung hình chạy theo thời gian video</div>
+              <div class="pe2-tl-playhead" id="pe2-tl-playhead" style="left:0%"></div>
+            </div>
+          </div>
+
+          <!-- Video screen (proc-preview-col / row giữ nguyên cho logic _onPreviewAspectChange) -->
+          <div class="pe2-screen">
+            <div id="proc-preview-col" style="display:flex;flex-direction:column;gap:10px">
+              <div id="proc-preview-row" style="display:flex;flex-direction:column;gap:10px">
+                <div id="sub-preview-wrap" style="position:relative;width:100%;background:#111;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;aspect-ratio:16/9">
+                  <img id="sub-preview-img" src="" alt="" style="width:100%;display:none;vertical-align:bottom">
+                  <div id="sub-preview-placeholder" style="color:#666;font-size:12px;padding:20px;text-align:center">
+                    Bấm 📷 Lấy frame để xem preview
+                  </div>
+                  <div id="sub-preview-blur" style="display:none;position:absolute;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:2px;"></div>
+                  <canvas id="sub-preview-blur-canvas" style="display:none;position:absolute;pointer-events:none;border-radius:2px;"></canvas>
+                  <div id="sub-preview-text" style="position:absolute;left:0;right:0;pointer-events:none;padding:0 12px;text-align:center;display:none"></div>
+                  <canvas id="frame-preview-canvas" style="display:none;width:100%;border-radius:8px"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /pe2-center -->
+
+      </div><!-- /pe2-body -->
+    </div><!-- /pe2-editor -->
+
+    <!-- Tab switcher + Aspect + Timeline (UI-only, không đụng logic xử lý) -->
+    <script>
+    (function(){
+      if (window.pe2Tool) return;
+      window.pe2Tool = function(name){
+        var root = document.querySelector('[data-proc-step="2"] .pe2-editor');
+        if (!root) return;
+        var titles = { subs:'⚙ Phụ đề & Dịch', blur:'🛡 Vùng che', frame:'🎞 Khung video', thumb:'🖼 Thumbnail' };
+        root.querySelectorAll('[data-pe2tab]').forEach(function(b){
+          b.classList.toggle('active', b.getAttribute('data-pe2tab') === name);
+        });
+        root.querySelectorAll('.pe2-pane').forEach(function(p){
+          p.classList.toggle('active', p.getAttribute('data-pe2pane') === name);
+        });
+        var t = root.querySelector('.pe2-panel-title');
+        if (t && titles[name]) t.textContent = titles[name];
+      };
+
+      // ── Aspect ratio buttons (giữ select ẩn cho logic) ──
+      window._syncAspectBtns = function(){
+        var sel = document.getElementById('proc-preview-aspect');
+        var v = sel ? sel.value : 'auto';
+        document.querySelectorAll('[data-pe2aspect]').forEach(function(b){
+          b.classList.toggle('active', b.getAttribute('data-pe2aspect') === v);
+        });
+      };
+      window.pe2SetAspect = function(v){
+        var sel = document.getElementById('proc-preview-aspect');
+        if (sel){ sel.value = v; if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange(); }
+        _syncAspectBtns();
+      };
+
+      // ── Zoom preview ──
+      window._pe2Zoom = window._pe2Zoom || 1;
+      window.pe2ApplyZoom = function(){
+        var col = document.getElementById('proc-preview-col');
+        var v = document.getElementById('pe2-zoom-val');
+        if (col){ col.style.transform = 'scale(' + window._pe2Zoom + ')'; col.style.transformOrigin = 'center center'; }
+        if (v) v.textContent = Math.round(window._pe2Zoom * 100) + '%';
+      };
+      window.pe2Zoom = function(d){
+        window._pe2Zoom = Math.max(0.3, Math.min(3, (window._pe2Zoom || 1) + d));
+        pe2ApplyZoom();
+      };
+      window.pe2ZoomReset = function(){ window._pe2Zoom = 1; pe2ApplyZoom(); };
+
+      // ── Kéo-thả thành phần trên preview (chỉ ở chế độ phụ đề) ──
+      (function(){
+        var wrap = document.getElementById('sub-preview-wrap');
+        if (!wrap) return;
+        var drag = null;
+        var clamp = function(v, min, max){ return Math.max(min, Math.min(max, v)); };
+
+        // Đánh dấu thành phần đang chọn (giữ trạng thái khi vẽ lại)
+        window._pe2Sel = window._pe2Sel || null;   // {type, id}
+        window.pe2ApplySelection = function(){
+          wrap.querySelectorAll('.pe2-selected').forEach(function(el){ el.classList.remove('pe2-selected'); });
+          var s = window._pe2Sel;
+          if (!s) return;
+          var el = null;
+          if (s.type === 'sub') el = document.getElementById('sub-preview-text');
+          else if (s.type === 'blur'){
+            var cv = document.getElementById('sub-preview-blur-canvas');
+            var bd = document.getElementById('sub-preview-blur');
+            el = (cv && cv.style.display !== 'none') ? cv : bd;
+          }
+          else if (s.type === 'extra') el = wrap.querySelector('.extra-blur-zone[data-zone-id="' + s.id + '"]');
+          if (el) el.classList.add('pe2-selected');
+        };
+
+        document.addEventListener('pointerdown', function(e){
+          if (!wrap.contains(e.target)) return;
+          if (document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked) return;
+          var t = e.target;
+          var handle = (t.closest ? t.closest('.pe2-handle') : null);
+          if (handle){
+            var zEl = handle.closest('.extra-blur-zone');
+            if (!zEl) return;
+            drag = { type:'resize', id: parseInt(zEl.dataset.zoneId), edge: handle.dataset.pe2handle };
+            window._pe2Sel = { type:'extra', id: drag.id };
+          } else {
+            var zoneEl = (t.closest ? t.closest('.extra-blur-zone') : null);
+            if (t.id === 'sub-preview-text') drag = { type:'sub' };
+            else if (t.id === 'sub-preview-blur' || t.id === 'sub-preview-blur-canvas') drag = { type:'blur' };
+            else if (zoneEl) drag = { type:'extra', id: parseInt(zoneEl.dataset.zoneId) };
+            else { window._pe2Sel = null; pe2ApplySelection(); return; }   // bấm vùng trống → bỏ chọn
+            window._pe2Sel = drag;
+          }
+          pe2ApplySelection();
+          document.body.classList.add('pe2-dragging');
+          e.preventDefault(); e.stopPropagation();
+        }, true);
+
+        document.addEventListener('pointermove', function(e){
+          if (!drag) return;
+          var rect = wrap.getBoundingClientRect();
+          if (!rect.height) return;
+          var f = clamp((e.clientY - rect.top) / rect.height, 0, 1);
+          if (drag.type === 'sub'){
+            var posSel = document.getElementById('proc-sub-pos');
+            var marginEl = document.getElementById('proc-margin-v');
+            if (f < 0.5){
+              if (posSel) posSel.value = 'top';
+              if (marginEl) marginEl.value = Math.round(clamp(f * 100, 0, 50) * 10) / 10;
+            } else {
+              if (posSel) posSel.value = 'bottom';
+              if (marginEl) marginEl.value = Math.round(clamp((1 - f) * 100, 0, 50) * 10) / 10;
+            }
+          } else if (drag.type === 'blur'){
+            var by = document.getElementById('proc-blur-y');
+            if (by) by.value = Math.round(f * 100);
+          } else if (drag.type === 'extra'){
+            var z = (window._procExtraBlurZones || []).find(function(x){ return x.id === drag.id; });
+            if (z){
+              var fx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+              z.position = Math.round(f * 100);
+              z.x = Math.round(fx * 100);
+              if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
+            }
+          } else if (drag.type === 'resize'){
+            var zr = (window._procExtraBlurZones || []).find(function(x){ return x.id === drag.id; });
+            if (zr){
+              var rfx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+              var xc = ((zr.x === undefined || zr.x === null) ? 50 : zr.x) / 100;
+              var yc = ((zr.position === undefined || zr.position === null) ? 50 : zr.position) / 100;
+              if (drag.edge.indexOf('e') >= 0) zr.width  = Math.round(clamp(2 * Math.abs(rfx - xc) * 100, 20, 100));
+              if (drag.edge.indexOf('s') >= 0) zr.height = Math.round(clamp(2 * Math.abs(f   - yc) * 100, 3, 40));
+              if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
+            }
+          }
+          if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+          pe2ApplySelection();   // giữ viền chọn + handle sau khi vẽ lại
+          e.preventDefault();
+        });
+
+        document.addEventListener('pointerup', function(){
+          if (drag){ drag = null; document.body.classList.remove('pe2-dragging'); }
+        });
+      })();
+
+      // ── Timeline state ──
+      window._pe2Duration = window._pe2Duration || 0;   // 0 = chưa biết
+
+      function _fmt(sec){
+        sec = Math.max(0, Math.round(sec));
+        var m = Math.floor(sec / 60), s = sec % 60;
+        return m + ':' + (s < 10 ? '0' + s : s);
+      }
+      function _dur(){ return window._pe2Duration > 0 ? window._pe2Duration : 120; }
+
+      function _renderRuler(){
+        var ruler = document.getElementById('pe2-tl-ruler');
+        if (!ruler) return;
+        var dur = _dur();
+        ruler.innerHTML = '';
+        var ticks = 8;
+        for (var i = 0; i <= ticks; i++){
+          var pct = (i / ticks) * 100;
+          var tk = document.createElement('div');
+          tk.className = 'pe2-tl-tick';
+          tk.style.left = pct + '%';
+          var lab = document.createElement('span');
+          lab.textContent = _fmt((i / ticks) * dur);
+          tk.appendChild(lab);
+          ruler.appendChild(tk);
+        }
+      }
+
+      // Vẽ các đoạn "burn từ → đến" của vùng che bổ sung lên timeline
+      window.pe2RenderRanges = function(){
+        var box = document.getElementById('pe2-tl-ranges');
+        if (!box) return;
+        box.innerHTML = '';
+        var dur = _dur();
+        (window._procExtraBlurZones || []).forEach(function(z){
+          var hasS = !(z.start === '' || z.start === null || z.start === undefined);
+          var hasE = !(z.end === '' || z.end === null || z.end === undefined);
+          if (!hasS && !hasE) return;   // che cả video → không vẽ đoạn
+          var s = hasS ? Number(z.start) : 0;
+          var e = hasE ? Number(z.end) : dur;
+          if (!(e > s)) return;
+          var left = Math.max(0, Math.min(100, s / dur * 100));
+          var width = Math.max(1, Math.min(100 - left, (e - s) / dur * 100));
+          var seg = document.createElement('div');
+          seg.className = 'pe2-tl-range';
+          seg.style.left = left + '%';
+          seg.style.width = width + '%';
+          var lab = document.createElement('span');
+          lab.textContent = _fmt(s) + '→' + _fmt(e);
+          seg.appendChild(lab);
+          box.appendChild(seg);
+        });
+      };
+
+      // Đồng bộ playhead theo giá trị sub-preview-ts
+      window.pe2SyncPlayhead = function(){
+        var ph = document.getElementById('pe2-tl-playhead');
+        var badge = document.getElementById('pe2-ts-badge');
+        var durEl = document.getElementById('pe2-tl-dur');
+        var ts = parseFloat(document.getElementById('sub-preview-ts')?.value || 0) || 0;
+        var dur = _dur();
+        var pct = Math.max(0, Math.min(100, (ts / dur) * 100));
+        if (ph) ph.style.left = pct + '%';
+        if (badge) badge.textContent = _fmt(ts);
+        if (durEl) durEl.textContent = '/ ' + (window._pe2Duration > 0 ? _fmt(window._pe2Duration) : '--:--');
+      };
+
+      function _seekFromX(clientX, fetch){
+        var track = document.getElementById('pe2-tl-track');
+        var tsInput = document.getElementById('sub-preview-ts');
+        if (!track || !tsInput) return;
+        var rect = track.getBoundingClientRect();
+        var ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        var ts = Math.round(ratio * _dur());
+        tsInput.value = ts;
+        pe2SyncPlayhead();
+        if (fetch && typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame();
+      }
+
+      var _dragging = false;
+      window.pe2TimelineDown = function(e){
+        _dragging = true;
+        _seekFromX(e.clientX, false);
+        e.preventDefault();
+      };
+      document.addEventListener('mousemove', function(e){
+        if (_dragging) _seekFromX(e.clientX, false);
+      });
+      document.addEventListener('mouseup', function(e){
+        if (_dragging){ _dragging = false; _seekFromX(e.clientX, true); }
+      });
+
+      // ── Build filmstrip ──
+      window.pe2BuildFilmstrip = async function(){
+        if (typeof _getPreviewVideoPath !== 'function') return;
+        var source = _getPreviewVideoPath();
+        if (!source){ if (window.toast) toast('Chưa có video — hãy chọn file hoặc nhập URL', 'warning'); return; }
+        if (source.type !== 'file'){
+          if (window.toast) toast('Dải thời gian chỉ hỗ trợ video từ file (URL chỉ có ảnh bìa)', 'warning');
+          return;
+        }
+        var btn = document.getElementById('pe2-strip-btn');
+        var strip = document.getElementById('pe2-tl-strip');
+        var empty = document.getElementById('pe2-tl-empty');
+        if (btn){ btn.disabled = true; btn.textContent = '⏳ Đang tạo...'; }
+        try {
+          var res = await fetch('/api/video_filmstrip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ video_path: source.val, count: 14 })
+          });
+          var data = await res.json();
+          if (data.ok && data.frames && data.frames.length){
+            window._pe2Duration = data.duration || 0;
+            if (strip){
+              strip.innerHTML = '';
+              data.frames.forEach(function(src){
+                var im = document.createElement('img');
+                im.src = src;
+                strip.appendChild(im);
+              });
+            }
+            if (empty) empty.style.display = 'none';
+            _renderRuler();
+            pe2SyncPlayhead();
+            if (window.pe2RenderRanges) pe2RenderRanges();
+            if (window.toast) toast('✓ Đã tạo dải thời gian', 'success');
+          } else {
+            if (window.toast) toast('Không tạo được dải: ' + (data.error || ''), 'error');
+          }
+        } catch (err){
+          if (window.toast) toast('Lỗi: ' + err.message, 'error');
+        } finally {
+          if (btn){ btn.disabled = false; btn.textContent = '🎞 Tạo dải thời gian'; }
+        }
+      };
+
+      // Init ruler + playhead + aspect buttons khi DOM sẵn sàng
+      function _init(){ _renderRuler(); pe2SyncPlayhead(); _syncAspectBtns(); pe2ApplyZoom(); if(window.pe2RenderRanges) pe2RenderRanges(); }
+      if (document.readyState !== 'loading') _init();
+      else document.addEventListener('DOMContentLoaded', _init);
+    })();
+    </script>
+
+  </section><!-- /step 2 -->

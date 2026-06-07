@@ -1719,7 +1719,7 @@ def _burn_ass(
                     y_start = max(0.0, 1.0 - h_pct - lift_pct)
                 else:
                     y_start = 0.0
-            active_zones.append((h_pct, w_pct, y_start))
+            active_zones.append((h_pct, w_pct, y_start, 0.5, None, None))
             
         if blur_original and blur_extra_zones:
             for ez in blur_extra_zones:
@@ -1727,23 +1727,32 @@ def _burn_ass(
                     ez_h = float(ez.get("height_pct", 0.12))
                     ez_pos = float(ez.get("position_pct", 0.50))
                     ez_w = float(ez.get("width_pct", 0.80))
+                    ez_x = float(ez.get("x_pct", 0.50))
+                    ez_st = ez.get("start_sec", None)
+                    ez_en = ez.get("end_sec", None)
                     ez_y = _clamp_float(ez_pos - ez_h / 2, 0.0, 1.0 - ez_h)
-                    active_zones.append((ez_h, ez_w, ez_y))
+                    active_zones.append((ez_h, ez_w, ez_y, ez_x, ez_st, ez_en))
                 except Exception:
                     pass
 
         # Apply each blur zone in a chain
         curr_label = "0:v"
         filter_complex_parts = []
-        for idx, (h, w, y) in enumerate(active_zones):
+        for idx, (h, w, y, x, _st, _en) in enumerate(active_zones):
             next_label = f"b{idx}"
+            _left = max(0.0, min(1.0 - w, x - w / 2))
+            _en_expr = ""
+            if _st is not None or _en is not None:
+                _s0 = float(_st) if _st is not None else 0.0
+                _e0 = float(_en) if _en is not None else 1e9
+                _en_expr = f":enable='between(t,{_s0:.3f},{_e0:.3f})'"
             filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
             filter_complex_parts.append(
-                f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*(1-{w:.4f})/2:ih*{y:.4f},"
+                f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_left:.4f}:ih*{y:.4f},"
                 f"boxblur=luma_radius=20:luma_power=3[blurred_{idx}]"
             )
             filter_complex_parts.append(
-                f"[orig_{idx}][blurred_{idx}]overlay=(W-w)/2:H*{y:.4f}[{next_label}]"
+                f"[orig_{idx}][blurred_{idx}]overlay=W*{_left:.4f}:H*{y:.4f}{_en_expr}[{next_label}]"
             )
             curr_label = next_label
             _log(f"🌫 Vùng che {idx+1}: từ {y*100:.0f}% → {(y+h)*100:.0f}%, rộng {w*100:.0f}%")
@@ -1979,7 +1988,7 @@ def _burn_srt(
                         y_start = max(0.0, 1.0 - h_pct - lift_pct)
                     else:
                         y_start = 0.0
-                active_zones.append((h_pct, w_pct, y_start))
+                active_zones.append((h_pct, w_pct, y_start, 0.5, None, None))
                 
             if blur_original and blur_extra_zones:
                 for ez in blur_extra_zones:
@@ -1987,23 +1996,32 @@ def _burn_srt(
                         ez_h = float(ez.get("height_pct", 0.12))
                         ez_pos = float(ez.get("position_pct", 0.50))
                         ez_w = float(ez.get("width_pct", 0.80))
+                        ez_x = float(ez.get("x_pct", 0.50))
+                        ez_st = ez.get("start_sec", None)
+                        ez_en = ez.get("end_sec", None)
                         ez_y = _clamp_float(ez_pos - ez_h / 2, 0.0, 1.0 - ez_h)
-                        active_zones.append((ez_h, ez_w, ez_y))
+                        active_zones.append((ez_h, ez_w, ez_y, ez_x, ez_st, ez_en))
                     except Exception:
                         pass
 
             # Apply each blur zone in a chain
             curr_label = "0:v"
             filter_complex_parts = []
-            for idx, (h, w, y) in enumerate(active_zones):
+            for idx, (h, w, y, x, _st, _en) in enumerate(active_zones):
                 next_label = f"b{idx}"
+                _left = max(0.0, min(1.0 - w, x - w / 2))
+                _en_expr = ""
+                if _st is not None or _en is not None:
+                    _s0 = float(_st) if _st is not None else 0.0
+                    _e0 = float(_en) if _en is not None else 1e9
+                    _en_expr = f":enable='between(t,{_s0:.3f},{_e0:.3f})'"
                 filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
                 filter_complex_parts.append(
-                    f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*(1-{w:.4f})/2:ih*{y:.4f},"
+                    f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_left:.4f}:ih*{y:.4f},"
                     f"boxblur=luma_radius=20:luma_power=3[blurred_{idx}]"
                 )
                 filter_complex_parts.append(
-                    f"[orig_{idx}][blurred_{idx}]overlay=(W-w)/2:H*{y:.4f}[{next_label}]"
+                    f"[orig_{idx}][blurred_{idx}]overlay=W*{_left:.4f}:H*{y:.4f}{_en_expr}[{next_label}]"
                 )
                 curr_label = next_label
 
