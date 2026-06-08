@@ -250,6 +250,7 @@ class YouTubeUploader:
         category_id: str = "22",  # 22 = People & Blogs
         privacy_status: str = "private",  # private, unlisted, public
         is_short: bool = False,
+        made_for_kids: bool = False,
         publish_at: str = None,  # ISO 8601 string: YYYY-MM-DDThh:mm:ss.sZ
         on_progress: callable = None,
     ) -> Optional[Dict[str, Any]]:
@@ -331,6 +332,7 @@ class YouTubeUploader:
                     'privacyStatus': privacy_status,
                     'embeddable': True,
                     'publicStatsViewable': True,
+                    'selfDeclaredMadeForKids': made_for_kids,
                 },
             }
             

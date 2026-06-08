@@ -2,9 +2,67 @@
   <script>
   (function(){
     window._procWizStep = window._procWizStep || 1;
+    window._step3Started = false;
+    window._step3Confirmed = false;
     var MAX = 5;
-    window.procWizGo = function(n){
+
+    // ── Per-step enter hook ──────────────────────────────────────────────────
+    function _procWizEnterStep(n) {
+      if (n === 2) {
+        // Step 2: Sync proc-video from first usable queue item, then refresh frame preview
+        const item = (window._batchQueue || []).find(t =>
+          t.status === 'ready' || t.status === 'processing' || t.status === 'done'
+        );
+        if (item && item.val) {
+          const pathEl = document.getElementById('proc-video');
+          const isHttpUrl = /^https?:\/\//i.test(item.val);
+          if (pathEl && !isHttpUrl) {
+            // Local path (file item or downloaded URL) — always sync to proc-video
+            pathEl.value = item.val;
+          }
+          // Always refresh the frame preview when entering Step 2
+          if (typeof subPreviewFetchFrame === 'function') {
+            setTimeout(() => subPreviewFetchFrame(), 300);
+          }
+        }
+      }
+      if (n === 3) {
+        // Step 3: Show/hide the "Start processing" card based on queue readiness
+        _step3RefreshStartCard();
+        // Refresh queue panel when entering step 3
+        _step3RenderQueue();
+      }
+    }
+
+    window.procWizGo = function(n, _forceForward){
       n = Math.max(1, Math.min(MAX, n));
+      var cur = window._procWizStep || 1;
+      var goingForward = n > cur || _forceForward;
+
+      // ── Forward-only guards (never block going back) ──
+      if (goingForward) {
+        if (n > 1) {
+          // Guard for Step 2+3: Need at least one item in queue (any status)
+          const hasAny = (window._batchQueue || []).length > 0;
+          if (!hasAny) {
+            if (window.toast) toast('Vui lòng thêm video vào hàng chờ trước!', 'warning');
+            return;
+          }
+        }
+
+        // Step 3: no extra guard — user can enter to configure AI/Voice settings
+        // while download is still in progress. Processing button in step 3 will
+        // be shown/enabled only once a ready item exists.
+
+        if (n >= 5) {
+          // Guard for Step 5: Must have finished processing
+          if (!window._publishLastOutputPath) {
+            if (window.toast) toast('Vui lòng chờ xử lý video hoàn tất trước khi cấu hình đăng!', 'warning');
+            return;
+          }
+        }
+      }
+
       window._procWizStep = n;
       var root = document.getElementById('page-process');
       if (!root) return;
@@ -23,13 +81,27 @@
       if (next) next.textContent = (n === MAX) ? '✓ Hoàn tất' : 'Tiếp theo →';
       if (hint) hint.textContent = 'Bước ' + n + ' / ' + MAX;
       var c = document.getElementById('content'); if (c) c.scrollTop = 0;
+
+      // Run per-step enter hooks
+      _procWizEnterStep(n);
     };
+
+    // Prev: always allow going back without guards
+    window.procWizPrev = function(){
+      if (window._procWizStep > 1) {
+        // Pass current step + 1 to make goingForward = false in procWizGo
+        // (n = cur-1 < cur, so guard won't fire)
+        window.procWizGo(window._procWizStep - 1);
+      }
+    };
+
     window.procWizNext = function(){ if (window._procWizStep < MAX) window.procWizGo(window._procWizStep + 1); };
-    window.procWizPrev = function(){ if (window._procWizStep > 1) window.procWizGo(window._procWizStep - 1); };
+
     // Initialise immediately (all step nodes precede this script in the DOM).
     window.procWizGo(1);
   })();
   </script>
+
 
   <!-- Batch queue JS -->
   <script>
@@ -51,24 +123,181 @@
       _runBatchQueueFlow();
     }
   }
+  function _step1Log(msg, level) {
+    const box = document.getElementById('step1-dl-log');
+    if (!box) return;
+    box.style.display = 'block';
+    const colors = { success: 'var(--success,#16a34a)', error: 'var(--error,#dc2626)', warning: '#d97706', info: 'var(--text-muted)' };
+    const line = document.createElement('div');
+    line.style.color = colors[level] || colors.info;
+    line.textContent = new Date().toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + '  ' + msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
   function _renderBatchQueue() {
     const list = document.getElementById('batch-queue-list');
     const cnt = document.getElementById('batch-count');
     if (cnt) cnt.textContent = window._batchQueue.length;
     if (!list) return;
+
+    const dlArea = document.getElementById('step1-download-area');
     if (!window._batchQueue.length) {
-      list.innerHTML = '<div class="empty-state text-xs">Chưa có task nào.</div>';
+      list.innerHTML = '<div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>';
+      const nextWrap = document.getElementById('step1-next-btn-wrap');
+      if (nextWrap) nextWrap.style.display = 'none';
+      if (dlArea) dlArea.style.display = 'none';
       if (typeof pBschedRecalcPreview === 'function') pBschedRecalcPreview();
       return;
     }
-    list.innerHTML = window._batchQueue.map((t,i) => `
+
+    // Show download area when there are queue items
+    if (dlArea) dlArea.style.display = 'block';
+
+    const statusLabel = {
+      pending:     '⏳ Chờ',
+      downloading: '📥 Đang tải...',
+      ready:       '✅ Sẵn sàng',
+      processing:  '⚙ Đang xử lý...',
+      done:        '✔ Hoàn tất',
+      error:       '❌ Lỗi',
+    };
+    list.innerHTML = window._batchQueue.map((t,i) => {
+      let badgeClass = 'badge-gray';
+      if (t.status === 'done') badgeClass = 'badge-green';
+      else if (t.status === 'error') badgeClass = 'badge-red';
+      else if (t.status === 'processing' || t.status === 'downloading') badgeClass = 'badge-yellow';
+      else if (t.status === 'ready') badgeClass = 'badge-accent';
+      
+      const disableDel = (t.status === 'processing' || t.status === 'downloading') ? 'disabled' : '';
+      const label = statusLabel[t.status] || t.status;
+      return `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
         <span style="color:var(--text-muted)">${t.type==='url'?'🔗':'📄'}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
-        <span class="badge ${t.status==='done'?'badge-green':t.status==='error'?'badge-red':t.status==='processing'?'badge-yellow':'badge-gray'}">${t.status}</span>
-        <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px" ${t.status==='processing'?'disabled':''}>✕</button>
-      </div>`).join('');
+        <span class="badge ${badgeClass}">${label}</span>
+        <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px" ${disableDel}>✕</button>
+      </div>`;
+    }).join('');
+
+    const hasReady = window._batchQueue.some(t => t.status === 'ready' || t.status === 'done');
+    const hasPending = window._batchQueue.some(t => t.status === 'pending');
+    const hasAny = window._batchQueue.length > 0;
+    const nextWrap = document.getElementById('step1-next-btn-wrap');
+    if (nextWrap) {
+      // Show "Tiếp theo" button as soon as there's anything in queue (not just when ready)
+      // Hide only when auto-flow is on (it handles navigation automatically)
+      nextWrap.style.display = (hasAny && !document.getElementById('proc-auto-flow')?.checked) ? 'block' : 'none';
+    }
+
+    // Update download button state
+    const dlBtn = document.getElementById('btn-step1-download');
+    const dlStatus = document.getElementById('step1-dl-status');
+    if (dlBtn) {
+      const isDownloading = window._step1Downloading;
+      dlBtn.disabled = isDownloading;
+      dlBtn.textContent = isDownloading ? '⏳ Đang tải...' : '📥 Tải hàng chờ';
+    }
+    if (dlStatus) {
+      if (hasReady && !hasPending) {
+        dlStatus.textContent = '✅ Tất cả video đã sẵn sàng.';
+      } else if (hasPending) {
+        dlStatus.textContent = 'Nhấn để bắt đầu tải video gốc từ URL.';
+      }
+    }
+
     if (typeof pBschedRecalcPreview === 'function') pBschedRecalcPreview();
+    // Refresh step 3 start card whenever queue state changes
+    _step3RefreshStartCard();
+    // Refresh step 3 queue panel
+    _step3RenderQueue();
+  }
+
+  /** Show/hide the "Start processing" card in step 3 based on queue readiness */
+  function _step3RefreshStartCard() {
+    const card = document.getElementById('step3-start-card');
+    if (!card) return;
+
+    // A ready item exists (downloaded or local file, not yet kicked off)
+    const hasReady = (window._batchQueue || []).some(t => t.status === 'ready');
+
+    // Pipeline already running or waiting for user (ASS/thumb review panels visible)
+    const isRunning = window._procRunning || window._step3Started;
+
+    // ASS or thumb review panels are open — pipeline is mid-flight, don't show start button
+    const assOpen   = document.getElementById('proc-ass-review-card')?.style.display !== 'none';
+    const thumbOpen = document.getElementById('proc-thumb-pick-card')?.style.display !== 'none';
+
+    const onStep3 = window._procWizStep === 3;
+    const shouldShow = hasReady && !isRunning && !assOpen && !thumbOpen && onStep3;
+    card.style.display = shouldShow ? 'block' : 'none';
+  }
+
+  /** Called when user clicks "Bắt đầu xử lý" in step 3 */
+  window._step3StartProc = function() {
+    // Apply skip flags from checkboxes before starting
+    window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
+    window._procSkipThumbSession  = document.getElementById('step3-skip-thumb')?.checked ?? false;
+    
+    // Mark as started and running
+    window._step3Started = true;
+    window._procRunning = true;
+    
+    // Update task status to processing
+    if (window._procCurrentTaskId) {
+      const t = (window._batchQueue || []).find(x => x.id === window._procCurrentTaskId);
+      if (t) t.status = 'processing';
+    }
+    _renderBatchQueue();
+    
+    // Hide the start card immediately
+    const card = document.getElementById('step3-start-card');
+    if (card) card.style.display = 'none';
+    
+    // Start backend process!
+    startProcessVideo();
+  };
+
+  /** Sync checkbox state to global flags in real-time */
+  window._onStep3SkipChange = function() {
+    window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
+    window._procSkipThumbSession  = document.getElementById('step3-skip-thumb')?.checked ?? false;
+  };
+
+  /** Render the step-3 queue status panel */
+  function _step3RenderQueue() {
+    const list    = document.getElementById('step3-queue-list');
+    const summary = document.getElementById('step3-queue-summary');
+    if (!list) return;
+    const q = window._batchQueue || [];
+    if (!q.length) {
+      list.innerHTML = '<div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>';
+      if (summary) summary.textContent = '';
+      return;
+    }
+    const statusLabel = {
+      pending:     '⏳ Chờ tải',
+      downloading: '📥 Đang tải...',
+      ready:       '✅ Sẵn sàng',
+      processing:  '⚙ Đang xử lý...',
+      done:        '✔ Hoàn thành',
+      error:       '❌ Lỗi',
+    };
+    const badgeClass = {
+      pending: 'badge-gray', downloading: 'badge-yellow',
+      ready: 'badge-accent', processing: 'badge-yellow',
+      done: 'badge-green', error: 'badge-red',
+    };
+    list.innerHTML = q.map(t => `
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
+        <span style="color:var(--text-muted)">${t.type === 'url' ? '🔗' : '📄'}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
+        <span class="badge ${badgeClass[t.status] || 'badge-gray'}">${statusLabel[t.status] || t.status}</span>
+      </div>`).join('');
+    const done    = q.filter(t => t.status === 'done').length;
+    const total   = q.length;
+    const pending = q.filter(t => t.status === 'ready' || t.status === 'pending').length;
+    if (summary) summary.textContent = `${done}/${total} hoàn thành${pending ? ` · ${pending} chờ` : ''}`;
   }
 
   function _onAutoDrainToggle() {
@@ -160,7 +389,24 @@
     }
     window._procCurrentTaskId = null;
     window._procRunning = false;
+    // Reset _step3Started so the "Bắt đầu xử lý" card can appear for the next task
+    window._step3Started = false;
+    // Reset skip flags for next task (unless auto-drain is keeping them intentionally)
+    if (!window._procAutoDrain) {
+      window._procSkipReviewSession = false;
+      window._procSkipThumbSession  = false;
+      // Sync checkboxes back to unchecked
+      const cbAss   = document.getElementById('step3-skip-ass');
+      const cbThumb = document.getElementById('step3-skip-thumb');
+      if (cbAss)   cbAss.checked   = false;
+      if (cbThumb) cbThumb.checked = false;
+    }
     _renderBatchQueue();
+
+    // After successful processing, go to step 2 to review the output
+    if (ok && !window._procAutoDrain) {
+      setTimeout(() => procWizGo(2), 400);
+    }
 
     // Auto-drain: immediately pick the next pending task (or wait if none)
     if (window._procAutoDrain) {
@@ -183,6 +429,8 @@
   // Session-only skip flag: resets when user manually starts a fresh batch
   // (auto-drain keeps it across videos so "Bỏ qua" applies to the rest of the run)
   window._procSkipReviewSession = false;
+  // Session-only skip flag for thumbnail picker
+  window._procSkipThumbSession = false;
   window._procReviewResolve = null; // Promise resolver waiting for user confirm
   window._procAssPath = '';
   // Remove legacy persistent flag (migration from previous version)
@@ -229,8 +477,13 @@
     // Show thumbnail picker (instead of resuming directly)
     const thumbCard = document.getElementById('proc-thumb-pick-card');
     if (thumbCard) {
-      thumbCard.style.display = 'block';
-      thumbCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      // Auto-skip thumbnail if flag is set
+      if (window._procSkipThumbSession) {
+        await procThumbPickSkip();
+      } else {
+        thumbCard.style.display = 'block';
+        thumbCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     } else {
       // Fallback: no thumbnail picker → resume directly
       _procDoResume();
@@ -316,6 +569,8 @@
 
     const card = document.getElementById('proc-thumb-pick-card');
     if (card) card.style.display = 'none';
+    window._step3Confirmed = true;
+    procWizGo(4);
     await _procDoResume();
   }
 
@@ -329,6 +584,8 @@
     } catch (_) {}
     const card = document.getElementById('proc-thumb-pick-card');
     if (card) card.style.display = 'none';
+    window._step3Confirmed = true;
+    procWizGo(4);
     await _procDoResume();
   }
 
@@ -473,7 +730,14 @@
     const ta = document.getElementById('proc-ass-review-content');
     if (pathEl) pathEl.textContent = '📄 ' + assPath;
     if (ta) ta.value = content || '';
-    if (card) { card.style.display = 'block'; card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+    if (card) {
+      card.style.display = 'block';
+      // Auto-navigate to step 3 so user sees the review panel
+      if (window._procWizStep !== 3) {
+        procWizGo(3);
+      }
+      setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150);
+    }
   }
 
   /* ── Pause / Resume ── */
@@ -545,19 +809,31 @@
   document.addEventListener('DOMContentLoaded', () => { _syncColorPicker(); });
 
   function _getPreviewVideoPath() {
-    // Priority: uploaded file path → first item in batch queue (file type) → proc-video field
+    // Priority: uploaded file path → first ready/processing item in batch queue → proc-video field
     if (window._procUploadedPath) {
       return { type: 'file', val: window._procUploadedPath };
     }
     if (window._batchQueue && window._batchQueue.length > 0) {
-      const first = window._batchQueue[0];
-      if (first.type === 'file' && first.val) return { type: 'file', val: first.val };
-      if (first.type === 'url'  && first.val) return { type: 'url',  val: first.val };
+      // Find first item that has a usable path (ready/processing/done have resolved paths)
+      const ready = window._batchQueue.find(t =>
+        t.status === 'ready' || t.status === 'processing' || t.status === 'done'
+      ) || window._batchQueue[0];
+      if (ready && ready.val) {
+        // After download, URL items have their val updated to local file path
+        // Detect by checking if val starts with http(s) — if not, it's a local path
+        const isHttpUrl = /^https?:\/\//i.test(ready.val);
+        if (isHttpUrl) {
+          return { type: 'url', val: ready.val };   // still just a URL (not yet downloaded)
+        } else {
+          return { type: 'file', val: ready.val };  // local file path (file item OR downloaded URL)
+        }
+      }
     }
     const v = document.getElementById('proc-video')?.value?.trim();
     if (v) return { type: 'file', val: v };
     return null;
   }
+
 
   function _renderSubOverlay() {
     const wrap    = document.getElementById('sub-preview-wrap');
@@ -850,7 +1126,115 @@
     }
   }
 
-  function _addCurrentToQueue() {
+  window._step1Downloading = false;
+  async function _runStep1QueueDownload() {
+    if (window._step1Downloading) return;
+    const pending = (window._batchQueue || []).find(t => t.status === 'pending');
+    if (!pending) {
+      _renderBatchQueue();
+      return;
+    }
+
+    window._step1Downloading = true;
+    _renderBatchQueue(); // update button disabled state immediately
+
+    try {
+      if (pending.type === 'url') {
+        pending.status = 'downloading';
+        _renderBatchQueue();
+        _step1Log('📥 Bắt đầu tải: ' + pending.val, 'info');
+
+        const dlStatus = document.getElementById('step1-dl-status');
+        if (dlStatus) dlStatus.textContent = '📥 Đang tải video gốc...';
+
+        const res = await fetch('/api/download_original_video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: pending.val,
+            out_dir: document.getElementById('proc-out')?.value?.trim() || ''
+          })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          pending.status = 'ready';
+          pending.val = data.path; // update to local path
+          pending.desc = data.title || data.path.split(/[\\/]/).pop();
+          _step1Log('✅ Tải xong: ' + (data.title || pending.desc), 'success');
+          if (data.path) _step1Log('📁 Đường dẫn: ' + data.path, 'info');
+          toast('📥 Đã tải video gốc: ' + (data.title || ''), 'success');
+          
+          // Fetch preview frame for Step 2
+          setTimeout(() => { if (typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame(); }, 300);
+
+          // Auto-flow: skip Step 2, jump directly to Step 3
+          if (document.getElementById('proc-auto-flow')?.checked) {
+            _step1Log('🔁 Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
+            window._step3Started = true;
+            window._step3Confirmed = false;
+            window._procCurrentTaskId = pending.id;
+            window._procRunning = true;
+            pending.status = 'processing';
+            const pathEl = document.getElementById('proc-video');
+            const urlEl2 = document.getElementById('proc-url');
+            if (pathEl) pathEl.value = pending.val;
+            if (urlEl2) urlEl2.value = '';
+            procWizGo(3);
+            startProcessVideo();
+          }
+        } else {
+          pending.status = 'error';
+          pending.desc = 'Lỗi: ' + (data.error || 'Unknown error');
+          _step1Log('❌ Tải thất bại: ' + (data.error || 'Unknown error'), 'error');
+          toast('❌ Tải video lỗi: ' + (data.error || ''), 'error');
+        }
+      } else {
+        // File type — already on disk, just mark ready
+        pending.status = 'ready';
+        _step1Log('📄 File video sẵn sàng: ' + (pending.desc || pending.val.split(/[\\/]/).pop()), 'success');
+        toast('📄 File video sẵn sàng', 'success');
+        setTimeout(() => { if (typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame(); }, 300);
+
+        // Auto-flow
+        if (document.getElementById('proc-auto-flow')?.checked) {
+          _step1Log('🔁 Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
+          window._step3Started = true;
+          window._step3Confirmed = false;
+          window._procCurrentTaskId = pending.id;
+          window._procRunning = true;
+          pending.status = 'processing';
+          const pathEl = document.getElementById('proc-video');
+          const urlEl2 = document.getElementById('proc-url');
+          if (pathEl) pathEl.value = pending.val;
+          if (urlEl2) urlEl2.value = '';
+          procWizGo(3);
+          startProcessVideo();
+        }
+      }
+    } catch (e) {
+      pending.status = 'error';
+      pending.desc = 'Lỗi kết nối';
+      _step1Log('❌ Lỗi kết nối: ' + e.message, 'error');
+      toast('❌ Lỗi kết nối tải video', 'error');
+    } finally {
+      window._step1Downloading = false;
+      _renderBatchQueue();
+      // Process next pending item
+      const nextPending = (window._batchQueue || []).find(t => t.status === 'pending');
+      if (nextPending) {
+        setTimeout(() => _runStep1QueueDownload(), 600);
+      }
+    }
+  }
+
+  async function _addCurrentToQueue() {
+
+    // Wait for any in-progress file upload before reading paths
+    if (window._procUploadPromise) {
+      toast('⏳ Đang upload file... vui lòng đợi', 'info');
+      try { await window._procUploadPromise; } catch(_) {}
+    }
+
     const urlEl  = document.getElementById('proc-url');
     const pathEl = document.getElementById('proc-video');
     const url    = urlEl?.value?.trim();
@@ -867,10 +1251,65 @@
       toast('✅ Đã thêm file vào hàng chờ', 'success');
     }
     _renderBatchQueue();
-
-    // Auto-fetch preview frame from first queue item
-    setTimeout(() => subPreviewFetchFrame(), 300);
+    
+    // Trigger downloader
+    _runStep1QueueDownload();
   }
+
+  window.procWizStep2Continue = function() {
+    const firstReady = (window._batchQueue || []).find(t => t.status === 'ready');
+    if (!firstReady) {
+      // Check if all done — suggest going to next step
+      const allDone = (window._batchQueue || []).length > 0 &&
+        (window._batchQueue || []).every(t => t.status === 'done' || t.status === 'error');
+      if (allDone) {
+        toast('Tất cả video trong hàng chờ đã xử lý xong!', 'info');
+        return;
+      }
+      
+      // Check if there are pending items that need downloading
+      const hasPending = (window._batchQueue || []).some(t => t.status === 'pending');
+      if (hasPending) {
+        toast('Đang tự động tải video...', 'info');
+        // Trigger download and wait for it to complete
+        if (typeof _runStep1QueueDownload === 'function') {
+          _runStep1QueueDownload();
+        }
+        return;
+      }
+      
+      toast('Vui lòng thêm video và đợi tải video gốc hoàn tất ở Bước 1!', 'warning');
+      return;
+    }
+    window._step3Started = false;  // Don't auto-start — wait for user to click "Bắt đầu xử lý" in step 3
+    window._step3Confirmed = false;
+
+    // Prepare the task for processing
+    window._procCurrentTaskId = firstReady.id;
+    firstReady.status = 'ready';  // Keep as ready, will change to processing when user clicks start
+    _renderBatchQueue();
+
+    // Feed the task's path into the form fields so startProcessVideo() can find it
+    const pathEl = document.getElementById('proc-video');
+    const urlEl  = document.getElementById('proc-url');
+    // Check if val is still an HTTP URL (pending download) or local path (already downloaded)
+    const isHttpUrl = /^https?:\/\//i.test(firstReady.val);
+    if (isHttpUrl) {
+      // Still a URL → feed to proc-url (will download)
+      if (urlEl) urlEl.value = firstReady.val;
+      if (pathEl) pathEl.value = '';
+    } else {
+      // Local file path (downloaded or uploaded file) → feed to proc-video (skip download)
+      if (pathEl) pathEl.value = firstReady.val;
+      if (urlEl) urlEl.value = '';
+    }
+
+    // Navigate to step 2 to allow user to review settings
+    procWizGo(2);
+    
+    // DO NOT auto-start processing — user must navigate to step 3 and click "Bắt đầu xử lý"
+
+  };
 
   // Re-render overlay on resize
   window.addEventListener('resize', () => {
@@ -899,7 +1338,9 @@
     const file = input.files?.[0];
     if (!file) return;
     window._frameLogoFile = file;
-    document.getElementById('frame-logo-path').value = file.name;
+    
+    // Display filename while uploading
+    document.getElementById('frame-logo-path').value = '⏳ Đang tải: ' + file.name;
 
     // Upload to server immediately so backend can use it
     const form = new FormData();
@@ -908,20 +1349,111 @@
     fetch('/api/upload_anti_fp_image', { method: 'POST', body: form })
       .then(r => r.json())
       .then(d => {
-        if (d.ok) {
+        if (d.ok && d.path) {
           // Store server path as data attribute
           document.getElementById('frame-logo-path').dataset.serverPath = d.path;
+          
+          // Construct URL from path (path is like "temp_uploads/anti-fp-logo-xxx.png")
+          // We need to serve it as /temp_uploads/anti-fp-logo-xxx.png
+          const pathParts = d.path.split(/[\\/]/);  // Handle both / and \
+          const filename = pathParts[pathParts.length - 1];
+          const url = '/temp_uploads/' + filename;
+          
+          // Save to localStorage for persistence
+          try {
+            localStorage.setItem('proc_frame_logo_path', d.path);
+            localStorage.setItem('proc_frame_logo_url', url);
+          } catch (_) {}
+          
+          // Update display to show filename only (not full path)
+          document.getElementById('frame-logo-path').value = filename;
+          
+          if (typeof toast === 'function') {
+            toast('✓ Logo đã lưu: ' + file.name, 'success');
+          }
+          
+          // Load the new logo image for preview
+          const img = new Image();
+          img.onload = () => { 
+            window._frameLogoImg = img; 
+            framePreviewUpdate(); 
+          };
+          img.src = url + '?t=' + Date.now();  // Add timestamp to bypass cache
+        } else {
+          document.getElementById('frame-logo-path').value = 'img/logo.png (mặc định)';
+          if (typeof toast === 'function') {
+            toast('✗ Upload logo thất bại', 'error');
+          }
         }
-      }).catch(() => {});
+      }).catch(() => {
+        document.getElementById('frame-logo-path').value = 'img/logo.png (mặc định)';
+        if (typeof toast === 'function') {
+          toast('✗ Lỗi upload logo', 'error');
+        }
+      });
 
+    // Also show preview immediately from file (before upload completes)
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
-      img.onload = () => { window._frameLogoImg = img; framePreviewUpdate(); };
+      img.onload = () => { 
+        window._frameLogoImg = img; 
+        framePreviewUpdate(); 
+      };
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
     input.value = '';
+  }
+
+  // Load default/saved logo on page load
+  function _loadFrameLogoDefault() {
+    const pathInput = document.getElementById('frame-logo-path');
+    if (!pathInput) return;
+    
+    try {
+      // Try to load saved logo path from localStorage
+      const savedPath = localStorage.getItem('proc_frame_logo_path');
+      const savedUrl = localStorage.getItem('proc_frame_logo_url');
+      
+      if (savedPath && savedUrl) {
+        // Extract filename from path for display
+        const pathParts = savedPath.split(/[\\/]/);
+        const filename = pathParts[pathParts.length - 1];
+        pathInput.value = filename;
+        pathInput.dataset.serverPath = savedPath;
+        
+        // Load the image for preview using URL
+        const img = new Image();
+        img.onload = () => { 
+          window._frameLogoImg = img; 
+          framePreviewUpdate(); 
+        };
+        img.onerror = () => {
+          // If saved path no longer exists, clear localStorage and show default
+          try {
+            localStorage.removeItem('proc_frame_logo_path');
+            localStorage.removeItem('proc_frame_logo_url');
+          } catch (_) {}
+          pathInput.value = 'img/logo.png (mặc định)';
+          pathInput.dataset.serverPath = 'img/logo.png';
+        };
+        // Add timestamp to bypass cache
+        img.src = savedUrl + '?t=' + Date.now();
+        return;
+      }
+    } catch (_) {}
+    
+    // No saved logo → show default
+    pathInput.value = 'img/logo.png (mặc định)';
+    pathInput.dataset.serverPath = 'img/logo.png';
+  }
+
+  // Initialize on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _loadFrameLogoDefault);
+  } else {
+    _loadFrameLogoDefault();
   }
 
   function _roundRect(ctx, x, y, w, h, r) {

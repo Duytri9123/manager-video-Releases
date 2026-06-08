@@ -1,187 +1,54 @@
-  <!-- ═════════════════ STEP 5: Xử lý & Theo dõi ═════════════════ -->
-  <section class="proc-step" data-proc-step="5" style="display:none">
-    <div class="proc-step-head">
-      <h2 class="proc-step-title">⚙️ Xử lý & Theo dõi</h2>
-      <p class="proc-step-sub">Kiểm tra hàng chờ rồi bấm “Xử lý hàng chờ”. Theo dõi tiến trình và nhật ký bên dưới.</p>
-    </div>
+<!-- ═════════════════ STEP 4: Xử lý & Theo dõi ═════════════════ -->
+<section class="proc-step" data-proc-step="4" style="display:none">
+  <div class="proc-step-head">
+    <h2 class="proc-step-title">⚙️ Xử lý & Theo dõi</h2>
+    <p class="proc-step-sub">Theo dõi tiến trình burn phụ đề/khung và nhật ký chi tiết bên dưới.</p>
+  </div>
 
-    <div class="proc-step5-grid">
+  <div class="proc-step5-grid">
 
-      <!-- Batch Process Queue -->
-      <div class="card card-collapsible">
-        <div class="card-header" onclick="toggleCard(this)">
-          <span class="card-title">📋 Hàng chờ xử lý (<span id="batch-count">0</span>)</span>
-          <div class="card-actions" onclick="event.stopPropagation()">
-            <button class="btn btn-danger btn-sm" onclick="window._batchQueue=[];_renderBatchQueue()">🗑 Xóa</button>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="flex-center gap-8 mb-8">
-            <button class="btn btn-secondary btn-sm" onclick="_addProcTask('url')">+ URL</button>
-            <button class="btn btn-secondary btn-sm" onclick="_addProcTask('file')">+ File</button>
-          </div>
-          <div id="batch-queue-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
-            <div class="empty-state text-xs">Chưa có task nào.</div>
-          </div>
-          <div class="btn-group mt-8">
-            <button class="btn btn-primary" id="btn-proc-main" onclick="_runBatchQueueFlow()" style="flex:1;justify-content:center">
-              ▶ Xử lý hàng chờ
-            </button>
-          </div>
-          <label class="check-item mt-8" style="width:100%" title="Khi bật: tự động xử lý liên tục từng video, kể cả video mới thêm vào sau.">
-            <input type="checkbox" id="batch-auto-drain" onchange="_onAutoDrainToggle()">
-            <span>🔁 Tự động xử lý toàn bộ hàng chờ (liên tục)</span>
-          </label>
-          <div class="text-xs text-muted mt-4" id="batch-drain-status"></div>
-        </div>
-      </div>
-
-      <!-- Download Queue — REMOVED per user request -->
-
-      <!-- ASS Review Panel (shown after translation completes) -->
-      <div class="card" id="proc-ass-review-card" style="display:none;border:2px solid var(--accent)">
-        <div class="card-header" style="background:var(--accent-light)">
-          <span class="card-title" style="color:var(--accent)">📝 Kiểm tra nội dung dịch</span>
-          <span class="badge badge-accent">Chờ xác nhận</span>
-        </div>
-        <div class="card-body">
-          <div class="alert-info mb-8" style="font-size:12px">
-            File phụ đề đã được tạo. Kiểm tra và chỉnh sửa nếu cần, sau đó bấm <b>Tiếp tục</b>.
-          </div>
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px" id="proc-ass-review-path"></div>
-          <textarea id="proc-ass-review-content" rows="10"
-            style="width:100%;font-family:monospace;font-size:11px;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px;background:#f8faff">
-          </textarea>
-          <div class="btn-group mt-8">
-            <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="procAssReviewContinue()">
-              ✅ Tiếp tục xử lý
-            </button>
-            <button class="btn btn-secondary" onclick="procAssReviewSkipAlways()">
-              ⏭ Không cần kiểm tra nữa
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Thumbnail Picker Panel (shown after ASS confirmed, before burn) -->
-      <div class="card" id="proc-thumb-pick-card" style="display:none;border:2px solid #f59e0b">
-        <div class="card-header" style="background:#fef3c7">
-          <span class="card-title" style="color:#b45309">🖼 Chọn thumbnail</span>
-          <span class="badge" style="background:#f59e0b;color:#fff">Chờ xác nhận</span>
-        </div>
-        <div class="card-body">
-          <div class="alert-info mb-8" style="font-size:12px">
-            Chọn ảnh thumbnail cho video. Bỏ qua nếu không muốn chèn thumbnail vào đầu video.
-          </div>
-
-          <!-- Mode selector -->
-          <div class="check-grid mb-12" style="grid-template-columns:repeat(4,1fr)">
-            <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="none" checked onchange="procThumbPickModeChange()"><span>Không dùng</span></label>
-            <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="frame" onchange="procThumbPickModeChange()"><span>Frame video</span></label>
-            <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="import" onchange="procThumbPickModeChange()"><span>Upload ảnh</span></label>
-            <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="ai" onchange="procThumbPickModeChange()"><span>AI (9Router/Gemini)</span></label>
-          </div>
-
-          <!-- Frame timestamp option -->
-          <div id="proc-thumb-pick-frame-opts" style="display:none">
-            <label class="lbl">Thời điểm lấy frame (giây)</label>
-            <input type="number" id="proc-thumb-pick-ts" value="5" min="0" step="0.5" class="inp">
-          </div>
-
-          <!-- Import file option -->
-          <div id="proc-thumb-pick-import-opts" style="display:none">
-            <label class="lbl">File ảnh thumbnail</label>
-            <input type="file" id="proc-thumb-pick-file" accept="image/*" onchange="procThumbPickPreview()">
-            <img id="proc-thumb-pick-preview" style="display:none;max-width:100%;max-height:200px;margin-top:8px;border-radius:6px;border:1px solid var(--border)">
-          </div>
-
-          <!-- Common options -->
-          <div id="proc-thumb-pick-common" style="display:none">
-            <div class="grid-2 mt-8">
-              <div>
-                <label class="lbl">Tiêu đề trên thumbnail (tùy chọn)</label>
-                <input type="text" id="proc-thumb-pick-title" class="inp" placeholder="Để trống = dùng tên video">
-              </div>
-              <div>
-                <label class="lbl">Thời lượng chèn (giây)</label>
-                <input type="number" id="proc-thumb-pick-duration" value="2" min="0.5" max="10" step="0.5" class="inp">
-              </div>
-            </div>
-          </div>
-
-          <div class="btn-group mt-12">
-            <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="procThumbPickContinue()">
-              ✅ Tiếp tục xử lý
-            </button>
-            <button class="btn btn-secondary" onclick="procThumbPickSkip()">
-              ⏭ Bỏ qua thumbnail
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Thumbnail Failure Recovery Panel (shown when AI thumbnail fails mid-pipeline) -->
-      <div class="card" id="proc-thumb-fail-card" style="display:none;border:2px solid #dc2626">
-        <div class="card-header" style="background:#fee2e2">
-          <span class="card-title" style="color:#991b1b">⚠ Thumbnail AI thất bại</span>
-          <span class="badge" style="background:#dc2626;color:#fff">Cần xử lý</span>
-        </div>
-        <div class="card-body">
-          <div class="alert-info mb-8" style="font-size:12px;background:#fef2f2;border-color:#fecaca;color:#991b1b">
-            Tạo thumbnail AI không thành công. Pipeline đang chờ — chọn 1 trong 3 cách bên dưới.
-          </div>
-          <div class="btn-group" style="flex-direction:column;gap:8px">
-            <button class="btn btn-primary" onclick="procThumbFailRetry()">
-              🔄 Tạo lại bằng AI
-            </button>
-            <div>
-              <label class="lbl">Hoặc upload ảnh thay thế:</label>
-              <input type="file" id="proc-thumb-fail-file" accept="image/*" onchange="procThumbFailUpload()">
-              <img id="proc-thumb-fail-preview" style="display:none;max-width:100%;max-height:200px;margin-top:8px;border-radius:6px;border:1px solid var(--border)">
-            </div>
-            <button class="btn btn-secondary" onclick="procThumbFailSkip()">
-              ⏭ Bỏ qua thumbnail (không chèn)
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Progress -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">📊 Tiến trình</span>
-          <div class="card-actions">
-            <button class="btn btn-secondary btn-sm" id="btn-proc-pause" style="display:none" onclick="procTogglePause()">
-              ⏸ Dừng
-            </button>
-          </div>
-        </div>
-        <div class="progress-row">
-          <span class="progress-label">Tổng thể</span>
-          <div class="progress-bar-wrap"><div class="progress-bar pb-overall" id="pb-proc-overall"></div></div>
-          <span class="progress-pct" id="pb-proc-overall-pct">0%</span>
-        </div>
-        <div class="progress-info text-muted" id="lbl-proc-overall">--</div>
-        
-        <div id="proc-done-actions" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-          <button class="btn btn-success w-full" onclick="sendLastProcessedToPublish()">
-            📤 Thêm dữ liệu vào Đăng video
+    <!-- Progress -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📊 Tiến trình</span>
+        <div class="card-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-proc-pause" style="display:none" onclick="procTogglePause()">
+            ⏸ Dừng
           </button>
         </div>
       </div>
-
-      <!-- Log -->
-      <div class="card card-collapsible">
-        <div class="card-header" onclick="toggleCard(this)">
-          <span class="card-title">📝 Nhật ký</span>
-          <div class="card-actions" onclick="event.stopPropagation()">
-            <button class="btn btn-secondary btn-sm" onclick="clearLog('proc-log')">Xóa</button>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="log-box" id="proc-log" style="height:280px"></div>
+      <div class="progress-row">
+        <span class="progress-label">Tổng thể</span>
+        <div class="progress-bar-wrap"><div class="progress-bar pb-overall" id="pb-proc-overall"></div></div>
+        <span class="progress-pct" id="pb-proc-overall-pct">0%</span>
+      </div>
+      <div class="progress-info text-muted" id="lbl-proc-overall">--</div>
+      
+      <div id="proc-done-actions" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div class="btn-group" style="flex-direction:column;gap:8px">
+          <button class="btn btn-primary w-full justify-center" style="font-weight:700"
+            onclick="_procImportAndAICaption()">
+            🤖 Import & AI viết Caption → Đăng (Bước 5)
+          </button>
+          <button class="btn btn-success w-full justify-center" onclick="sendLastProcessedToPublish()">
+            👉 Chuyển sang Bước 5 (đã có caption) →
+          </button>
         </div>
       </div>
+    </div>
 
-    </div><!-- /step5-grid -->
-  </section><!-- /step 5 -->
+    <!-- Log -->
+    <div class="card card-collapsible">
+      <div class="card-header" onclick="toggleCard(this)">
+        <span class="card-title">📝 Nhật ký</span>
+        <div class="card-actions" onclick="event.stopPropagation()">
+          <button class="btn btn-secondary btn-sm" onclick="clearLog('proc-log')">Xóa</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="log-box" id="proc-log" style="height:360px"></div>
+      </div>
+    </div>
+
+  </div><!-- /step5-grid -->
+</section><!-- /step 4 -->

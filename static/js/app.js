@@ -559,6 +559,9 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
   // Reset UI
   const logBox = document.getElementById('proc-log');
   if (logBox) logBox.innerHTML = '';
+  // Reset step3 log mirror
+  const logBox3 = document.getElementById('step3-log');
+  if (logBox3) logBox3.innerHTML = '';
   _setProcProgress(0, 'Bắt đầu...');
 
   const baseFields = {
@@ -693,6 +696,10 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
           _setProcProgress(100, 'Hoàn thành!');
 
           // ── Auto-publish after processing ──
+          if (document.getElementById('p-autopub-enabled')?.checked) {
+            if (typeof procWizGo === 'function') procWizGo(5);
+          }
+
           const autoPubPromise = (typeof pPubAutoUploadAll === 'function'
               && document.getElementById('p-autopub-enabled')?.checked
               && window._publishLastOutputPath)
@@ -815,7 +822,63 @@ function sendLastProcessedToPublish() {
     toast('Không tìm thấy đường dẫn video vừa xử lý', 'warning');
     return;
   }
-  sendToPublish(window._publishLastOutputPath);
+  // Navigate to wizard step 5 (Đăng tự động — embedded in process wizard)
+  if (typeof procWizGo === 'function') {
+    procWizGo(5);
+    toast('✅ Video xử lý xong — hãy cấu hình đăng ở bước 5', 'success');
+  } else {
+    // Fallback: switch to publish page
+    sendToPublish(window._publishLastOutputPath);
+  }
+}
+
+/**
+ * Reads ASS subtitle → calls AI to generate caption → navigates to step 5.
+ * Shows a loading indicator while AI is running.
+ */
+async function _procImportAndAICaption() {
+  if (!window._publishLastOutputPath) {
+    toast('Không tìm thấy video vừa xử lý', 'warning');
+    return;
+  }
+
+  const btn = event?.currentTarget;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ AI đang viết caption...'; }
+
+  try {
+    // Read ASS content if available
+    const assPath = window._publishLastSubtitlePath || '';
+    let assContent = '';
+    if (assPath) {
+      try {
+        const r = await fetch('/api/proc_read_ass', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: assPath })
+        });
+        const d = await r.json();
+        assContent = d.content || '';
+      } catch (_) {}
+    }
+
+    // Enable auto-publish panel so AI fill works
+    const autopubChk = document.getElementById('p-autopub-enabled');
+    if (autopubChk && !autopubChk.checked) autopubChk.checked = true;
+
+    // Run AI analysis
+    if (assContent && typeof pPubAnalyzeFromAss === 'function') {
+      await pPubAnalyzeFromAss(assContent);
+    } else {
+      _appendProcLog('⚠ Không có ASS để AI phân tích — chuyển sang bước 5 để nhập thủ công', 'warning');
+    }
+  } catch (e) {
+    _appendProcLog('❌ AI caption thất bại: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 Import & AI viết Caption → Đăng (Bước 5)'; }
+  }
+
+  // Navigate to step 5
+  sendLastProcessedToPublish();
 }
 
 function sendToPublish(videoPath) {
@@ -883,6 +946,14 @@ function _appendProcLog(msg, level) {
   div.textContent = `[${ts}] ${msg}`;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
+
+  // Mirror to step 3 log box if visible
+  const box3 = document.getElementById('step3-log');
+  if (box3) {
+    const div3 = div.cloneNode(true);
+    box3.appendChild(div3);
+    box3.scrollTop = box3.scrollHeight;
+  }
 }
 
 function _setProcProgress(pct, label) {
@@ -892,6 +963,12 @@ function _setProcProgress(pct, label) {
   if (bar)   bar.style.width = pct + '%';
   if (pctEl) pctEl.textContent = pct + '%';
   if (lblEl) lblEl.textContent = label || '';
+
+  // Mirror progress to step 3 mini bar
+  const bar3  = document.getElementById('pb-step3-overall');
+  const pct3  = document.getElementById('pb-step3-pct');
+  if (bar3)  bar3.style.width = pct + '%';
+  if (pct3)  pct3.textContent = pct + '%';
 }
 
 /* ── Transcribe page ─────────────────────────────────────────────────────── */

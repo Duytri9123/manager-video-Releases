@@ -816,6 +816,146 @@ def process_video():
     return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
 
 
+@bp.route("/api/download_original_video", methods=["POST"])
+def download_original_video():
+    """Download video from URL and save it to the output folder."""
+    data = request.json or {}
+    video_url = str(data.get("url") or "").strip()
+    out_dir = str(data.get("out_dir") or "").strip()
+
+    if not video_url:
+        return jsonify({"ok": False, "error": "Chưa nhập URL video"}), 400
+
+    from config import ConfigLoader
+    from auth import CookieManager
+    from core import DouyinAPIClient, URLParser
+    from core.video_downloader import VideoDownloader
+    from control import QueueManager, RateLimiter, RetryHandler
+    from storage import FileManager
+    import re
+    from urllib.parse import urlparse, parse_qs
+
+    def _pick_url(raw: str) -> str:
+        text = str(raw or "").strip()
+        if not text:
+            return ""
+        m = re.search(r"https?://[^\s]+", text)
+        if m:
+            return m.group(0).rstrip("\"'.,;)")
+        if text.startswith("v.douyin.com/") or text.startswith("www.douyin.com/"):
+            return "https://" + text
+        return text
+
+    def _extract_aweme_id(url: str, parsed_url: dict | None) -> str:
+        if parsed_url:
+            aid = str(parsed_url.get("aweme_id") or "").strip()
+            if aid:
+                return aid
+        qs = parse_qs(urlparse(url).query or "")
+        for key in ("modal_id", "item_id", "group_id", "aweme_id"):
+            val = str((qs.get(key) or [""])[0]).strip()
+            if val.isdigit():
+                return val
+        m = re.search(r"/(?:video|note|gallery|slides|share/video)/(\d{15,20})", url)
+        if m:
+            return m.group(1)
+        return ""
+
+    async def _do_download():
+        cfg = ConfigLoader(str(CONFIG_FILE))
+        cm = CookieManager()
+        cm.set_cookies(get_cookies_with_fallback())
+        if not cm.validate_cookies():
+            raise RuntimeError("Cookies may be invalid")
+
+        from core.proxy_resolver import resolve_proxy as _resolve_proxy
+        async with DouyinAPIClient(cm.get_cookies(), proxy=_resolve_proxy(cfg)) as api:
+            normalized_url = _pick_url(video_url)
+            if not normalized_url:
+                raise RuntimeError("URL is empty")
+
+            resolved_url = normalized_url
+            if "v.douyin.com" in resolved_url:
+                redirected = await api.resolve_short_url(resolved_url)
+                if redirected:
+                    resolved_url = redirected
+
+            parsed = URLParser.parse(resolved_url)
+            aweme_id = _extract_aweme_id(resolved_url, parsed)
+            if not aweme_id:
+                aweme_id = _extract_aweme_id(normalized_url, URLParser.parse(normalized_url))
+            if not aweme_id:
+                raise RuntimeError("Invalid video URL. Please use a specific Douyin post link.")
+
+            if parsed and parsed.get("type") not in ("video", "gallery") and not aweme_id:
+                raise RuntimeError("URL is not a video post")
+
+            aweme_data = await api.get_video_detail(aweme_id)
+            if not aweme_data:
+                raise RuntimeError("Failed to fetch video detail")
+
+            raw_title = str(aweme_data.get("desc") or "video").strip() or "video"
+            resolved_title = _resolve_naming_title(raw_title)
+
+            out_path = Path(out_dir).expanduser() if out_dir else Path(cfg.get("path") or "./Downloaded")
+            file_manager = FileManager(str(out_path))
+            downloader = VideoDownloader(
+                config=cfg,
+                api_client=api,
+                file_manager=file_manager,
+                cookie_manager=cm,
+                database=None,
+                rate_limiter=RateLimiter(max_per_second=float(cfg.get("rate_limit", 5) or 5)),
+                retry_handler=RetryHandler(max_retries=int(cfg.get("retry_times", 3) or 3)),
+                queue_manager=QueueManager(max_workers=1),
+                progress_reporter=None,
+            )
+
+            if downloader._detect_media_type(aweme_data) != "video":
+                raise RuntimeError("URL is not a video post")
+
+            play_info = downloader._build_no_watermark_url(aweme_data)
+            if not play_info:
+                raise RuntimeError("No playable video URL found")
+
+            play_url, headers = play_info
+            from core.video_processor import _safe_stem
+
+            slug = _safe_stem(resolved_title)
+            base_name = f"{slug}_{aweme_id}"
+            save_dir = out_path / "Process_video" / base_name
+            save_dir.mkdir(parents=True, exist_ok=True)
+            save_path = save_dir / f"{base_name}.mp4"
+
+            if save_path.exists():
+                save_path = save_dir / f"{base_name}_{int(time.time())}.mp4"
+
+            session = await api.get_session()
+            ok = await file_manager.download_file(
+                play_url, save_path, session,
+                headers=headers, proxy=api.proxy,
+            )
+            if not ok or not save_path.exists():
+                raise RuntimeError("Download failed")
+
+            return save_path.resolve(), resolved_title
+
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            downloaded_path, downloaded_title = loop.run_until_complete(_do_download())
+        finally:
+            loop.close()
+
+        return jsonify({
+            "ok": True,
+            "path": str(downloaded_path),
+            "title": downloaded_title
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/api/make_vertical_video", methods=["POST"])
 def make_vertical_video_route():
     """Convert landscape video to 9:16 vertical with blurred gradient layers."""

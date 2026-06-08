@@ -731,6 +731,7 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
   const tagsStr  = document.getElementById('p-yt-tags')?.value?.trim()  || '';
   const tags     = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
   const isShort  = document.getElementById('p-yt-is-short')?.checked || false;
+  const madeForKids = document.getElementById('p-yt-made-for-kids')?.value === 'true';
   let privacy    = document.getElementById('p-yt-privacy')?.value || 'private';
 
   let publishAt = null;
@@ -748,6 +749,7 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
     tags,
     privacy_status: privacy,
     is_short:       isShort,
+    made_for_kids:  madeForKids,
     publish_at:     publishAt
   };
 

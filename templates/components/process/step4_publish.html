@@ -1,5 +1,5 @@
-  <!-- ═════════════════ STEP 4: Đăng tự động & Lịch ═════════════════ -->
-  <section class="proc-step" data-proc-step="4" style="display:none">
+  <!-- ═════════════════ STEP 5: Đăng tự động & Lịch ═════════════════ -->
+  <section class="proc-step" data-proc-step="5" style="display:none">
     <div class="proc-step-head">
       <h2 class="proc-step-title">📤 Đăng tự động & Lịch</h2>
       <p class="proc-step-sub">Tùy chọn: tự động đăng lên YouTube / TikTok / Facebook và đặt lịch theo lô sau khi video xử lý xong.</p>
@@ -90,11 +90,17 @@
                 </select>
               </div>
               <div class="field">
-                <label>&nbsp;</label>
-                <label class="check-item w-full" style="height:38px;margin:0">
-                  <input type="checkbox" id="p-yt-is-short"><span>📱 YouTube Shorts</span>
-                </label>
+                <label>Dành cho trẻ em</label>
+                <select id="p-yt-made-for-kids">
+                  <option value="false" selected>🚫 Không phải nội dung trẻ em</option>
+                  <option value="true">👦 Dành cho trẻ em</option>
+                </select>
               </div>
+            </div>
+            <div class="check-grid mt-4" style="grid-template-columns:1fr 1fr">
+              <label class="check-item w-full" style="height:38px;margin:0">
+                <input type="checkbox" id="p-yt-is-short"><span>📱 YouTube Shorts</span>
+              </label>
             </div>
           </div>
 

@@ -141,6 +141,7 @@ def youtube_upload():
         tags = data.get("tags") or []
         privacy_status = str(data.get("privacy_status") or "private").strip().lower()
         is_short = bool(data.get("is_short", False))
+        made_for_kids = bool(data.get("made_for_kids", False))
         publish_at = str(data.get("publish_at") or "").strip() or None
     else:
         video_file = request.files.get("video_file")
@@ -162,6 +163,7 @@ def youtube_upload():
             tags = []
         privacy_status = str(request.form.get("privacy_status") or "private").strip().lower()
         is_short = request.form.get("is_short", "false").lower() in ("true", "1", "yes")
+        made_for_kids = request.form.get("made_for_kids", "false").lower() in ("true", "1", "yes")
         publish_at = str(request.form.get("publish_at") or "").strip() or None
 
     if not title and video_path:
@@ -213,6 +215,7 @@ def youtube_upload():
                         tags=tags,
                         privacy_status=privacy_status,
                         is_short=is_short,
+                        made_for_kids=made_for_kids,
                         publish_at=publish_at,
                         on_progress=_on_progress,
                     )
