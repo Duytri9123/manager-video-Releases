@@ -42,6 +42,8 @@ _BLUEPRINTS: List[Tuple[str, str, str]] = [
     ("routes.videogen",   "bp", "videogen"),
     ("routes.idea2video", "bp", "idea2video"),
     ("routes.ai_studio",  "bp", "ai_studio"),
+    ("routes.n8n",        "bp", "n8n"),
+    ("routes.sales",      "bp", "sales"),
 ]
 
 _REGISTERED: List[str] = []

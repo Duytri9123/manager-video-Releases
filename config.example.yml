@@ -80,6 +80,11 @@ video_process:
   model: small
   language: zh
   fpt_api_key: ''   # đặt trong env FPT_TTS_API_KEY
+  elevenlabs_api_key: ''   # env ELEVENLABS_API_KEY
+  elevenlabs_voice_id: '21m00Tcm4TlvDq8ikWAM'
+  fish_api_key: ''         # env FISH_API_KEY — Fish Audio (đa ngôn ngữ: ja, zh, ko, vi...)
+  fish_model: 's2-pro'    # backbone: s2-pro (mới nhất) hoặc s1
+  fish_reference_id: ''   # voice model ID từ fish.audio — để trống = giọng mặc định
   tts_engine: edge-tts
   tts_voice: vi-VN-HoaiMyNeural
   bg_volume: 0.15
@@ -147,3 +152,12 @@ idea2video:
   default_style: 'cinematic, high quality, dramatic lighting'
   shot_duration: 5      # giây mỗi shot (Gemini Veo 2)
   max_shots_per_scene: 8
+
+# n8n orchestration — toolvideo là "worker", n8n là "conductor"
+# n8n (lịch/webhook/đăng bài/thông báo) ──HTTP──▶ toolvideo REST API
+n8n:
+  enabled: false
+  base_url: http://localhost:5678   # URL instance n8n
+  api_key: ''                       # n8n REST API key (env N8N_API_KEY) — chỉ cần để liệt kê workflow
+  webhook_url: ''                   # Production webhook URL để trigger
+  timeout_sec: 30

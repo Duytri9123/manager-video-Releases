@@ -499,7 +499,95 @@
 
         document.addEventListener('pointerdown', function(e){
           if (!wrap.contains(e.target)) return;
-          if (document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked) return;
+          var frameOn = document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked;
+
+          if (frameOn) {
+            // ── Frame mode: hit-test blur zones drawn on canvas ──
+            var canvas = document.getElementById('frame-preview-canvas');
+            var g = window._frameGeom;
+            if (!canvas || !g || !g.vidH) return;
+            var rect = canvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            // Click position in canvas-internal coords
+            var cx = (e.clientX - rect.left) / rect.width  * g.cW;
+            var cy = (e.clientY - rect.top)  / rect.height * g.cH;
+            // Convert to video-area fraction (0..1)
+            var fxv = (cx - g.vidX) / g.vidW;
+            var fyv = (cy - g.vidY) / g.vidH;
+
+            var hit = null;
+            var zones = window._procExtraBlurZones || [];
+
+            // First: test resize handles of the currently-selected extra zone
+            var curSel = window._pe2Sel;
+            if (curSel && curSel.type === 'extra') {
+              var sz = zones.find(function(z){ return z.id === curSel.id; });
+              if (sz) {
+                var szw = (sz.width || 80) / 100;
+                var szh = (sz.height || 12) / 100;
+                var szxc = ((sz.x == null) ? 50 : sz.x) / 100;
+                var szyc = (sz.position || 50) / 100;
+                var rightF = szxc + szw/2, bottomF = szyc + szh/2;
+                var tol = 0.04;  // handle hit tolerance in fraction
+                // East handle (right-middle)
+                if (Math.abs(fxv - rightF) < tol && Math.abs(fyv - szyc) < tol*2) {
+                  hit = { type:'resize', id: sz.id, edge: 'e' };
+                }
+                // South handle (bottom-middle)
+                else if (Math.abs(fyv - bottomF) < tol && Math.abs(fxv - szxc) < tol*2) {
+                  hit = { type:'resize', id: sz.id, edge: 's' };
+                }
+              }
+            }
+
+            // Test extra blur zones (top-most first)
+            if (!hit) {
+              for (var zi = zones.length - 1; zi >= 0; zi--) {
+                var z = zones[zi];
+                var zw = (z.width || 80) / 100;
+                var zh = (z.height || 12) / 100;
+                var zxc = ((z.x == null) ? 50 : z.x) / 100;
+                var zyc = (z.position || 50) / 100;
+                if (fxv >= zxc - zw/2 && fxv <= zxc + zw/2 &&
+                    fyv >= zyc - zh/2 && fyv <= zyc + zh/2) {
+                  hit = { type:'extra', id: z.id };
+                  break;
+                }
+              }
+            }
+            // Test main blur zone (che phụ đề gốc)
+            if (!hit && document.getElementById('proc-blur-original')?.checked) {
+              var mbw = 0.80;
+              var mbh = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
+              var byOv = document.getElementById('proc-blur-y')?.value?.trim();
+              var myc;
+              if (byOv !== '' && byOv !== undefined) {
+                myc = parseFloat(byOv) / 100;
+              } else {
+                myc = (document.getElementById('proc-sub-pos')?.value === 'top') ? mbh/2 + 0.06 : 1 - mbh/2 - 0.06;
+              }
+              if (fxv >= 0.5 - mbw/2 && fxv <= 0.5 + mbw/2 &&
+                  fyv >= myc - mbh/2 && fyv <= myc + mbh/2) {
+                hit = { type:'blur' };
+              }
+            }
+
+            if (hit) {
+              drag = hit;
+              // Selection follows the zone (resize keeps the same zone selected)
+              window._pe2Sel = (hit.type === 'resize') ? { type:'extra', id: hit.id } : hit;
+              document.body.classList.add('pe2-dragging');
+              // Re-render canvas so the blue selection outline shows immediately
+              if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+              e.preventDefault(); e.stopPropagation();
+            } else {
+              // Clicked empty area → deselect
+              window._pe2Sel = null;
+              if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+            }
+            return;
+          }
+
           var t = e.target;
           var handle = (t.closest ? t.closest('.pe2-handle') : null);
           if (handle){
@@ -524,7 +612,25 @@
           if (!drag) return;
           var rect = wrap.getBoundingClientRect();
           if (!rect.height) return;
-          var f = clamp((e.clientY - rect.top) / rect.height, 0, 1);
+
+          // Compute vertical/horizontal fractions relative to the VIDEO area.
+          // In frame mode, the video is offset (title bar on top, blur on sides),
+          // so convert canvas coords → video-area fraction using stored geometry.
+          var f, fx;
+          var frameOn = document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked;
+          var g = window._frameGeom;
+          if (frameOn && g && g.vidH) {
+            var canvas = document.getElementById('frame-preview-canvas');
+            var crect = canvas ? canvas.getBoundingClientRect() : rect;
+            var cx = (e.clientX - crect.left) / crect.width  * g.cW;
+            var cy = (e.clientY - crect.top)  / crect.height * g.cH;
+            f  = clamp((cy - g.vidY) / g.vidH, 0, 1);
+            fx = clamp((cx - g.vidX) / g.vidW, 0, 1);
+          } else {
+            f  = clamp((e.clientY - rect.top)  / rect.height, 0, 1);
+            fx = clamp((e.clientX - rect.left) / rect.width,  0, 1);
+          }
+
           if (drag.type === 'sub'){
             var posSel = document.getElementById('proc-sub-pos');
             var marginEl = document.getElementById('proc-margin-v');
@@ -541,7 +647,6 @@
           } else if (drag.type === 'extra'){
             var z = (window._procExtraBlurZones || []).find(function(x){ return x.id === drag.id; });
             if (z){
-              var fx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
               z.position = Math.round(f * 100);
               z.x = Math.round(fx * 100);
               if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
@@ -549,7 +654,7 @@
           } else if (drag.type === 'resize'){
             var zr = (window._procExtraBlurZones || []).find(function(x){ return x.id === drag.id; });
             if (zr){
-              var rfx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+              var rfx = fx;
               var xc = ((zr.x === undefined || zr.x === null) ? 50 : zr.x) / 100;
               var yc = ((zr.position === undefined || zr.position === null) ? 50 : zr.position) / 100;
               if (drag.edge.indexOf('e') >= 0) zr.width  = Math.round(clamp(2 * Math.abs(rfx - xc) * 100, 20, 100));

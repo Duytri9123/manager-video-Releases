@@ -32,6 +32,11 @@ ELEVENLABS_TTS_ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id
 # Default ElevenLabs voice ID: Rachel (en) — overridable via config elevenlabs_voice_id
 ELEVENLABS_DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
+# Fish Audio TTS — multilingual backbone, excels at JA/ZH/KO phonetics
+# Docs: https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech
+FISH_TTS_ENDPOINT = "https://api.fish.audio/v1/tts"
+FISH_DEFAULT_MODEL = "s2-pro"  # backbone: "s2-pro" (recommended) or "s1"
+
 
 # ── ffmpeg helper ─────────────────────────────────────────────────────────────
 def find_ffmpeg() -> Optional[str]:
@@ -2567,6 +2572,8 @@ def _max_tts_chars_for_engine(engine: str) -> int:
         return 200
     if engine == "elevenlabs":
         return 2500
+    if engine == "fish-audio":
+        return 1500
     if engine == "9router" or engine.startswith("9r:"):
         return 1500
     # edge-tts, openai-tts, and others
@@ -2592,6 +2599,9 @@ class MultiProviderTTS:
         elevenlabs_voice_id: str = "",
         elevenlabs_model: str = "eleven_multilingual_v2",
         fpt_fallback_elevenlabs: bool = True,
+        fish_api_key: str = "",
+        fish_model: str = "",
+        fish_reference_id: str = "",
     ):
         self.voice = voice
         self.engine = engine
@@ -2603,6 +2613,13 @@ class MultiProviderTTS:
         self.elevenlabs_api_key = (elevenlabs_api_key or "").strip() or os.getenv("ELEVENLABS_API_KEY", "").strip()
         self.elevenlabs_voice_id = (elevenlabs_voice_id or "").strip() or ELEVENLABS_DEFAULT_VOICE_ID
         self.elevenlabs_model = elevenlabs_model or "eleven_multilingual_v2"
+        self.fish_api_key = (
+            (fish_api_key or "").strip()
+            or os.getenv("FISH_API_KEY", "").strip()
+            or os.getenv("FISH_AUDIO_API_KEY", "").strip()
+        )
+        self.fish_model = (fish_model or "").strip() or FISH_DEFAULT_MODEL
+        self.fish_reference_id = (fish_reference_id or "").strip()
         # Tự động fallback FPT → ElevenLabs khi FPT hết token/quota
         self.fpt_fallback_elevenlabs = fpt_fallback_elevenlabs and bool(self.elevenlabs_api_key)
 
@@ -2642,6 +2659,19 @@ class MultiProviderTTS:
                     text, voice_id, out_path,
                     api_key=self.elevenlabs_api_key,
                     model_id=self.elevenlabs_model,
+                )
+                if ok:
+                    return True
+            except Exception:
+                pass
+
+        elif engine == "fish-audio":
+            try:
+                ref_id = (self.voice or "").strip() or self.fish_reference_id
+                ok = await _tts_fish(
+                    text, ref_id, out_path,
+                    api_key=self.fish_api_key,
+                    model=self.fish_model,
                 )
                 if ok:
                     return True
@@ -3255,6 +3285,102 @@ async def _tts_elevenlabs(
             audio_bytes = await resp.read()
             if not audio_bytes or len(audio_bytes) < 100:
                 raise RuntimeError("ElevenLabs trả về audio rỗng")
+
+            out_path.write_bytes(audio_bytes)
+            return out_path.exists() and out_path.stat().st_size > 0
+
+
+async def _tts_fish(
+    text: str,
+    voice: str,
+    out_path: Path,
+    api_key: str = "",
+    model: str = "",
+    speed: float = 1.0,
+) -> bool:
+    """Generate TTS using Fish Audio.
+
+    Docs: https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech
+
+    Fish Audio's s1 / s2-pro backbones are multilingual and handle the
+    phonetics of languages like Japanese, Chinese and Korean very well. The
+    target language is auto-detected from the text — no language code needed.
+
+    Args:
+        text: Text to synthesize (any supported language).
+        voice: Fish Audio voice model ID (``reference_id``). Leave empty to use
+            the backbone's built-in default voice.
+        out_path: Output MP3 file path.
+        api_key: Fish Audio API key. Falls back to env FISH_API_KEY /
+            FISH_AUDIO_API_KEY.
+        model: Backbone model — "s2-pro" (default) or "s1".
+        speed: Speaking rate multiplier (0.5–2.0).
+    """
+    import aiohttp
+
+    key = (
+        (api_key or "").strip()
+        or os.getenv("FISH_API_KEY", "").strip()
+        or os.getenv("FISH_AUDIO_API_KEY", "").strip()
+    )
+    if not key:
+        raise RuntimeError(
+            "Missing Fish Audio API key (set FISH_API_KEY or config video_process.fish_api_key)"
+        )
+
+    payload_text = str(text or "").strip()
+    if not payload_text:
+        return False
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    backbone = (model or "").strip().lower() or FISH_DEFAULT_MODEL
+    if backbone not in ("s1", "s2-pro"):
+        backbone = FISH_DEFAULT_MODEL
+
+    payload: dict = {
+        "text": payload_text,
+        "format": "mp3",
+        "mp3_bitrate": 128,
+        "normalize": True,
+        "latency": "normal",
+    }
+    ref = (voice or "").strip()
+    if ref:
+        payload["reference_id"] = ref
+    try:
+        spd = float(speed)
+    except (TypeError, ValueError):
+        spd = 1.0
+    if abs(spd - 1.0) > 0.01:
+        payload["prosody"] = {"speed": max(0.5, min(2.0, spd))}
+
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "model": backbone,
+    }
+
+    timeout = aiohttp.ClientTimeout(total=120)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(FISH_TTS_ENDPOINT, json=payload, headers=headers) as resp:
+            if resp.status == 401:
+                raise RuntimeError("Fish Audio API key không hợp lệ (401 Unauthorized)")
+            if resp.status == 402:
+                raise RuntimeError("Fish Audio hết credit / cần nạp tiền (402 Payment Required)")
+            if resp.status == 422:
+                body = await resp.text()
+                raise RuntimeError(f"Fish Audio request không hợp lệ (422): {body[:200]}")
+            if resp.status == 429:
+                raise RuntimeError("Fish Audio rate limit (429)")
+            if resp.status != 200:
+                body = await resp.text()
+                raise RuntimeError(f"Fish Audio TTS lỗi {resp.status}: {body[:200]}")
+
+            audio_bytes = await resp.read()
+            if not audio_bytes or len(audio_bytes) < 100:
+                raise RuntimeError("Fish Audio trả về audio rỗng")
 
             out_path.write_bytes(audio_bytes)
             return out_path.exists() and out_path.stat().st_size > 0
@@ -4409,6 +4535,22 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             (cfg_raw.get("video_process") or {}).get("fpt_fallback_elevenlabs", True),
                         ),
                         True,
+                    ),
+                    fish_api_key=(
+                        str(data.get("fish_api_key") or "").strip()
+                        or str((cfg_raw.get("video_process") or {}).get("fish_api_key") or "").strip()
+                        or os.getenv("FISH_API_KEY", "").strip()
+                        or os.getenv("FISH_AUDIO_API_KEY", "").strip()
+                    ),
+                    fish_model=str(
+                        data.get("fish_model")
+                        or (cfg_raw.get("video_process") or {}).get("fish_model")
+                        or "s2-pro"
+                    ),
+                    fish_reference_id=str(
+                        data.get("fish_reference_id")
+                        or (cfg_raw.get("video_process") or {}).get("fish_reference_id")
+                        or ""
                     ),
                 )
                 tts_clips = asyncio.run(

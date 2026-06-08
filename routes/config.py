@@ -341,6 +341,24 @@ def test_api_key():
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)})
 
+    # ── Fish Audio TTS ────────────────────────────────────────────────────────
+    elif provider == "fish-audio":
+        try:
+            import asyncio
+            from core.video_processor import _tts_fish
+            import tempfile
+            from pathlib import Path as _Path
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out = _Path(tmpdir) / "test.mp3"
+                ok = asyncio.run(_tts_fish(
+                    "Hello world", "", out, api_key=key, model="s2-pro"
+                ))
+            if ok:
+                return jsonify({"ok": True, "model": "s2-pro", "quota": "Fish Audio TTS hoạt động"})
+            return jsonify({"ok": False, "error": "TTS thất bại — kiểm tra key"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
     return jsonify({"ok": False, "error": f"Provider không hỗ trợ: {provider}"}), 400
 
 

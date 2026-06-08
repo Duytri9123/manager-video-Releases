@@ -138,6 +138,33 @@ def local_tts_engines() -> List[Dict[str, Any]]:
             },
         },
         {
+            "id": "fish-audio",
+            "label": "Fish Audio TTS (da ngon ngu, can API key)",
+            "default": "",
+            "backend": "local",
+            "voices": {
+                "ja": [
+                    ("", "Default voice (auto)"),
+                    ("fbe02f8306fc4d3d915e9871722a39d5", "Japanese Female (sample)"),
+                ],
+                "zh": [
+                    ("", "Default voice (auto)"),
+                ],
+                "ko": [
+                    ("", "Default voice (auto)"),
+                ],
+                "en": [
+                    ("", "Default voice (auto)"),
+                ],
+                "vi": [
+                    ("", "Default voice (auto)"),
+                ],
+                "multi": [
+                    ("", "Default voice (auto)"),
+                ],
+            },
+        },
+        {
             "id": "gtts",
             "label": "Google gTTS (don gian, du phong)",
             "default": "vi",

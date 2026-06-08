@@ -120,6 +120,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM",  # Rachel — eleven_multilingual_v2 supports VI
         "elevenlabs_model": "eleven_multilingual_v2",
         "fpt_fallback_elevenlabs": True,  # Tự động fallback FPT → ElevenLabs khi FPT hết token
+        "fish_api_key": "",            # Fish Audio key — env FISH_API_KEY hoặc video_process.fish_api_key
+        "fish_model": "s2-pro",        # Backbone đa ngôn ngữ: "s2-pro" hoặc "s1" (tốt cho tiếng Nhật...)
+        "fish_reference_id": "",       # Voice model ID (reference_id) — để trống = giọng mặc định
         "bg_volume": 0.15,
         "font_size": 18,
         "font_name": "Arial",
@@ -236,5 +239,20 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "default_style": "cinematic, high quality, dramatic lighting",
         "shot_duration": 5,       # giây mỗi shot (Gemini Veo 2)
         "max_shots_per_scene": 8,
+    },
+    # ── n8n orchestration (workflow automation gateway) ──
+    # toolvideo plays the "worker" role; n8n plays the "conductor":
+    #   n8n (schedule/webhook/đăng bài/thông báo) ──HTTP──▶ toolvideo REST API
+    # The tab lets you connect to a self-hosted n8n instance, test the
+    # connection, and trigger n8n webhook workflows manually. The API key is
+    # an n8n REST API key (Settings → n8n API) used only for listing
+    # workflows / status; webhook triggers don't require it.
+    "n8n": {
+        "enabled": False,
+        "base_url": "http://localhost:5678",  # n8n instance URL
+        "api_key": "",                          # n8n REST API key (env: N8N_API_KEY)
+        "webhook_url": "",                      # default Production webhook URL to trigger
+        "default_payload": "{\n  \"source\": \"toolvideo\"\n}",
+        "timeout_sec": 30,
     },
 }

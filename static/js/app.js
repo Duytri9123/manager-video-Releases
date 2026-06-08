@@ -98,7 +98,7 @@ function _ensureTtsEngineForLang(engineSelectId, lang) {
 function _refreshTtsEngineSelects() {
   const catalog = TTS_ENGINE_CATALOG || [];
   if (!catalog.length) return;
-  ['proc-tts-engine', 'vp-tts-engine', 'tr-tts-engine'].forEach(id => {
+  ['proc-tts-engine', 'vp-tts-engine', 'tr-tts-engine', 'mv-tts-engine'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const current = sel.value;
@@ -380,7 +380,7 @@ function switchPage(name) {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
     movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router',
-    videogen:'Video AI', ai_studio:'AI Studio'
+    videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
   if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
@@ -406,6 +406,8 @@ function switchPage(name) {
   if (name === 'proxies') { if (typeof proxyLoadList === 'function') proxyLoadList(); if (typeof routerLoadList === 'function') routerLoadList(); }
   if (name === 'chat' && typeof chatInit === 'function') chatInit();
   if (name === 'videogen' && typeof vgInit === 'function') vgInit();
+  if (name === 'n8n' && typeof n8nInit === 'function') n8nInit();
+  if (name === 'sales' && typeof salesInit === 'function') salesInit();
 }
 
 /* ── Content platform sub-tabs (defined here so inline onclick always works) ── */

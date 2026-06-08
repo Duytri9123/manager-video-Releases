@@ -9,10 +9,15 @@
     // ── Per-step enter hook ──────────────────────────────────────────────────
     function _procWizEnterStep(n) {
       if (n === 2) {
-        // Step 2: Sync proc-video from first usable queue item, then refresh frame preview
-        const item = (window._batchQueue || []).find(t =>
-          t.status === 'ready' || t.status === 'processing' || t.status === 'done'
-        );
+        // Step 2: Sync proc-video from the ACTIVE queue item, then refresh frame preview.
+        // Must resolve the task currently being processed (or the next one waiting) —
+        // never an already-finished item, otherwise we'd grab the file from a done
+        // item above in the queue ("lấy nhầm file trên").
+        const item = (typeof window._resolveActiveQueueItem === 'function')
+          ? window._resolveActiveQueueItem()
+          : (window._batchQueue || []).find(t =>
+              t.status === 'ready' || t.status === 'processing'
+            );
         if (item && item.val) {
           const pathEl = document.getElementById('proc-video');
           const isHttpUrl = /^https?:\/\//i.test(item.val);
@@ -109,6 +114,27 @@
   window._procRunning = false;       // currently processing a task?
   window._procAutoDrain = false;     // auto-drain mode
   window._procCurrentTaskId = null;  // id of task currently in progress
+
+  /**
+   * Resolve the queue item that should currently be processed / previewed.
+   * Priority:
+   *   1. The task explicitly marked as active (_procCurrentTaskId)
+   *   2. Any item still 'processing'
+   *   3. The next item that is 'ready' (downloaded / on disk, not yet run)
+   * Finished items ('done' / 'error') are intentionally skipped so we never
+   * re-feed the file of an already-processed item above in the queue.
+   */
+  window._resolveActiveQueueItem = function() {
+    const q = window._batchQueue || [];
+    if (window._procCurrentTaskId) {
+      const cur = q.find(t => t.id === window._procCurrentTaskId);
+      if (cur) return cur;
+    }
+    return q.find(t => t.status === 'processing')
+        || q.find(t => t.status === 'ready')
+        || null;
+  };
+
   function _addProcTask(type) {
     const urlEl = document.getElementById('proc-url');
     const pathEl = document.getElementById('proc-video');
@@ -814,8 +840,13 @@
       return { type: 'file', val: window._procUploadedPath };
     }
     if (window._batchQueue && window._batchQueue.length > 0) {
-      // Find first item that has a usable path (ready/processing/done have resolved paths)
-      const ready = window._batchQueue.find(t =>
+      // Prefer the task currently being processed / waiting, so the preview
+      // matches the file that will actually be processed. Fall back to any
+      // finished item only if nothing is active (e.g. reviewing a done video).
+      const active = (typeof window._resolveActiveQueueItem === 'function')
+        ? window._resolveActiveQueueItem()
+        : null;
+      const ready = active || window._batchQueue.find(t =>
         t.status === 'ready' || t.status === 'processing' || t.status === 'done'
       ) || window._batchQueue[0];
       if (ready && ready.val) {
@@ -1539,6 +1570,9 @@
     // Khung preview tự co theo bố cục khung (có thanh tiêu đề / blur → tỉ lệ đổi)
     if (wrap) wrap.style.aspectRatio = cW + ' / ' + cH;
 
+    // Store frame geometry for drag/hit-test in frame mode
+    window._frameGeom = { titleBarH, vidX, vidY, vidW, vidH, cW, cH };
+
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, cW, cH);
 
@@ -1730,6 +1764,36 @@
     _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
   }
 
+  /** Draw a blue selection outline (+ resize handles for extra zones) on canvas */
+  function _drawCanvasSelection(ctx, x, y, w, h, withHandles) {
+    ctx.save();
+    // Blue selection rectangle
+    ctx.strokeStyle = '#1a73e8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    // Inner light glow
+    ctx.strokeStyle = 'rgba(26,115,232,0.35)';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
+
+    if (withHandles) {
+      // East handle (right-middle, circle) — resize width
+      const hr = 7;
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#1a73e8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x + w, y + h / 2, hr, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      // South handle (bottom-middle, square) — resize height
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y + h, hr, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH) {
     const sample    = document.getElementById('sub-preview-sample')?.value || '';
     const burnOn    = document.getElementById('proc-burn')?.checked ?? true;
@@ -1774,6 +1838,11 @@
         ctx.restore();
         ctx.fillStyle = 'rgba(0,0,0,0.35)';
         ctx.fillRect(bX, bY, bW, bH);
+
+        // Draw selection outline if main blur zone is selected
+        if (window._pe2Sel && window._pe2Sel.type === 'blur') {
+          _drawCanvasSelection(ctx, bX, bY, bW, bH, false);
+        }
       }
 
       // Draw extra blur zones
@@ -1796,6 +1865,12 @@
           ctx.restore();
           ctx.fillStyle = 'rgba(0,0,0,0.35)';
           ctx.fillRect(ezX, ezY, ezW, ezH);
+
+          // Draw selection outline + handles if this zone is selected
+          const sel = window._pe2Sel;
+          if (sel && sel.type === 'extra' && sel.id === zone.id) {
+            _drawCanvasSelection(ctx, ezX, ezY, ezW, ezH, true);
+          }
         });
       }
     }

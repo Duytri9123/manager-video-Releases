@@ -153,6 +153,20 @@ def tts_preview():
                             raise
                 elif tts_engine == "elevenlabs":
                     ok = asyncio.run(_tts_elevenlabs(text, tts_voice, out_path, elevenlabs_api_key))
+                elif tts_engine == "fish-audio":
+                    from core.video_processor import _tts_fish
+                    fish_cfg = vp_cfg
+                    fish_key = (
+                        str(data.get("fish_api_key") or "").strip()
+                        or str(fish_cfg.get("fish_api_key") or "").strip()
+                        or os.environ.get("FISH_API_KEY", "").strip()
+                        or os.environ.get("FISH_AUDIO_API_KEY", "").strip()
+                    )
+                    fish_model = str(data.get("fish_model") or fish_cfg.get("fish_model") or "s2-pro").strip()
+                    ok = asyncio.run(_tts_fish(
+                        text, tts_voice, out_path,
+                        api_key=fish_key, model=fish_model,
+                    ))
                 elif tts_engine == "minimax":
                     from core.video_processor import _tts_minimax
                     ok = asyncio.run(_tts_minimax(
@@ -312,6 +326,14 @@ def tts_from_ass():
                     fpt_api_key=fpt_api_key, fpt_speed=0,
                     elevenlabs_api_key=elevenlabs_api_key,
                     elevenlabs_voice_id=elevenlabs_voice_id,
+                    fish_api_key=(
+                        str(data.get("fish_api_key") or "").strip()
+                        or str(vp_cfg.get("fish_api_key") or "").strip()
+                        or os.environ.get("FISH_API_KEY", "").strip()
+                        or os.environ.get("FISH_AUDIO_API_KEY", "").strip()
+                    ),
+                    fish_model=str(data.get("fish_model") or vp_cfg.get("fish_model") or "s2-pro"),
+                    fish_reference_id=str(data.get("fish_reference_id") or vp_cfg.get("fish_reference_id") or ""),
                 )
                 translations = [s.get("text", "") for s in segments]
 
@@ -510,6 +532,8 @@ def tts_to_mp3():
         max_chars = 200
     elif tts_engine == "elevenlabs":
         max_chars = 2500  # ElevenLabs supports up to 5000 chars
+    elif tts_engine == "fish-audio":
+        max_chars = 1500
     elif tts_engine == "9router" or tts_engine.startswith("9r:"):
         max_chars = 1500
     else:
@@ -540,6 +564,19 @@ def tts_to_mp3():
                         ok = _tts_gtts(chunk, str(data.get("tts_lang") or data.get("language") or "vi"), clip_path)
                     elif tts_engine == "elevenlabs":
                         ok = _asyncio.run(_tts_elevenlabs(chunk, tts_voice, clip_path, elevenlabs_api_key))
+                    elif tts_engine == "fish-audio":
+                        from core.video_processor import _tts_fish
+                        fish_key = (
+                            str(data.get("fish_api_key") or "").strip()
+                            or str(vp_cfg.get("fish_api_key") or "").strip()
+                            or os.environ.get("FISH_API_KEY", "").strip()
+                            or os.environ.get("FISH_AUDIO_API_KEY", "").strip()
+                        )
+                        fish_model = str(data.get("fish_model") or vp_cfg.get("fish_model") or "s2-pro").strip()
+                        ok = _asyncio.run(_tts_fish(
+                            chunk, tts_voice, clip_path,
+                            api_key=fish_key, model=fish_model,
+                        ))
                     elif tts_engine == "fpt-ai":
                         try:
                             ok = _asyncio.run(_tts_fpt_ai(chunk, tts_voice, clip_path, fpt_api_key, fpt_speed))
