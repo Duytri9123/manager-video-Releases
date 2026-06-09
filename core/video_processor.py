@@ -221,30 +221,19 @@ def _gen_ai_thumbnail_for_pipeline(
             if use_9router:
                 model_id = (nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
                 try:
-                    payload = {
-                        "model": model_id,
-                        "prompt": gen_prompt[:2000],
-                        "n": 1,
-                        "size": "1792x1024",  # 16:9
-                        "quality": "standard",
-                        "response_format": "b64_json",
-                        # multimodal reference frame
-                        "images": [frame_b64],
-                        "image": frame_b64,
-                    }
-                    body = _json.dumps(payload).encode("utf-8")
-                    req = urllib.request.Request(
-                        f"{nr_endpoint}/images/generations",
-                        data=body,
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {nr_key}",
-                        },
-                        method="POST",
+                    from utils.niner_image import build_image_payload, generate_images
+
+                    # Pass the extracted frame as a multimodal reference. Codex
+                    # (cx/*) models stream SSE, which generate_images() handles.
+                    payload = build_image_payload(
+                        model_id,
+                        gen_prompt[:2000],
+                        n=1,
+                        size="1792x1024",  # 16:9
+                        extra={"images": [frame_b64], "image": frame_b64},
                     )
-                    with urllib.request.urlopen(req, timeout=240) as resp:
-                        rdata = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
-                    img_data = (rdata.get("data") or [{}])[0]
+                    images, _err = generate_images(nr_endpoint, nr_key, payload)
+                    img_data = images[0] if images else {}
                     img_b64_data = img_data.get("b64_json")
                     img_url_remote = img_data.get("url")
                     if img_b64_data:
@@ -1664,6 +1653,16 @@ def _burn_ass(
         _frame_blur_top_pct = 0.0
         _frame_blur_bottom_pct = 0.0
         _frame_blur_opacity = 0.0
+        # Expand-mode geometry (px) — đọc từ comment ASS do write_ass_with_frame ghi
+        _frame_mode = "overlay"
+        _frame_out_w = 0
+        _frame_out_h = 0
+        _frame_vid_x = 0
+        _frame_vid_y = 0
+        _frame_vid_w = 0
+        _frame_vid_h = 0
+        _frame_side_w = 0
+        _frame_title_bar_h = 0
 
         def _ass_comment_float(label: str, default: float = 0.0) -> float:
             m = re.search(rf"^; {re.escape(label)}:\s*([\d.]+)", _ass_content, re.MULTILINE)
@@ -1671,6 +1670,15 @@ def _burn_ass(
                 return default
             try:
                 return float(m.group(1))
+            except Exception:
+                return default
+
+        def _ass_comment_int(label: str, default: int = 0) -> int:
+            m = re.search(rf"^; {re.escape(label)}:\s*(-?\d+)", _ass_content, re.MULTILINE)
+            if not m:
+                return default
+            try:
+                return int(m.group(1))
             except Exception:
                 return default
 
@@ -1690,6 +1698,18 @@ def _burn_ass(
                 if _frame_blur_opacity > 1.0:
                     _frame_blur_opacity = _frame_blur_opacity / 100.0
                 _frame_blur_opacity = _clamp_float(_frame_blur_opacity, 0.0, 1.0)
+                # Geometry (chỉ có ý nghĩa khi mode=expand)
+                _fm = re.search(r"^; Frame mode:\s*(\w+)", _ass_content, re.MULTILINE)
+                if _fm:
+                    _frame_mode = _fm.group(1).strip().lower()
+                _frame_out_w = _ass_comment_int("Out width px", 0)
+                _frame_out_h = _ass_comment_int("Out height px", 0)
+                _frame_vid_x = _ass_comment_int("Vid x px", 0)
+                _frame_vid_y = _ass_comment_int("Vid y px", 0)
+                _frame_vid_w = _ass_comment_int("Vid w px", 0)
+                _frame_vid_h = _ass_comment_int("Vid h px", 0)
+                _frame_side_w = _ass_comment_int("Side width px", 0)
+                _frame_title_bar_h = _ass_comment_int("Title bar h px", 0)
             _logo_size_match = re.search(r"^; Logo size:\s*([\d.]+)%", _ass_content, re.MULTILINE)
             if _logo_size_match:
                 _logo_size_pct = float(_logo_size_match.group(1))
@@ -1764,8 +1784,15 @@ def _burn_ass(
 
         # Frame side/top/bottom panels need real pixel blur before ASS draws the
         # semi-transparent dark overlays. Otherwise they only dim the video.
+        # Ở chế độ "expand" (đẩy ra ngoài) việc blur cạnh được làm trong bước dựng
+        # canvas bên dưới, nên KHÔNG dùng blur tại chỗ ở đây.
+        _is_expand = (
+            _frame_has_elements and _frame_mode == "expand"
+            and _frame_out_w > 0 and _frame_out_h > 0
+            and _frame_vid_w > 0 and _frame_vid_h > 0
+        )
         frame_blur_specs = []
-        if _frame_has_elements and _frame_blur_opacity > 0.001:
+        if _frame_has_elements and not _is_expand and _frame_blur_opacity > 0.001:
             if _frame_blur_w_pct > 0.001:
                 side_w_expr = f"trunc(iw*{_frame_blur_w_pct:.4f}/2)*2"
                 frame_blur_specs.append((
@@ -1812,6 +1839,54 @@ def _burn_ass(
                 f"top={_frame_blur_top_pct*100:.0f}%, bottom={_frame_blur_bottom_pct*100:.0f}%"
             )
 
+        # ── Chế độ "Đẩy ra ngoài" (expand): thu nhỏ video + chừa dải tiêu đề ──
+        # + lấp 2 bên bằng video blur, dựng đúng layout như preview.
+        if _is_expand:
+            ow, oh = _frame_out_w, _frame_out_h
+            vx, vy = _frame_vid_x, _frame_vid_y
+            vw, vh = _frame_vid_w, _frame_vid_h
+            sw = _frame_side_w
+            # 1. Thu nhỏ video gốc về vùng nội dung
+            filter_complex_parts.append(f"[{curr_label}]scale={vw}:{vh},setsar=1[ex_main]")
+            _ex_main = "ex_main"
+            # 1b. Blur thật dải trên/dưới bên trong video (nếu bật)
+            if _frame_blur_opacity > 0.001 and _frame_blur_top_pct > 0.001:
+                th = max(2, int(vh * _frame_blur_top_pct)); th -= th % 2
+                filter_complex_parts.append(f"[{_ex_main}]split[ex_to][ex_tc]")
+                filter_complex_parts.append(f"[ex_tc]crop={vw}:{th}:0:0,gblur=sigma=12[ex_tb]")
+                filter_complex_parts.append(f"[ex_to][ex_tb]overlay=0:0[ex_main_t]")
+                _ex_main = "ex_main_t"
+            if _frame_blur_opacity > 0.001 and _frame_blur_bottom_pct > 0.001:
+                bh = max(2, int(vh * _frame_blur_bottom_pct)); bh -= bh % 2
+                _by = vh - bh
+                filter_complex_parts.append(f"[{_ex_main}]split[ex_bo][ex_bc]")
+                filter_complex_parts.append(f"[ex_bc]crop={vw}:{bh}:0:{_by},gblur=sigma=12[ex_bb]")
+                filter_complex_parts.append(f"[ex_bo][ex_bb]overlay=0:{_by}[ex_main_b]")
+                _ex_main = "ex_main_b"
+            # 2. Canvas nền + lấp 2 bên bằng video blur kéo giãn từ mép
+            filter_complex_parts.append(f"color=white:{ow}x{oh}:r=30[ex_cv]")
+            if sw > 0:
+                slice_w = max(2, int(vw * 0.08))
+                _crop_rx = max(0, vw - slice_w)
+                _right_x = max(0, ow - sw)
+                filter_complex_parts.append(f"[{_ex_main}]split=3[ex_mv][ex_ml][ex_mr]")
+                filter_complex_parts.append(
+                    f"[ex_ml]crop={slice_w}:{vh}:0:0,scale={sw}:{vh},gblur=sigma=20[ex_lfill]"
+                )
+                filter_complex_parts.append(
+                    f"[ex_mr]crop={slice_w}:{vh}:{_crop_rx}:0,scale={sw}:{vh},gblur=sigma=20[ex_rfill]"
+                )
+                filter_complex_parts.append(f"[ex_cv][ex_lfill]overlay=0:{vy}[ex_c1]")
+                filter_complex_parts.append(f"[ex_c1][ex_rfill]overlay={_right_x}:{vy}[ex_c2]")
+                filter_complex_parts.append(f"[ex_c2][ex_mv]overlay={vx}:{vy}[ex_framed]")
+            else:
+                filter_complex_parts.append(f"[ex_cv][{_ex_main}]overlay={vx}:{vy}[ex_framed]")
+            curr_label = "ex_framed"
+            _log(
+                f"🎞 Khung 'Đẩy ra ngoài': video {vw}x{vh} @({vx},{vy}), "
+                f"canvas {ow}x{oh}, blur cạnh {sw}px"
+            )
+
         # Finally, apply ASS subtitle filter
         filter_complex_parts.append(f"[{curr_label}]ass='{ass_esc}'[subbed]")
         filter_complex = ";".join(filter_complex_parts)
@@ -1844,6 +1919,12 @@ def _burn_ass(
                 pass
             logo_x_px = max(0, int(_vid_w * _logo_left_pct / 100))
             logo_y_px = max(0, int(_vid_h * _logo_top_pct / 100) + _title_bar_h_from_ass)
+
+            # Expand: logo tính theo vùng video đã thu nhỏ + offset vào canvas
+            if _is_expand:
+                logo_h_px = max(20, int(_frame_vid_h * _logo_size_pct / 100))
+                logo_x_px = _frame_vid_x + max(0, int(_frame_vid_w * _logo_left_pct / 100))
+                logo_y_px = _frame_vid_y + max(0, int(_frame_vid_h * _logo_top_pct / 100))
 
             # Border radius: 0% = square, 50% = circle
             # radius in pixels = min(w,h)/2 * radius_pct/50
@@ -2221,8 +2302,11 @@ def generate_frame_title(
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
         )
         with urllib.request.urlopen(req, timeout=15) as response:
-            data = json.loads(response.read())
-        title = data["choices"][0]["message"]["content"].strip()
+            raw = response.read()
+        # Some upstreams (incl. 9Router Codex combos) ship SSE even when
+        # stream is unset — parse both JSON and SSE bodies robustly.
+        from utils.translation import _parse_chat_response_body
+        title = _parse_chat_response_body(raw)
         # Clean up: remove quotes, newlines
         title = title.strip('"\'').split("\n")[0].strip()
         # Limit length
@@ -2279,6 +2363,11 @@ def write_ass_with_frame(
     logo_left_pct: float = 3.0,  # Logo X position as % from left
     logo_radius_pct: float = 50.0,  # Border radius: 0=square, 50=circle
     logo_position: str = "top-left",  # top-left, top-right
+    # Frame layout mode:
+    #   "overlay" → khung vẽ đè lên video (không đổi kích thước) — hành vi cũ
+    #   "expand"  → thu nhỏ video + chừa dải tiêu đề phía trên + blur 2 bên ngoài
+    #               (khớp với preview "Đẩy ra ngoài")
+    frame_mode: str = "overlay",
 ) -> Path:
     """
     Write ASS subtitle file with frame elements (title bar + side blur panels)
@@ -2312,6 +2401,29 @@ def write_ass_with_frame(
     title_font_px = max(16, int(play_res_x * title_size_pct / 100))
 
     side_w = max(0, int(play_res_x * blur_w_pct / 100))
+
+    # ── Geometry theo chế độ khung ────────────────────────────────────────────
+    # overlay: khung đè lên video, output = play_res_x × play_res_y (không đổi)
+    # expand : thu nhỏ video, chừa dải tiêu đề trên + blur 2 bên ngoài
+    #          → output cao/khác đi, khớp với preview "Đẩy ra ngoài"
+    frame_mode = (frame_mode or "overlay").strip().lower()
+    out_w = play_res_x
+    if frame_mode == "expand":
+        vid_w = max(2, play_res_x - 2 * side_w)
+        vid_w -= vid_w % 2
+        vid_h = max(2, int(round(vid_w * play_res_y / max(1, play_res_x))))
+        vid_h -= vid_h % 2
+        vid_x = side_w
+        vid_y = title_bar_h
+        out_h = title_bar_h + vid_h
+    else:
+        vid_w = play_res_x
+        vid_h = play_res_y
+        vid_x = 0
+        vid_y = 0
+        out_h = play_res_y
+    # Vùng video theo trục dọc (panel blur 2 bên chỉ phủ phần video, không phủ dải tiêu đề)
+    vid_bottom = vid_y + vid_h
 
     # ASS alpha: 0=opaque, FF=transparent (opposite of normal)
     blur_alpha = max(0, min(255, int((1.0 - blur_opacity) * 255)))
@@ -2355,10 +2467,19 @@ def write_ass_with_frame(
     # ── Build header ──────────────────────────────────────────────────────────
     header = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: {play_res_x}
-PlayResY: {play_res_y}
+PlayResX: {out_w}
+PlayResY: {out_h}
 WrapStyle: 0
 ; Frame elements embedded: title bar + side blur panels (overlay on video)
+; Frame mode: {frame_mode}
+; Out width px: {out_w}
+; Out height px: {out_h}
+; Vid x px: {vid_x}
+; Vid y px: {vid_y}
+; Vid w px: {vid_w}
+; Vid h px: {vid_h}
+; Side width px: {side_w}
+; Title bar h px: {title_bar_h}
 ; Title: {title_text}
 ; Title color: {title_color} / {title_color_2} (split)
 ; Title bar height: {title_bar_h_pct}%
@@ -2393,7 +2514,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # Chỉ vẽ khi thực sự có title — nếu user tắt "Hiện tiêu đề" thì không vẽ dải trắng
     has_title = bool(title_text and title_text.strip())
     if has_title:
-        title_draw = f"m 0 0 l {play_res_x} 0 {play_res_x} {title_bar_h} 0 {title_bar_h}"
+        title_draw = f"m 0 0 l {out_w} 0 {out_w} {title_bar_h} 0 {title_bar_h}"
         lines.append(
             f"Dialogue: 3,{start_time},{end_time},TitleBar,,0,0,0,,{{\\pos(0,0)\\p1}}{title_draw}{{\\p0}}"
         )
@@ -2428,13 +2549,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # No outline (\bord0) — clean look matching the title bar background
             if part2:
                 colored_title = (
-                    f"{{\\an8\\pos({play_res_x // 2},{title_y})\\bord0}}"
+                    f"{{\\an8\\pos({out_w // 2},{title_y})\\bord0}}"
                     f"{{\\c&H00{color1_bgr}&}}{part1} "
                     f"{{\\c&H00{color2_bgr}&}}{part2}"
                 )
             else:
                 colored_title = (
-                    f"{{\\an8\\pos({play_res_x // 2},{title_y})\\bord0}}"
+                    f"{{\\an8\\pos({out_w // 2},{title_y})\\bord0}}"
                     f"{{\\c&H00{color1_bgr}&}}{part1}"
                 )
             lines.append(
@@ -2443,42 +2564,42 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         else:
             lines.append(
                 f"Dialogue: 4,{start_time},{end_time},TitleText,,0,0,0,,"
-                f"{{\\an8\\pos({play_res_x // 2},{title_y})\\bord0}}{safe_title}"
+                f"{{\\an8\\pos({out_w // 2},{title_y})\\bord0}}{safe_title}"
             )
 
-    # 3. Left blur panel (semi-transparent, covers full video height including title bar area)
+    # 3. Left blur panel (semi-transparent) — phủ phần video (từ vid_y, cao vid_h)
     if side_w > 0:
-        left_draw = f"m 0 0 l {side_w} 0 {side_w} {play_res_y} 0 {play_res_y}"
+        left_draw = f"m 0 0 l {side_w} 0 {side_w} {vid_h} 0 {vid_h}"
         lines.append(
             f"Dialogue: 1,{start_time},{end_time},BlurLeft,,0,0,0,,"
-            f"{{\\pos(0,0)\\p1}}{left_draw}{{\\p0}}"
+            f"{{\\pos(0,{vid_y})\\p1}}{left_draw}{{\\p0}}"
         )
 
         # 4. Right blur panel
-        right_x = play_res_x - side_w
-        right_draw = f"m 0 0 l {side_w} 0 {side_w} {play_res_y} 0 {play_res_y}"
+        right_x = out_w - side_w
+        right_draw = f"m 0 0 l {side_w} 0 {side_w} {vid_h} 0 {vid_h}"
         lines.append(
             f"Dialogue: 1,{start_time},{end_time},BlurRight,,0,0,0,,"
-            f"{{\\pos({right_x},0)\\p1}}{right_draw}{{\\p0}}"
+            f"{{\\pos({right_x},{vid_y})\\p1}}{right_draw}{{\\p0}}"
         )
 
-    # 5. Top blur strip (full width)
-    top_h = max(0, int(play_res_y * blur_top_pct / 100))
+    # 5. Top blur strip (full video width, trong vùng video)
+    top_h = max(0, int(vid_h * blur_top_pct / 100))
     if top_h > 0:
-        top_draw = f"m 0 0 l {play_res_x} 0 {play_res_x} {top_h} 0 {top_h}"
+        top_draw = f"m 0 0 l {vid_w} 0 {vid_w} {top_h} 0 {top_h}"
         lines.append(
             f"Dialogue: 1,{start_time},{end_time},BlurLeft,,0,0,0,,"
-            f"{{\\pos(0,0)\\p1}}{top_draw}{{\\p0}}"
+            f"{{\\pos({vid_x},{vid_y})\\p1}}{top_draw}{{\\p0}}"
         )
 
-    # 6. Bottom blur strip (full width)
-    bottom_h = max(0, int(play_res_y * blur_bottom_pct / 100))
+    # 6. Bottom blur strip (full video width, trong vùng video)
+    bottom_h = max(0, int(vid_h * blur_bottom_pct / 100))
     if bottom_h > 0:
-        bottom_y = play_res_y - bottom_h
-        bottom_draw = f"m 0 0 l {play_res_x} 0 {play_res_x} {bottom_h} 0 {bottom_h}"
+        bottom_y = vid_bottom - bottom_h
+        bottom_draw = f"m 0 0 l {vid_w} 0 {vid_w} {bottom_h} 0 {bottom_h}"
         lines.append(
             f"Dialogue: 1,{start_time},{end_time},BlurLeft,,0,0,0,,"
-            f"{{\\pos(0,{bottom_y})\\p1}}{bottom_draw}{{\\p0}}"
+            f"{{\\pos({vid_x},{bottom_y})\\p1}}{bottom_draw}{{\\p0}}"
         )
 
     # ── Subtitle dialogue lines (layer 2 — below title bar, above blur) ──────
@@ -3084,16 +3205,59 @@ def _nine_router_cfg_for_tts() -> tuple[str, str, dict]:
     return endpoint, api_key, cfg
 
 
+def _provider_of_model(model_id: str) -> str:
+    """Top-level provider for a 9Router model id.
+    "openai/tts-1" -> "openai"; "openrouter/openai/tts-1" -> "openai";
+    "el/eleven_multilingual_v2" -> "elevenlabs".
+    """
+    parts = [p for p in str(model_id or "").split("/") if p]
+    if not parts:
+        return ""
+    p = parts[0].lower()
+    if p == "openrouter" and len(parts) > 1:
+        p = parts[1].lower()
+    if p == "el":
+        return "elevenlabs"
+    return p
+
+
 def _nine_router_model_for_engine(engine: str, voice: str, cfg: dict) -> tuple[str, str, list[tuple[str, str]]]:
-    """Return (model, voice_param, fallback_candidates) for 9Router TTS."""
+    """Return (model, voice_param, fallback_candidates) for 9Router TTS.
+
+    The consolidated "9router" engine passes model via the voice field as
+    "model_id|voice_name" when the frontend supplies both. Legacy per-provider
+    engine ids (9r:openai, 9r:gemini, ...) are kept working for backward compat.
+    """
     eng = (engine or "9router").strip().lower()
     selected = (voice or "").strip()
     fallbacks: list[tuple[str, str]] = []
 
+    # Pipe-separated "model|voice" — used by consolidated 9router engine UI.
+    # Build the provider-specific final model id per the 9Router TTS spec:
+    #   openai      -> model id + separate `voice` field (alloy, nova, ...)
+    #   elevenlabs  -> "<model_id>/<voice_id>"  (voice in the path)
+    #   edge-tts    -> "edge-tts/<voice>"       (voice in the path)
+    #   others      -> "<model>/<voice>" when a voice is given
     if "|" in selected:
         model, voice_param = selected.split("|", 1)
-        return model.strip(), voice_param.strip(), fallbacks
+        model = model.strip()
+        voice_param = voice_param.strip()
+        if not voice_param:
+            return model, "", fallbacks
+        prov = _provider_of_model(model)
+        if prov == "openai":
+            # OpenAI accepts a dedicated voice field.
+            return model, voice_param, fallbacks
+        # elevenlabs / edge-tts / deepgram / inworld / google-tts: voice lives
+        # in the model path. Avoid double-appending if already present.
+        if voice_param.startswith(model.rstrip("/") + "/") or "/" + voice_param in model:
+            return model, "", fallbacks
+        return f"{model.rstrip('/')}/{voice_param}", "", fallbacks
 
+    # For the consolidated "9router" engine, `selected` is pure voice (nova,
+    # shimmer, etc.) and model comes from a separate field injected by the UI.
+    # At the video_processor layer we receive model as part of the voice string
+    # (pipe-separated above) OR as the default from the catalog.
     default_model = ""
     provider = ""
     try:
@@ -3105,6 +3269,11 @@ def _nine_router_model_for_engine(engine: str, voice: str, cfg: dict) -> tuple[s
             provider = str(found.get("provider") or "").strip().lower()
     except Exception:
         pass
+
+    # Consolidated "9router" — model is defaultModel, voice is `selected`.
+    if eng == "9router":
+        model = default_model or "openai/tts-1"
+        return model, selected or "nova", fallbacks
 
     if selected and "/" in selected and eng not in ("9r:openai", "9r:gemini"):
         return selected, "", fallbacks
@@ -3122,7 +3291,7 @@ def _nine_router_model_for_engine(engine: str, voice: str, cfg: dict) -> tuple[s
             return f"el/{selected}", "", fallbacks
         return default_model or "el/eleven_multilingual_v2", "", fallbacks
 
-    if eng in ("9r:edge-tts", "9router", "9r", "9router-edge") or provider == "edge-tts":
+    if eng in ("9r:edge-tts", "9router-edge") or provider == "edge-tts":
         if selected:
             if selected.startswith("edge-tts/"):
                 return selected, "", fallbacks
@@ -3402,6 +3571,7 @@ async def convert_voice(
     fpt_speed: int = 0,
     elevenlabs_api_key: str = "",   # ElevenLabs key
     elevenlabs_voice_id: str = "",  # ElevenLabs voice ID
+    target_lang: str = "vi",        # ngôn ngữ đích của translated_texts
 ) -> tuple[bool, str]:
     """
     Replace original audio with TTS voice.
@@ -3420,6 +3590,22 @@ async def convert_voice(
     # Resolve ElevenLabs key/voice from env nếu không truyền vào
     el_key = (elevenlabs_api_key or "").strip() or os.getenv("ELEVENLABS_API_KEY", "").strip()
     el_voice = (elevenlabs_voice_id or "").strip() or ELEVENLABS_DEFAULT_VOICE_ID
+
+    # Tự chọn engine/voice phù hợp ngôn ngữ đích (vd target=ja nhưng engine FPT
+    # chỉ nói tiếng Việt → fallback edge-tts giọng Nhật).
+    _lang = (target_lang or "vi").strip().lower() or "vi"
+    try:
+        from core.tts_catalog import resolve_engine_voice as _resolve_ev
+        tts_engine, tts_voice, _ev_changed, _ev_note = _resolve_ev(
+            tts_engine, tts_voice, _lang
+        )
+        if _ev_changed:
+            logging.getLogger(__name__).info(
+                "convert_voice: auto-selected TTS for lang=%s → %s/%s (%s)",
+                _lang, tts_engine, tts_voice, _ev_note,
+            )
+    except Exception:
+        pass
 
     with tempfile.TemporaryDirectory(prefix="voice_") as tmpdir:
         tmpdir = Path(tmpdir)
@@ -3449,7 +3635,7 @@ async def convert_voice(
             engine=tts_engine,
             fpt_api_key=fpt_api_key,
             fpt_speed=fpt_speed,
-            tts_lang="vi",
+            tts_lang=_lang,
             elevenlabs_api_key=el_key,
             elevenlabs_voice_id=el_voice,
             fpt_fallback_elevenlabs=bool(el_key),
@@ -4069,6 +4255,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             logo_left_pct=_as_float(data.get("frame_logo_left_pct"), 3.0),
                             logo_radius_pct=_as_float(data.get("frame_logo_radius_pct"), 50.0),
                             logo_position=str(data.get("frame_logo_position") or "top-left"),
+                            frame_mode=str(data.get("frame_blur_mode") or "overlay"),
                         )
                         yield send(log=f"[Bước 3/5] ✓ ASS (có khung) {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                         yield send(log=f"[Bước 3/5] 🎞 Khung: title=\"{_frame_title[:25]}\", blur={_as_float(data.get('frame_blur_w_pct'), 15.0)}%, logo={'✓' if _logo_path else '✗'}", level="info")
@@ -4352,6 +4539,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     # Khi 'auto' hoặc đã đúng aspect → bỏ qua. Đảm bảo chạy TRƯỚC concat
     # thumbnail để aspect của final khớp với thumbnail.
     _target_aspect = str(data.get("target_aspect") or "auto").lower()
+    _pad_blur = bool(data.get("aspect_pad_blur") or False)
     if _target_aspect in ("9x16", "16x9") and burned_path and burned_path.exists():
         try:
             _r = subprocess.run([ffmpeg, "-i", str(burned_path)],
@@ -4381,17 +4569,37 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 log=f"[Aspect] Chuyen huong video: {_src_w}x{_src_h} -> {target_w}x{target_h} ({_target_aspect})",
                 level="info",
             )
-            vf = (
-                f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
-                f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
-            )
-            ok_a, err_a = run_ffmpeg([
-                ffmpeg, "-i", str(burned_path),
-                "-vf", vf,
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-                "-c:a", "copy",
-                str(aspect_video), "-y", "-loglevel", "error",
-            ], timeout=600)
+            if _pad_blur:
+                # Nền mờ: video phóng to lấp đầy khung + làm mờ làm nền, video gốc
+                # (scale vừa) đặt giữa lên trên. Giống style Shorts/Reel.
+                yield send(log="[Aspect] Nen mo (blur) thay cho vien den", level="info")
+                filter_complex = (
+                    f"[0:v]split=2[bg][fg];"
+                    f"[bg]scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+                    f"crop={target_w}:{target_h},gblur=sigma=24[bgb];"
+                    f"[fg]scale={target_w}:{target_h}:force_original_aspect_ratio=decrease[fgs];"
+                    f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1[vout]"
+                )
+                ok_a, err_a = run_ffmpeg([
+                    ffmpeg, "-i", str(burned_path),
+                    "-filter_complex", filter_complex,
+                    "-map", "[vout]", "-map", "0:a?",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                    "-c:a", "copy",
+                    str(aspect_video), "-y", "-loglevel", "error",
+                ], timeout=600)
+            else:
+                vf = (
+                    f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
+                    f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
+                )
+                ok_a, err_a = run_ffmpeg([
+                    ffmpeg, "-i", str(burned_path),
+                    "-vf", vf,
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                    "-c:a", "copy",
+                    str(aspect_video), "-y", "-loglevel", "error",
+                ], timeout=600)
             if ok_a and aspect_video.exists():
                 yield send(log=f"[Aspect] ✓ Khung hình đã chuyển: {aspect_video.name}", level="success")
                 burned_path = aspect_video
@@ -4543,11 +4751,33 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         yield send(overall=85, overall_lbl="Đang tạo giọng nói...")
         source_for_voice = burned_path if burned_path else video_path
         voice_path = out_dir / f"{stem}_{target_language}_voice.mp4"
+        # ── Tự chọn engine/voice theo ngôn ngữ đích ──────────────────────────
+        # Engine/voice người dùng chọn có thể không nói được ngôn ngữ đích
+        # (vd FPT chỉ tiếng Việt, voice banmai cho target=ja). Bộ resolver sẽ
+        # giữ lựa chọn nếu hợp lệ, ngược lại tự đổi sang giọng/engine phù hợp.
+        _req_engine = data.get("tts_engine", "fpt-ai")
+        _req_voice = data.get("tts_voice", "banmai")
+        try:
+            from core.tts_catalog import resolve_engine_voice as _resolve_ev
+            _eng_sel, _voice_sel, _ev_changed, _ev_note = _resolve_ev(
+                _req_engine, _req_voice, target_language, cfg_raw
+            )
+        except Exception:
+            _eng_sel, _voice_sel, _ev_changed, _ev_note = _req_engine, _req_voice, False, ""
+        if _ev_changed:
+            yield send(
+                log=(
+                    f"[Bước 5/5] 🌐 Giọng không hợp với {target_lang_name} — "
+                    f"tự chọn: {_req_engine}/{_req_voice or '∅'} → "
+                    f"{_eng_sel}/{_voice_sel or '∅'} ({_ev_note})"
+                ),
+                level="info",
+            )
         try:
             with tempfile.TemporaryDirectory(prefix="tts_") as tts_tmpdir:
                 tts = MultiProviderTTS(
-                    voice=data.get("tts_voice", "banmai"),
-                    engine=data.get("tts_engine", "fpt-ai"),
+                    voice=_voice_sel,
+                    engine=_eng_sel,
                     fpt_api_key=(
                         str(data.get("fpt_api_key") or "").strip()
                         or str((cfg_raw.get("video_process") or {}).get("fpt_api_key") or "").strip()

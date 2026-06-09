@@ -473,6 +473,7 @@
   async function loadVoices() {
     const engineSel = document.getElementById('mv-render-engine');
     if (!engineSel) return;
+    if (typeof _loadTtsEngineCatalog === 'function') { try { await _loadTtsEngineCatalog(); } catch (_) {} }
     try {
       const r = await fetch('/api/movie/voices').then(r => r.json());
       _engines = r.engines || [];
@@ -488,6 +489,15 @@
   }
 
   function refreshVoices() {
+    // 9Router engine → shared Model + voice-id component handles everything.
+    if (typeof _handle9RouterEngine === 'function'
+        && _handle9RouterEngine('mv-render-engine', 'mv-render-voice')) {
+      const rateField = document.getElementById('mv-render-rate')?.closest('.field');
+      const fptField = document.getElementById('mv-render-fpt-speed')?.closest('.field');
+      if (rateField) rateField.style.display = 'none';
+      if (fptField) fptField.style.display = 'none';
+      return;
+    }
     const engineId = document.getElementById('mv-render-engine')?.value || 'edge-tts';
     const lang = document.getElementById('mv-lang')?.value || 'vi';
     const voiceSel = document.getElementById('mv-render-voice');
@@ -533,8 +543,10 @@
       || 'Đây là đoạn nghe thử giọng đọc.';
     const payload = {
       text,
-      tts_engine: document.getElementById('mv-render-engine')?.value || 'edge-tts',
-      tts_voice: document.getElementById('mv-render-voice')?.value || '',
+      ...(typeof _resolveTtsEngineVoiceEx === 'function'
+        ? _resolveTtsEngineVoiceEx('mv-render-engine', 'mv-render-voice')
+        : { tts_engine: document.getElementById('mv-render-engine')?.value || 'edge-tts',
+            tts_voice: document.getElementById('mv-render-voice')?.value || '' }),
       tts_rate: document.getElementById('mv-render-rate')?.value || '+0%',
       tts_pitch: '+0Hz',
       fpt_speed: parseInt(document.getElementById('mv-render-fpt-speed')?.value || '0', 10),
@@ -586,8 +598,10 @@
       title: (_selectedInfo?.title || _selectedInfo?.name || 'movie_review'),
       preset: document.getElementById('mv-render-preset').value,
       fps: parseInt(document.getElementById('mv-render-fps').value || '30', 10),
-      tts_engine: document.getElementById('mv-render-engine').value,
-      tts_voice: document.getElementById('mv-render-voice').value,
+      ...(typeof _resolveTtsEngineVoiceEx === 'function'
+        ? _resolveTtsEngineVoiceEx('mv-render-engine', 'mv-render-voice')
+        : { tts_engine: document.getElementById('mv-render-engine').value,
+            tts_voice: document.getElementById('mv-render-voice').value }),
       tts_rate: document.getElementById('mv-render-rate').value,
       tts_lang: document.getElementById('mv-lang').value,
       fpt_speed: parseInt(document.getElementById('mv-render-fpt-speed').value || '0', 10),

@@ -1005,8 +1005,6 @@ def chatbot_tts():
     payload: Dict[str, Any] = {"input": text, "model": model}
     if data.get("voice"):
         payload["voice"] = str(data["voice"])
-    if data.get("format"):
-        payload["response_format"] = str(data["format"])
     if data.get("language"):
         payload["language"] = str(data["language"])
 
@@ -1016,7 +1014,13 @@ def chatbot_tts():
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    url = f"{nr['endpoint'].rstrip('/')}/audio/speech"
+    # 9Router takes `response_format` as a QUERY param (mp3 raw bytes by
+    # default, or json -> {audio, format}). We always request raw audio here
+    # and convert to base64 ourselves when the caller asks for ?json=1.
+    fmt = str(data.get("format") or "mp3").strip().lower() or "mp3"
+    from urllib.parse import urlencode as _urlencode
+    qs = _urlencode({"response_format": fmt})
+    url = f"{nr['endpoint'].rstrip('/')}/audio/speech?{qs}"
     try:
         import requests  # type: ignore
         upstream = requests.post(

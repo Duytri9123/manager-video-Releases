@@ -192,7 +192,7 @@ async function _batchPubAnalyzeAll() {
       const res = await fetch('/api/analyze_video_content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: plain.slice(0, 3000), provider, target_language: document.getElementById('proc-target-lang')?.value || 'vi' })
+        body: JSON.stringify({ content: plain.slice(0, 3000), provider, target_language: document.getElementById('batch-pub-target-lang')?.value || document.getElementById('proc-target-lang')?.value || 'vi' })
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'AI thất bại');
@@ -304,7 +304,7 @@ async function _batchPubStartAll() {
             const res = await fetch('/api/analyze_video_content', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: plain.slice(0, 3000), provider, target_language: document.getElementById('proc-target-lang')?.value || 'vi' })
+              body: JSON.stringify({ content: plain.slice(0, 3000), provider, target_language: document.getElementById('batch-pub-target-lang')?.value || document.getElementById('proc-target-lang')?.value || 'vi' })
             });
             const data = await res.json();
             if (data.ok) {

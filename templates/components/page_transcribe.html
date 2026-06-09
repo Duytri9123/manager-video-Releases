@@ -5,75 +5,7 @@
     <!-- LEFT: Settings + TTS Preview + Voice FX -->
     <div>
 
-      <!-- Settings card -->
-      <div class="card card-collapsible card-has-body">
-        <div class="card-header" onclick="toggleCard(this)">
-          <span class="card-title">🎙 Cài đặt phiên âm</span>
-        </div>
-        <div class="card-body">
-          <div class="field">
-            <label>Thư mục video</label>
-            <input type="text" id="tr-dir" value="./Downloaded" placeholder="./Downloaded">
-          </div>
-          <div class="field">
-            <label>File đơn (video hoặc .ass)</label>
-            <div class="flex-center gap-8">
-              <input type="text" id="tr-file" placeholder="Đường dẫn file..." style="flex:1">
-              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('tr-import-file').click()">📂 Chọn</button>
-              <input type="file" id="tr-import-file" accept="video/*,.ass" style="display:none">
-            </div>
-            <div class="text-xs text-muted mt-4" id="tr-file-name">--</div>
-          </div>
-          <div class="field">
-            <label>Thư mục xuất</label>
-            <input type="text" id="tr-out" placeholder="Để trống = cùng thư mục video">
-          </div>
-
-          <div class="grid-2">
-            <div class="field">
-              <label>Phiên âm bằng</label>
-              <select id="tr-provider">
-                <option value="groq" selected>Groq Whisper API (cloud, nhanh)</option>
-                <option value="model">Whisper local (chậm hơn)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Ngôn ngữ gốc</label>
-              <select id="tr-lang">
-                <option value="zh" selected>Tiếng Trung</option>
-                <option value="vi">Tiếng Việt</option>
-                <option value="en">Tiếng Anh</option>
-                <option value="ja">Tiếng Nhật</option>
-                <option value="ko">Tiếng Hàn</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="field" id="tr-model-row" style="display:none">
-            <label>Mô hình Whisper local</label>
-            <select id="tr-model">
-              <option value="tiny">tiny (nhanh nhất)</option>
-              <option value="base" selected>base</option>
-              <option value="small">small</option>
-              <option value="medium">medium</option>
-              <option value="large">large (chính xác nhất)</option>
-            </select>
-          </div>
-
-          <div class="check-grid mt-8 mb-12">
-            <label class="check-item"><input type="checkbox" id="tr-srt"><span>Xuất file .srt</span></label>
-            <label class="check-item"><input type="checkbox" id="tr-skip" checked><span>Bỏ qua file đã có</span></label>
-            <label class="check-item"><input type="checkbox" id="tr-sc"><span>Phồn → giản thể</span></label>
-          </div>
-
-          <div class="btn-group">
-            <button class="btn btn-primary" id="btn-tr" onclick="startTranscribe()" data-i18n="btn_start_tr">▶ Bắt đầu phiên âm</button>
-            <button class="btn btn-secondary" onclick="extractAudioOnly()">🎵 Tách MP3</button>
-            <button class="btn btn-secondary" onclick="generateTtsFromAss()">🔊 Tạo MP3 từ .ass</button>
-          </div>
-        </div>
-      </div>
-
+     
       <!-- TTS Preview card -->
       <div class="card card-collapsible card-has-body">
         <div class="card-header" onclick="toggleCard(this)">
@@ -168,6 +100,7 @@
         </div>
       </div>
 
+
     </div><!-- end left -->
 
     <!-- RIGHT: Progress + Log -->
@@ -175,6 +108,75 @@
 
       <!-- Progress card -->
       <div class="card">
+         <!-- Settings card -->
+      <div class="card card-collapsible card-has-body">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">🎙 Cài đặt phiên âm</span>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label>Thư mục video</label>
+            <input type="text" id="tr-dir" value="./Downloaded" placeholder="./Downloaded">
+          </div>
+          <div class="field">
+            <label>File đơn (video hoặc .ass)</label>
+            <div class="flex-center gap-8">
+              <input type="text" id="tr-file" placeholder="Đường dẫn file..." style="flex:1">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('tr-import-file').click()">📂 Chọn</button>
+              <input type="file" id="tr-import-file" accept="video/*,.ass" style="display:none">
+            </div>
+            <div class="text-xs text-muted mt-4" id="tr-file-name">--</div>
+          </div>
+          <div class="field">
+            <label>Thư mục xuất</label>
+            <input type="text" id="tr-out" placeholder="Để trống = cùng thư mục video">
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label>Phiên âm bằng</label>
+              <select id="tr-provider">
+                <option value="groq" selected>Groq Whisper API (cloud, nhanh)</option>
+                <option value="model">Whisper local (chậm hơn)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Ngôn ngữ gốc</label>
+              <select id="tr-lang">
+                <option value="zh" selected>Tiếng Trung</option>
+                <option value="vi">Tiếng Việt</option>
+                <option value="en">Tiếng Anh</option>
+                <option value="ja">Tiếng Nhật</option>
+                <option value="ko">Tiếng Hàn</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field" id="tr-model-row" style="display:none">
+            <label>Mô hình Whisper local</label>
+            <select id="tr-model">
+              <option value="tiny">tiny (nhanh nhất)</option>
+              <option value="base" selected>base</option>
+              <option value="small">small</option>
+              <option value="medium">medium</option>
+              <option value="large">large (chính xác nhất)</option>
+            </select>
+          </div>
+
+          <div class="check-grid mt-8 mb-12">
+            <label class="check-item"><input type="checkbox" id="tr-srt"><span>Xuất file .srt</span></label>
+            <label class="check-item"><input type="checkbox" id="tr-skip" checked><span>Bỏ qua file đã có</span></label>
+            <label class="check-item"><input type="checkbox" id="tr-sc"><span>Phồn → giản thể</span></label>
+          </div>
+
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btn-tr" onclick="startTranscribe()" data-i18n="btn_start_tr">▶ Bắt đầu phiên âm</button>
+            <button class="btn btn-secondary" onclick="extractAudioOnly()">🎵 Tách MP3</button>
+            <button class="btn btn-secondary" onclick="generateTtsFromAss()">🔊 Tạo MP3 từ .ass</button>
+          </div>
+        </div>
+      </div>
+
         <div class="card-header">
           <span class="card-title">📊 Tiến trình</span>
         </div>

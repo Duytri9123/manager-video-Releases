@@ -227,7 +227,9 @@ async function pubAnalyzeContent() {
   if (status) status.textContent = 'Đang gọi AI...';
 
   const provider = document.getElementById('pub-ai-provider')?.value || 'deepseek';
-  const targetLang = document.getElementById('proc-target-lang')?.value || 'vi';
+  const targetLang = document.getElementById('pub-target-lang')?.value
+    || document.getElementById('proc-target-lang')?.value
+    || 'vi';
   try {
     const res  = await fetch('/api/analyze_video_content', {
       method: 'POST',
@@ -648,7 +650,7 @@ async function pubFbGenerateAI() {
     const res  = await fetch('/api/analyze_video_content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, provider, target_language: document.getElementById('proc-target-lang')?.value || 'vi' })
+      body: JSON.stringify({ content, provider, target_language: document.getElementById('pub-target-lang')?.value || document.getElementById('proc-target-lang')?.value || 'vi' })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'AI thất bại');

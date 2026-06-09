@@ -20,8 +20,53 @@ window.aiSwitchMode = function(mode) {
 };
 
 // ── Config ───────────────────────────────────────────────────────────────────
+// Nạp danh sách model ảnh THẬT từ 9Router (/v1/models/image) vào dropdown,
+// chèn trước các nhóm tĩnh (Gemini/OpenAI). Dùng chung nguồn với Thumbnail & Truyện.
+let _aiImgModelsLoaded = false;
+window.aiLoadImageModels = async function() {
+  const sel = document.getElementById('ai-image-model');
+  if (!sel || _aiImgModelsLoaded) return;
+  _aiImgModelsLoaded = true;
+  try {
+    const r = await fetch('/api/story/ai_image_models').then(res => res.json());
+    if (!r || !r.ok || !Array.isArray(r.models) || !r.models.length) {
+      _aiImgModelsLoaded = false;
+      return;
+    }
+    sel.querySelectorAll('optgroup[data-nr="1"]').forEach(g => g.remove());
+    const existing = new Set(Array.from(sel.options).map(o => o.value));
+    const groups = {};
+    r.models.forEach(function(m) {
+      const id = (m && (m.id || m)) || '';
+      if (!id || existing.has(id)) return;
+      const prefix = id.includes('/') ? id.split('/')[0] : (m.owned_by || 'khác');
+      (groups[prefix] = groups[prefix] || []).push(id);
+    });
+    const labelMap = {
+      openai: '🟢 OpenAI', cx: '⭐ Codex (SSE)', nb: '🍌 NanoBanana',
+      google: '🔷 Google', sdwebui: '🖥 Local (SD WebUI)', flux: '⚡ FLUX',
+    };
+    const staticGroups = sel.querySelectorAll('optgroup[data-static="1"]');
+    const beforeNode = staticGroups.length > 1 ? staticGroups[1] : (staticGroups[0] || null);
+    Object.keys(groups).forEach(function(prefix) {
+      const grp = document.createElement('optgroup');
+      grp.setAttribute('data-nr', '1');
+      grp.label = labelMap[prefix] || ('9Router · ' + prefix);
+      groups[prefix].forEach(function(id) {
+        const opt = document.createElement('option');
+        opt.value = id; opt.textContent = id;
+        grp.appendChild(opt);
+      });
+      sel.insertBefore(grp, beforeNode);
+    });
+  } catch (_) {
+    _aiImgModelsLoaded = false;
+  }
+};
+
 window.aiLoadConfig = async function() {
   try {
+    await aiLoadImageModels();
     const r = await fetch('/api/ai/config');
     const d = await r.json();
     if (!d.ok) return;

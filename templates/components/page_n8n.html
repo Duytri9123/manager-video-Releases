@@ -48,6 +48,29 @@
   #n8n-log{height:120px;border-top:1px solid var(--border);overflow-y:auto;padding:8px 12px;font-family:'Courier New',monospace;font-size:11px;background:#f8faff}
   .n8n-log-line{margin-bottom:2px}
   .n8n-empty-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;pointer-events:none;text-align:center;padding:20px}
+  /* Template picker */
+  .n8n-tpl-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .n8n-tpl-card{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg3);cursor:pointer;transition:all .15s}
+  .n8n-tpl-card:hover{border-color:var(--accent);background:var(--accent-light);transform:translateY(-1px)}
+  .n8n-tpl-ic{font-size:22px;flex-shrink:0;width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--bg2)}
+  .n8n-tpl-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;line-height:1.25}
+  .n8n-tpl-desc{font-size:11px;color:var(--text-muted);line-height:1.4}
+  @media(max-width:560px){ .n8n-tpl-grid{grid-template-columns:1fr} }
+  /* Run-prompt modal */
+  .n8n-rp-list{display:flex;flex-direction:column;gap:12px}
+  .n8n-rp-row{border:1px solid var(--border);border-radius:9px;padding:10px;background:var(--bg3)}
+  .n8n-rp-head{font-size:12px;color:var(--text2);margin-bottom:6px}
+  .n8n-rp-input{width:100%;box-sizing:border-box}
+  /* Pick-videos modal */
+  .n8n-pv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:8px 20px;overflow-y:auto}
+  .n8n-pv-card{position:relative;border:2px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg3);cursor:pointer;display:flex;flex-direction:column}
+  .n8n-pv-card:has(.n8n-pv-chk:checked){border-color:var(--accent);box-shadow:0 0 0 2px rgba(26,115,232,.18)}
+  .n8n-pv-chk{position:absolute;top:8px;left:8px;z-index:2;width:18px;height:18px;cursor:pointer}
+  .n8n-pv-thumb{width:100%;aspect-ratio:3/4;background:var(--bg);overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .n8n-pv-thumb img{width:100%;height:100%;object-fit:cover}
+  .n8n-pv-noimg{font-size:32px;color:var(--text-muted)}
+  .n8n-pv-desc{font-size:11px;font-weight:600;color:var(--text);padding:6px 8px 2px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .n8n-pv-meta{font-size:10px;color:var(--text-muted);padding:0 8px 8px}
   @media(max-width:768px){ #n8n-palette{width:150px;min-width:150px} #n8n-inspector{position:absolute;right:0;top:0;bottom:0;z-index:20;box-shadow:-4px 0 16px rgba(0,0,0,.12)}}
   </style>
 
@@ -55,6 +78,7 @@
     <!-- Toolbar -->
     <div id="n8n-toolbar">
       <input type="text" id="n8n-wf-name" placeholder="Tên workflow" value="Workflow của tôi">
+      <button class="btn btn-secondary btn-sm" onclick="n8nShowTemplates()" title="Chọn flow mẫu có sẵn">📋 Mẫu</button>
       <button class="btn btn-primary btn-sm" onclick="n8nFlowSave()">💾 Lưu</button>
       <button class="btn btn-success btn-sm" id="btn-n8n-run" onclick="n8nFlowRun()">▶️ Chạy</button>
       <button class="btn btn-secondary btn-sm" onclick="n8nFlowFit()">🎯 Canh giữa</button>
@@ -66,7 +90,6 @@
       <span id="n8n-zoom-label" class="text-xs text-muted" style="width:42px;text-align:center">100%</span>
       <button class="btn btn-secondary btn-sm" onclick="n8nZoom(-0.1)">－</button>
       <button class="btn btn-secondary btn-sm" onclick="n8nToggleConn()">⚙️ Kết nối</button>
-      <button class="btn btn-secondary btn-sm" onclick="n8nShowSchedule()">⏰ Lịch</button>
     </div>
 
     <!-- Stage -->
@@ -81,6 +104,7 @@
         <div class="n8n-pal-group">toolvideo</div>
         <div class="n8n-pal-item" draggable="true" data-type="tv.user_info"><span class="ic">🔍</span>Thông tin user</div>
         <div class="n8n-pal-item" draggable="true" data-type="tv.user_videos"><span class="ic">🎞</span>Lấy video user</div>
+        <div class="n8n-pal-item" draggable="true" data-type="tv.pick_videos"><span class="ic">✅</span>Chọn video</div>
         <div class="n8n-pal-item" draggable="true" data-type="tv.queue_add"><span class="ic">➕</span>Thêm hàng chờ</div>
         <div class="n8n-pal-item" draggable="true" data-type="tv.process"><span class="ic">🎬</span>Xử lý video</div>
         <div class="n8n-pal-item" draggable="true" data-type="tv.publish"><span class="ic">📤</span>Đăng video</div>

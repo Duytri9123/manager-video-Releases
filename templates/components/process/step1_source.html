@@ -31,23 +31,6 @@
         <input type="text" id="proc-out" placeholder="./output">
       </div>
 
-      <label class="check-item mt-8" style="width:100%" title="Khi bật: tải xong sẽ bỏ qua bước 2 Xem &amp; Chỉnh sửa, tự động chạy tạo SRT/ASS/Giọng lồng tiếng ở bước 3, dừng lại ở bước 3 để check ASS &amp; Thumbnail rồi tiếp tục chạy xử lý ở bước 4.">
-        <input type="checkbox" id="proc-auto-flow">
-        <span>🔁 Tự động hóa quy trình (Tải xong → Dịch &amp; Lồng tiếng → Check ASS/Thumb → Xử lý)</span>
-      </label>
-
-      <!-- Skip options — apply when processing starts -->
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
-        <label class="check-item" style="width:auto;white-space:nowrap" title="Tự động bỏ qua bước kiểm tra và chỉnh sửa phụ đề ASS">
-          <input type="checkbox" id="step3-skip-ass" onchange="_onStep3SkipChange()">
-          <span>⏭ Bỏ qua kiểm tra ASS</span>
-        </label>
-        <label class="check-item" style="width:auto;white-space:nowrap" title="Tự động bỏ qua bước chọn thumbnail">
-          <input type="checkbox" id="step3-skip-thumb" onchange="_onStep3SkipChange()">
-          <span>⏭ Bỏ qua thumbnail</span>
-        </label>
-      </div>
-
       <div class="btn-group mt-12">
         <button class="btn btn-primary" id="btn-proc" onclick="_addCurrentToQueue()">➕ Thêm vào hàng chờ</button>
       </div>
@@ -63,6 +46,37 @@
       </div>
     </div>
     <div class="card-body">
+      <!-- Tùy chọn tự động hóa — áp dụng cho cả hàng chờ -->
+      <style>
+        .proc-auto-options .pe2-opts{ gap:8px; }
+        .proc-auto-options .pe2-optcard{ flex-direction:row; justify-content:flex-start; gap:6px; padding:8px 10px; min-height:0; border-radius:8px; }
+        .proc-auto-options .pe2-optcard-ic{ font-size:14px; }
+        .proc-auto-options .pe2-optcard-lbl{ font-size:11px; font-weight:600; }
+        .proc-auto-options .pe2-optcard-badge{ top:50%; transform:translateY(-50%); width:15px; height:15px; font-size:9px; }
+      </style>
+      <div class="proc-auto-options" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+        <div class="pe2-opts">
+          <label class="pe2-optcard" title="Khi bật: tải xong sẽ bỏ qua bước 2 Xem &amp; Chỉnh sửa, tự động chạy tạo SRT/ASS/Giọng lồng tiếng ở bước 3, dừng lại ở bước 3 để check ASS &amp; Thumbnail rồi tiếp tục chạy xử lý ở bước 4.">
+            <input type="checkbox" id="proc-auto-flow">
+            <span class="pe2-optcard-ic">🔁</span>
+            <span class="pe2-optcard-lbl">Tự động hóa quy trình</span>
+            <span class="pe2-optcard-badge">✓</span>
+          </label>
+          <label class="pe2-optcard" title="Tự động bỏ qua bước kiểm tra và chỉnh sửa phụ đề ASS">
+            <input type="checkbox" id="step3-skip-ass" onchange="_onStep3SkipChange()">
+            <span class="pe2-optcard-ic">⏭</span>
+            <span class="pe2-optcard-lbl">Bỏ qua kiểm tra ASS</span>
+            <span class="pe2-optcard-badge">✓</span>
+          </label>
+          <label class="pe2-optcard" title="Tự động bỏ qua bước chọn thumbnail">
+            <input type="checkbox" id="step3-skip-thumb" onchange="_onStep3SkipChange()">
+            <span class="pe2-optcard-ic">⏭</span>
+            <span class="pe2-optcard-lbl">Bỏ qua thumbnail</span>
+            <span class="pe2-optcard-badge">✓</span>
+          </label>
+        </div>
+      </div>
+
       <div id="batch-queue-list" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
         <div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>
       </div>

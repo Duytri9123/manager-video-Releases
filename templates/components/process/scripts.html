@@ -905,6 +905,12 @@
     const dispW = (rect.width  > 0 ? rect.width  : img.offsetWidth)  || wrap.offsetWidth || 640;
     const dispH = (rect.height > 0 ? rect.height : img.offsetHeight) || Math.round(dispW * imgH / imgW);
 
+    // Lệch của ảnh bên trong khung wrap. ≠0 chỉ khi letterbox (đổi khung 9:16/16:9):
+    // ảnh được đặt giữa, chừa viền → overlay phải bám theo vùng ẢNH, không phải wrap.
+    const _wrapRectO = wrap.getBoundingClientRect();
+    const imgOffX = (rect.width  > 0) ? Math.max(0, Math.round(rect.left - _wrapRectO.left)) : 0;
+    const imgOffY = (rect.height > 0) ? Math.max(0, Math.round(rect.top  - _wrapRectO.top )) : 0;
+
     // font_size and margin_v are % of video height.
     // Apply same % to dispH → preview always matches real video proportionally.
     const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
@@ -951,9 +957,9 @@
     const _posBlur = (el) => {
       el.style.width  = bW + 'px';
       el.style.height = bH + 'px';
-      el.style.left   = bLeft + 'px';
+      el.style.left   = (imgOffX + bLeft) + 'px';
       el.style.right  = 'auto';
-      el.style.top    = bTop + 'px';
+      el.style.top    = (imgOffY + bTop) + 'px';
       el.style.bottom = 'auto';
     };
 
@@ -963,20 +969,12 @@
       canvas.style.display = 'block';
       _posBlur(canvas);
 
-      // Compute source region in natural image coords
-      const wrapRect = wrap.getBoundingClientRect();
-      const imgRect  = img.getBoundingClientRect();
-      // img may be offset inside wrap (e.g. flex centering)
-      const imgOffX = imgRect.left - wrapRect.left;
-      const imgOffY = imgRect.top  - wrapRect.top;
-      const scaleX  = imgW / (imgRect.width  || dispW);
-      const scaleY  = imgH / (imgRect.height || dispH);
-
-      const canvasLeft   = bLeft - imgOffX;
-      const canvasTop    = bTop - imgOffY;
-
-      const sx = Math.round(canvasLeft * scaleX);
-      const sy = Math.round(canvasTop  * scaleY);
+      // Vùng nguồn theo toạ độ ảnh gốc. Canvas đặt tại (imgOffX+bLeft, imgOffY+bTop)
+      // → toạ độ so với chính ảnh là (bLeft, bTop).
+      const scaleX  = imgW / (rect.width  || dispW);
+      const scaleY  = imgH / (rect.height || dispH);
+      const sx = Math.round(bLeft * scaleX);
+      const sy = Math.round(bTop  * scaleY);
       const sw = Math.round(bW * scaleX);
       const sh = Math.round(bH * scaleY);
 
@@ -1016,12 +1014,15 @@
     overlay.style.background  = 'none';
 
     if (pos === 'top') {
-      overlay.style.top    = scaledMargin + 'px';
+      overlay.style.top    = (imgOffY + scaledMargin) + 'px';
       overlay.style.bottom = 'auto';
     } else {
-      overlay.style.bottom = scaledMargin + 'px';
+      overlay.style.bottom = (imgOffY + scaledMargin) + 'px';
       overlay.style.top    = 'auto';
     }
+    // Giới hạn bề ngang theo vùng ảnh (letterbox dọc→ngang sẽ có viền 2 bên).
+    overlay.style.left  = imgOffX + 'px';
+    overlay.style.right = imgOffX + 'px';
     overlay.textContent = sample;
 
     // ── Render extra blur zones on preview ──
@@ -1041,7 +1042,7 @@
         const div = document.createElement('div');
         div.className = 'extra-blur-zone';
         div.dataset.zoneId = zone.id;
-        div.style.cssText = `position:absolute;left:${ezLeft}px;top:${ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);`;
+        div.style.cssText = `position:absolute;left:${imgOffX + ezLeft}px;top:${imgOffY + ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);`;
         ['e','s','se'].forEach(function(edge){
           const hd = document.createElement('div');
           hd.className = 'pe2-handle ' + edge;
@@ -1105,11 +1106,8 @@
                 if (typeof _updateAspectBadge === 'function') _updateAspectBadge();
               }
 
-              // If preview-aspect select is in 'auto' mode, re-apply layout
-              const aspectSel = document.getElementById('proc-preview-aspect');
-              if (aspectSel?.value === 'auto' && typeof _onPreviewAspectChange === 'function') {
-                _onPreviewAspectChange();
-              }
+              // (Layout khung/letterbox áp lần cuối sau khối if/else bên dưới,
+              //  vì nhánh subtitle có reset img.style.position.)
             } catch (_) {}
 
             const frameOn = document.getElementById('frame-enabled')?.checked;
@@ -1131,6 +1129,9 @@
               if (cv) cv.style.display = 'none';
               _renderSubOverlay();
             }
+            // Áp khung đích / letterbox / nền mờ lần cuối (sau khi style ảnh đã reset),
+            // cho cả mode 'auto' lẫn khi chọn 16:9 / 9:16 thủ công.
+            if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
           };
           img.src = data.image;
           img.style.display = 'block';
@@ -2023,6 +2024,7 @@
   const _PROC_FIELDS = [
     // Aspect / Preview
     { id:'proc-preview-aspect', type:'value' },
+    { id:'proc-aspect-blur-bg', type:'checkbox' },
     // AI Model + Language
     { id:'proc-model',          type:'value' },
     { id:'proc-lang',           type:'value' },
@@ -2212,15 +2214,63 @@
     const subWrap   = document.getElementById('sub-preview-wrap');
     const thumbWrap = document.getElementById('thumb-preview-wrap');
 
-    // Khung xem trước LUÔN theo tỉ lệ video GỐC (mục tiêu: chỉnh sửa trên video gốc).
-    // "Chế độ video" (16:9 / 9:16) chỉ là tỉ lệ ĐÍCH để scale/xoay khi XUẤT, không
-    // làm méo khung preview ở bước chỉnh sửa.
+    // Khung xem trước phản ánh ĐÚNG khung sẽ xuất:
+    //  - 'auto' (Tự nhận diện): giữ tỉ lệ video gốc, ảnh lấp đầy khung.
+    //  - '16x9' / '9x16' chọn thủ công: nếu HƯỚNG nguồn khác mode đích thì hiển thị
+    //    khung đích kèm viền (letterbox) — khớp với cách backend scale+pad khi xuất.
+    //    Nếu nguồn đã đúng hướng thì giữ khung gốc (backend cũng không convert).
     const _imgEl = document.getElementById('sub-preview-img');
-    let origAspect = '16 / 9';
-    if (_imgEl && _imgEl.naturalWidth && _imgEl.naturalHeight) {
-      origAspect = _imgEl.naturalWidth + ' / ' + _imgEl.naturalHeight;
+    const _haveDims = !!(_imgEl && _imgEl.naturalWidth && _imgEl.naturalHeight);
+    const _srcW = _haveDims ? _imgEl.naturalWidth  : 16;
+    const _srcH = _haveDims ? _imgEl.naturalHeight : 9;
+    const _srcIsVertical = _srcH > _srcW;
+    const _origAspect = _haveDims ? (_srcW + ' / ' + _srcH) : '16 / 9';
+
+    const _forced = (value === '16x9' || value === '9x16');
+    const _shouldConvert = _forced && (
+      (aspect === '9x16' && !_srcIsVertical) ||
+      (aspect === '16x9' &&  _srcIsVertical)
+    );
+    const _blurBg = document.getElementById('proc-aspect-blur-bg')?.checked || false;
+    const _bgEl = document.getElementById('sub-preview-bgblur');
+
+    if (subWrap) {
+      if (_shouldConvert) {
+        subWrap.style.aspectRatio = isVertical ? '9 / 16' : '16 / 9';
+        subWrap.dataset.letterbox = '1';
+        if (_imgEl) {
+          _imgEl.style.width     = 'auto';
+          _imgEl.style.height    = 'auto';
+          _imgEl.style.maxWidth  = '100%';
+          _imgEl.style.maxHeight = '100%';
+          _imgEl.style.objectFit = 'contain';
+          _imgEl.style.position  = 'relative';
+          _imgEl.style.zIndex    = '1';
+        }
+        // Nền mờ: hiện ảnh nền (mờ) lấp viền thay cho nền đen.
+        if (_bgEl) {
+          if (_blurBg && _imgEl && _imgEl.src && _imgEl.src !== window.location.href) {
+            _bgEl.src = _imgEl.src;
+            _bgEl.style.display = 'block';
+          } else {
+            _bgEl.style.display = 'none';
+            _bgEl.removeAttribute('src');
+          }
+        }
+      } else {
+        subWrap.style.aspectRatio = _origAspect;
+        subWrap.dataset.letterbox = '';
+        if (_imgEl) {
+          _imgEl.style.width     = '100%';
+          _imgEl.style.height    = '';
+          _imgEl.style.maxWidth  = '';
+          _imgEl.style.maxHeight = '';
+          _imgEl.style.objectFit = '';
+          _imgEl.style.zIndex    = '';
+        }
+        if (_bgEl) { _bgEl.style.display = 'none'; _bgEl.removeAttribute('src'); }
+      }
     }
-    if (subWrap)   subWrap.style.aspectRatio   = origAspect;
     // Thumbnail là ảnh cho nền tảng đăng → giữ theo tỉ lệ đích.
     if (thumbWrap) thumbWrap.style.aspectRatio = isVertical ? '9 / 16' : '16 / 9';
 
@@ -2468,7 +2518,59 @@
   }
 
 
+  // Nạp danh sách mô hình AI tạo ảnh THẬT từ 9Router (/v1/models/image) vào
+  // dropdown Thumbnail, nhóm theo provider (openai / cx / nb / google …).
+  // Giữ option "auto" + Gemini (gọi trực tiếp) ở đầu.
+  window._thumbAiModelsLoaded = false;
+  async function loadThumbAiModels() {
+    if (window._thumbAiModelsLoaded) return;
+    const sel = document.getElementById('thumb-ai-model');
+    if (!sel) return;
+    window._thumbAiModelsLoaded = true;
+    try {
+      const r = await fetch('/api/chatbot/media_models?kind=image').then(res => res.json());
+      if (!r || !r.ok || !Array.isArray(r.models) || !r.models.length) {
+        window._thumbAiModelsLoaded = false; // chưa có dữ liệu → cho thử lại
+        return;
+      }
+      // Xoá các optgroup 9Router cũ (nếu nạp lại), giữ 2 option tĩnh đầu tiên
+      sel.querySelectorAll('optgroup[data-nr="1"]').forEach(g => g.remove());
+
+      const existing = new Set(Array.from(sel.options).map(o => o.value));
+      // Gom theo provider prefix trước dấu '/'
+      const groups = {};
+      r.models.forEach(function(m) {
+        const id = (m && (m.id || m)) || '';
+        if (!id || existing.has(id)) return;
+        const prefix = id.includes('/') ? id.split('/')[0] : (m.owned_by || 'khác');
+        (groups[prefix] = groups[prefix] || []).push(id);
+      });
+      const labelMap = {
+        openai: '🟢 OpenAI', cx: '⭐ Codex (SSE)', nb: '🍌 NanoBanana',
+        google: '🔷 Google', sdwebui: '🖥 Local (SD WebUI)', flux: '⚡ FLUX',
+      };
+      Object.keys(groups).forEach(function(prefix) {
+        const grp = document.createElement('optgroup');
+        grp.setAttribute('data-nr', '1');
+        grp.label = labelMap[prefix] || ('9Router · ' + prefix);
+        groups[prefix].forEach(function(id) {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = id;
+          grp.appendChild(opt);
+          existing.add(id);
+        });
+        sel.appendChild(grp);
+      });
+    } catch (_) {
+      window._thumbAiModelsLoaded = false; // cho phép thử lại lần sau
+    }
+  }
+  // Nạp ngay khi script sẵn sàng (không chặn UI)
+  loadThumbAiModels();
+
   async function generateThumbnailAI() {
+    loadThumbAiModels();
     const source = _getPreviewVideoPath();
     const ts = parseFloat(document.getElementById('sub-preview-ts')?.value || 2);
     const title = document.getElementById('thumb-title')?.value?.trim() || '';
@@ -2534,6 +2636,7 @@
         aspect_ratio: '9:16',
         frame_b64: frameB64,
         is_editing_existing_thumb: isEditingExistingThumb,
+        image_model: document.getElementById('thumb-ai-model')?.value || 'auto',
       };
 
       // Add video_path if source is file

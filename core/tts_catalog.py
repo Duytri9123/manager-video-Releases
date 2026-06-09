@@ -189,6 +189,77 @@ def local_tts_engines() -> List[Dict[str, Any]]:
     ]
 
 
+# Engines that can synthesize (almost) any language — used as fallback when the
+# chosen engine can't speak the target language. edge-tts covers every entry in
+# _LANGS; gTTS is the simpler last resort.
+_UNIVERSAL_FALLBACKS = ("edge-tts", "gtts")
+
+
+def _local_engine_by_id(engine_id: str) -> Dict[str, Any] | None:
+    eid = (engine_id or "").strip().lower()
+    for eng in local_tts_engines():
+        if eng["id"] == eid:
+            return eng
+    return None
+
+
+def engine_voices_for_lang(engine: Dict[str, Any], lang: str) -> List[Tuple[str, str]]:
+    """Voices an engine offers for `lang`. Falls back to its `multi` bucket for
+    multilingual engines (ElevenLabs, Fish Audio, 9Router)."""
+    voices = engine.get("voices") or {}
+    rows = voices.get(lang) or voices.get("multi") or []
+    return [tuple(v) for v in rows]
+
+
+def resolve_engine_voice(
+    engine_id: str,
+    voice_id: str,
+    lang: str,
+    cfg: Dict[str, Any] | None = None,
+) -> Tuple[str, str, bool, str]:
+    """Pick an (engine, voice) pair that can actually speak `lang`.
+
+    Keeps the user's choice when it already supports the target language;
+    otherwise auto-selects the engine's default voice for that language, and
+    finally falls back to a universal engine (edge-tts) when the chosen engine
+    can't speak it at all.
+
+    Returns ``(engine_id, voice_id, changed, note)`` where ``changed`` is True
+    when the selection was adjusted and ``note`` is a short human-readable
+    description of what changed.
+    """
+    lang = (lang or "vi").strip().lower() or "vi"
+    eid = (engine_id or "").strip().lower()
+    vid = (voice_id or "").strip()
+
+    # 9Router / MiniMax models are multilingual — trust the caller's selection.
+    if eid == "9router" or eid.startswith("9r:") or eid == "minimax":
+        return (eid or "edge-tts"), vid, False, ""
+
+    eng = _local_engine_by_id(eid)
+    if eng is not None:
+        rows = engine_voices_for_lang(eng, lang)
+        if rows:
+            valid_ids = {r[0] for r in rows}
+            if vid in valid_ids:
+                return eid, vid, False, ""
+            default_voice = eng.get("default")
+            new_voice = default_voice if default_voice in valid_ids else rows[0][0]
+            return eid, new_voice, True, f"voice→{new_voice}"
+
+    # Engine cannot speak this language → fall back to a universal engine.
+    for fb in _UNIVERSAL_FALLBACKS:
+        if fb == eid:
+            continue
+        fb_eng = _local_engine_by_id(fb)
+        rows = engine_voices_for_lang(fb_eng, lang) if fb_eng else []
+        if rows:
+            return fb, rows[0][0], True, f"engine→{fb}, voice→{rows[0][0]}"
+
+    # Last resort: keep whatever we were given.
+    return (eid or "edge-tts"), vid, False, ""
+
+
 def _endpoint_from_cfg(cfg: Dict[str, Any]) -> str:
     nr = cfg.get("nine_router") or {}
     endpoint = (
@@ -280,109 +351,103 @@ def _has_model(models: List[str], *patterns: str) -> str:
     return ""
 
 
+# Voice presets per 9Router provider. Mirrors the Chat Bot tab — each model's
+# provider decides which voices apply. Providers not listed here (edge-tts,
+# google-tts, deepgram, ...) use the model's own default voice, so the UI
+# just offers a "default" entry for them.
+_PROVIDER_TTS_VOICES: Dict[str, List[Tuple[str, str]]] = {
+    "openai": [
+        ("nova", "Nova (multilingual)"),
+        ("shimmer", "Shimmer (multilingual)"),
+        ("alloy", "Alloy (neutral)"),
+        ("echo", "Echo (male)"),
+        ("onyx", "Onyx (male)"),
+        ("fable", "Fable (storyteller)"),
+    ],
+    "gemini": [
+        ("Kore", "Kore (female)"),
+        ("Charon", "Charon (male)"),
+        ("Puck", "Puck (cheerful)"),
+        ("Aoede", "Aoede (warm)"),
+    ],
+    "elevenlabs": [
+        ("21m00Tcm4TlvDq8ikWAM", "Rachel (female)"),
+        ("EXAVITQu4vr4xnSDxMaL", "Bella (female, soft)"),
+        ("AZnzlk1XvdvUeBnXmlld", "Domi (female)"),
+        ("ErXwobaYiN019PkySvjV", "Antoni (male)"),
+        ("pNInz6obpgDQGcFmaJgB", "Adam (male)"),
+    ],
+    "minimax": [
+        ("English_expressive_narrator", "Expressive Narrator (EN)"),
+        ("English_radiant_girl", "Radiant Girl (EN, female)"),
+        ("English_PassionateWarrior", "Passionate Warrior (EN, male)"),
+        ("Chinese_audiobook_male", "Chinese audiobook male"),
+        ("Chinese_audiobook_female", "Chinese audiobook female"),
+    ],
+}
+
+
+def _provider_of(model_id: str) -> str:
+    """Top-level provider for a 9Router model id.
+
+    "openai/tts-1" -> "openai"; "openrouter/openai/tts-1" -> "openai";
+    "el/eleven_multilingual_v2" -> "elevenlabs"; "gemini/...-tts" -> "gemini".
+    """
+    parts = [p for p in str(model_id or "").split("/") if p]
+    if not parts:
+        return ""
+    p = parts[0].lower()
+    if p == "openrouter" and len(parts) > 1:
+        p = parts[1].lower()
+    if p == "el":
+        return "elevenlabs"
+    return p
+
+
+def _consolidated_9router_engine(models: List[str]) -> Dict[str, Any] | None:
+    """Build ONE "9Router TTS" engine carrying the live model list (grouped by
+    provider) plus a per-provider voice map — mirroring the Chat Bot tab's
+    Text-to-Speech panel (Model + Voice dropdowns). Returns None when 9Router
+    exposes no TTS models, so the UI shows nothing rather than a fake entry.
+    """
+    if not models:
+        return None
+
+    model_items: List[Dict[str, str]] = []
+    for m in models:
+        grp = (m.split("/", 1)[0] or "9router").lower()
+        model_items.append({
+            "id": m,
+            "label": m,
+            "group": grp,
+            "provider": _provider_of(m),
+        })
+
+    default_model = _has_model(models, r"^openai/(?:tts|gpt-4o.*tts)") or models[0]
+    voices_by_provider = {
+        prov: [list(v) for v in rows]
+        for prov, rows in _PROVIDER_TTS_VOICES.items()
+    }
+    default_voices = voices_by_provider.get(_provider_of(default_model)) \
+        or voices_by_provider["openai"]
+
+    return {
+        "id": "9router",
+        "label": "9Router TTS",
+        "default": default_voices[0][0] if default_voices else "",
+        "defaultModel": default_model,
+        "backend": "9router",
+        "provider": "9router",
+        "models": model_items,
+        "voicesByProvider": voices_by_provider,
+        # `multi` keeps _engineSupportsLang() happy for every target language.
+        "voices": {"multi": default_voices},
+    }
+
+
 def _static_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
-    engines: List[Dict[str, Any]] = []
-
-    openai_model = _has_model(models, r"^openai/(?:tts|gpt-4o.*tts)")
-    if openai_model:
-        engines.append({
-            "id": "9r:openai",
-            "label": "OpenAI TTS (9Router)",
-            "default": "nova",
-            "defaultModel": openai_model,
-            "backend": "9router",
-            "provider": "openai",
-            "voices": {
-                "vi": [
-                    ("nova", "Nova (multilingual)"),
-                    ("shimmer", "Shimmer (multilingual)"),
-                    ("alloy", "Alloy (multilingual)"),
-                ],
-                "en": [
-                    ("nova", "Nova (female, warm)"),
-                    ("shimmer", "Shimmer (female, soft)"),
-                    ("alloy", "Alloy (neutral)"),
-                    ("echo", "Echo (male)"),
-                    ("onyx", "Onyx (male)"),
-                    ("fable", "Fable (storyteller)"),
-                ],
-                "ja": [("nova", "Nova (multilingual)"), ("shimmer", "Shimmer")],
-                "ko": [("nova", "Nova (multilingual)"), ("shimmer", "Shimmer")],
-                "zh": [("nova", "Nova (multilingual)"), ("shimmer", "Shimmer")],
-            },
-        })
-
-    el_model = _has_model(models, r"^el/", r"^eleven")
-    if el_model:
-        engines.append({
-            "id": "9r:elevenlabs",
-            "label": "ElevenLabs (9Router)",
-            "default": "21m00Tcm4TlvDq8ikWAM",
-            "defaultModel": el_model,
-            "backend": "9router",
-            "provider": "elevenlabs",
-            "voices": {
-                "vi": [
-                    ("21m00Tcm4TlvDq8ikWAM", "Rachel (multilingual v2)"),
-                    ("EXAVITQu4vr4xnSDxMaL", "Bella (multilingual v2)"),
-                ],
-                "en": [
-                    ("21m00Tcm4TlvDq8ikWAM", "Rachel (female)"),
-                    ("AZnzlk1XvdvUeBnXmlld", "Domi (female)"),
-                    ("EXAVITQu4vr4xnSDxMaL", "Bella (female)"),
-                    ("ErXwobaYiN019PkySvjV", "Antoni (male)"),
-                    ("pNInz6obpgDQGcFmaJgB", "Adam (male)"),
-                ],
-                "multi": [
-                    ("21m00Tcm4TlvDq8ikWAM", "Rachel (multilingual)"),
-                    ("EXAVITQu4vr4xnSDxMaL", "Bella (multilingual)"),
-                ],
-            },
-        })
-
-    gemini_model = _has_model(models, r"^gemini/.*tts")
-    if gemini_model:
-        engines.append({
-            "id": "9r:gemini",
-            "label": "Gemini TTS (9Router)",
-            "default": "Kore",
-            "defaultModel": gemini_model,
-            "backend": "9router",
-            "provider": "gemini",
-            "voices": {
-                "vi": [("Kore", "Kore (multilingual)"), ("Charon", "Charon")],
-                "en": [
-                    ("Kore", "Kore (female)"),
-                    ("Charon", "Charon (male)"),
-                    ("Puck", "Puck (cheerful)"),
-                    ("Aoede", "Aoede (warm)"),
-                ],
-            },
-        })
-
-    minimax_model = _has_model(models, r"^minimax/")
-    if minimax_model:
-        engines.append({
-            "id": "minimax",
-            "label": "MiniMax TTS (9Router)",
-            "default": "English_expressive_narrator",
-            "defaultModel": minimax_model,
-            "backend": "9router",
-            "provider": "minimax",
-            "voices": {
-                "en": [
-                    ("English_expressive_narrator", "Expressive Narrator (EN)"),
-                    ("English_radiant_girl", "Radiant Girl (EN, female)"),
-                    ("English_PassionateWarrior", "Passionate Warrior (EN, male)"),
-                ],
-                "zh": [
-                    ("Chinese_audiobook_male", "Chinese audiobook male"),
-                    ("Chinese_audiobook_female", "Chinese audiobook female"),
-                ],
-            },
-        })
-
-    return engines
+    engine = _consolidated_9router_engine(models)
+    return [engine] if engine else []
 
 
 def _dynamic_provider_engine(
@@ -451,23 +516,6 @@ def nine_router_tts_engines(cfg: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], 
     status["models_count"] = len(models)
     if models:
         engines.extend(_static_9router_engines(models))
-
-    # Voice-by-id providers are best discovered through /audio/voices. Only
-    # probe providers that appear in /models/tts; otherwise catalog load can
-    # spend many seconds on unreachable provider-specific discovery.
-    if status["reachable"] and models:
-        for provider, engine_id, label, patterns in (
-            ("edge-tts", "9r:edge-tts", "Edge TTS (9Router)", (r"^edge-tts", r"^edge/")),
-            ("google-tts", "9r:google-tts", "Google TTS (9Router)", (r"^google-tts", r"^gtts")),
-            ("deepgram", "9r:deepgram", "Deepgram TTS (9Router)", (r"^deepgram",)),
-            ("inworld", "9r:inworld", "Inworld TTS (9Router)", (r"^inworld",)),
-            ("local-device", "9r:local-device", "Local Device TTS (9Router host)", (r"^local-device",)),
-        ):
-            if not _has_model(models, *patterns):
-                continue
-            eng = _dynamic_provider_engine(endpoint, api_key, provider, engine_id, label)
-            if eng:
-                engines.append(eng)
 
     seen = set()
     deduped = []

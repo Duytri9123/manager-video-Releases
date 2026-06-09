@@ -1299,6 +1299,12 @@ def generate_thumbnail_ai():
 
     subtitle_text = str(data.get("subtitle_text") or "").strip()
 
+    # Mô hình AI tạo ảnh do người dùng chọn ở UI Thumbnail trước khi bấm 🤖.
+    #   "auto"               → 9Router (nếu cấu hình) rồi fallback Gemini
+    #   "gemini*"/"imagen*"  → ép dùng Gemini native image
+    #   còn lại (vd cx/...)  → ép dùng 9Router với đúng model đó
+    image_model = str(data.get("image_model") or "auto").strip() or "auto"
+
     # Get API keys (need at least 1 of: 9Router or Gemini)
     cfg = load_cfg()
     api_key = (
@@ -1383,10 +1389,17 @@ def generate_thumbnail_ai():
     img_b64_data = None
     used_provider = None
 
-    # Priority 1: 9Router (cx/gpt-5.5-image hoặc model user cấu hình)
-    if nr_endpoint and nr_key:
+    # Phân loại lựa chọn model của người dùng
+    _model_lc = image_model.lower()
+    force_gemini = _model_lc.startswith(("gemini", "imagen"))
+    forced_9router_model = None
+    if image_model and image_model != "auto" and not force_gemini:
+        forced_9router_model = image_model  # vd: cx/gpt-5.5-image
+
+    # Priority 1: 9Router — dùng khi auto hoặc user chọn 1 model 9Router (bỏ qua nếu ép Gemini)
+    if nr_endpoint and nr_key and not force_gemini:
         try:
-            model_id = (nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
+            model_id = (forced_9router_model or nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
             size_map = {"9:16": "1024x1792", "16:9": "1792x1024", "1:1": "1024x1024"}
             size_str = size_map.get(aspect_ratio, "1024x1792")
             payload = {
@@ -1427,10 +1440,11 @@ def generate_thumbnail_ai():
     if not img_b64_data:
         if not api_key:
             return jsonify({"ok": False, "error": "Chưa có 9Router cũng như Gemini API key"}), 400
-        result = _ai_generate_thumbnail_image(api_key, gen_prompt, frame_b64, aspect_ratio)
+        gemini_model = image_model if (force_gemini and _model_lc.startswith("gemini")) else "gemini-2.5-flash-image"
+        result = _ai_generate_thumbnail_image(api_key, gen_prompt, frame_b64, aspect_ratio, gemini_model)
         if result.get("ok"):
             img_b64_data = result["image_b64"]
-            used_provider = "Gemini"
+            used_provider = f"Gemini ({gemini_model})"
         else:
             return jsonify({"ok": False, "error": result.get("error", "AI thumbnail generation failed")}), 500
 
@@ -1529,13 +1543,13 @@ Content hint: {subtitle or 'N/A'}"""
     )
 
 
-def _ai_generate_thumbnail_image(api_key: str, prompt: str, reference_frame_b64: str | None, aspect_ratio: str) -> dict:
+def _ai_generate_thumbnail_image(api_key: str, prompt: str, reference_frame_b64: str | None, aspect_ratio: str, model: str = "gemini-2.5-flash-image") -> dict:
     """Generate thumbnail image using Gemini native image generation."""
     import json as _json
     import urllib.request
     import urllib.error
 
-    model = "gemini-2.5-flash-image"
+    model = (model or "gemini-2.5-flash-image").strip() or "gemini-2.5-flash-image"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     # Build parts — include reference frame if available

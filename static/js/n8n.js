@@ -20,11 +20,14 @@ const N8N_NODE_DEFS = {
     fields: [{ k: 'path', label: 'Đường dẫn', ph: '/webhook/abc-123' }] },
 
   'tv.user_info':   { title: 'Thông tin user', ic: '🔍', endpoint: '/api/user_info', method: 'POST',
-    fields: [{ k: 'url', label: 'URL người dùng', ph: 'https://www.douyin.com/user/...' }],
+    fields: [{ k: 'url', label: 'URL người dùng', ph: 'https://www.douyin.com/user/...', ask: true }],
     payload: c => ({ url: c.url || '' }) },
   'tv.user_videos': { title: 'Lấy video user', ic: '🎞', endpoint: '/api/user_videos_page', method: 'POST',
-    fields: [{ k: 'url', label: 'URL người dùng' }, { k: 'page', label: 'Trang', type: 'number', def: '1' }],
+    fields: [{ k: 'url', label: 'URL người dùng', ph: 'https://www.douyin.com/user/...', ask: true }, { k: 'page', label: 'Trang', type: 'number', def: '1' }],
     payload: c => ({ url: c.url || '', page: parseInt(c.page || 1, 10) }) },
+  'tv.pick_videos': { title: 'Chọn video', ic: '✅', interactive: true,
+    fields: [{ k: 'source', label: 'Khoá danh sách (trong input)', ph: 'videos', def: 'videos' }],
+    note: 'Mở bảng chọn video từ kết quả node trước (ảnh + mô tả). Chọn xong mới chạy tiếp. Output: {items, videos} cho node Loop dùng {{input.items}}.' },
   'tv.queue_add':   { title: 'Thêm hàng chờ', ic: '➕', endpoint: '/api/queue/add', method: 'POST',
     fields: [{ k: 'items', label: 'Items JSON (mảng)', type: 'textarea', def: '[]' }],
     payload: c => _n8nParseJson(c.items, []) },
@@ -39,7 +42,7 @@ const N8N_NODE_DEFS = {
   'ai.chat': { title: 'AI Chat (LLM)', ic: '🤖', endpoint: '/api/chatbot/chat', method: 'POST', ai: true,
     fields: [{ k: 'model', label: 'Model (trống = mặc định)', ph: 'kr/claude-sonnet-4.5' },
              { k: 'system', label: 'System prompt', type: 'textarea' },
-             { k: 'prompt', label: 'Prompt', type: 'textarea', def: 'Viết kịch bản ngắn về {{input}}' }],
+             { k: 'prompt', label: 'Prompt', type: 'textarea', def: 'Viết kịch bản ngắn về {{input}}', ask: true }],
     payload: c => {
       const msgs = [];
       if (c.system) msgs.push({ role: 'system', content: c.system });
@@ -79,16 +82,18 @@ const N8N_NODE_DEFS = {
     note: 'Nhánh TRUE chạy tất cả node nối bên phải. Nếu FALSE thì dừng tại đây.' },
   'logic.loop': { title: 'Lặp (Loop)', ic: '🔁', logic: true,
     fields: [{ k: 'array', label: 'Mảng lặp', type: 'textarea', def: '{{input.items}}' },
-             { k: 'limit', label: 'Giới hạn', type: 'number', def: '10' }],
-    note: 'Chạy nhánh bên phải cho mỗi phần tử (truyền vào {{input}}).' },
+             { k: 'limit', label: 'Giới hạn', type: 'number', def: '10' },
+             { k: 'mode', label: 'Chế độ chạy', type: 'select', opts: ['Tuần tự', 'Song song'], def: 'Tuần tự' },
+             { k: 'concurrency', label: 'Số luồng song song', type: 'number', def: '3' }],
+    note: 'Chạy nhánh bên phải cho mỗi phần tử (truyền vào {{input}}). Chọn "Song song" để xử lý nhiều phần tử cùng lúc (giới hạn bằng "Số luồng").' },
 
   'action.n8n':  { title: 'Trigger n8n', ic: '🔗',
-    fields: [{ k: 'webhook_url', label: 'Webhook URL' },
+    fields: [{ k: 'webhook_url', label: 'Webhook URL', ask: true },
              { k: 'method', label: 'Method', type: 'select', opts: ['POST', 'GET'] },
              { k: 'payload', label: 'Payload JSON', type: 'textarea', def: '{}' }] },
   'action.http': { title: 'HTTP Request', ic: '🌐',
     fields: [{ k: 'method', label: 'Method', type: 'select', opts: ['GET', 'POST', 'PUT', 'DELETE'] },
-             { k: 'url', label: 'URL', ph: 'https://...' },
+             { k: 'url', label: 'URL', ph: 'https://...', ask: true },
              { k: 'payload', label: 'Payload JSON', type: 'textarea' }] },
   'util.notify': { title: 'Thông báo', ic: '🔔',
     fields: [{ k: 'message', label: 'Tin nhắn', type: 'textarea', def: '{{input}}' }] },
@@ -540,6 +545,181 @@ function n8nNodeStatus(id, state) {
 }
 
 async function n8nFlowRun() {
+  // Trước khi chạy: quét các trường còn trống / còn placeholder để hỏi người dùng.
+  const prompts = n8nCollectPrompts();
+  if (prompts.length) { n8nShowRunPrompts(prompts); return; }
+  await _n8nDoRun();
+}
+
+/* Thu thập các trường cần nhập trước khi chạy.
+ * Quy tắc: field đánh dấu ask=true mà đang trống, HOẶC bất kỳ field nào còn
+ * chứa placeholder "..." (ví dụ URL mẫu). Bỏ qua field động dùng {{...}}. */
+function n8nCollectPrompts() {
+  const out = [];
+  // Theo thứ tự node trên canvas (trái→phải) cho dễ nhìn
+  const ordered = [...n8nFlow.nodes].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+  ordered.forEach(node => {
+    const def = N8N_NODE_DEFS[node.type] || {};
+    (def.fields || []).forEach(f => {
+      const val = node.config && node.config[f.k] != null ? String(node.config[f.k]) : '';
+      // Field động (lấy từ node trước) → bỏ qua
+      if (val.indexOf('{{') >= 0) return;
+      const isPlaceholder = val.indexOf('...') >= 0;
+      const needAsk = (f.ask && val.trim() === '') || isPlaceholder;
+      if (!needAsk) return;
+      out.push({ nodeId: node.id, nodeTitle: def.title || node.type, nodeIc: def.ic || '▫️', field: f, value: isPlaceholder ? '' : val });
+    });
+  });
+  return out;
+}
+
+/* Modal nhập/chọn dữ liệu cho từng phần trước khi chạy */
+function n8nShowRunPrompts(prompts) {
+  const rows = prompts.map((p, i) => {
+    const f = p.field;
+    const id = 'n8n-rp-' + i;
+    let input;
+    if (f.type === 'select') {
+      input = `<select id="${id}" class="n8n-rp-input">${(f.opts || []).map(o => `<option value="${_n8nEsc(o)}"${o === p.value ? ' selected' : ''}>${_n8nEsc(o)}</option>`).join('')}</select>`;
+    } else if (f.type === 'textarea') {
+      input = `<textarea id="${id}" class="n8n-rp-input" rows="3" placeholder="${_n8nEsc(f.ph || '')}">${_n8nEsc(p.value)}</textarea>`;
+    } else {
+      input = `<input id="${id}" class="n8n-rp-input" type="${f.type || 'text'}" value="${_n8nEsc(p.value)}" placeholder="${_n8nEsc(f.ph || '')}">`;
+    }
+    return `<div class="n8n-rp-row">
+      <div class="n8n-rp-head"><span>${p.nodeIc}</span> <b>${_n8nEsc(p.nodeTitle)}</b> · ${_n8nEsc(f.label)}</div>
+      ${input}
+    </div>`;
+  }).join('');
+
+  const html = `<div id="n8n-rp-modal" style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--bg2,#fff);border-radius:14px;max-width:560px;width:100%;max-height:84vh;overflow-y:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.35)">
+      <div class="flex-between mb-12">
+        <div style="font-weight:700;font-size:16px">📝 Nhập dữ liệu trước khi chạy</div>
+        <button class="btn-icon" onclick="document.getElementById('n8n-rp-modal')?.remove()">✕</button>
+      </div>
+      <div class="alert-info text-xs mb-12">Các trường dưới đây đang trống hoặc còn là giá trị mẫu. Nhập/chọn giá trị rồi bấm <b>Chạy</b>.</div>
+      <div class="n8n-rp-list">${rows}</div>
+      <div class="btn-group mt-12">
+        <button class="btn btn-success" onclick="n8nApplyRunPrompts()">▶️ Chạy</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('n8n-rp-modal')?.remove()">Hủy</button>
+      </div>
+    </div></div>`;
+  document.getElementById('n8n-rp-modal')?.remove();
+  // Lưu mapping để ghi lại sau khi bấm Chạy
+  window._n8nRunPrompts = prompts;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+/* Ghi giá trị từ modal vào node rồi chạy thật */
+function n8nApplyRunPrompts() {
+  const prompts = window._n8nRunPrompts || [];
+  prompts.forEach((p, i) => {
+    const el = document.getElementById('n8n-rp-' + i);
+    if (!el) return;
+    const node = n8nGetNode(p.nodeId);
+    if (!node) return;
+    node.config = node.config || {};
+    node.config[p.field.k] = el.value;
+    n8nRenderNode(node);
+  });
+  // Cập nhật inspector nếu đang mở node liên quan
+  if (n8nSel) n8nSelect(n8nSel);
+  document.getElementById('n8n-rp-modal')?.remove();
+  window._n8nRunPrompts = null;
+  _n8nDoRun();
+}
+
+/* Modal chọn video (interactive): hiện lưới video để tích chọn.
+ * Trả về Promise: mảng video đã chọn, hoặc null nếu huỷ. */
+function n8nPickVideosModal(videos) {
+  return new Promise(resolve => {
+    const cards = videos.map((v, i) => {
+      const cover = v.cover || v.cover_url || '';
+      const img = cover
+        ? `<img loading="lazy" src="/api/proxy_image?url=${encodeURIComponent(cover)}" alt="">`
+        : `<div class="n8n-pv-noimg">🎬</div>`;
+      const desc = _n8nEsc((v.desc || v.title || v.aweme_id || ('Video ' + (i + 1))));
+      const meta = [];
+      if (v.play != null) meta.push('▶ ' + _n8nFmtNum(v.play));
+      if (v.like != null) meta.push('❤ ' + _n8nFmtNum(v.like));
+      if (v.date) meta.push('📅 ' + _n8nEsc(v.date));
+      return `<label class="n8n-pv-card" data-i="${i}">
+        <input type="checkbox" class="n8n-pv-chk" data-i="${i}" checked>
+        <div class="n8n-pv-thumb">${img}</div>
+        <div class="n8n-pv-desc" title="${desc}">${desc}</div>
+        <div class="n8n-pv-meta">${meta.join(' · ')}</div>
+      </label>`;
+    }).join('');
+
+    const html = `<div id="n8n-pv-modal" style="position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px">
+      <div style="background:var(--bg2,#fff);border-radius:14px;max-width:820px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.4)">
+        <div style="padding:18px 20px 10px">
+          <div class="flex-between mb-8">
+            <div style="font-weight:700;font-size:16px">✅ Chọn video để xử lý</div>
+            <button class="btn-icon" onclick="n8nPickVideosDone(null)">✕</button>
+          </div>
+          <div class="flex-between" style="gap:8px;flex-wrap:wrap">
+            <div class="btn-group">
+              <button class="btn btn-secondary btn-sm" onclick="n8nPickVideosToggleAll(true)">Chọn tất cả</button>
+              <button class="btn btn-secondary btn-sm" onclick="n8nPickVideosToggleAll(false)">Bỏ chọn</button>
+            </div>
+            <span class="text-xs text-muted" id="n8n-pv-count"></span>
+          </div>
+        </div>
+        <div class="n8n-pv-grid" id="n8n-pv-grid">${cards}</div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border)">
+          <div class="btn-group">
+            <button class="btn btn-success" onclick="n8nPickVideosConfirm()">▶️ Dùng video đã chọn</button>
+            <button class="btn btn-secondary" onclick="n8nPickVideosDone(null)">Huỷ</button>
+          </div>
+        </div>
+      </div></div>`;
+
+    document.getElementById('n8n-pv-modal')?.remove();
+    window._n8nPickList = videos;
+    window._n8nPickResolve = resolve;
+    document.body.insertAdjacentHTML('beforeend', html);
+    n8nPickVideosUpdateCount();
+    document.querySelectorAll('#n8n-pv-grid .n8n-pv-chk').forEach(chk => {
+      chk.addEventListener('change', n8nPickVideosUpdateCount);
+    });
+  });
+}
+function _n8nFmtNum(n) {
+  n = parseInt(n, 10) || 0;
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+function n8nPickVideosToggleAll(on) {
+  document.querySelectorAll('#n8n-pv-grid .n8n-pv-chk').forEach(chk => { chk.checked = on; });
+  n8nPickVideosUpdateCount();
+}
+function n8nPickVideosUpdateCount() {
+  const total = document.querySelectorAll('#n8n-pv-grid .n8n-pv-chk').length;
+  const sel = document.querySelectorAll('#n8n-pv-grid .n8n-pv-chk:checked').length;
+  const el = document.getElementById('n8n-pv-count');
+  if (el) el.textContent = `Đã chọn ${sel}/${total}`;
+}
+function n8nPickVideosConfirm() {
+  const list = window._n8nPickList || [];
+  const sel = [];
+  document.querySelectorAll('#n8n-pv-grid .n8n-pv-chk:checked').forEach(chk => {
+    const i = parseInt(chk.dataset.i, 10);
+    if (list[i] != null) sel.push(list[i]);
+  });
+  n8nPickVideosDone(sel);
+}
+function n8nPickVideosDone(result) {
+  document.getElementById('n8n-pv-modal')?.remove();
+  const r = window._n8nPickResolve;
+  window._n8nPickResolve = null;
+  window._n8nPickList = null;
+  if (r) r(result);
+}
+
+async function _n8nDoRun() {
   const btn = document.getElementById('btn-n8n-run');
   if (btn) btn.disabled = true;
   document.getElementById('n8n-log').innerHTML = '';
@@ -580,10 +760,32 @@ async function n8nFlowRun() {
       if (node.type === 'logic.loop') {
         const items = out._items || [];
         const children = n8nFlow.connections.filter(c => c.from === node.id).map(c => n8nGetNode(c.to)).filter(Boolean);
-        for (let i = 0; i < items.length; i++) {
-          n8nLog(`   🔁 Lặp [${i + 1}/${items.length}]`, 'detail');
-          for (const child of children) {
-            await _n8nRunSubtree(child, items[i], ctxByTitle, new Set(visited));
+        const parallel = out._parallel;
+        const conc = out._concurrency || 3;
+        if (parallel && items.length > 1) {
+          n8nLog(`   ⚡ Chạy song song ${items.length} phần tử (tối đa ${conc} luồng cùng lúc)`, 'url');
+          let cursor = 0;
+          const runOne = async (idx) => {
+            n8nLog(`   🔁 [${idx + 1}/${items.length}] bắt đầu`, 'detail');
+            for (const child of children) {
+              await _n8nRunSubtree(child, items[idx], ctxByTitle, new Set(visited));
+            }
+          };
+          const worker = async () => {
+            while (cursor < items.length) {
+              const idx = cursor++;
+              await runOne(idx);
+            }
+          };
+          const pool = [];
+          for (let w = 0; w < Math.min(conc, items.length); w++) pool.push(worker());
+          await Promise.all(pool);
+        } else {
+          for (let i = 0; i < items.length; i++) {
+            n8nLog(`   🔁 Lặp [${i + 1}/${items.length}]`, 'detail');
+            for (const child of children) {
+              await _n8nRunSubtree(child, items[i], ctxByTitle, new Set(visited));
+            }
           }
         }
         // Mark children as visited to avoid double run
@@ -648,9 +850,11 @@ async function n8nExecNode(node, prev, ctxByTitle) {
       } catch (e) { items = []; }
       const limit = Math.min(parseInt(c.limit || 10, 10) || 10, 100);
       items = items.slice(0, limit);
-      n8nLog(`🔁 Loop: ${items.length} phần tử (giới hạn ${limit})`, 'url');
+      const parallel = String(c.mode || '').toLowerCase().indexOf('song') >= 0;
+      const concurrency = Math.min(Math.max(parseInt(c.concurrency || 3, 10) || 3, 1), 20);
+      n8nLog(`🔁 Loop: ${items.length} phần tử (giới hạn ${limit}${parallel ? `, song song ×${concurrency}` : ', tuần tự'})`, 'url');
       n8nNodeStatus(node.id, 'ok');
-      return { _items: items };
+      return { _items: items, _parallel: parallel, _concurrency: concurrency };
     }
     if (node.type === 'action.n8n') {
       n8nLog(`🔗 Trigger n8n → ${c.webhook_url || '(chưa nhập URL)'}`, 'detail');
@@ -671,6 +875,30 @@ async function n8nExecNode(node, prev, ctxByTitle) {
       const data = await r.json();
       _n8nLogResp(label, data); n8nNodeStatus(node.id, data.ok ? 'ok' : 'err');
       return data.response_json != null ? data.response_json : data;
+    }
+    if (node.type === 'tv.pick_videos') {
+      const key = (c.source || 'videos').trim();
+      let list = [];
+      if (Array.isArray(prev)) list = prev;
+      else if (prev && Array.isArray(prev[key])) list = prev[key];
+      else if (prev && Array.isArray(prev.videos)) list = prev.videos;
+      else if (prev && Array.isArray(prev.items)) list = prev.items;
+      else if (prev && Array.isArray(prev.data)) list = prev.data;
+      if (!list.length) {
+        n8nLog('✅ Chọn video: node trước không trả về danh sách video nào.', 'warning');
+        n8nNodeStatus(node.id, 'err');
+        return { items: [], videos: [], count: 0 };
+      }
+      n8nLog(`✅ Chọn video: mở bảng chọn (${list.length} video)…`, 'detail');
+      const selected = await n8nPickVideosModal(list);
+      if (selected == null) {
+        n8nLog('   ↳ Đã huỷ — dừng nhánh.', 'warning');
+        n8nNodeStatus(node.id, 'err');
+        return { items: [], videos: [], count: 0, _cancelled: true };
+      }
+      n8nLog(`   ↳ Đã chọn ${selected.length}/${list.length} video.`, 'success');
+      n8nNodeStatus(node.id, 'ok');
+      return { items: selected, videos: selected, count: selected.length };
     }
     if (def.endpoint) {
       const body = def.payload ? def.payload(c) : {};
@@ -845,3 +1073,208 @@ async function n8nScheduleBadge() {
     n8nScheduleBadge();
   };
 })();
+
+/* ── Thư viện mẫu Flow (templates) ────────────────────────────────────────
+ * Mỗi mẫu định nghĩa sẵn node + dây nối để người dùng chọn nhanh.
+ * Toạ độ tương đối; khi áp dụng sẽ remap id để tránh trùng.
+ * COL = bước theo chiều ngang, ROW = nhánh theo chiều dọc.
+ */
+const _N8N_COL = 230, _N8N_ROW = 130, _N8N_X0 = 80, _N8N_Y0 = 160;
+function _tpl(col, row, type, config) {
+  return { _c: col, _r: row, type, config: config || {} };
+}
+function _chain(ids) {
+  const cs = [];
+  for (let i = 0; i < ids.length - 1; i++) cs.push([ids[i], ids[i + 1]]);
+  return cs;
+}
+
+const N8N_TEMPLATES = [
+  {
+    id: 'multi_user_parallel',
+    name: 'Tải nhiều video user → xử lý SONG SONG',
+    ic: '⚡',
+    desc: 'Lấy danh sách video của 1 user rồi xử lý đồng thời nhiều video cùng lúc (loop song song).',
+    build() {
+      const n = {
+        t:  _tpl(0, 0, 'trigger.manual'),
+        uv: _tpl(1, 0, 'tv.user_videos', { url: 'https://www.douyin.com/user/...', page: '1' }),
+        pk: _tpl(2, 0, 'tv.pick_videos', { source: 'videos' }),
+        lp: _tpl(3, 0, 'logic.loop', { array: '{{input.items}}', limit: '10', mode: 'Song song', concurrency: '3' }),
+        pr: _tpl(4, 0, 'tv.process', { payload: '{{input}}' }),
+        pb: _tpl(5, 0, 'tv.publish', { platform: 'youtube' }),
+      };
+      return { nodes: n, conns: _chain(['t', 'uv', 'pk', 'lp', 'pr', 'pb']) };
+    },
+  },
+  {
+    id: 'multi_account_parallel',
+    name: 'Nhiều USER cùng lúc (danh sách kênh)',
+    ic: '👥',
+    desc: 'Lặp song song qua danh sách nhiều kênh user; mỗi kênh tự lấy video và xử lý.',
+    build() {
+      const n = {
+        t:  _tpl(0, 0, 'trigger.manual'),
+        lp: _tpl(1, 0, 'logic.loop', { array: '["https://www.douyin.com/user/AAA", "https://www.douyin.com/user/BBB"]', limit: '20', mode: 'Song song', concurrency: '2' }),
+        uv: _tpl(2, 0, 'tv.user_videos', { url: '{{input}}', page: '1' }),
+        qa: _tpl(3, 0, 'tv.queue_add', { items: '{{input.videos}}' }),
+        pr: _tpl(4, 0, 'tv.process', { payload: '{{input}}' }),
+      };
+      return { nodes: n, conns: _chain(['t', 'lp', 'uv', 'qa', 'pr']) };
+    },
+  },
+  {
+    id: 'queue_batch',
+    name: 'Tải video user → Hàng chờ → Xử lý hàng loạt',
+    ic: '📥',
+    desc: 'Lấy thông tin user, lấy video, đẩy vào hàng chờ rồi xử lý hàng loạt.',
+    build() {
+      const n = {
+        t:  _tpl(0, 0, 'trigger.manual'),
+        ui: _tpl(1, 0, 'tv.user_info', { url: 'https://www.douyin.com/user/...' }),
+        uv: _tpl(2, 0, 'tv.user_videos', { url: 'https://www.douyin.com/user/...', page: '1' }),
+        pk: _tpl(3, 0, 'tv.pick_videos', { source: 'videos' }),
+        qa: _tpl(4, 0, 'tv.queue_add', { items: '{{input.items}}' }),
+        pr: _tpl(5, 0, 'tv.process', { payload: '{{input}}' }),
+      };
+      return { nodes: n, conns: _chain(['t', 'ui', 'uv', 'pk', 'qa', 'pr']) };
+    },
+  },
+  {
+    id: 'schedule_publish',
+    name: 'Tự động theo lịch: lấy video → xử lý → đăng',
+    ic: '⏰',
+    desc: 'Chạy theo Cron: tự lấy video mới, xử lý song song và đăng lên nền tảng.',
+    build() {
+      const n = {
+        t:  _tpl(0, 0, 'trigger.schedule', { cron: '0 9 * * *' }),
+        uv: _tpl(1, 0, 'tv.user_videos', { url: 'https://www.douyin.com/user/...', page: '1' }),
+        lp: _tpl(2, 0, 'logic.loop', { array: '{{input.items}}', limit: '5', mode: 'Song song', concurrency: '2' }),
+        pr: _tpl(3, 0, 'tv.process', { payload: '{{input}}' }),
+        pb: _tpl(4, 0, 'tv.publish', { platform: 'tiktok' }),
+      };
+      return { nodes: n, conns: _chain(['t', 'uv', 'lp', 'pr', 'pb']) };
+    },
+  },
+  {
+    id: 'translate_dub',
+    name: 'Dịch & lồng tiếng nhiều video (song song)',
+    ic: '🌍',
+    desc: 'Mỗi video: dịch nội dung bằng AI → tạo giọng đọc (TTS) → xử lý video.',
+    build() {
+      const n = {
+        t:  _tpl(0, 0, 'trigger.manual'),
+        uv: _tpl(1, 0, 'tv.user_videos', { url: 'https://www.douyin.com/user/...', page: '1' }),
+        lp: _tpl(2, 0, 'logic.loop', { array: '{{input.items}}', limit: '10', mode: 'Song song', concurrency: '3' }),
+        tr: _tpl(3, 0, 'ai.translate', { text: '{{input.title}}', provider: 'auto' }),
+        ts: _tpl(4, 0, 'ai.tts_file', { text: '{{input.result}}', tts_engine: 'edge-tts', tts_voice: 'vi-VN-HoaiMyNeural' }),
+        pr: _tpl(5, 0, 'tv.process', { payload: '{{input}}' }),
+      };
+      return { nodes: n, conns: _chain(['t', 'uv', 'lp', 'tr', 'ts', 'pr']) };
+    },
+  },
+  {
+    id: 'ai_script_tts',
+    name: 'AI sinh kịch bản → TTS → Thông báo',
+    ic: '🤖',
+    desc: 'Dùng LLM viết kịch bản, đọc thành file MP3 rồi báo hoàn tất.',
+    build() {
+      const n = {
+        t:  _tpl(0, 0, 'trigger.manual'),
+        ch: _tpl(1, 0, 'ai.chat', { system: 'Bạn là người viết kịch bản video ngắn.', prompt: 'Viết kịch bản 60 giây về chủ đề: công nghệ AI' }),
+        ts: _tpl(2, 0, 'ai.tts_file', { text: '{{input.content}}', tts_engine: 'edge-tts', tts_voice: 'vi-VN-HoaiMyNeural' }),
+        nt: _tpl(3, 0, 'util.notify', { message: 'Đã tạo xong kịch bản & giọng đọc ✅' }),
+      };
+      return { nodes: n, conns: _chain(['t', 'ch', 'ts', 'nt']) };
+    },
+  },
+  {
+    id: 'webhook_process',
+    name: 'Webhook nhận URL → xử lý → đăng',
+    ic: '🪝',
+    desc: 'Nhận yêu cầu từ webhook (n8n/bên ngoài), xử lý video rồi đăng.',
+    build() {
+      const n = {
+        t:  _tpl(0, 0, 'trigger.webhook', { path: '/webhook/process-video' }),
+        pr: _tpl(1, 0, 'tv.process', { payload: '{{input}}' }),
+        pb: _tpl(2, 0, 'tv.publish', { platform: 'youtube' }),
+      };
+      return { nodes: n, conns: _chain(['t', 'pr', 'pb']) };
+    },
+  },
+  {
+    id: 'monitor_channel',
+    name: 'Theo dõi kênh: lấy info → thông báo',
+    ic: '🔔',
+    desc: 'Định kỳ lấy thông tin kênh và gửi thông báo (theo dõi tăng trưởng).',
+    build() {
+      const n = {
+        t:  _tpl(0, 0, 'trigger.schedule', { cron: '0 8 * * *' }),
+        ui: _tpl(1, 0, 'tv.user_info', { url: 'https://www.douyin.com/user/...' }),
+        nt: _tpl(2, 0, 'util.notify', { message: 'Cập nhật kênh: {{input}}' }),
+      };
+      return { nodes: n, conns: _chain(['t', 'ui', 'nt']) };
+    },
+  },
+];
+
+/* Mở modal chọn mẫu */
+function n8nShowTemplates() {
+  const cards = N8N_TEMPLATES.map(tpl => `
+    <div class="n8n-tpl-card" onclick="n8nApplyTemplate('${tpl.id}')">
+      <div class="n8n-tpl-ic">${tpl.ic}</div>
+      <div class="n8n-tpl-info">
+        <div class="n8n-tpl-name">${_n8nEsc(tpl.name)}</div>
+        <div class="n8n-tpl-desc">${_n8nEsc(tpl.desc)}</div>
+      </div>
+    </div>`).join('');
+  const html = `<div id="n8n-tpl-modal" style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--bg2,#fff);border-radius:14px;max-width:640px;width:100%;max-height:84vh;overflow-y:auto;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.35)">
+      <div class="flex-between mb-12">
+        <div style="font-weight:700;font-size:16px">📋 Chọn mẫu Flow</div>
+        <button class="btn-icon" onclick="document.getElementById('n8n-tpl-modal')?.remove()">✕</button>
+      </div>
+      <div class="alert-info text-xs mb-12">Chọn 1 mẫu để nạp sẵn các node lên canvas. Bạn có thể chỉnh URL, model, lịch… sau khi áp dụng. Mẫu sẽ <b>thay thế</b> flow hiện tại.</div>
+      <div class="n8n-tpl-grid">${cards}</div>
+    </div></div>`;
+  document.getElementById('n8n-tpl-modal')?.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+/* Áp dụng mẫu: thay toàn bộ canvas bằng mẫu đã chọn */
+function n8nApplyTemplate(id) {
+  const tpl = N8N_TEMPLATES.find(t => t.id === id);
+  if (!tpl) return;
+  if (n8nFlow.nodes.length && !confirm(`Áp dụng mẫu "${tpl.name}"? Flow hiện tại trên canvas sẽ bị thay thế.`)) return;
+
+  const built = tpl.build();
+  const idMap = {};
+  const nodes = [];
+  Object.keys(built.nodes).forEach(key => {
+    const t = built.nodes[key];
+    const newId = 'n' + (_n8nIdSeq++);
+    idMap[key] = newId;
+    nodes.push({
+      id: newId,
+      type: t.type,
+      x: _N8N_X0 + t._c * _N8N_COL,
+      y: _N8N_Y0 + t._r * _N8N_ROW,
+      config: Object.assign({}, t.config),
+    });
+  });
+  const connections = (built.conns || [])
+    .map(([a, b]) => ({ from: idMap[a], to: idMap[b] }))
+    .filter(c => c.from && c.to);
+
+  n8nFlow = { nodes, connections };
+  const nameInput = document.getElementById('n8n-wf-name');
+  if (nameInput) nameInput.value = tpl.name;
+  n8nRenderNodes();
+  n8nDrawWires();
+  n8nSelect(null);
+  _n8nUpdateHint();
+  n8nFlowFit();
+  document.getElementById('n8n-tpl-modal')?.remove();
+  toast(`📋 Đã áp dụng mẫu: ${tpl.name}`, 'success');
+  n8nLog(`📋 Đã nạp mẫu "${tpl.name}" (${nodes.length} node). Nhớ chỉnh URL/tham số rồi bấm 💾 Lưu.`, 'banner');
+}

@@ -1024,22 +1024,59 @@
   async function loadVoices() {
     const engineSel = document.getElementById('sw-tts-engine');
     if (!engineSel) return;
+    if (typeof _loadTtsEngineCatalog === 'function') { try { await _loadTtsEngineCatalog(); } catch (_) {} }
     try {
       const r = await fetch('/api/story/voices').then(r => r.json());
       _ttsEngines = r.engines || [];
       engineSel.replaceChildren();
-      for (const eng of _ttsEngines) {
-        engineSel.appendChild(_el('option', { value: eng.id }, eng.label));
+      
+      // Group engines by backend (local vs 9Router)
+      const localEngines = _ttsEngines.filter(e => !e.backend || e.backend === 'local');
+      const nineRouterEngines = _ttsEngines.filter(e => e.backend === '9router');
+      
+      // Add local engines first
+      if (localEngines.length) {
+        const localGroup = document.createElement('optgroup');
+        localGroup.label = '🖥 Local (miễn phí)';
+        for (const eng of localEngines) {
+          localGroup.appendChild(_el('option', { value: eng.id }, eng.label));
+        }
+        engineSel.appendChild(localGroup);
       }
+      
+      // Add 9Router engines
+      if (nineRouterEngines.length) {
+        const nineGroup = document.createElement('optgroup');
+        nineGroup.label = '🌐 9Router (premium)';
+        for (const eng of nineRouterEngines) {
+          nineGroup.appendChild(_el('option', { value: eng.id }, eng.label));
+        }
+        engineSel.appendChild(nineGroup);
+      }
+      
+      // Default to edge-tts or first available
       engineSel.value = (_ttsEngines.find(e => e.id === 'edge-tts')?.id) || (_ttsEngines[0]?.id || 'edge-tts');
       engineSel.addEventListener('change', refreshVoices);
       const langSel = document.getElementById('sw-target-lang');
       if (langSel) langSel.addEventListener('change', refreshVoices);
       refreshVoices();
-    } catch (_) {}
+      
+      _log(`🔊 Đã load ${_ttsEngines.length} TTS engines (${localEngines.length} local, ${nineRouterEngines.length} 9Router)`, 'detail');
+    } catch (e) {
+      _log(`❌ Lỗi load TTS engines: ${e.message}`, 'error');
+    }
   }
 
   function refreshVoices() {
+    // 9Router engine → shared Model + voice-id component handles everything.
+    if (typeof _handle9RouterEngine === 'function'
+        && _handle9RouterEngine('sw-tts-engine', 'sw-tts-voice')) {
+      const rateField = document.getElementById('sw-tts-rate')?.closest('.field');
+      const fptField = document.getElementById('sw-tts-fpt-speed')?.closest('.field');
+      if (rateField) rateField.style.display = 'none';
+      if (fptField) fptField.style.display = 'none';
+      return;
+    }
     const engineId = document.getElementById('sw-tts-engine')?.value || 'edge-tts';
     const lang = document.getElementById('sw-target-lang')?.value || 'vi';
     const voiceSel = document.getElementById('sw-tts-voice');
@@ -1081,8 +1118,10 @@
     const sample = (_panels.find(p => p.text && p.text.trim())?.text || 'Đây là đoạn nghe thử giọng đọc.').slice(0, 200);
     const payload = {
       text: sample,
-      tts_engine: document.getElementById('sw-tts-engine')?.value || 'edge-tts',
-      tts_voice: document.getElementById('sw-tts-voice')?.value || '',
+      ...(typeof _resolveTtsEngineVoiceEx === 'function'
+        ? _resolveTtsEngineVoiceEx('sw-tts-engine', 'sw-tts-voice')
+        : { tts_engine: document.getElementById('sw-tts-engine')?.value || 'edge-tts',
+            tts_voice: document.getElementById('sw-tts-voice')?.value || '' }),
       tts_rate: document.getElementById('sw-tts-rate')?.value || '+0%',
       tts_pitch: '+0Hz',
       fpt_speed: parseInt(document.getElementById('sw-tts-fpt-speed')?.value || '0', 10),
@@ -1126,8 +1165,10 @@
       fps: parseInt(document.getElementById('sw-render-fps').value || '30', 10),
       subtitle_format: document.getElementById('sw-sub-format').value,
       burn_subtitles: document.getElementById('sw-burn-subs').checked,
-      tts_engine: document.getElementById('sw-tts-engine').value,
-      tts_voice: document.getElementById('sw-tts-voice').value,
+      ...(typeof _resolveTtsEngineVoiceEx === 'function'
+        ? _resolveTtsEngineVoiceEx('sw-tts-engine', 'sw-tts-voice')
+        : { tts_engine: document.getElementById('sw-tts-engine').value,
+            tts_voice: document.getElementById('sw-tts-voice').value }),
       tts_rate: document.getElementById('sw-tts-rate').value,
       target_lang: document.getElementById('sw-target-lang').value,
       fpt_speed: parseInt(document.getElementById('sw-tts-fpt-speed').value || '0', 10),
@@ -4593,22 +4634,32 @@
         const prefix = (m.id || '').split('/')[0] || 'other';
         (grouped[prefix] = grouped[prefix] || []).push(m);
       }
+      
+      // Add optgroups for each provider
+      const _labelMap = {
+        openai: '🟢 OpenAI', cx: '⭐ Codex (SSE streaming)', nb: '🍌 NanoBanana',
+        google: '🔷 Google', sdwebui: '🖥 Local (SD WebUI)', flux: '⚡ FLUX',
+      };
       for (const prefix of Object.keys(grouped)) {
         const grp = document.createElement('optgroup');
-        grp.label = prefix;
+        grp.label = _labelMap[prefix] || prefix;
         for (const m of grouped[prefix]) {
           const opt = document.createElement('option');
           opt.value = m.id;
           // Mark newest with a star prefix in label
-          opt.textContent = (m.id === newestId ? '⭐ ' : '') + (m.label || m.id);
+          const isNewest = m.id === newestId;
+          opt.textContent = (isNewest ? '⭐ ' : '') + (m.label || m.id);
+          if (isNewest) opt.selected = true;
           grp.appendChild(opt);
         }
         sel.appendChild(grp);
       }
+      
       // Always default to the newest model (override any existing selection)
       sel.value = newestId;
-      _log && _log(`📦 Đã load ${r.models.length} model · mặc định: ${newestId} (mới nhất)`, 'detail');
-    } catch (_) {
+      _log(`📸 Đã load ${r.models.length} image models · mặc định: ${newestId} (mới nhất)`, 'detail');
+    } catch (e) {
+      _log(`⚠ Không thể load image models từ 9Router: ${e.message}`, 'warning');
       // Keep the static defaults from HTML
     }
   }

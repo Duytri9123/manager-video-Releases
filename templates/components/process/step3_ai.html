@@ -82,11 +82,11 @@
             <div class="alert-info mb-8" style="font-size:12px">
               Chọn ảnh thumbnail cho video. Bỏ qua nếu không muốn chèn thumbnail vào đầu video.
             </div>
-            <div class="check-grid mb-12" style="grid-template-columns:repeat(4,1fr)">
-              <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="none" checked onchange="procThumbPickModeChange()"><span>Không dùng</span></label>
-              <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="frame" onchange="procThumbPickModeChange()"><span>Frame video</span></label>
-              <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="import" onchange="procThumbPickModeChange()"><span>Upload ảnh</span></label>
-              <label class="check-item"><input type="radio" name="proc-thumb-pick-mode" value="ai" onchange="procThumbPickModeChange()"><span>AI (9Router/Gemini)</span></label>
+            <div class="pe2-opts mb-12" style="grid-template-columns:repeat(4,1fr)">
+              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="none" checked onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">🚫</span><span class="pe2-optcard-lbl">Không dùng</span><span class="pe2-optcard-badge">✓</span></label>
+              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="frame" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">🎞</span><span class="pe2-optcard-lbl">Frame video</span><span class="pe2-optcard-badge">✓</span></label>
+              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="import" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">📤</span><span class="pe2-optcard-lbl">Upload ảnh</span><span class="pe2-optcard-badge">✓</span></label>
+              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="ai" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">✨</span><span class="pe2-optcard-lbl">AI (9Router/Gemini)</span><span class="pe2-optcard-badge">✓</span></label>
             </div>
             <div id="proc-thumb-pick-frame-opts" style="display:none">
               <label class="lbl">Thời điểm lấy frame (giây)</label>

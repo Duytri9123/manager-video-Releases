@@ -588,30 +588,32 @@
                 <!-- Image model -->
                 <div class="grid-3">
                   <div class="field">
-                    <label>🤖 Model sinh ảnh</label>
+                    <label>🤖 Model sinh ảnh (9Router)</label>
                     <select id="sw-ai-img-model">
-                      <option value="cx/gpt-5.5-image" selected>GPT-5.5 Image (mới nhất)</option>
+                      <option value="cx/gpt-5.5-image" selected>⭐ GPT-5.5 Image (mới nhất)</option>
                       <option value="cx/gpt-5.4-image">GPT-5.4 Image</option>
                       <option value="cx/gpt-5.3-image">GPT-5.3 Image</option>
                       <option value="cx/gpt-5.2-image">GPT-5.2 Image</option>
                     </select>
-                    <div class="text-xs text-muted mt-4">Dùng 9Router → Codex (cần Codex Plus/Pro).</div>
+                    <div class="text-xs text-muted mt-4">Codex models dùng SSE streaming · Hỗ trợ reference images</div>
                   </div>
                   <div class="field">
                     <label>📐 Tỷ lệ ảnh</label>
                     <select id="sw-ai-img-ratio">
-                      <option value="9:16" selected>9:16 (Dọc)</option>
-                      <option value="16:9">16:9 (Ngang)</option>
+                      <option value="9:16" selected>9:16 (Dọc - Shorts/TikTok)</option>
+                      <option value="16:9">16:9 (Ngang - YouTube)</option>
                       <option value="1:1">1:1 (Vuông)</option>
                       <option value="3:4">3:4 (Dọc nhẹ)</option>
+                      <option value="4:3">4:3 (Ngang nhẹ)</option>
                     </select>
                   </div>
                   <div class="field">
-                    <label>Chất lượng</label>
+                    <label>🎨 Chất lượng</label>
                     <select id="sw-ai-img-quality">
-                      <option value="standard" selected>Standard</option>
-                      <option value="hd">HD</option>
+                      <option value="standard" selected>Standard (nhanh)</option>
+                      <option value="hd">HD (chi tiết cao)</option>
                     </select>
+                    <div class="text-xs text-muted mt-4">HD tốn nhiều token hơn</div>
                   </div>
                 </div>
 
@@ -849,16 +851,18 @@
 
       <div class="grid-3">
         <div class="field">
-          <label>TTS Engine</label>
+          <label>🔊 TTS Engine</label>
           <select id="sw-tts-engine"></select>
+          <div class="text-xs text-muted mt-4">9Router engines: OpenAI, ElevenLabs, Gemini, Edge TTS...</div>
         </div>
         <div class="field">
-          <label>Giọng đọc</label>
+          <label>🎤 Giọng đọc</label>
           <select id="sw-tts-voice"></select>
         </div>
         <div class="field">
-          <label>Tốc độ đọc</label>
+          <label>⚡ Tốc độ đọc</label>
           <input id="sw-tts-rate" type="text" value="+0%" placeholder="+0%">
+          <div class="text-xs text-muted mt-4">VD: +10% (nhanh), -5% (chậm)</div>
         </div>
       </div>
 

@@ -105,22 +105,38 @@ function _refreshTtsEngineSelects() {
     const lang = _getTtsTargetLangForSelect(id);
     const fallback = _pickTtsEngineForLang(lang, current);
     sel.innerHTML = '';
-    catalog.forEach(eng => {
+    const localEngs = catalog.filter(e => e.backend !== '9router');
+    const nineEngs = catalog.filter(e => e.backend === '9router');
+    const addOpt = (parent, eng) => {
       const opt = document.createElement('option');
       opt.value = eng.id;
       opt.textContent = eng.label || eng.id;
-      // Mark selected nếu khớp với giá trị hiện tại hoặc fpt-ai là default
       if (eng.id === current || (!current && fallback && eng.id === fallback.id)) {
         opt.selected = true;
       }
-      sel.appendChild(opt);
-    });
+      parent.appendChild(opt);
+    };
+    if (nineEngs.length) {
+      const gLocal = document.createElement('optgroup');
+      gLocal.label = 'Local';
+      localEngs.forEach(e => addOpt(gLocal, e));
+      sel.appendChild(gLocal);
+      const gNine = document.createElement('optgroup');
+      gNine.label = '9Router';
+      nineEngs.forEach(e => addOpt(gNine, e));
+      sel.appendChild(gNine);
+    } else {
+      localEngs.forEach(e => addOpt(sel, e));
+    }
     // Giữ giá trị hiện tại nếu còn trong catalog, không thì dùng fpt-ai hoặc edge-tts làm default
     const currentEngine = catalog.find(e => e.id === current);
     const targetValue = currentEngine && _engineSupportsLang(currentEngine, lang)
       ? current
       : fallback?.id || '';
     sel.value = targetValue;
+    if (typeof _handle9RouterEngine === 'function') {
+      _handle9RouterEngine(id, id.replace('-tts-engine', '-tts-voice'));
+    }
   });
 }
 
@@ -260,10 +276,251 @@ function _onTargetLangChange() {
   voiceEl.value = voices[0]?.value || '';
 }
 
+/* ── 9Router consolidated TTS engine — SHARED dynamic component ────────────
+ * The catalog exposes ONE "9Router TTS" engine carrying `models` (grouped by
+ * provider) + `voicesByProvider`. Given any (engineSelectId, voiceSelectId)
+ * pair, this injects a Model dropdown + free-text Voice input (with
+ * suggestions) + "save as default" button right after the engine field — so it
+ * works on process / transcribe / movie / story / sales / ads uniformly.
+ * Final value is sent as "model|voice"; backend builds the provider's real
+ * model id (openai => voice field, elevenlabs/edge => model/voice path). */
+function _9rKey(engineSelectId) {
+  return String(engineSelectId || '').replace(/[^a-z0-9]/gi, '_');
+}
+
+function _find9rEngine(engineId) {
+  const eng = String(engineId || '').toLowerCase();
+  return (TTS_ENGINE_CATALOG || []).find(
+    e => String(e.id || '').toLowerCase() === eng && e.backend === '9router');
+}
+
+// Create (once) the Model + Voice + Save controls after the engine field.
+function _ensure9rComponent(engineSelectId, voiceSelectId) {
+  _ensure9rStyles();
+  const key = _9rKey(engineSelectId);
+  let wrap = document.getElementById(key + '-9r-wrap');
+  if (wrap) {
+    if (voiceSelectId) wrap.dataset.voiceSel = voiceSelectId;
+    return wrap;
+  }
+  const engineEl = document.getElementById(engineSelectId);
+  const engineField = engineEl && engineEl.closest('.field');
+  if (!engineField) return null;
+
+  wrap = document.createElement('div');
+  wrap.id = key + '-9r-wrap';
+  wrap.className = 'field';
+  wrap.style.gridColumn = '1 / -1';
+  wrap.style.display = 'none';
+  wrap.dataset.engineSel = engineSelectId;
+  if (voiceSelectId) wrap.dataset.voiceSel = voiceSelectId;
+  wrap.innerHTML =
+    '<div class="grid-2">' +
+      '<div class="field">' +
+        '<label>Model (9Router)</label>' +
+        '<select id="' + key + '-9r-model"></select>' +
+      '</div>' +
+      '<div class="field" style="position:relative">' +
+        '<label>Voice (nhập ID hoặc chọn gợi ý)</label>' +
+        '<input type="text" id="' + key + '-9r-voice" autocomplete="off" style="width:100%" ' +
+          'placeholder="để trống = giọng mặc định">' +
+        '<div id="' + key + '-9r-voice-pop" class="nr-voice-pop" style="display:none"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="flex-center gap-8 mt-8">' +
+      '<button type="button" class="btn btn-secondary btn-sm" id="' + key + '-9r-save">💾 Lưu làm mặc định</button>' +
+      '<span class="text-xs text-muted" id="' + key + '-9r-hint"></span>' +
+    '</div>';
+  engineField.parentNode.insertBefore(wrap, engineField.nextSibling);
+
+  document.getElementById(key + '-9r-model')
+    .addEventListener('change', () => _sync9rVoice(engineSelectId));
+
+  const voiceInput = document.getElementById(key + '-9r-voice');
+  const pop = document.getElementById(key + '-9r-voice-pop');
+  if (voiceInput && pop) {
+    const show = () => { _9rRenderVoicePop(engineSelectId); pop.style.display = 'block'; };
+    voiceInput.addEventListener('focus', show);
+    voiceInput.addEventListener('click', show);
+    voiceInput.addEventListener('input', () => { _9rRenderVoicePop(engineSelectId); pop.style.display = 'block'; });
+    // Hide when focus/click leaves the field.
+    document.addEventListener('click', (e) => {
+      if (!wrap.contains(e.target)) pop.style.display = 'none';
+    });
+  }
+
+  document.getElementById(key + '-9r-save')
+    .addEventListener('click', () => _save9rDefault(engineSelectId, wrap.dataset.voiceSel || ''));
+  return wrap;
+}
+
+function _ensure9rStyles() {
+  if (document.getElementById('nr-voice-pop-style')) return;
+  const st = document.createElement('style');
+  st.id = 'nr-voice-pop-style';
+  st.textContent =
+    '.nr-voice-pop{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:50;' +
+    'max-height:240px;overflow-y:auto;background:var(--bg2,#fff);border:1px solid var(--border,#d8d8de);' +
+    'border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px}' +
+    '.nr-voice-pop .nr-vi{padding:8px 10px;border-radius:7px;cursor:pointer;display:flex;' +
+    'flex-direction:column;gap:1px}' +
+    '.nr-voice-pop .nr-vi:hover{background:var(--accent-light,#eef3ff)}' +
+    '.nr-voice-pop .nr-vi b{font-size:12.5px;color:var(--text,#1f2430);font-weight:600}' +
+    '.nr-voice-pop .nr-vi small{font-size:11px;color:var(--text-muted,#8a8f9a);font-family:monospace;word-break:break-all}' +
+    '.nr-voice-pop .nr-empty{padding:8px 10px;font-size:12px;color:var(--text-muted,#8a8f9a)}';
+  document.head.appendChild(st);
+}
+
+// Render the floating voice-suggestion popover for the engine's selected model.
+function _9rRenderVoicePop(engineSelectId) {
+  const key = _9rKey(engineSelectId);
+  const engineEl = document.getElementById(engineSelectId);
+  const cat = engineEl ? _find9rEngine(engineEl.value) : null;
+  const modelSel = document.getElementById(key + '-9r-model');
+  const pop = document.getElementById(key + '-9r-voice-pop');
+  const input = document.getElementById(key + '-9r-voice');
+  if (!cat || !modelSel || !pop) return;
+  const model = (cat.models || []).find(m => m.id === modelSel.value) || {};
+  const prov = model.provider || '';
+  const voices = (cat.voicesByProvider && cat.voicesByProvider[prov])
+    || (cat.voices && cat.voices.multi) || [];
+  const filter = (input?.value || '').trim().toLowerCase();
+  pop.innerHTML = '';
+  let shown = 0;
+  voices.forEach(v => {
+    const val = Array.isArray(v) ? v[0] : (v.value || v.id || '');
+    const lab = Array.isArray(v) ? (v[1] || v[0]) : (v.label || val);
+    if (!val) return;
+    if (filter && !(val.toLowerCase().includes(filter) || String(lab).toLowerCase().includes(filter))) return;
+    const item = document.createElement('div');
+    item.className = 'nr-vi';
+    item.innerHTML = '<b></b><small></small>';
+    item.querySelector('b').textContent = lab;
+    item.querySelector('small').textContent = val;
+    // mousedown fires before input blur so the value sticks.
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      if (input) input.value = val;
+      pop.style.display = 'none';
+    });
+    pop.appendChild(item);
+    shown++;
+  });
+  if (!shown) {
+    const empty = document.createElement('div');
+    empty.className = 'nr-empty';
+    empty.textContent = voices.length ? 'Không khớp gợi ý nào.' : 'Model này không có giọng gợi ý — nhập ID thủ công.';
+    pop.appendChild(empty);
+  }
+}
+
+function _sync9rVoice(engineSelectId) {
+  _ensure9rStyles();
+  const key = _9rKey(engineSelectId);
+  const pop = document.getElementById(key + '-9r-voice-pop');
+  // Re-render suggestions if the popover is open; otherwise just refresh data
+  // lazily on next focus.
+  if (pop && pop.style.display !== 'none') _9rRenderVoicePop(engineSelectId);
+}
+
+// Save current 9Router model+voice as the default in config.yml (video_process).
+async function _save9rDefault(engineSelectId, voiceSelectId) {
+  const key = _9rKey(engineSelectId);
+  const { tts_engine, tts_voice } = _resolveTtsEngineVoiceEx(engineSelectId, voiceSelectId);
+  const hint = document.getElementById(key + '-9r-hint');
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_process: { tts_engine, tts_voice } }),
+    });
+    if (hint) { hint.textContent = '✓ Đã lưu mặc định'; hint.style.color = 'var(--success)'; }
+    if (typeof toast === 'function') toast('Đã lưu TTS mặc định', 'success');
+  } catch (e) {
+    if (hint) { hint.textContent = '✗ Lưu thất bại'; hint.style.color = 'var(--danger)'; }
+  }
+}
+
+// Returns true when the selected engine is a 9Router engine (and sets up its
+// Model + voice controls), false otherwise (so the caller runs normal logic).
+function _handle9RouterEngine(engineSelectId, voiceSelectId) {
+  const engineEl = document.getElementById(engineSelectId);
+  if (!engineEl) return false;
+  const key = _9rKey(engineSelectId);
+  const cat = _find9rEngine(engineEl.value);
+  const is9r = !!cat;
+
+  const voiceEl = voiceSelectId ? document.getElementById(voiceSelectId) : null;
+  const voiceField = voiceEl && voiceEl.closest('.field');
+  const wrap = _ensure9rComponent(engineSelectId, voiceSelectId);
+
+  if (!is9r) {
+    if (wrap) wrap.style.display = 'none';
+    if (voiceField) voiceField.style.display = '';
+    return false;
+  }
+  if (!wrap) return false; // no engine field on this page — let normal logic run
+
+  if (voiceField) voiceField.style.display = 'none';
+  wrap.style.display = '';
+
+  const modelSel = document.getElementById(key + '-9r-model');
+  if (modelSel) {
+    const cur = modelSel.value;
+    const models = cat.models || [];
+    const groups = {};
+    models.forEach(m => {
+      const g = m.group || m.provider || '9router';
+      (groups[g] = groups[g] || []).push(m);
+    });
+    modelSel.innerHTML = '';
+    Object.keys(groups).forEach(g => {
+      const og = document.createElement('optgroup');
+      og.label = g;
+      groups[g].forEach(m => {
+        const o = document.createElement('option');
+        o.value = m.id;
+        o.textContent = m.label || m.id;
+        og.appendChild(o);
+      });
+      modelSel.appendChild(og);
+    });
+    modelSel.value = models.some(m => m.id === cur)
+      ? cur
+      : (cat.defaultModel || (models[0] && models[0].id) || '');
+    _sync9rVoice(engineSelectId);
+  }
+  return true;
+}
+
+// Explicit resolver: {tts_engine, tts_voice} from an (engine, voice) id pair.
+function _resolveTtsEngineVoiceEx(engineSelectId, voiceSelectId) {
+  const key = _9rKey(engineSelectId);
+  const engineEl = document.getElementById(engineSelectId);
+  const cat = engineEl ? _find9rEngine(engineEl.value) : null;
+  if (cat) {
+    const model = document.getElementById(key + '-9r-model')?.value || cat.defaultModel || '';
+    const voice = (document.getElementById(key + '-9r-voice')?.value || '').trim();
+    return { tts_engine: '9router', tts_voice: model + '|' + voice };
+  }
+  return {
+    tts_engine: engineEl?.value || 'edge-tts',
+    tts_voice: (voiceSelectId && document.getElementById(voiceSelectId)?.value) || 'vi-VN-HoaiMyNeural',
+  };
+}
+
+// Convenience wrapper for the common "{base}-tts-engine"/"{base}-tts-voice" pages.
+function _resolveTtsEngineVoice(base) {
+  return _resolveTtsEngineVoiceEx(base + '-tts-engine', base + '-tts-voice');
+}
+
 function _syncVoiceOptions(engineSelectId, voiceSelectId) {
   const engineEl = document.getElementById(engineSelectId);
   const voiceEl = document.getElementById(voiceSelectId);
   if (!engineEl || !voiceEl) return;
+
+  // 9Router engine → dedicated Model + voice-id controls; skip normal logic.
+  if (_handle9RouterEngine(engineSelectId, voiceSelectId)) return;
 
   // Nếu engine select trống (chưa được populate), thử refresh trước
   let engine = (engineEl.value || '').toLowerCase();
@@ -595,8 +852,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     translate_subs:   document.getElementById('proc-translate-subs')?.checked ?? true,
     burn_vi_subs:     document.getElementById('proc-burn-vi')?.checked ?? true,
     voice_convert:    document.getElementById('proc-voice')?.checked ?? false,
-    tts_engine:       document.getElementById('proc-tts-engine')?.value || 'edge-tts',
-    tts_voice:        document.getElementById('proc-tts-voice')?.value || 'vi-VN-HoaiMyNeural',
+    ..._resolveTtsEngineVoice('proc'),
     tts_pitch:        _sanitizeVoiceParam(document.getElementById('proc-tts-pitch')?.value || '+0Hz'),
     tts_rate:         _sanitizeVoiceParam(document.getElementById('proc-tts-rate')?.value || '+0%'),
     tts_emotion:      document.getElementById('proc-tts-emotion')?.value || 'default',
@@ -646,6 +902,8 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     capcut_auto_open: document.getElementById('proc-capcut-auto-open')?.checked ?? false,
     // Video mode: only convert when the source orientation differs from the selected mode.
     target_aspect: document.getElementById('proc-preview-aspect')?.value || 'auto',
+    // Lấp viền khi đổi khung bằng nền mờ (blur) thay vì viền đen.
+    aspect_pad_blur: document.getElementById('proc-aspect-blur-bg')?.checked ?? false,
     // Frame video (step 6)
     frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
     frame_title:          document.getElementById('frame-title')?.value || '',
@@ -1146,8 +1404,7 @@ async function generateTtsFromAss() {
 
   const params = {
     output_dir:  outDir,
-    tts_engine:  document.getElementById('tr-tts-engine')?.value  || 'edge-tts',
-    tts_voice:   document.getElementById('tr-tts-voice')?.value   || 'vi-VN-HoaiMyNeural',
+    ..._resolveTtsEngineVoice('tr'),
     tts_pitch:   _sanitizeVoiceParam(document.getElementById('tr-tts-pitch')?.value  || '+0Hz'),
     tts_rate:    _sanitizeVoiceParam(document.getElementById('tr-tts-rate')?.value   || '+0%'),
     tts_emotion: document.getElementById('tr-tts-emotion')?.value || 'default',
@@ -1258,8 +1515,7 @@ async function createMp3FromText() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
-        tts_engine: document.getElementById('tr-tts-engine')?.value || 'edge-tts',
-        tts_voice: document.getElementById('tr-tts-voice')?.value || 'vi-VN-HoaiMyNeural',
+        ..._resolveTtsEngineVoice('tr'),
         tts_pitch: _sanitizeVoiceParam(document.getElementById('tr-tts-pitch')?.value || '+0Hz'),
         tts_rate: _sanitizeVoiceParam(document.getElementById('tr-tts-rate')?.value || '+0%'),
         tts_emotion: document.getElementById('tr-tts-emotion')?.value || 'default',
@@ -1326,6 +1582,8 @@ async function createMp3FromText() {
 }
 
 async function previewTranscribeVoice() {
+  const textInput = document.getElementById('tr-preview-text');
+  let text = textInput?.value?.trim() || '';
   if (!text && window._trAssPreviewText) {
     text = window._trAssPreviewText;
     if (textInput) textInput.value = text;
@@ -1347,8 +1605,7 @@ async function previewTranscribeVoice() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
-        tts_engine: document.getElementById('tr-tts-engine')?.value || 'edge-tts',
-        tts_voice: document.getElementById('tr-tts-voice')?.value || 'vi-VN-HoaiMyNeural',
+        ..._resolveTtsEngineVoice('tr'),
         tts_pitch: _sanitizeVoiceParam(document.getElementById('tr-tts-pitch')?.value || '+0Hz'),
         tts_rate: _sanitizeVoiceParam(document.getElementById('tr-tts-rate')?.value || '+0%'),
         tts_emotion: document.getElementById('tr-tts-emotion')?.value || 'default',
@@ -1409,8 +1666,7 @@ async function previewProcessVoice() {
         text,
         language: targetLang,
         tts_lang: targetLang,
-        tts_engine: document.getElementById('proc-tts-engine')?.value || 'edge-tts',
-        tts_voice: document.getElementById('proc-tts-voice')?.value || 'vi-VN-HoaiMyNeural',
+        ..._resolveTtsEngineVoice('proc'),
         tts_pitch: _sanitizeVoiceParam(document.getElementById('proc-tts-pitch')?.value || '+0Hz'),
         tts_rate: _sanitizeVoiceParam(document.getElementById('proc-tts-rate')?.value || '+0%'),
         tts_emotion: document.getElementById('proc-tts-emotion')?.value || 'default',
@@ -2432,8 +2688,7 @@ async function previewConfigVoice() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text,
-        tts_engine: document.getElementById('vp-tts-engine')?.value || 'edge-tts',
-        tts_voice: document.getElementById('vp-tts-voice')?.value || 'vi-VN-HoaiMyNeural',
+        ..._resolveTtsEngineVoice('vp'),
         tts_pitch: _sanitizeVoiceParam(document.getElementById('vp-tts-pitch')?.value || '+0Hz'),
         tts_rate: _sanitizeVoiceParam(document.getElementById('vp-tts-rate')?.value || '+0%'),
         tts_emotion: document.getElementById('vp-tts-emotion')?.value || 'default',

@@ -513,8 +513,17 @@ def n8n_flow_run():
                 items = []
             limit = min(int(cfg.get("limit", 10) or 10), 100)
             items = items[:limit] if isinstance(items, list) else [items]
-            log_lines.append(f"🔁 Loop: {len(items)} items")
-            return {"_items": items}
+            mode = str(cfg.get("mode", "") or "").lower()
+            parallel = "song" in mode  # "Song song"
+            try:
+                concurrency = max(1, min(20, int(cfg.get("concurrency", 3) or 3)))
+            except Exception:
+                concurrency = 3
+            log_lines.append(
+                f"🔁 Loop: {len(items)} items"
+                + (f" (song song ×{concurrency})" if parallel else " (tuần tự)")
+            )
+            return {"_items": items, "_parallel": parallel, "_concurrency": concurrency}
 
         # Nodes with local endpoint
         from . import n8n as _self_mod  # noqa — unused, just ensures defs are available
@@ -640,12 +649,44 @@ def n8n_flow_run():
         # Loop logic
         if node["type"] == "logic.loop":
             items = out.get("_items") or []
+            parallel = bool(out.get("_parallel"))
+            concurrency = int(out.get("_concurrency") or 3)
             children = [node_map[c["to"]] for c in conns if c["from"] == node["id"] and c["to"] in node_map]
-            for item in items:
+
+            def _run_subtree(start_node, prev_val, local_visited):
+                if not start_node or start_node["id"] in local_visited:
+                    return
+                local_visited.add(start_node["id"])
+                sub_out = exec_node(start_node, prev_val)
+                for cc in conns:
+                    if cc["from"] == start_node["id"]:
+                        nxt = node_map.get(cc["to"])
+                        if nxt:
+                            _run_subtree(nxt, sub_out, local_visited)
+
+            def _run_item(item):
                 for child in children:
-                    exec_node(child, item)
+                    _run_subtree(child, item, set(visited))
+
+            if parallel and len(items) > 1:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=min(concurrency, len(items))) as pool:
+                    list(pool.map(_run_item, items))
+            else:
+                for item in items:
+                    _run_item(item)
+
+            # Mark the whole loop subtree as visited to avoid re-running in BFS
+            def _mark(n_node, seen):
+                if not n_node or n_node["id"] in seen:
+                    return
+                seen.add(n_node["id"])
+                visited.add(n_node["id"])
+                for cc in conns:
+                    if cc["from"] == n_node["id"]:
+                        _mark(node_map.get(cc["to"]), seen)
             for child in children:
-                visited.add(child["id"])
+                _mark(child, set())
             continue
 
         for c in conns:

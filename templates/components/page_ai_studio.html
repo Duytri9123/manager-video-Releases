@@ -87,10 +87,14 @@
       <div class="field">
         <label>🖼️ Image Backend</label>
         <select id="ai-image-model">
-          <option value="9router">9Router (cx/gpt-5.5-image)</option>
-          <option value="imagen-3.0-generate-002">Gemini Imagen 3</option>
-          <option value="imagen-3.0-fast-generate-001">Gemini Imagen 3 Fast</option>
-          <option value="dall-e-3">OpenAI DALL-E 3</option>
+          <optgroup label="⚡ Mặc định" data-static="1">
+            <option value="9router">9Router · Tự động (cx/gpt-5.5-image)</option>
+          </optgroup>
+          <optgroup label="🔷 Gemini / OpenAI (gọi trực tiếp)" data-static="1">
+            <option value="imagen-3.0-generate-002">Gemini Imagen 3</option>
+            <option value="imagen-3.0-fast-generate-001">Gemini Imagen 3 Fast</option>
+            <option value="dall-e-3">OpenAI DALL-E 3</option>
+          </optgroup>
         </select>
       </div>
       <div class="field">

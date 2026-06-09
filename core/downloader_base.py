@@ -1007,6 +1007,15 @@ class BaseDownloader(ABC):
         voice_convert = bool(vp_cfg.get("voice_convert"))
         translate_enabled = bool(vp_cfg.get("translate_subs", vp_cfg.get("translate", True)))
 
+        # Ngôn ngữ đích: ưu tiên cấu hình video_process, sau đó translation,
+        # mặc định "vi". Quyết định cả bản dịch lẫn giọng đọc TTS.
+        target_lang = str(
+            vp_cfg.get("target_lang")
+            or vp_cfg.get("target_language")
+            or (self.config.get("translation") or {}).get("default_target_lang")
+            or "vi"
+        ).strip().lower() or "vi"
+
         if not (burn_original_subs or burn_vi_subs or voice_convert):
             logger.info("video_process: no post-process steps enabled for %s", aweme_id)
             self._progress_post(100, "Không bật hậu xử lý")
@@ -1047,7 +1056,7 @@ class BaseDownloader(ABC):
                 trans_cfg = self.config.get("translation") or {}
                 provider = trans_cfg.get("preferred_provider", "auto")
                 texts = [seg.get("text", "").strip() for seg in segments]
-                translated_texts, used = translate_texts(texts, trans_cfg, provider)
+                translated_texts, used = translate_texts(texts, trans_cfg, provider, target_lang=target_lang)
                 logger.info("video_process: translated %d segments via %s", len(translated_texts), used)
 
                 # Write VI SRT
@@ -1114,9 +1123,9 @@ class BaseDownloader(ABC):
         # Step 4: Voice conversion ZH → VI
         voice_out = None
         if voice_convert and translated_texts and segments:
-            self._progress_post(90, "Đang tạo giọng tiếng Việt")
+            self._progress_post(90, f"Đang tạo giọng ({target_lang})")
             source = processed_path if processed_path else video_path
-            voice_out = out_dir / f"{post_title}_vi_voice.mp4"
+            voice_out = out_dir / f"{post_title}_{target_lang}_voice.mp4"
             # Lấy đúng engine và voice từ config
             tts_voice = vp_cfg.get("tts_voice") or "vi-VN-HoaiMyNeural"
             tts_engine = vp_cfg.get("tts_engine") or "edge-tts"
@@ -1138,10 +1147,11 @@ class BaseDownloader(ABC):
                     bg_volume=float(vp_cfg.get("bg_volume", 0.15)),
                     elevenlabs_api_key=elevenlabs_api_key,
                     elevenlabs_voice_id=elevenlabs_voice_id,
+                    target_lang=target_lang,
                 )
                 if ok:
                     logger.info("video_process: voice converted → %s", voice_out.name)
-                    self._progress_post(100, f"Đã tạo giọng tiếng Việt ({tts_engine}, {tts_voice})")
+                    self._progress_post(100, f"Đã tạo giọng {target_lang} ({tts_engine}, {tts_voice})")
                 else:
                     logger.warning("video_process: voice conversion failed for %s: %s", aweme_id, err)
                     self._progress_post(100, "Đổi giọng thất bại")

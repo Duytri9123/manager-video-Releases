@@ -351,24 +351,29 @@ def image_generate():
 
 def _run_image_gen(task_id, model, prompt, count, aspect_ratio):
     """Route tạo ảnh tới backend phù hợp."""
-    if model == "9router":
-        _run_image_gen_9router(task_id, prompt, count, aspect_ratio)
-    elif model == "dall-e-3":
-        _run_image_gen_openai(task_id, prompt, count, aspect_ratio)
-    elif model.startswith("imagen"):
+    if model.startswith(("imagen", "gemini")):
         api_key = _gemini_key()
         if not api_key:
             _update_task(task_id, state="FAILED", error="Thiếu Gemini API Key")
             return
         _run_image_gen_gemini(task_id, api_key, model, prompt, count, aspect_ratio)
+    elif model in ("dall-e-3", "dalle-3"):
+        # Legacy: gọi thẳng OpenAI DALL-E 3
+        _run_image_gen_openai(task_id, prompt, count, aspect_ratio)
     else:
-        _update_task(task_id, state="FAILED", error=f"Model không hỗ trợ: {model}")
+        # "9router" (mặc định cx/gpt-5.5-image) hoặc bất kỳ model id 9Router thật
+        # (vd openai/gpt-image-1, nb/nanobanana-pro, cx/gpt-5.4-image, local…)
+        model_id = "cx/gpt-5.5-image" if model in ("9router", "") else model
+        _run_image_gen_9router(task_id, prompt, count, aspect_ratio, model_id)
 
 
-def _run_image_gen_9router(task_id, prompt, count, aspect_ratio):
-    """Tạo ảnh qua 9Router /v1/images/generations (OpenAI-compatible)."""
-    import urllib.request
-    import urllib.error
+def _run_image_gen_9router(task_id, prompt, count, aspect_ratio, model_id="cx/gpt-5.5-image"):
+    """Tạo ảnh qua 9Router /v1/images/generations (OpenAI-compatible).
+
+    Codex ``cx/*`` models stream the result as SSE; the shared helper handles
+    both SSE and plain-JSON responses, so this works for every model id.
+    """
+    from utils.niner_image import build_image_payload, generate_images
 
     cfg = load_cfg()
     nr = cfg.get("nine_router") or {}
@@ -383,40 +388,20 @@ def _run_image_gen_9router(task_id, prompt, count, aspect_ratio):
     size_map = {"1:1": "1024x1024", "16:9": "1792x1024", "9:16": "1024x1792", "4:3": "1024x768", "3:4": "768x1024"}
     size = size_map.get(aspect_ratio, "1024x1024")
 
-    payload = {
-        "model": "cx/gpt-5.5-image",
-        "prompt": prompt,
-        "n": count,
-        "size": size,
-        "quality": "auto",
-        "output_format": "png",
-        "background": "auto",
-    }
+    payload = build_image_payload(
+        (model_id or "cx/gpt-5.5-image"),
+        prompt,
+        n=count,
+        size=size,
+    )
 
-    url = f"{endpoint}/images/generations"
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=body, headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }, method="POST")
-
-    try:
-        with urllib.request.urlopen(req, timeout=300) as resp:
-            data = json.loads(resp.read().decode("utf-8", "replace") or "{}")
-    except urllib.error.HTTPError as e:
-        err = ""
-        try:
-            err = e.read().decode()[:300]
-        except Exception:
-            pass
-        _update_task(task_id, state="FAILED", error=f"9Router HTTP {e.code}: {err}")
-        return
-    except Exception as e:
-        _update_task(task_id, state="FAILED", error=str(e))
+    data_images, error = generate_images(endpoint, api_key, payload)
+    if error:
+        _update_task(task_id, state="FAILED", error=error)
         return
 
     images = []
-    for i, item in enumerate(data.get("data") or []):
+    for i, item in enumerate(data_images):
         b64 = item.get("b64_json") or ""
         img_url = item.get("url") or ""
         if b64:

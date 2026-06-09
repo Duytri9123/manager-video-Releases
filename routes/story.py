@@ -22,7 +22,7 @@ from core.story_writer import (
     ocr_folder,
     run_pipeline,
 )
-from core_app import ROOT, STATE_DIR, TEMP_UPLOADS_DIR, load_cfg
+from core_app import ROOT, STATE_DIR, TEMP_UPLOADS_DIR, LOGGER, load_cfg
 from utils.security import safe_filename, safe_join
 
 bp = Blueprint("story", __name__)
@@ -760,6 +760,9 @@ def _call_image_api(
 ) -> tuple[bool, dict]:
     """Send a single generation request to 9Router and write the result to disk.
 
+    Supports both standard JSON responses (Gemini, OpenAI) and SSE streaming
+    responses (Codex cx/* models). Matches the structure used in chatbot_image.
+
     Returns (ok, info_dict). info_dict keys:
         - on success: model, size, used_references, status_code
         - on error:   error, status_code (best-effort)
@@ -795,16 +798,28 @@ def _call_image_api(
         except Exception:
             continue
 
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    # Build payload matching chatbot_image structure
     payload = {
         "model": model,
         "prompt": prompt[:2000],
         "n": 1,
-        "size": f"{width}x{height}",
-        "quality": quality,
-        "response_format": "b64_json",
-        "seed": seed,
     }
+    
+    # Codex models (cx/*) use size/quality/background/output_format
+    # Legacy models use size as WxH and response_format
+    if model.startswith("cx/"):
+        payload["size"] = "auto"
+        payload["quality"] = quality if quality in ("standard", "hd") else "auto"
+        payload["background"] = "auto"
+        payload["output_format"] = "png"
+    else:
+        payload["size"] = f"{width}x{height}"
+        payload["quality"] = quality if quality in ("standard", "hd") else "standard"
+        payload["response_format"] = "b64_json"
+    
+    if seed is not None:
+        payload["seed"] = seed
+    
     if ref_b64s:
         # 9Router image-edit / multimodal field. Different providers use different
         # field names; we send the most common ones so the gateway can route.
@@ -812,8 +827,20 @@ def _call_image_api(
         payload["image"] = ref_b64s[0]          # OpenAI image-edit single-ref
 
     url = f"{endpoint}/images/generations"
+    
+    # Use stream=True to support both SSE (Codex) and JSON responses
+    req_headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+    if api_key:
+        req_headers["Authorization"] = f"Bearer {api_key}"
+    
     try:
-        resp = _requests.post(url, json=payload, headers=headers, timeout=240)
+        resp = _requests.post(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=req_headers,
+            stream=True,
+            timeout=(10, 300),  # (connect, read)
+        )
     except _requests.exceptions.Timeout:
         return False, {"error": "Timeout khi gọi 9Router (model có thể đang quá tải).", "status_code": 504}
     except _requests.exceptions.ConnectionError as exc:
@@ -823,8 +850,9 @@ def _call_image_api(
 
     if resp.status_code >= 400:
         try:
-            err_body = resp.json()
-            err_msg = (err_body.get("error") or {}).get("message") or str(err_body)
+            err_body = resp.text
+            err_json = json.loads(err_body) if err_body else {}
+            err_msg = (err_json.get("error") or {}).get("message") or err_body
         except Exception:
             err_msg = resp.text[:300]
         return False, {
@@ -833,8 +861,17 @@ def _call_image_api(
             "model": model,
         }
 
-    try:
-        body = resp.json()
+    # Determine if response is SSE or plain JSON
+    content_type = (resp.headers.get("Content-Type") or "").lower()
+    is_sse = "text/event-stream" in content_type
+    
+    if not is_sse:
+        # Standard JSON response (Gemini, OpenAI native)
+        try:
+            body = resp.json()
+        except Exception:
+            return False, {"error": "Invalid JSON response from 9Router", "status_code": 502}
+        
         img_data = (body.get("data") or [{}])[0]
         if img_data.get("b64_json"):
             with open(out_path, "wb") as f:
@@ -845,8 +882,70 @@ def _call_image_api(
                 f.write(dl.content)
         else:
             return False, {"error": "9Router không trả ảnh (data trống).", "status_code": 502}
-    except Exception as exc:
-        return False, {"error": f"Lỗi xử lý response: {exc}", "status_code": 500}
+        
+        resp.close()
+    else:
+        # SSE streaming response (Codex cx/* models)
+        images = []
+        try:
+            buf = ""
+            for chunk in resp.iter_content(chunk_size=None, decode_unicode=True):
+                if not chunk:
+                    continue
+                buf += chunk
+            
+            # Parse SSE events from the accumulated buffer
+            events = buf.split("\n\n")
+            for ev in events:
+                lines = ev.strip().split("\n")
+                event_name = ""
+                data_parts = []
+                for line in lines:
+                    if line.startswith("event:"):
+                        event_name = line[6:].strip()
+                    elif line.startswith("data:"):
+                        data_parts.append(line[5:].strip())
+                if not data_parts:
+                    continue
+                data_str = "\n".join(data_parts)
+                
+                if event_name == "partial_image" or (not event_name and '"b64_json"' in data_str):
+                    try:
+                        img_data = json.loads(data_str)
+                        if img_data.get("b64_json"):
+                            images.append({"b64_json": img_data["b64_json"]})
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                elif event_name == "result" or (not event_name and '"data"' in data_str):
+                    try:
+                        result_data = json.loads(data_str)
+                        for item in (result_data.get("data") or []):
+                            if isinstance(item, dict) and (item.get("b64_json") or item.get("url")):
+                                images.append(item)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+        except Exception as exc:
+            LOGGER.warning("Truyện→Video SSE parse error: %s", exc)
+        finally:
+            resp.close()
+        
+        if not images:
+            return False, {
+                "error": "9Router trả về SSE nhưng không tìm thấy ảnh. Thử lại hoặc đổi model.",
+                "status_code": 502,
+            }
+        
+        # Use the first (or last) image from the stream
+        img_data = images[-1] if images else images[0]
+        if img_data.get("b64_json"):
+            with open(out_path, "wb") as f:
+                f.write(base64.b64decode(img_data["b64_json"]))
+        elif img_data.get("url"):
+            dl = _requests.get(img_data["url"], timeout=180)
+            with open(out_path, "wb") as f:
+                f.write(dl.content)
+        else:
+            return False, {"error": "9Router SSE không có ảnh hợp lệ.", "status_code": 502}
 
     if not out_path.exists() or out_path.stat().st_size < 1024:
         return False, {"error": "File ảnh tải về bị rỗng.", "status_code": 502}
@@ -1243,8 +1342,11 @@ def ai_generate_end_frame():
 def ai_image_models():
     """Return list of available image-generation models from 9Router.
 
-    Tries /v1/models first; if that fails or doesn't list image models,
-    returns a curated default list of Codex GPT image models.
+    Priority:
+      1. /v1/models/image  → danh sách model ảnh THẬT do 9Router expose
+         (openai/cx/nb/google/sdwebui…), kể cả local nếu có.
+      2. /v1/models        → lọc heuristic theo tên (fallback khi gateway cũ).
+      3. Curated defaults  → khi không có API key / không kết nối được.
     """
     import requests as _requests
 
@@ -1265,28 +1367,43 @@ def ai_image_models():
         return jsonify({"ok": True, "models": defaults, "source": "default"})
 
     headers = {"Authorization": f"Bearer {api_key}"}
+
+    def _label_for(mid: str, owned_by: str = "") -> str:
+        return mid + (f" · {owned_by}" if owned_by else "")
+
+    # ── Priority 1: endpoint chuyên cho model ảnh ─────────────────────────────
+    try:
+        resp = _requests.get(f"{endpoint}/models/image", headers=headers, timeout=10)
+        if resp.status_code == 200:
+            body = resp.json()
+            items = body.get("data") or body.get("models") or []
+            img_models = []
+            for it in items:
+                mid = (it or {}).get("id") or (it or {}).get("name") or ""
+                if mid:
+                    img_models.append({"id": mid, "label": _label_for(mid, (it or {}).get("owned_by", ""))})
+            if img_models:
+                return jsonify({"ok": True, "models": img_models, "source": "9router:image"})
+    except Exception:
+        pass
+
+    # ── Priority 2: /v1/models + lọc heuristic ────────────────────────────────
     try:
         resp = _requests.get(f"{endpoint}/models", headers=headers, timeout=10)
         if resp.status_code == 200:
             body = resp.json()
             items = body.get("data") or body.get("models") or []
-            # Keep only image-capable models (heuristic: id contains 'image' or 'dalle')
             img_models = []
             for it in items:
                 mid = it.get("id") or it.get("name") or ""
-                if any(k in mid.lower() for k in ("image", "dalle", "dall-e", "sd-", "flux", "imagen", "midjourney")):
-                    img_models.append({
-                        "id": mid,
-                        "label": mid + (f" · {it['owned_by']}" if it.get("owned_by") else ""),
-                    })
+                if any(k in mid.lower() for k in ("image", "dalle", "dall-e", "sd-", "flux", "imagen", "midjourney", "nanobanana")):
+                    img_models.append({"id": mid, "label": _label_for(mid, it.get("owned_by", ""))})
             if img_models:
-                # Sort newest-first by extracted version score
                 import re as _re
                 def _score(m):
                     mid = m["id"]
                     versions = _re.findall(r"\d+(?:\.\d+)?", mid)
                     v_sum = sum(float(v) for v in versions) if versions else 0
-                    # Bonus for cx/ (Codex) and image-specific models
                     bonus = 0
                     if mid.startswith("cx/"):
                         bonus += 100
