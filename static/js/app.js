@@ -380,7 +380,7 @@ function switchPage(name) {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
     movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router',
-    videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng'
+    videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng', ads:'Video quảng cáo'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
   if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
@@ -408,6 +408,7 @@ function switchPage(name) {
   if (name === 'videogen' && typeof vgInit === 'function') vgInit();
   if (name === 'n8n' && typeof n8nInit === 'function') n8nInit();
   if (name === 'sales' && typeof salesInit === 'function') salesInit();
+  if (name === 'ads' && typeof adsInit === 'function') adsInit();
 }
 
 /* ── Content platform sub-tabs (defined here so inline onclick always works) ── */

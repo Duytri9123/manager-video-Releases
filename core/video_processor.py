@@ -4203,13 +4203,74 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     burned_path = None
     # Resume: nếu file subbed đã có → dùng lại (BUT: skip if frame enabled to re-apply new frame settings)
     _frame_enabled_for_burn = _as_bool(data.get("frame_enabled", False), False)
+
+    # Quyết định burn hiệu lực: KHÔNG BAO GIỜ ghi phụ đề GỐC lên video.
+    # - Khi user tắt optcard "Ghi phụ đề" (do_burn_vi=False) → không burn.
+    # - Khi có dịch nhưng srt_path vẫn trỏ về phụ đề gốc (vd dịch lỗi, hoặc
+    #   do_burn_vi=False nên không đổi sang vi_ass) → không burn để tránh
+    #   in lại phụ đề ngôn ngữ gốc lên video.
+    do_burn_effective = do_burn
+    if do_burn and do_translate:
+        _srt_is_translated = (srt_path != source_srt_path)
+        do_burn_effective = bool(do_burn_vi and _srt_is_translated)
+        if not do_burn_effective:
+            yield send(log="[Bước 4/5] ℹ Tắt ghi phụ đề (chỉ giữ phụ đề gốc) → bỏ qua burn để không in phụ đề gốc lên video", level="info")
+    do_burn = do_burn_effective
+
+    # ── Tham số che (blur) vùng phụ đề gốc ───────────────────────────────────
+    # Tách riêng để có thể CHE cả khi KHÔNG ghi phụ đề (do_burn_vi=False).
+    _blur_original_flag = _as_bool(data.get("blur_original", True), True)
+    _blur_zone_val = str(data.get("blur_zone", "bottom"))
+
+    _blur_y_raw = data.get("blur_y_pct")
+    _blur_y_pct = None
+    if _blur_y_raw is not None and str(_blur_y_raw).strip() != "" and str(_blur_y_raw).lower() != "null":
+        try:
+            _blur_y_pct = float(_blur_y_raw)
+        except Exception:
+            pass
+
+    _blur_extra_zones_raw = data.get("blur_extra_zones")
+    _blur_extra_zones = None
+    if _blur_extra_zones_raw:
+        if isinstance(_blur_extra_zones_raw, str):
+            try:
+                _blur_extra_zones = _j.loads(_blur_extra_zones_raw)
+            except Exception:
+                pass
+        elif isinstance(_blur_extra_zones_raw, list):
+            _blur_extra_zones = _blur_extra_zones_raw
+
+    # Có cần che không? (bật "Che phụ đề gốc" + có vùng che hợp lệ)
+    _blur_enabled = bool(_blur_original_flag and (_blur_zone_val.lower() != "none" or _blur_extra_zones))
+
+    # Chọn nguồn ASS cho bước encode:
+    #   "sub"  → có ghi phụ đề: dùng srt_path (ASS đã dịch) + che (nếu bật)
+    #   "blur" → KHÔNG ghi phụ đề nhưng vẫn che: tạo ASS rỗng để chỉ che, không vẽ chữ
+    #   "skip" → không ghi phụ đề và cũng không che: bỏ qua encode
+    _encode_srt = None
+    _encode_mode = "skip"
+    if do_burn and srt_path.exists():
+        _encode_srt = srt_path
+        _encode_mode = "sub"
+    elif _blur_enabled:
+        try:
+            _empty_ass = out_dir / f"{stem}_bluronly.ass"
+            write_ass([], _empty_ass, play_res_x=1280, play_res_y=720)
+            _encode_srt = _empty_ass
+            _encode_mode = "blur"
+            yield send(log="[Bước 4/5] 🌫 Không ghi phụ đề nhưng vẫn che phụ đề gốc theo cấu hình", level="info")
+        except Exception as _e_ass:
+            yield send(log=f"[Bước 4/5] ⚠ Không tạo được ASS che: {_e_ass}", level="warning")
+
+    # Resume cache chỉ áp dụng cho chế độ có phụ đề ("sub")
     _burn_cache_valid = False
     _burn_cache_stale_reason = ""
-    if do_burn and not _frame_enabled_for_burn and burned_path_cached.exists() and burned_path_cached.stat().st_size > 0:
+    if _encode_mode == "sub" and not _frame_enabled_for_burn and burned_path_cached.exists() and burned_path_cached.stat().st_size > 0:
         try:
             _burn_deps = [video_path]
-            if srt_path and Path(srt_path).exists():
-                _burn_deps.append(Path(srt_path))
+            if _encode_srt and Path(_encode_srt).exists():
+                _burn_deps.append(Path(_encode_srt))
             _newest_burn_dep = max(p.stat().st_mtime for p in _burn_deps)
             _burn_cache_valid = burned_path_cached.stat().st_mtime >= _newest_burn_dep
             if not _burn_cache_valid:
@@ -4218,22 +4279,25 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             _burn_cache_valid = False
             _burn_cache_stale_reason = "không kiểm tra được thời gian cache"
 
-    if do_burn and not _frame_enabled_for_burn and _burn_cache_valid:
+    if _encode_mode == "sub" and not _frame_enabled_for_burn and _burn_cache_valid:
         burned_path = burned_path_cached
         final_output_path = burned_path
         yield send(log=f"[Bước 4/5] ♻ Dùng lại video phụ đề cũ: {burned_path.name}", level="info")
         yield send(overall=80, overall_lbl="Dùng lại video phụ đề cũ")
-    elif do_burn and srt_path.exists():
+    elif _encode_mode != "skip" and _encode_srt and _encode_srt.exists():
         if _burn_cache_stale_reason:
-            yield send(log=f"[Bước 4/5] ♻ Bỏ cache video phụ đề cũ ({_burn_cache_stale_reason}), burn lại từ ASS hiện tại", level="info")
-        yield send(log=f"[Bước 4/5] 🔥 Đang burn phụ đề ASS vào video...", level="info")
-        yield send(overall=65, overall_lbl="Đang burn phụ đề...")
+            yield send(log=f"[Bước 4/5] ♻ Bỏ cache video phụ đề cũ ({_burn_cache_stale_reason}), encode lại từ ASS hiện tại", level="info")
+        if _encode_mode == "blur":
+            yield send(log=f"[Bước 4/5] 🌫 Đang che phụ đề gốc (không ghi phụ đề)...", level="info")
+        else:
+            yield send(log=f"[Bước 4/5] 🔥 Đang burn phụ đề ASS vào video...", level="info")
+        yield send(overall=65, overall_lbl="Đang xử lý video...")
         burned_path = out_dir / f"{stem}_subbed.mp4"
 
         # Log details before starting (so user sees progress immediately)
         _vid_size = video_path.stat().st_size / 1024 / 1024
         yield send(log=f"[Bước 4/5] 📂 Video: {video_path.name} ({_vid_size:.1f} MB)", level="info")
-        yield send(log=f"[Bước 4/5] 📄 Phụ đề: {srt_path.name}", level="info")
+        yield send(log=f"[Bước 4/5] 📄 ASS: {_encode_srt.name}", level="info")
         _hw_preset = _get_encoding_args(ffmpeg)
         _hw_desc = " ".join(_hw_preset[:6])
         yield send(log=f"[Bước 4/5] 🎬 Đang encode ({_hw_desc})...", level="info")
@@ -4243,32 +4307,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         def _burn_log_cb(msg, level="info"):
             _burn_logs.append((msg, level))
 
-        _blur_y_raw = data.get("blur_y_pct")
-        _blur_y_pct = None
-        if _blur_y_raw is not None and str(_blur_y_raw).strip() != "" and str(_blur_y_raw).lower() != "null":
-            try:
-                _blur_y_pct = float(_blur_y_raw)
-            except Exception:
-                pass
-
-        _blur_extra_zones_raw = data.get("blur_extra_zones")
-        _blur_extra_zones = None
-        if _blur_extra_zones_raw:
-            if isinstance(_blur_extra_zones_raw, str):
-                try:
-                    _blur_extra_zones = _j.loads(_blur_extra_zones_raw)
-                except Exception:
-                    pass
-            elif isinstance(_blur_extra_zones_raw, list):
-                _blur_extra_zones = _blur_extra_zones_raw
-
         ok, err = burn_subtitles(
             video_path=video_path,
-            srt_path=srt_path,
+            srt_path=_encode_srt,
             output_path=burned_path,
             ffmpeg=ffmpeg,
-            blur_original=_as_bool(data.get("blur_original", True), True),
-            blur_zone=data.get("blur_zone", "bottom"),
+            blur_original=_blur_original_flag,
+            blur_zone=_blur_zone_val,
             blur_height_pct=_as_float(data.get("blur_height_pct", 0.15), 0.15),
             blur_width_pct=_as_float(data.get("blur_width_pct", 0.80), 0.80),
             blur_lift_pct=_as_float(data.get("blur_lift_pct", 0.06), 0.06),
@@ -4288,16 +4333,19 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         for _msg, _lvl in _burn_logs:
             yield send(log=f"[Bước 4/5] {_msg}", level=_lvl)
         if ok:
-            yield send(log=f"[Bước 4/5] ✓ Video có phụ đề: {burned_path.name}", level="success")
-            yield send(overall=80, overall_lbl="Burn phụ đề xong")
+            if _encode_mode == "blur":
+                yield send(log=f"[Bước 4/5] ✓ Video đã che phụ đề gốc: {burned_path.name}", level="success")
+            else:
+                yield send(log=f"[Bước 4/5] ✓ Video có phụ đề: {burned_path.name}", level="success")
+            yield send(overall=80, overall_lbl="Xử lý video xong")
             final_output_path = burned_path
         else:
-            yield send(log=f"[Bước 4/5] ✗ Burn thất bại: {err}", level="error")
+            yield send(log=f"[Bước 4/5] ✗ Xử lý thất bại: {err}", level="error")
             burned_path = None
-    elif do_burn and not srt_path.exists():
+    elif do_burn and not srt_path.exists() and not _blur_enabled:
         yield send(log="[Bước 4/5] ⚠ Không có file phụ đề để burn", level="warning")
     else:
-        yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề", level="info")
+        yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề / che", level="info")
 
     # ── Convert aspect ratio (sau khi burn xong, trước khi concat thumbnail) ──
     # Nếu user chọn 9x16/16x9 mà video burned không đúng aspect đó → convert.
