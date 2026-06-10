@@ -475,7 +475,11 @@
       };
       window.pe2SetAspect = function(v){
         var sel = document.getElementById('proc-preview-aspect');
-        if (sel){ sel.value = v; if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange(); }
+        if (sel){
+          sel.value = v;
+          try { localStorage.setItem('proc_preview_aspect_v1', v); } catch (_) {}
+          if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
+        }
         _syncAspectBtns();
       };
 

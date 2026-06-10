@@ -1336,8 +1336,8 @@
       if (urlEl) urlEl.value = '';
     }
 
-    // Navigate to step 2 to allow user to review settings
-    procWizGo(2);
+    // Settings are ready; continue to the confirmation/start step.
+    procWizGo(3);
     
     // DO NOT auto-start processing — user must navigate to step 3 and click "Bắt đầu xử lý"
 
@@ -1571,7 +1571,12 @@
 
     // Title bar — chỉ hiện nếu titleEnabled
     const titleFontPx = titleEnabled ? Math.max(10, Math.round(wrapW * titleSizePct / 100)) : 0;
-    const titleBarH   = titleEnabled ? Math.round(titleFontPx * 2.4) : 0;
+    const sourceDisplayH = Math.round(wrapW * srcNH / srcNW);
+    const titleBarH = titleEnabled
+      ? (blurMode === 'expand'
+          ? Math.round(titleFontPx * 2.4)
+          : Math.max(40, Math.round(sourceDisplayH * 0.12)))
+      : 0;
 
     // Side blur width in preview pixels
     const sideW = Math.round(wrapW * blurWPct);
@@ -1594,21 +1599,13 @@
       vidW = wrapW;
       vidH = Math.round(wrapW * srcNH / srcNW);
       vidX = 0;
-      vidY = titleBarH;
+      vidY = 0;
       cW   = wrapW;
-      cH   = titleBarH + vidH;
+      cH   = vidH;
     }
 
     canvas.width  = cW;
     canvas.height = cH;
-    canvas.style.width  = '100%';
-    canvas.style.height = 'auto';
-    canvas.style.maxWidth = '100%';
-    // Khung preview tự co theo bố cục khung (có thanh tiêu đề / blur → tỉ lệ đổi)
-    if (wrap) wrap.style.aspectRatio = cW + ' / ' + cH;
-
-    // Store frame geometry for drag/hit-test in frame mode
-    window._frameGeom = { titleBarH, vidX, vidY, vidW, vidH, cW, cH };
 
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, cW, cH);
@@ -1786,7 +1783,8 @@
       const lH = Math.max(8, Math.round(vidH * logoSizePct));
       const lW = Math.round(lH * logoAR);
       const lX = Math.round(cW * logoLeftPct);
-      const lY = vidY + Math.round(vidH * logoTopPct);
+      const titleOffset = (blurMode === 'overlay' && titleEnabled) ? titleBarH : 0;
+      const lY = vidY + titleOffset + Math.round(vidH * logoTopPct);
       // Border radius: % of shorter side (0%=square, 50%=circle)
       const r  = Math.round(Math.min(lW, lH) * logoRadiusPct);
       ctx.save();
@@ -1799,6 +1797,81 @@
 
     // ── Subtitle overlay on canvas (same as subtitle-only mode) ──
     _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
+
+    // Compose in source space first, then place the complete foreground into
+    // the selected output aspect. This is the same order used by FFmpeg.
+    const aspectValue = document.getElementById('proc-preview-aspect')?.value || 'auto';
+    const sourceIsVertical = srcNH > srcNW;
+    const targetAspect = aspectValue === 'auto'
+      ? (sourceIsVertical ? '9x16' : '16x9')
+      : aspectValue;
+    const shouldConvert = (
+      (targetAspect === '9x16' && !sourceIsVertical) ||
+      (targetAspect === '16x9' && sourceIsVertical)
+    );
+
+    let finalCW = cW;
+    let finalCH = cH;
+    let finalVidX = vidX;
+    let finalVidY = vidY;
+    let finalVidW = vidW;
+    let finalVidH = vidH;
+    let finalTitleBarH = titleBarH;
+
+    if (shouldConvert) {
+      const composed = document.createElement('canvas');
+      composed.width = cW;
+      composed.height = cH;
+      composed.getContext('2d').drawImage(canvas, 0, 0);
+
+      finalCW = targetAspect === '9x16' ? 1080 : 1920;
+      finalCH = targetAspect === '9x16' ? 1920 : 1080;
+      canvas.width = finalCW;
+      canvas.height = finalCH;
+      const outCtx = canvas.getContext('2d');
+      outCtx.fillStyle = '#000';
+      outCtx.fillRect(0, 0, finalCW, finalCH);
+
+      if (document.getElementById('proc-aspect-blur-bg')?.checked) {
+        const coverScale = Math.max(finalCW / srcNW, finalCH / srcNH) * 1.12;
+        const bgW = srcNW * coverScale;
+        const bgH = srcNH * coverScale;
+        outCtx.save();
+        outCtx.filter = 'blur(28px) brightness(70%)';
+        outCtx.drawImage(srcImg, (finalCW - bgW) / 2, (finalCH - bgH) / 2, bgW, bgH);
+        outCtx.restore();
+      }
+
+      const fgScale = Math.min(finalCW / cW, finalCH / cH);
+      const fgW = cW * fgScale;
+      const fgH = cH * fgScale;
+      const fgX = (finalCW - fgW) / 2;
+      const fgY = (finalCH - fgH) / 2;
+      outCtx.drawImage(composed, fgX, fgY, fgW, fgH);
+
+      finalVidX = fgX + vidX * fgScale;
+      finalVidY = fgY + vidY * fgScale;
+      finalVidW = vidW * fgScale;
+      finalVidH = vidH * fgScale;
+      finalTitleBarH = titleBarH * fgScale;
+    }
+
+    canvas.style.width = '100%';
+    canvas.style.height = 'auto';
+    canvas.style.maxWidth = '100%';
+    if (wrap) {
+      wrap.style.aspectRatio = finalCW + ' / ' + finalCH;
+      wrap.dataset.letterbox = shouldConvert ? '1' : '';
+    }
+    window._frameGeom = {
+      titleBarH: finalTitleBarH,
+      vidX: finalVidX,
+      vidY: finalVidY,
+      vidW: finalVidW,
+      vidH: finalVidH,
+      cW: finalCW,
+      cH: finalCH
+    };
   }
 
   /** Draw a blue selection outline (+ resize handles for extra zones) on canvas */
@@ -1958,6 +2031,7 @@
   const _PROC_DEFAULTS_KEY      = 'proc_settings_defaults_v1';      // legacy single preset
   const _PROC_DEFAULTS_KEY_V2   = 'proc_settings_defaults_v2';      // { '9x16': {...}, '16x9': {...} }
   const _PROC_ASPECT_OVERRIDE_K = 'proc_aspect_override_v1';        // 'auto' | '9x16' | '16x9'
+  const _PROC_PREVIEW_ASPECT_K  = 'proc_preview_aspect_v1';
 
   // Currently active aspect ratio for save/restore. Set by:
   //  - aspect override dropdown
@@ -1972,7 +2046,9 @@
   }
 
   function _getAspectOverride() {
-    return document.getElementById('proc-aspect-override')?.value || 'auto';
+    return document.getElementById('proc-aspect-override')?.value
+      || document.getElementById('proc-preview-aspect')?.value
+      || 'auto';
   }
 
   function _updateAspectBadge() {
@@ -2059,7 +2135,6 @@
   // All field IDs to save (id → type)
   const _PROC_FIELDS = [
     // Aspect / Preview
-    { id:'proc-preview-aspect', type:'value' },
     { id:'proc-aspect-blur-bg', type:'checkbox' },
     // AI Model + Language
     { id:'proc-model',          type:'value' },
@@ -2196,8 +2271,20 @@
     try {
       // Pick initial preset to apply on first load
       const map = _loadPresetsMap();
-      // Check if saved preset has proc-preview-aspect
-      const initialAspect = '16x9';
+      const aspectSel = document.getElementById('proc-preview-aspect');
+      let selectedAspect = aspectSel?.value || 'auto';
+      try {
+        const savedAspect = localStorage.getItem(_PROC_PREVIEW_ASPECT_K);
+        if (savedAspect === 'auto' || savedAspect === '16x9' || savedAspect === '9x16') {
+          selectedAspect = savedAspect;
+        }
+      } catch (_) {}
+      if (aspectSel) aspectSel.value = selectedAspect;
+
+      const img = document.getElementById('sub-preview-img');
+      const initialAspect = selectedAspect === 'auto'
+        ? ((img && img.naturalWidth) ? _classifyAspect(img.naturalWidth, img.naturalHeight) : '16x9')
+        : selectedAspect;
       window._procActiveAspect = initialAspect;
       const data = map[initialAspect] || map['9x16'];
 
@@ -2225,6 +2312,7 @@
       if (typeof frameToggle === 'function') frameToggle();
       // Apply preview aspect on page load (reads from proc-preview-aspect select which was restored above)
       if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
+      if (typeof window._syncAspectBtns === 'function') window._syncAspectBtns();
     } catch (_) {}
   });
 
@@ -2232,6 +2320,7 @@
   function _onPreviewAspectChange() {
     const sel = document.getElementById('proc-preview-aspect');
     const value = sel?.value || 'auto';
+    try { localStorage.setItem(_PROC_PREVIEW_ASPECT_K, value); } catch (_) {}
 
     // Resolve effective aspect:
     //  - 'auto' → dùng aspect của video frame đã load (nếu có), mặc định 16x9

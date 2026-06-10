@@ -2444,6 +2444,7 @@ def write_ass_with_frame(
     #   "expand"  → thu nhỏ video + chừa dải tiêu đề phía trên + blur 2 bên ngoài
     #               (khớp với preview "Đẩy ra ngoài")
     frame_mode: str = "overlay",
+    target_aspect: str = "auto",
 ) -> Path:
     """
     Write ASS subtitle file with frame elements (title bar + side blur panels)
@@ -2545,16 +2546,30 @@ def write_ass_with_frame(
         f"0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1"
     )
 
+    target_aspect = str(target_aspect or "auto").strip().lower()
+    source_is_vertical = play_res_y > play_res_x
+    aspect_will_convert = target_aspect in ("9x16", "16x9") and (
+        (target_aspect == "9x16" and not source_is_vertical)
+        or (target_aspect == "16x9" and source_is_vertical)
+    )
+    final_w, final_h = (
+        ((1080, 1920) if target_aspect == "9x16" else (1920, 1080))
+        if aspect_will_convert else (out_w, out_h)
+    )
+
     # ── Build header ──────────────────────────────────────────────────────────
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {out_w}
 PlayResY: {out_h}
 WrapStyle: 0
-; Frame elements embedded: title bar + side blur panels (overlay on video)
+; Frame elements embedded: title bar + side blur panels (source-space composition)
 ; Frame mode: {frame_mode}
 ; Out width px: {out_w}
 ; Out height px: {out_h}
+; Final target aspect: {target_aspect}
+; Final output width px: {final_w}
+; Final output height px: {final_h}
 ; Vid x px: {vid_x}
 ; Vid y px: {vid_y}
 ; Vid w px: {vid_w}
@@ -4349,6 +4364,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             logo_radius_pct=_as_float(data.get("frame_logo_radius_pct"), 50.0),
                             logo_position=str(data.get("frame_logo_position") or "top-left"),
                             frame_mode=str(data.get("frame_blur_mode") or "overlay"),
+                            target_aspect=_target_aspect,
                         )
                         yield send(log=f"[Bước 3/5] ✓ ASS (có khung) {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                         yield send(log=f"[Bước 3/5] 🎞 Khung: title=\"{_frame_title[:25]}\", blur={_as_float(data.get('frame_blur_w_pct'), 15.0)}%, logo={'✓' if _logo_path else '✗'}", level="info")
