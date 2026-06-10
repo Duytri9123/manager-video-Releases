@@ -188,6 +188,58 @@
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
     }
+
+    /* ── Source layout: left sidebar nav + content pane ── */
+    #page-story .story-shell {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+    }
+    #page-story .story-nav {
+      flex: 0 0 210px;
+      width: 210px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-right: 16px;
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 8px;
+    }
+    #page-story .story-nav .platform-tab {
+      width: 100%;
+      margin: 0;
+      justify-content: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+    #page-story .story-nav .story-nav-ico { font-size: 16px; flex: 0 0 auto; }
+    #page-story .story-panes { flex: 1 1 auto; min-width: 0; }
+
+    @media (max-width: 760px) {
+      #page-story .story-shell { flex-direction: column; gap: 12px; }
+      #page-story .story-nav {
+        flex: none;
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding-right: 0;
+        padding-bottom: 10px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        position: static;
+      }
+      #page-story .story-nav .platform-tab {
+        width: auto;
+        flex: 1 1 auto;
+        min-width: 110px;
+        justify-content: center;
+      }
+    }
   </style>
 
   <!-- ═══════════════════════════════════════════════════════════════
@@ -198,13 +250,16 @@
       <span class="card-title">📖 Nguồn truyện tranh</span>
     </div>
     <div class="card-body">
-      <div class="platform-tabs">
-        <div class="platform-tab active" data-source="mangadex" onclick="storySwitchSource('mangadex')">🌐 Tìm truyện online</div>
-        <div class="platform-tab" data-source="urls"     onclick="storySwitchSource('urls')">🔗 Link chương trực tiếp</div>
-        <div class="platform-tab" data-source="comic"    onclick="storySwitchSource('comic')">🗂 Upload ZIP (OCR)</div>
-        <div class="platform-tab" data-source="novel"    onclick="storySwitchSource('novel')">📖 Tìm truyện chữ</div>
-        <div class="platform-tab" data-source="text"     onclick="storySwitchSource('text')">🤖 Tạo truyện AI</div>
-      </div>
+      <div class="story-shell">
+        <nav class="story-nav platform-tabs">
+          <div class="platform-tab active" data-source="mangadex" onclick="storySwitchSource('mangadex')"><span class="story-nav-ico">🌐</span><span>Tìm truyện online</span></div>
+          <div class="platform-tab" data-source="urls"     onclick="storySwitchSource('urls')"><span class="story-nav-ico">🔗</span><span>Link chương trực tiếp</span></div>
+          <div class="platform-tab" data-source="comic"    onclick="storySwitchSource('comic')"><span class="story-nav-ico">🗂</span><span>Upload ZIP (OCR)</span></div>
+          <div class="platform-tab" data-source="novel"    onclick="storySwitchSource('novel')"><span class="story-nav-ico">📖</span><span>Tìm truyện chữ</span></div>
+          <div class="platform-tab" data-source="text"     onclick="storySwitchSource('text')"><span class="story-nav-ico">🤖</span><span>Tạo truyện AI</span></div>
+        </nav>
+
+        <div class="story-panes">
 
       <!-- ── 1A. MangaPlus catalog search ─────────────────────────────
            Single-source: chỉ MangaPlus (bản quyền chính chủ Shueisha,
@@ -519,23 +574,26 @@
                     <button class="btn btn-secondary btn-sm" type="button" onclick="storyAiAddChar()">＋ Thêm</button>
                   </div>
                   <div id="sw-ai-chars">
-                    <div class="sw-ai-char-row" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:8px">
-                      <div style="display:grid;grid-template-columns:120px 1fr 32px;gap:8px;align-items:center">
-                        <input type="text" placeholder="Tên nhân vật" class="sw-ai-char-name" style="font-size:12px;padding:6px 8px;font-weight:700">
-                        <input type="text" placeholder="Mô tả ngoại hình (vd: nam 25t, tóc đen, áo hoodie xám)" class="sw-ai-char-desc" style="font-size:12px;padding:6px 8px">
-                        <button class="btn btn-danger btn-sm" type="button" onclick="this.closest('.sw-ai-char-row').remove()" style="padding:4px 8px" title="Xoá nhân vật">✕</button>
-                      </div>
-                      <div class="char-refs-container" style="display:flex;flex-direction:column;gap:4px;padding-top:4px;border-top:1px dashed var(--border)">
-                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                          <span class="text-xs font-semibold text-muted">🖼️ Ảnh tham chiếu nhân vật (Style/Face References):</span>
-                          <div style="display:flex;gap:4px">
-                            <input class="sw-ai-char-ref-file" type="file" accept="image/*" multiple style="display:none" onchange="storyAiUploadCharRef(this)">
-                            <button class="btn btn-secondary btn-sm" type="button" onclick="this.previousElementSibling.click()" style="font-size:10px;padding:2px 8px">📤 Thêm ảnh</button>
-                          </div>
+                    <div class="sw-ai-char-row" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:10px">
+                      <div style="display:flex;gap:10px;align-items:flex-start">
+                        <!-- LEFT: action buttons -->
+                        <div class="char-refs-container" style="flex:0 0 124px;width:124px;display:flex;flex-direction:column;gap:6px">
+                          <input class="sw-ai-char-ref-file" type="file" accept="image/*" multiple style="display:none" onchange="storyAiUploadCharRef(this)">
+                          <button class="btn btn-secondary btn-sm" type="button" onclick="this.closest('.char-refs-container').querySelector('.sw-ai-char-ref-file').click()" style="font-size:11px;padding:5px 6px">📤 Ảnh mẫu</button>
+                          <button class="btn btn-outline-info btn-sm sw-ai-char-genimg-btn" type="button" onclick="storyAiGenerateCharImage(this)" style="font-size:11px;padding:5px 6px" title="AI tạo ảnh nhân vật chuẩn từ tên + mô tả + ảnh mẫu, dùng làm tham chiếu xuyên suốt">🎨 Tạo ảnh AI</button>
+                          <input type="hidden" class="sw-ai-char-ref-urls" value="[]">
                         </div>
-                        <div class="sw-ai-char-refs-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"></div>
-                        <input type="hidden" class="sw-ai-char-ref-urls" value="[]">
+                        <!-- RIGHT: name + description -->
+                        <div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:8px">
+                          <div style="display:flex;gap:8px;align-items:center">
+                            <input type="text" placeholder="Tên nhân vật" class="sw-ai-char-name" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;font-weight:700">
+                            <button class="btn btn-danger btn-sm" type="button" onclick="this.closest('.sw-ai-char-row').remove()" style="padding:4px 8px" title="Xoá nhân vật">✕</button>
+                          </div>
+                          <textarea placeholder="Mô tả ngoại hình (vd: nam 25t, tóc đen, áo hoodie xám, mắt nâu, cao gầy...)" class="sw-ai-char-desc" rows="3" style="font-size:12px;padding:6px 8px;resize:vertical;font-family:inherit"></textarea>
+                        </div>
                       </div>
+                      <!-- Full-width reference image gallery: 5 per row, click to view -->
+                      <div class="sw-ai-char-refs-preview" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px"></div>
                     </div>
                   </div>
                 </div>
@@ -583,6 +641,23 @@
                   <div id="sw-ai-ref-image-preview-wrap" class="hidden" style="margin-top:8px">
                     <img id="sw-ai-ref-image-preview" src="" style="max-height:120px;border-radius:6px;border:1px solid var(--border);object-fit:cover">
                   </div>
+                </div>
+
+                <!-- Scene / background references taken from the comic -->
+                <div class="field" style="margin-bottom:12px">
+                  <label style="font-weight:700">🏞️ Ảnh tham chiếu bối cảnh / khung cảnh từ truyện <span class="text-xs text-muted">(giúp AI tái hiện đúng bối cảnh, đồ vật, không gian)</span></label>
+                  <div class="alert-info text-xs" style="margin:6px 0;line-height:1.5">
+                    Thêm ảnh khung cảnh lấy từ truyện tranh gốc (nền phòng, đường phố, lâu đài, nội thất...). AI sẽ dùng chúng làm tham chiếu môi trường cho ảnh <b>anchor</b> và mọi cảnh, để vẽ bối cảnh xung quanh chính xác hơn thay vì bịa ra.
+                  </div>
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <input id="sw-ai-scene-ref-file" type="file" accept="image/*" multiple style="display:none" onchange="storyAiUploadSceneRef(this)">
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="document.getElementById('sw-ai-scene-ref-file').click()" style="padding:6px 12px;font-size:12px">📤 Thêm ảnh bối cảnh</button>
+                    <span class="text-xs text-muted">hoặc dán link:</span>
+                    <input id="sw-ai-scene-ref-url-input" type="text" placeholder="https://...jpg" style="flex:1;min-width:180px;font-size:12px;padding:6px 8px" onkeydown="if(event.key==='Enter'){event.preventDefault();storyAiAddSceneRefUrl();}">
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="storyAiAddSceneRefUrl()" style="padding:6px 10px;font-size:12px">＋ Thêm link</button>
+                  </div>
+                  <div id="sw-ai-scene-refs-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+                  <input type="hidden" id="sw-ai-scene-refs" value="[]">
                 </div>
 
                 <!-- Image model -->
@@ -705,6 +780,8 @@
           </div>
         </div>
       </div>
+        </div><!-- /story-panes -->
+      </div><!-- /story-shell -->
     </div>
   </div>
 

@@ -1389,17 +1389,19 @@ def generate_thumbnail_ai():
     img_b64_data = None
     used_provider = None
 
+    nr_error = None  # lỗi thật từ 9Router (nếu có) để báo cho người dùng
+
     # Phân loại lựa chọn model của người dùng
     _model_lc = image_model.lower()
+    explicit_choice = bool(image_model and image_model != "auto")
     force_gemini = _model_lc.startswith(("gemini", "imagen"))
-    forced_9router_model = None
-    if image_model and image_model != "auto" and not force_gemini:
-        forced_9router_model = image_model  # vd: cx/gpt-5.5-image
+    # User chọn 1 model 9Router cụ thể (vd: nb/nanobanana-flash, cx/gpt-5.5-image)
+    forced_9router_model = image_model if (explicit_choice and not force_gemini) else None
 
     # Priority 1: 9Router — dùng khi auto hoặc user chọn 1 model 9Router (bỏ qua nếu ép Gemini)
     if nr_endpoint and nr_key and not force_gemini:
+        model_id = (forced_9router_model or nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
         try:
-            model_id = (forced_9router_model or nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
             size_map = {"9:16": "1024x1792", "16:9": "1792x1024", "1:1": "1024x1024"}
             size_str = size_map.get(aspect_ratio, "1024x1792")
             payload = {
@@ -1407,7 +1409,7 @@ def generate_thumbnail_ai():
                 "prompt": gen_prompt[:2000],
                 "n": 1,
                 "size": size_str,
-                "quality": "standard",
+                "quality": "auto",
                 "response_format": "b64_json",
             }
             if frame_b64:
@@ -1433,20 +1435,42 @@ def generate_thumbnail_ai():
                 with urllib.request.urlopen(img_data["url"], timeout=180) as dl:
                     img_b64_data = base64.b64encode(dl.read()).decode("ascii")
                 used_provider = f"9Router ({model_id})"
-        except Exception:
-            img_b64_data = None  # fall through to Gemini
+            else:
+                nr_error = ((rdata.get("error") or {}).get("message")
+                            if isinstance(rdata.get("error"), dict) else rdata.get("error")) \
+                           or "9Router không trả về ảnh"
+        except urllib.error.HTTPError as e:
+            try:
+                ebody = e.read().decode("utf-8", "replace")
+                ej = _json.loads(ebody)
+                nr_error = (ej.get("error") or {}).get("message") or ebody[:300]
+            except Exception:
+                nr_error = f"HTTP {e.code}"
+        except Exception as e:
+            nr_error = str(e)[:300]
 
-    # Priority 2: Gemini fallback
+    # Nếu user CHỌN model 9Router cụ thể mà thất bại → báo đúng lỗi, KHÔNG fallback Gemini
+    # (tránh hiện lỗi quota Gemini gây hiểu lầm khi user đã chọn nanobanana/codex…)
+    if forced_9router_model and not img_b64_data:
+        return jsonify({
+            "ok": False,
+            "error": f"Model '{forced_9router_model}' (9Router) lỗi: {nr_error or 'không tạo được ảnh'}",
+        }), 502
+
+    # Priority 2: Gemini — chỉ khi auto fallback, hoặc user chọn model Gemini
     if not img_b64_data:
         if not api_key:
-            return jsonify({"ok": False, "error": "Chưa có 9Router cũng như Gemini API key"}), 400
+            return jsonify({"ok": False, "error": nr_error or "Chưa có 9Router cũng như Gemini API key"}), 400
         gemini_model = image_model if (force_gemini and _model_lc.startswith("gemini")) else "gemini-2.5-flash-image"
         result = _ai_generate_thumbnail_image(api_key, gen_prompt, frame_b64, aspect_ratio, gemini_model)
         if result.get("ok"):
             img_b64_data = result["image_b64"]
             used_provider = f"Gemini ({gemini_model})"
         else:
-            return jsonify({"ok": False, "error": result.get("error", "AI thumbnail generation failed")}), 500
+            msg = result.get("error", "AI thumbnail generation failed")
+            if nr_error:
+                msg = f"9Router lỗi: {nr_error} · Gemini lỗi: {msg}"
+            return jsonify({"ok": False, "error": msg}), 500
 
     # Save to file
     img_data = base64.b64decode(img_b64_data)

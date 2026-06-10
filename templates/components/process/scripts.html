@@ -1364,7 +1364,46 @@
   ════════════════════════════════════════════════════════ */
   window._frameLogoImg  = null;
   window._frameLogoFile = null;
+  window._frameLogoIsGif = false;   // logo hiện tại có phải GIF động không
+  window._frameAnimRAF  = null;     // id của vòng lặp animation (GIF)
   window._rawFrameB64   = null; // Ảnh gốc từ video (không có logo) — dùng cho AI thumbnail
+
+  /* Vòng lặp vẽ lại canvas để GIF logo chạy liên tục.
+     drawImage lấy đúng khung GIF mà <img> đang hiển thị, nên vẽ lại đều đặn
+     sẽ làm GIF "động". Chỉ chạy khi: bật khung + logo là GIF.
+     Việc chỉnh các thành phần khung không làm gián đoạn vòng lặp này. */
+  function _frameAnimLoop(ts) {
+    const enabled = document.getElementById('frame-enabled')?.checked;
+    if (!enabled || !window._frameLogoIsGif || !window._frameLogoImg) {
+      window._frameAnimRAF = null;
+      return;
+    }
+    if (!window._frameAnimLast || (ts - window._frameAnimLast) >= 50) { // ~20 fps
+      window._frameAnimLast = ts;
+      const srcImg = document.getElementById('sub-preview-img');
+      if (srcImg && srcImg.complete && srcImg.naturalWidth) {
+        _drawFramePreview(srcImg);
+      }
+    }
+    window._frameAnimRAF = requestAnimationFrame(_frameAnimLoop);
+  }
+  function _frameStartAnim() {
+    if (window._frameAnimRAF) return;            // đang chạy rồi
+    if (!window._frameLogoIsGif) return;          // chỉ GIF mới cần
+    window._frameAnimLast = 0;
+    window._frameAnimRAF = requestAnimationFrame(_frameAnimLoop);
+  }
+  function _frameStopAnim() {
+    if (window._frameAnimRAF) { cancelAnimationFrame(window._frameAnimRAF); window._frameAnimRAF = null; }
+  }
+  /* Gán logo cho preview + tự bật/tắt animation tùy GIF. */
+  function _setFrameLogo(img, isGif) {
+    window._frameLogoImg = img;
+    window._frameLogoIsGif = !!isGif;
+    if (isGif) _frameStartAnim(); else _frameStopAnim();
+    framePreviewUpdate();
+  }
+  function _isGifSrc(s) { return /\.gif(\?|$)/i.test(String(s || '')); }
 
   function frameSetLogo(input) {
     const file = input.files?.[0];
@@ -1406,9 +1445,8 @@
           
           // Load the new logo image for preview
           const img = new Image();
-          img.onload = () => { 
-            window._frameLogoImg = img; 
-            framePreviewUpdate(); 
+          img.onload = () => {
+            _setFrameLogo(img, (file.type === 'image/gif') || _isGifSrc(file.name) || _isGifSrc(url));
           };
           img.src = url + '?t=' + Date.now();  // Add timestamp to bypass cache
         } else {
@@ -1428,9 +1466,8 @@
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
-      img.onload = () => { 
-        window._frameLogoImg = img; 
-        framePreviewUpdate(); 
+      img.onload = () => {
+        _setFrameLogo(img, (file.type === 'image/gif') || _isGifSrc(file.name));
       };
       img.src = e.target.result;
     };
@@ -1457,9 +1494,8 @@
         
         // Load the image for preview using URL
         const img = new Image();
-        img.onload = () => { 
-          window._frameLogoImg = img; 
-          framePreviewUpdate(); 
+        img.onload = () => {
+          _setFrameLogo(img, _isGifSrc(savedUrl) || _isGifSrc(savedPath));
         };
         img.onerror = () => {
           // If saved path no longer exists, clear localStorage and show default
@@ -2313,8 +2349,10 @@
         img.style.pointerEvents = 'none';
       }
       framePreviewUpdate();
+      _frameStartAnim();   // GIF logo chạy lại khi bật khung
     } else {
       // Subtitle mode: hide frame canvas, show img + overlays
+      _frameStopAnim();    // dừng vòng lặp GIF khi tắt khung
       if (canvas) canvas.style.display = 'none';
       if (img && img.src && img.src !== window.location.href) {
         img.style.display = 'block';

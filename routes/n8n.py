@@ -525,6 +525,20 @@ def n8n_flow_run():
             )
             return {"_items": items, "_parallel": parallel, "_concurrency": concurrency}
 
+        if ntype == "tv.pick_videos":
+            # Chạy nền (cron) không có UI → tự chọn tất cả video từ node trước.
+            key = cfg.get("source", "videos") or "videos"
+            lst = []
+            if isinstance(prev, list):
+                lst = prev
+            elif isinstance(prev, dict):
+                lst = (prev.get(key) or prev.get("videos") or prev.get("items")
+                       or prev.get("data") or [])
+            if not isinstance(lst, list):
+                lst = []
+            log_lines.append(f"✅ Chọn video: tự chọn tất cả {len(lst)} (chạy nền)")
+            return {"items": lst, "videos": lst, "count": len(lst)}
+
         # Nodes with local endpoint
         from . import n8n as _self_mod  # noqa — unused, just ensures defs are available
         # Map known node types to their endpoint+payload

@@ -1149,7 +1149,7 @@ const N8N_TEMPLATES = [
       const n = {
         t:  _tpl(0, 0, 'trigger.schedule', { cron: '0 9 * * *' }),
         uv: _tpl(1, 0, 'tv.user_videos', { url: 'https://www.douyin.com/user/...', page: '1' }),
-        lp: _tpl(2, 0, 'logic.loop', { array: '{{input.items}}', limit: '5', mode: 'Song song', concurrency: '2' }),
+        lp: _tpl(2, 0, 'logic.loop', { array: '{{input.videos}}', limit: '5', mode: 'Song song', concurrency: '2' }),
         pr: _tpl(3, 0, 'tv.process', { payload: '{{input}}' }),
         pb: _tpl(4, 0, 'tv.publish', { platform: 'tiktok' }),
       };
@@ -1165,12 +1165,13 @@ const N8N_TEMPLATES = [
       const n = {
         t:  _tpl(0, 0, 'trigger.manual'),
         uv: _tpl(1, 0, 'tv.user_videos', { url: 'https://www.douyin.com/user/...', page: '1' }),
-        lp: _tpl(2, 0, 'logic.loop', { array: '{{input.items}}', limit: '10', mode: 'Song song', concurrency: '3' }),
-        tr: _tpl(3, 0, 'ai.translate', { text: '{{input.title}}', provider: 'auto' }),
-        ts: _tpl(4, 0, 'ai.tts_file', { text: '{{input.result}}', tts_engine: 'edge-tts', tts_voice: 'vi-VN-HoaiMyNeural' }),
-        pr: _tpl(5, 0, 'tv.process', { payload: '{{input}}' }),
+        pk: _tpl(2, 0, 'tv.pick_videos', { source: 'videos' }),
+        lp: _tpl(3, 0, 'logic.loop', { array: '{{input.items}}', limit: '10', mode: 'Song song', concurrency: '3' }),
+        tr: _tpl(4, 0, 'ai.translate', { text: '{{input.desc}}', provider: 'auto' }),
+        ts: _tpl(5, 0, 'ai.tts_file', { text: '{{input.result}}', tts_engine: 'edge-tts', tts_voice: 'vi-VN-HoaiMyNeural' }),
+        pr: _tpl(6, 0, 'tv.process', { payload: '{{input}}' }),
       };
-      return { nodes: n, conns: _chain(['t', 'uv', 'lp', 'tr', 'ts', 'pr']) };
+      return { nodes: n, conns: _chain(['t', 'uv', 'pk', 'lp', 'tr', 'ts', 'pr']) };
     },
   },
   {

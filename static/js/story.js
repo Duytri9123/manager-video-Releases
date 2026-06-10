@@ -1391,52 +1391,22 @@
   function addChar() {
     const wrap = document.getElementById('sw-ai-chars');
     if (!wrap) return;
-    
+
     const card = _el('div', {
       class: 'sw-ai-char-row',
-      style: 'background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:8px'
+      style: 'background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:10px'
     });
 
+    // ── Top row: buttons (left) + name/description (right) ──────────────
     const topRow = _el('div', {
-      style: 'display:grid;grid-template-columns:120px 1fr 32px;gap:8px;align-items:center'
+      style: 'display:flex;gap:10px;align-items:flex-start'
     });
-    const nameInput = _el('input', {
-      type: 'text',
-      placeholder: 'Tên nhân vật',
-      class: 'sw-ai-char-name',
-      style: 'font-size:12px;padding:6px 8px;font-weight:700'
-    });
-    const descInput = _el('input', {
-      type: 'text',
-      placeholder: 'Mô tả ngoại hình (vd: nam 25t, tóc đen, áo hoodie xám)',
-      class: 'sw-ai-char-desc',
-      style: 'font-size:12px;padding:6px 8px'
-    });
-    const delBtn = _el('button', {
-      class: 'btn btn-danger btn-sm',
-      type: 'button',
-      style: 'padding:4px 8px',
-      title: 'Xoá nhân vật'
-    }, '✕');
-    delBtn.addEventListener('click', () => card.remove());
-    
-    topRow.appendChild(nameInput);
-    topRow.appendChild(descInput);
-    topRow.appendChild(delBtn);
 
+    // Left column: action buttons
     const refsContainer = _el('div', {
       class: 'char-refs-container',
-      style: 'display:flex;flex-direction:column;gap:4px;padding-top:4px;border-top:1px dashed var(--border)'
+      style: 'flex:0 0 124px;width:124px;display:flex;flex-direction:column;gap:6px'
     });
-    
-    const labelRow = _el('div', {
-      style: 'display:flex;align-items:center;justify-content:space-between;gap:8px'
-    });
-    const labelSpan = _el('span', {
-      class: 'text-xs font-semibold text-muted'
-    }, '🖼️ Ảnh tham chiếu nhân vật (Style/Face References):');
-    
-    const btnWrap = _el('div', { style: 'display:flex;gap:4px' });
     const fileInput = _el('input', {
       class: 'sw-ai-char-ref-file',
       type: 'file',
@@ -1445,36 +1415,78 @@
       style: 'display:none'
     });
     fileInput.addEventListener('change', () => uploadCharRef(fileInput));
-    
-    const addBtn = _el('button', {
+
+    const uploadBtn = _el('button', {
       class: 'btn btn-secondary btn-sm',
       type: 'button',
-      style: 'font-size:10px;padding:2px 8px'
-    }, '📤 Thêm ảnh');
-    addBtn.addEventListener('click', () => fileInput.click());
-    
-    btnWrap.appendChild(fileInput);
-    btnWrap.appendChild(addBtn);
-    labelRow.appendChild(labelSpan);
-    labelRow.appendChild(btnWrap);
-    
-    const previewDiv = _el('div', {
-      class: 'sw-ai-char-refs-preview',
-      style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:4px'
-    });
+      style: 'font-size:11px;padding:5px 6px'
+    }, '📤 Ảnh mẫu');
+    uploadBtn.addEventListener('click', () => fileInput.click());
+
+    const genBtn = _el('button', {
+      class: 'btn btn-outline-info btn-sm sw-ai-char-genimg-btn',
+      type: 'button',
+      style: 'font-size:11px;padding:5px 6px',
+      title: 'AI tạo ảnh nhân vật chuẩn từ tên + mô tả + ảnh mẫu, dùng làm tham chiếu xuyên suốt'
+    }, '🎨 Tạo ảnh AI');
+    genBtn.addEventListener('click', () => storyAiGenerateCharImage(genBtn));
+
     const hiddenUrls = _el('input', {
       type: 'hidden',
       class: 'sw-ai-char-ref-urls',
       value: '[]'
     });
-    
-    refsContainer.appendChild(labelRow);
-    refsContainer.appendChild(previewDiv);
+
+    refsContainer.appendChild(fileInput);
+    refsContainer.appendChild(uploadBtn);
+    refsContainer.appendChild(genBtn);
     refsContainer.appendChild(hiddenUrls);
 
+    // Right column: name + description
+    const rightCol = _el('div', {
+      style: 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:8px'
+    });
+    const nameRow = _el('div', {
+      style: 'display:flex;gap:8px;align-items:center'
+    });
+    const nameInput = _el('input', {
+      type: 'text',
+      placeholder: 'Tên nhân vật',
+      class: 'sw-ai-char-name',
+      style: 'flex:1;min-width:0;font-size:12px;padding:6px 8px;font-weight:700'
+    });
+    const delBtn = _el('button', {
+      class: 'btn btn-danger btn-sm',
+      type: 'button',
+      style: 'padding:4px 8px',
+      title: 'Xoá nhân vật'
+    }, '✕');
+    delBtn.addEventListener('click', () => card.remove());
+    nameRow.appendChild(nameInput);
+    nameRow.appendChild(delBtn);
+
+    const descInput = _el('textarea', {
+      placeholder: 'Mô tả ngoại hình (vd: nam 25t, tóc đen, áo hoodie xám, mắt nâu, cao gầy...)',
+      class: 'sw-ai-char-desc',
+      rows: '3',
+      style: 'font-size:12px;padding:6px 8px;resize:vertical;font-family:inherit'
+    });
+
+    rightCol.appendChild(nameRow);
+    rightCol.appendChild(descInput);
+
+    topRow.appendChild(refsContainer);
+    topRow.appendChild(rightCol);
+
+    // ── Full-width reference image gallery: 5 per row, click to view ────
+    const previewDiv = _el('div', {
+      class: 'sw-ai-char-refs-preview',
+      style: 'display:grid;grid-template-columns:repeat(5,1fr);gap:8px'
+    });
+
     card.appendChild(topRow);
-    card.appendChild(refsContainer);
-    
+    card.appendChild(previewDiv);
+
     wrap.appendChild(card);
   }
 
@@ -1763,11 +1775,12 @@
         _log('▶ Bước 2.5/3: Sinh ảnh anchor (master shot) — dùng làm tham chiếu xuyên suốt câu chuyện', 'info');
         const tA = Date.now();
         const customRef = document.getElementById('sw-ai-ref-image-url')?.value?.trim() || '';
+        const sceneRefs = _getSceneRefs();
         const anchorRes = await API.post('/api/story/ai_generate_anchor', {
           characters, location, art_style: artStyle, genre,
           model: imgModel, quality: imgQuality, ratio: imgRatio, seed: storySeed,
           session_id: window._aiSessionId || '',
-          reference_image_urls: customRef ? [customRef] : [],
+          reference_image_urls: [...(customRef ? [customRef] : []), ...sceneRefs],
         }, { silent: true });
         if (anchorRes.ok && anchorRes.image_url) {
           anchorUrl = anchorRes.image_url;
@@ -1793,12 +1806,13 @@
           try {
             const tP = Date.now();
             const customRef = document.getElementById('sw-ai-ref-image-url')?.value?.trim() || '';
+            const sceneRefs = _getSceneRefs();
             const r = await API.post('/api/story/ai_generate_portrait', {
               name: c.name, description: c.description || '',
               art_style: artStyle, model: imgModel, quality: imgQuality,
               ratio: '1:1', seed: storySeed, anchor_url: anchorUrl,
               session_id: window._aiSessionId || '',
-              reference_image_urls: customRef ? [customRef] : [],
+              reference_image_urls: [...(customRef ? [customRef] : []), ...(c.reference_images || []), ...sceneRefs],
             }, { silent: true });
             if (r.ok && r.image_url) {
               portraits[c.name] = r.image_url;
@@ -1863,6 +1877,15 @@
           if (refs.length >= 3) break;
           if (portraits[name] && !refs.includes(portraits[name])) {
             refs.push(portraits[name]);
+          }
+        }
+
+        // Scenery-heavy scenes (no character detected) lean on the background
+        // references pulled from the source comic so the environment matches.
+        if (!detectedNames.length) {
+          for (const sref of _getSceneRefs()) {
+            if (refs.length >= 4) break;
+            if (sref && !refs.includes(sref)) refs.push(sref);
           }
         }
 
@@ -3429,9 +3452,6 @@
     const files = fileInput.files;
     if (!files.length) return;
     const row = fileInput.closest('.sw-ai-char-row');
-    const previewWrap = row.querySelector('.sw-ai-char-refs-preview');
-    const urlsInput = row.querySelector('.sw-ai-char-ref-urls');
-    let urls = JSON.parse(urlsInput.value || '[]');
 
     for (let f of files) {
       const fd = new FormData();
@@ -3445,33 +3465,7 @@
           .then(res => res.json());
 
         if (!r.ok) throw new Error(r.error || 'Upload thất bại');
-        
-        urls.push(r.image_url);
-        
-        // Add thumbnail preview
-        const thumb = _el('div', {
-          style: 'position:relative;width:48px;height:48px;border-radius:4px;border:1px solid var(--border);overflow:hidden;background:var(--bg3)'
-        });
-        const img = _el('img', {
-          src: r.image_url,
-          style: 'width:100%;height:100%;object-fit:cover'
-        });
-        const delBtn = _el('button', {
-          type: 'button',
-          style: 'position:absolute;top:0;right:0;background:rgba(0,0,0,0.6);color:#fff;border:none;width:14px;height:14px;font-size:9px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0',
-          title: 'Xoá ảnh'
-        }, '✕');
-        
-        delBtn.addEventListener('click', () => {
-          thumb.remove();
-          urls = urls.filter(u => u !== r.image_url);
-          urlsInput.value = JSON.stringify(urls);
-        });
-        
-        thumb.appendChild(img);
-        thumb.appendChild(delBtn);
-        previewWrap.appendChild(thumb);
-        
+        _addCharRefThumbnail(row, r.image_url);
       } catch (e) {
         _toast(String(e.message || e), 'error');
         _log(`✗ Lỗi tải ảnh tham chiếu nhân vật: ${e.message || e}`, 'error');
@@ -3479,9 +3473,175 @@
         LoadingUI.stop && LoadingUI.stop();
       }
     }
-    
-    urlsInput.value = JSON.stringify(urls);
     fileInput.value = ''; // Reset file input
+  }
+
+  // ── Add a thumbnail (+ delete control, click-to-view) to a char row ───
+  function _addCharRefThumbnail(row, url) {
+    const previewWrap = row.querySelector('.sw-ai-char-refs-preview');
+    const urlsInput = row.querySelector('.sw-ai-char-ref-urls');
+    if (!previewWrap || !urlsInput || !url) return;
+    let urls = [];
+    try { urls = JSON.parse(urlsInput.value || '[]'); } catch (_) { urls = []; }
+    if (!urls.includes(url)) urls.push(url);
+    urlsInput.value = JSON.stringify(urls);
+
+    const thumb = _el('div', {
+      style: 'position:relative;width:100%;aspect-ratio:3/4;border-radius:6px;border:1px solid var(--border);overflow:hidden;background:var(--bg3);cursor:zoom-in'
+    });
+    const img = _el('img', { src: url, style: 'width:100%;height:100%;object-fit:cover' });
+    thumb.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
+    const delBtn = _el('button', {
+      type: 'button',
+      style: 'position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:#fff;border:none;width:18px;height:18px;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;border-radius:4px',
+      title: 'Xoá ảnh'
+    }, '✕');
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      thumb.remove();
+      let cur = [];
+      try { cur = JSON.parse(urlsInput.value || '[]'); } catch (_) { cur = []; }
+      urlsInput.value = JSON.stringify(cur.filter(u => u !== url));
+    });
+    thumb.appendChild(img);
+    thumb.appendChild(delBtn);
+    previewWrap.appendChild(thumb);
+  }
+
+  // ── Generate a clean "standard" character image from the row's refs ───
+  // Uses /ai_generate_portrait which builds a consistent front-view prompt,
+  // then registers the result as a new reference image for that character so
+  // every later scene anchors to the same face/appearance.
+  async function storyAiGenerateCharImage(btn) {
+    const row = btn.closest('.sw-ai-char-row');
+    if (!row) return;
+    const name = (row.querySelector('.sw-ai-char-name')?.value || '').trim();
+    const desc = (row.querySelector('.sw-ai-char-desc')?.value || '').trim();
+    if (!name && !desc) {
+      return _toast('Nhập tên hoặc mô tả nhân vật trước khi tạo ảnh.', 'warning');
+    }
+    const urlsInput = row.querySelector('.sw-ai-char-ref-urls');
+    let refUrls = [];
+    try { refUrls = JSON.parse(urlsInput?.value || '[]'); } catch (_) { refUrls = []; }
+
+    const artStyle = document.getElementById('sw-ai-art-style')?.value || '';
+    const imgModel = document.getElementById('sw-ai-img-model')?.value || 'cx/gpt-5.5-image';
+    const imgQuality = document.getElementById('sw-ai-img-quality')?.value || 'standard';
+    const sceneRefs = _getSceneRefs();
+
+    // Ensure a session so the portrait lands in the same folder as the story.
+    try {
+      if (!window._aiSessionId) {
+        const sidRes = await API.post('/api/story/ai_session_new', {}, { silent: true });
+        window._aiSessionId = (sidRes && sidRes.ok) ? sidRes.session_id : '';
+      }
+    } catch { /* non-fatal */ }
+
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳...';
+    try {
+      LoadingUI.start && LoadingUI.start(`Đang tạo ảnh nhân vật ${name || ''}...`);
+      const r = await API.post('/api/story/ai_generate_portrait', {
+        name: name || 'nhân vật',
+        description: desc,
+        art_style: artStyle,
+        model: imgModel,
+        quality: imgQuality,
+        ratio: '1:1',
+        seed: 42,
+        session_id: window._aiSessionId || '',
+        reference_image_urls: [...refUrls, ...sceneRefs],
+      }, { silent: true });
+      if (!r.ok || !r.image_url) throw new Error(r.error || 'Không tạo được ảnh');
+      _addCharRefThumbnail(row, r.image_url);
+      _toast(`Đã tạo ảnh nhân vật ${name || ''}.`, 'success');
+      _log(`🎨 Tạo ảnh nhân vật ${name}: ${r.image_url}`, 'success');
+    } catch (e) {
+      _toast(String(e.message || e), 'error');
+      _log(`✗ Lỗi tạo ảnh nhân vật: ${e.message || e}`, 'error');
+    } finally {
+      LoadingUI.stop && LoadingUI.stop();
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  }
+
+  // ── Scene / background reference images (taken from the comic) ─────────
+  function _getSceneRefs() {
+    const input = document.getElementById('sw-ai-scene-refs');
+    if (!input) return [];
+    try { return JSON.parse(input.value || '[]'); } catch (_) { return []; }
+  }
+
+  function _setSceneRefs(urls) {
+    const input = document.getElementById('sw-ai-scene-refs');
+    if (input) input.value = JSON.stringify(urls || []);
+  }
+
+  function _renderSceneRefs() {
+    const wrap = document.getElementById('sw-ai-scene-refs-preview');
+    if (!wrap) return;
+    const urls = _getSceneRefs();
+    wrap.replaceChildren();
+    if (!urls.length) return;
+    urls.forEach(url => {
+      const thumb = _el('div', {
+        style: 'position:relative;width:72px;height:72px;border-radius:6px;border:1px solid var(--border);overflow:hidden;background:var(--bg3)'
+      });
+      const img = _el('img', { src: url, style: 'width:100%;height:100%;object-fit:cover' });
+      const delBtn = _el('button', {
+        type: 'button',
+        style: 'position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:#fff;border:none;width:16px;height:16px;font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;border-radius:3px',
+        title: 'Xoá'
+      }, '✕');
+      delBtn.addEventListener('click', () => {
+        _setSceneRefs(_getSceneRefs().filter(u => u !== url));
+        _renderSceneRefs();
+      });
+      thumb.appendChild(img);
+      thumb.appendChild(delBtn);
+      wrap.appendChild(thumb);
+    });
+  }
+
+  async function storyAiUploadSceneRef(fileInput) {
+    const files = fileInput.files;
+    if (!files || !files.length) return;
+    const urls = _getSceneRefs();
+    for (let f of files) {
+      const fd = new FormData();
+      fd.append('file', f);
+      try {
+        LoadingUI.start && LoadingUI.start('Đang tải ảnh bối cảnh...');
+        const csrf = document.cookie.match(/dt_csrf=([^;]*)/)?.[1] || '';
+        const headers = csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {};
+        const r = await fetch('/api/story/ai_upload_ref', { method: 'POST', body: fd, headers })
+          .then(res => res.json());
+        if (!r.ok) throw new Error(r.error || 'Upload thất bại');
+        if (!urls.includes(r.image_url)) urls.push(r.image_url);
+      } catch (e) {
+        _toast(String(e.message || e), 'error');
+        _log(`✗ Lỗi tải ảnh bối cảnh: ${e.message || e}`, 'error');
+      } finally {
+        LoadingUI.stop && LoadingUI.stop();
+      }
+    }
+    _setSceneRefs(urls);
+    _renderSceneRefs();
+    fileInput.value = '';
+  }
+
+  function storyAiAddSceneRefUrl() {
+    const input = document.getElementById('sw-ai-scene-ref-url-input');
+    if (!input) return;
+    const url = (input.value || '').trim();
+    if (!url) return;
+    const urls = _getSceneRefs();
+    if (!urls.includes(url)) urls.push(url);
+    _setSceneRefs(urls);
+    _renderSceneRefs();
+    input.value = '';
   }
 
   // ── Scene splitting & detail configuration editor ─────────────────────
@@ -4580,6 +4740,9 @@
     storyAiUploadRefImage: aiUploadRefImage,
     storyAiClearRefImage: aiClearRefImage,
     storyAiUploadCharRef: uploadCharRef,
+    storyAiGenerateCharImage: storyAiGenerateCharImage,
+    storyAiUploadSceneRef: storyAiUploadSceneRef,
+    storyAiAddSceneRefUrl: storyAiAddSceneRefUrl,
     storyNovelSearch: novelSearch,
     storyNovelLoadChapter: novelLoadChapter,
     storyToggleChaptersGrid: toggleChaptersGrid,

@@ -1876,11 +1876,11 @@ def _burn_ass(
                 filter_complex_parts.append(
                     f"[ex_mr]crop={slice_w}:{vh}:{_crop_rx}:0,scale={sw}:{vh},gblur=sigma=20[ex_rfill]"
                 )
-                filter_complex_parts.append(f"[ex_cv][ex_lfill]overlay=0:{vy}[ex_c1]")
+                filter_complex_parts.append(f"[ex_cv][ex_lfill]overlay=0:{vy}:shortest=1[ex_c1]")
                 filter_complex_parts.append(f"[ex_c1][ex_rfill]overlay={_right_x}:{vy}[ex_c2]")
                 filter_complex_parts.append(f"[ex_c2][ex_mv]overlay={vx}:{vy}[ex_framed]")
             else:
-                filter_complex_parts.append(f"[ex_cv][{_ex_main}]overlay={vx}:{vy}[ex_framed]")
+                filter_complex_parts.append(f"[ex_cv][{_ex_main}]overlay={vx}:{vy}:shortest=1[ex_framed]")
             curr_label = "ex_framed"
             _log(
                 f"🎞 Khung 'Đẩy ra ngoài': video {vw}x{vh} @({vx},{vy}), "
@@ -2409,6 +2409,11 @@ def write_ass_with_frame(
     frame_mode = (frame_mode or "overlay").strip().lower()
     out_w = play_res_x
     if frame_mode == "expand":
+        # Khớp với preview: chiều cao dải tiêu đề tính theo cỡ chữ (font × 2.4),
+        # không dùng title_bar_h_pct cố định.
+        if title_bar_h > 0:
+            title_bar_h = max(40, int(round(title_font_px * 2.4)))
+            title_bar_h += title_bar_h % 2
         vid_w = max(2, play_res_x - 2 * side_w)
         vid_w -= vid_w % 2
         vid_h = max(2, int(round(vid_w * play_res_y / max(1, play_res_x))))
