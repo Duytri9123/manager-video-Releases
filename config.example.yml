@@ -87,6 +87,8 @@ video_process:
   fish_reference_id: ''   # voice model ID từ fish.audio — để trống = giọng mặc định
   tts_engine: edge-tts
   tts_voice: vi-VN-HoaiMyNeural
+  tts_concurrency: 4
+  tts_retries: 2
   bg_volume: 0.15
   font_size: 18
   blur_height: 15

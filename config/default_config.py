@@ -113,6 +113,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "tts_voice": "vi-VN-HoaiMyNeural",
         "tts_engine": "edge-tts",
         "tts_speed": 1.0,
+        "tts_concurrency": 4,
+        "tts_retries": 2,
         "auto_speed": True,
         "pitch_semitones": 0.0,
         "fpt_api_key": "",  # Set via env FPT_TTS_API_KEY or video_process.fpt_api_key in config.yml

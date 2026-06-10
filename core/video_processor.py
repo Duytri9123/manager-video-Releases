@@ -25,7 +25,7 @@ FPT_TTS_ENDPOINT = "https://api.fpt.ai/hmi/tts/v5"
 # FPT key must come from env (FPT_TTS_API_KEY) or config (video_process.fpt_api_key).
 # Hard-coded keys removed for security.
 FPT_TTS_DEFAULT_KEY = ""
-TTS_CACHE_VERSION = "tts-ass-merge-v1"
+TTS_CACHE_VERSION = "tts-ass-window-8s-v2"
 
 # ElevenLabs TTS endpoint
 ELEVENLABS_TTS_ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
@@ -883,12 +883,11 @@ def _merge_segments_for_tts(
     segments: list[dict],
     max_gap: float = 0.08,
     max_chars: int = 260,
-    max_duration: float = 12.0,
+    max_duration: float = 8.0,
 ) -> list[dict]:
-    """Merge display-oriented subtitle chunks into more natural TTS units."""
+    """Merge display chunks into bounded TTS windows while preserving punctuation."""
     merged: list[dict] = []
     current: dict | None = None
-    terminal_punct = tuple(".!?…。！？")
 
     for seg in sorted(segments or [], key=lambda s: float(s.get("start", 0.0))):
         text = re.sub(r"\s+", " ", str(seg.get("text") or "")).strip()
@@ -907,12 +906,10 @@ def _merge_segments_for_tts(
         gap = start - float(current.get("end", start))
         combined_text = f"{current.get('text', '')} {text}".strip()
         combined_duration = end - float(current.get("start", start))
-        prev_text = str(current.get("text") or "").rstrip()
         can_merge = (
             gap <= max_gap
             and len(combined_text) <= max_chars
             and combined_duration <= max_duration
-            and not prev_text.endswith(terminal_punct)
         )
 
         if can_merge:
@@ -2995,7 +2992,7 @@ class MultiProviderTTS:
         segments: list[dict],
         translations: list[str],
         tmpdir: Path,
-        max_concurrency: int = 2,
+        max_concurrency: int = 4,
         retries: int = 2,
         tts_speed: float = 1.0,
         auto_speed: bool = True,
@@ -4962,13 +4959,29 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         or ""
                     ),
                 )
+                _vp_cfg = cfg_raw.get("video_process") or {}
+                _tts_concurrency = _as_int(
+                    data.get("tts_concurrency", _vp_cfg.get("tts_concurrency", 4)),
+                    4,
+                )
+                _tts_retries = _as_int(
+                    data.get("tts_retries", _vp_cfg.get("tts_retries", 2)),
+                    2,
+                )
+                yield send(
+                    log=(
+                        f"[Bước 5/5] ⚡ TTS: {len(translated_texts)} đoạn, "
+                        f"chạy song song {max(1, _tts_concurrency)} request"
+                    ),
+                    level="info",
+                )
                 tts_clips = asyncio.run(
                     tts.generate_all(
                         segments,
                         translated_texts,
                         Path(tts_tmpdir),
-                        max_concurrency=_as_int(data.get("tts_concurrency", 2), 2),
-                        retries=_as_int(data.get("tts_retries", 2), 2),
+                        max_concurrency=_tts_concurrency,
+                        retries=_tts_retries,
                         tts_speed=_as_float(data.get("tts_speed", 1.0), 1.0),
                         auto_speed=_as_bool(data.get("auto_speed", True), True),
                         ffmpeg=ffmpeg,

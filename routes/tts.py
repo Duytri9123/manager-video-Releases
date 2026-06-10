@@ -341,7 +341,7 @@ def tts_from_ass():
 
                 clips = _asyncio.run(tts.generate_all(
                     segments, translations, tmpdir,
-                    max_concurrency=2, retries=2,
+                    max_concurrency=4, retries=2,
                     tts_speed=1.0, auto_speed=False, ffmpeg=ffmpeg,
                 ))
 
