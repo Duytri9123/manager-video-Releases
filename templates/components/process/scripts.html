@@ -1856,8 +1856,11 @@
       finalTitleBarH = titleBarH * fgScale;
     }
 
+    canvas.style.position = 'absolute';
+    canvas.style.inset = '0';
+    canvas.style.zIndex = '2';
     canvas.style.width = '100%';
-    canvas.style.height = 'auto';
+    canvas.style.height = '100%';
     canvas.style.maxWidth = '100%';
     if (wrap) {
       wrap.style.aspectRatio = finalCW + ' / ' + finalCH;
@@ -2358,6 +2361,7 @@
     );
     const _blurBg = document.getElementById('proc-aspect-blur-bg')?.checked || false;
     const _bgEl = document.getElementById('sub-preview-bgblur');
+    const _frameEnabled = document.getElementById('frame-enabled')?.checked || false;
 
     if (subWrap) {
       if (_shouldConvert) {
@@ -2369,12 +2373,15 @@
           _imgEl.style.maxWidth  = '100%';
           _imgEl.style.maxHeight = '100%';
           _imgEl.style.objectFit = 'contain';
-          _imgEl.style.position  = 'relative';
+          _imgEl.style.position  = _frameEnabled ? 'absolute' : 'relative';
+          _imgEl.style.inset     = _frameEnabled ? '0' : '';
+          _imgEl.style.opacity   = _frameEnabled ? '0' : '';
+          _imgEl.style.pointerEvents = _frameEnabled ? 'none' : '';
           _imgEl.style.zIndex    = '1';
         }
         // Nền mờ: hiện ảnh nền (mờ) lấp viền thay cho nền đen.
         if (_bgEl) {
-          if (_blurBg && _imgEl && _imgEl.src && _imgEl.src !== window.location.href) {
+          if (!_frameEnabled && _blurBg && _imgEl && _imgEl.src && _imgEl.src !== window.location.href) {
             _bgEl.src = _imgEl.src;
             _bgEl.style.display = 'block';
           } else {
@@ -2391,6 +2398,10 @@
           _imgEl.style.maxWidth  = '';
           _imgEl.style.maxHeight = '';
           _imgEl.style.objectFit = '';
+          _imgEl.style.position  = _frameEnabled ? 'absolute' : '';
+          _imgEl.style.inset     = _frameEnabled ? '0' : '';
+          _imgEl.style.opacity   = _frameEnabled ? '0' : '';
+          _imgEl.style.pointerEvents = _frameEnabled ? 'none' : '';
           _imgEl.style.zIndex    = '';
         }
         if (_bgEl) { _bgEl.style.display = 'none'; _bgEl.removeAttribute('src'); }
@@ -2424,7 +2435,17 @@
       if (blurC)  blurC.style.display  = 'none';
       if (blurD)  blurD.style.display  = 'none';
       if (text)   text.style.display   = 'none';
-      if (canvas) canvas.style.display = 'block';
+      if (canvas) {
+        canvas.style.display = 'block';
+        canvas.style.position = 'absolute';
+        canvas.style.inset = '0';
+        canvas.style.zIndex = '2';
+      }
+      const bg = document.getElementById('sub-preview-bgblur');
+      if (bg) {
+        bg.style.display = 'none';
+        bg.removeAttribute('src');
+      }
       // Bỏ các div vùng che DOM còn sót (đã thêm ở chế độ phụ đề) để không bị
       // hiển thị 2 lớp với vùng che vẽ trên canvas khung.
       const _w = document.getElementById('sub-preview-wrap');
@@ -2446,6 +2467,7 @@
       if (img && img.src && img.src !== window.location.href) {
         img.style.display = 'block';
         img.style.position = '';
+        img.style.inset = '';
         img.style.opacity = '';
         img.style.pointerEvents = '';
         // Trả lại tỉ lệ khung theo video (bỏ tỉ lệ do khung video áp vào)
