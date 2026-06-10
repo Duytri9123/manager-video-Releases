@@ -4578,10 +4578,15 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 # Nền mờ: video phóng to lấp đầy khung + làm mờ làm nền, video gốc
                 # (scale vừa) đặt giữa lên trên. Giống style Shorts/Reel.
                 yield send(log="[Aspect] Nen mo (blur) thay cho vien den", level="info")
+                # Match the preview background: scale 112%, blur strongly, then
+                # reduce RGB brightness to 70%.
+                bg_w = int(round(target_w * 1.12 / 2) * 2)
+                bg_h = int(round(target_h * 1.12 / 2) * 2)
                 filter_complex = (
                     f"[0:v]split=2[bg][fg];"
-                    f"[bg]scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
-                    f"crop={target_w}:{target_h},gblur=sigma=24[bgb];"
+                    f"[bg]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
+                    f"crop={target_w}:{target_h},gblur=sigma=68,"
+                    f"colorchannelmixer=rr=0.7:gg=0.7:bb=0.7[bgb];"
                     f"[fg]scale={target_w}:{target_h}:force_original_aspect_ratio=decrease[fgs];"
                     f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1[vout]"
                 )
