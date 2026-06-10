@@ -1509,12 +1509,15 @@ def burn_subtitles(
     log_callback=None,
     blur_y_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
+    target_aspect: str = "auto",
+    aspect_pad_blur: bool = False,
 ) -> tuple[bool, str]:
     """
     Burn subtitles into video.
     If subtitle_format='ass': use ASS filter (no blur needed, faster).
     If subtitle_format='srt': use SRT with optional blur strip.
     If frame_enabled=True: also creates 9:16 frame in same encode pass (ASS mode only).
+    Aspect conversion is folded into the ASS encode when requested.
     """
     # Tự động căn giữa vùng che blur với phụ đề (chỉ khi không có blur_y_pct)
     blur_lift_pct_adj = blur_lift_pct
@@ -1550,7 +1553,9 @@ def burn_subtitles(
                          frame_target_w=frame_target_w,
                          log_callback=log_callback,
                          blur_y_pct=blur_y_pct,
-                         blur_extra_zones=blur_extra_zones)
+                         blur_extra_zones=blur_extra_zones,
+                         target_aspect=target_aspect,
+                         aspect_pad_blur=aspect_pad_blur)
 
     # SRT path (original logic — no frame support)
     return _burn_srt(video_path, srt_path, output_path, ffmpeg,
@@ -1589,6 +1594,8 @@ def _burn_ass(
     log_callback=None,
     blur_y_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
+    target_aspect: str = "auto",
+    aspect_pad_blur: bool = False,
 ) -> tuple[bool, str]:
     """Burn ASS subtitle file into video. Optionally blur a zone to hide burned-in original subs.
     Frame elements (title bar, blur panels) are now embedded directly in the ASS file.
@@ -1639,6 +1646,33 @@ def _burn_ass(
         ass_esc = str(tmp_ass).replace("\\", "/")
         if len(ass_esc) >= 2 and ass_esc[1] == ':':
             ass_esc = ass_esc[0] + "\\:" + ass_esc[2:]
+
+        # Fold aspect conversion into this encode when source and target
+        # orientations differ.
+        try:
+            _vr = subprocess.run(
+                [ffmpeg, "-i", str(tmp_video)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            )
+            _vm = re.search(r"(\d{2,5})x(\d{2,5})", _vr.stderr or "")
+            _src_w, _src_h = (int(_vm.group(1)), int(_vm.group(2))) if _vm else (1280, 720)
+        except Exception:
+            _src_w, _src_h = 1280, 720
+
+        _target_aspect = str(target_aspect or "auto").lower()
+        _target_w, _target_h = (
+            (1080, 1920) if _target_aspect == "9x16" else (1920, 1080)
+        )
+        _src_is_vertical = _src_h > _src_w
+        _aspect_convert = _target_aspect in ("9x16", "16x9") and (
+            (_target_aspect == "9x16" and not _src_is_vertical)
+            or (_target_aspect == "16x9" and _src_is_vertical)
+        )
+        if _aspect_convert:
+            _log(
+                f"Aspect trong cung encode: {_src_w}x{_src_h} -> "
+                f"{_target_w}x{_target_h} ({_target_aspect})"
+            )
 
         # Check if ASS file has frame/logo info embedded in comments
         _ass_content = ""
@@ -1760,9 +1794,15 @@ def _burn_ass(
                 except Exception:
                     pass
 
-        # Apply each blur zone in a chain
-        curr_label = "0:v"
+        # Apply each blur zone in a chain. An untouched source branch is reserved
+        # for the background, so foreground masks, ASS, and logos are not repeated.
         filter_complex_parts = []
+        if _aspect_convert and aspect_pad_blur:
+            filter_complex_parts.append("[0:v]split=2[aspect_bg_src][aspect_fg_src]")
+            curr_label = "aspect_fg_src"
+        else:
+            curr_label = "0:v"
+
         for idx, (h, w, y, x, _st, _en) in enumerate(active_zones):
             next_label = f"b{idx}"
             _left = max(0.0, min(1.0 - w, x - w / 2))
@@ -1887,7 +1927,8 @@ def _burn_ass(
                 f"canvas {ow}x{oh}, blur cạnh {sw}px"
             )
 
-        # Finally, apply ASS subtitle filter
+        # Apply ASS before aspect conversion so positions remain relative to the
+        # source video and match the editor's blur-zone coordinates.
         filter_complex_parts.append(f"[{curr_label}]ass='{ass_esc}'[subbed]")
         filter_complex = ";".join(filter_complex_parts)
 
@@ -1959,11 +2000,44 @@ def _burn_ass(
 
             filter_complex += (
                 f";{logo_filter};"
-                f"[subbed][logo]overlay={logo_x_px}:{logo_y_px}[vout]"
+                f"[subbed][logo]overlay={logo_x_px}:{logo_y_px}[composited]"
             )
             _log(f"🏷 Logo: {_logo_file.name} (h={logo_h_px}px, x={logo_x_px}, y={logo_y_px}, radius={r_pct}%)")
         else:
-            filter_complex += ";[subbed]null[vout]"
+            filter_complex += ";[subbed]null[composited]"
+
+        if _aspect_convert:
+            if aspect_pad_blur:
+                # Blur at preview resolution, then upscale. The background is
+                # already intentionally soft, so processing it at full 1080p
+                # wastes substantial CPU without a visible quality benefit.
+                if _target_h > _target_w:
+                    blur_w, blur_h = 360, 640
+                else:
+                    blur_w, blur_h = 640, 360
+                blur_zoom_w = int(round(blur_w * 1.12 / 2) * 2)
+                blur_zoom_h = int(round(blur_h * 1.12 / 2) * 2)
+                filter_complex += (
+                    f";[aspect_bg_src]scale={blur_w}:{blur_h}:force_original_aspect_ratio=increase,"
+                    f"crop={blur_w}:{blur_h},scale={blur_zoom_w}:{blur_zoom_h},"
+                    f"crop={blur_w}:{blur_h},gblur=sigma=23,"
+                    f"colorchannelmixer=rr=0.7:gg=0.7:bb=0.7,"
+                    f"scale={_target_w}:{_target_h}:flags=bicubic[aspect_bg]"
+                    f";[composited]scale={_target_w}:{_target_h}:"
+                    f"force_original_aspect_ratio=decrease[aspect_fg]"
+                    f";[aspect_bg][aspect_fg]overlay=(W-w)/2:(H-h)/2,setsar=1[vout]"
+                )
+                _log("Aspect: nen mo preview 112%, sigma=23, brightness=70%")
+            else:
+                filter_complex += (
+                    f";[composited]scale={_target_w}:{_target_h}:"
+                    f"force_original_aspect_ratio=decrease,"
+                    f"pad={_target_w}:{_target_h}:(ow-iw)/2:(oh-ih)/2:black,"
+                    f"setsar=1[vout]"
+                )
+                _log("Aspect: vien den")
+        else:
+            filter_complex += ";[composited]null[vout]"
 
         map_label = "[vout]"
         _log(f"🎬 Pipeline: {'blur + ' if blur_original else ''}burn ASS{' + logo' if _logo_file else ''}")
@@ -1973,6 +2047,8 @@ def _burn_ass(
         _log(f"🎬 Bắt đầu encode ({' '.join(_enc_args[:4])})...")
         t_encode = _time.time()
 
+        video_duration = get_media_duration_seconds(ffmpeg, tmp_video)
+        encode_timeout = max(600, int(video_duration * 6 + 300))
         ok, err = run_ffmpeg([
             ffmpeg, "-i", str(tmp_video),
         ] + extra_inputs + [
@@ -1980,7 +2056,7 @@ def _burn_ass(
             "-map", map_label, "-map", "0:a?",
         ] + _enc_args + [
             str(tmp_out), "-y", "-loglevel", "error"
-        ])
+        ], timeout=encode_timeout)
 
         encode_time = _time.time() - t_encode
         if ok and tmp_out.exists():
@@ -3904,6 +3980,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     except Exception:
         _vw, _vh = 1280, 720
 
+    _target_aspect = str(data.get("target_aspect") or "auto").lower()
+    _pad_blur = _as_bool(data.get("aspect_pad_blur", False), False)
+    _source_is_vertical = _vh > _vw
+    _aspect_should_convert = _target_aspect in ("9x16", "16x9") and (
+        (_target_aspect == "9x16" and not _source_is_vertical)
+        or (_target_aspect == "16x9" and _source_is_vertical)
+    )
+
     # Output dir logic:
     # - User chỉ định out_dir → dùng nó
     # - Nếu video gốc đã nằm trong Downloaded/Process_video/<name>/ → giữ nguyên (resume)
@@ -4015,7 +4099,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
     # ── Resume: kiểm tra file cache từ lần chạy trước ─────────────────────────
     vi_ass_path_cached   = out_dir / f"{stem}_{target_language}.ass"
-    burned_path_cached   = out_dir / f"{stem}_subbed.mp4"
+    if _aspect_should_convert:
+        _aspect_style = "blur" if _pad_blur else "pad"
+        burned_path_cached = out_dir / f"{stem}_subbed_{_target_aspect}_{_aspect_style}.mp4"
+    else:
+        burned_path_cached = out_dir / f"{stem}_subbed.mp4"
     voice_path_cached    = out_dir / f"{stem}_{target_language}_voice.mp4"
     voice_meta_path_cached = out_dir / f"{stem}_{target_language}_voice.meta.json"
 
@@ -4393,6 +4481,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
     # ── Bước 4/5: Burn phụ đề ────────────────────────────────────────────────
     burned_path = None
+    _aspect_combined = False
     # Resume: nếu file subbed đã có → dùng lại (BUT: skip if frame enabled to re-apply new frame settings)
     _frame_enabled_for_burn = _as_bool(data.get("frame_enabled", False), False)
 
@@ -4474,6 +4563,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if _encode_mode == "sub" and not _frame_enabled_for_burn and _burn_cache_valid:
         burned_path = burned_path_cached
         final_output_path = burned_path
+        _aspect_combined = _aspect_should_convert
         yield send(log=f"[Bước 4/5] ♻ Dùng lại video phụ đề cũ: {burned_path.name}", level="info")
         yield send(overall=80, overall_lbl="Dùng lại video phụ đề cũ")
     elif _encode_mode != "skip" and _encode_srt and _encode_srt.exists():
@@ -4484,7 +4574,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         else:
             yield send(log=f"[Bước 4/5] 🔥 Đang burn phụ đề ASS vào video...", level="info")
         yield send(overall=65, overall_lbl="Đang xử lý video...")
-        burned_path = out_dir / f"{stem}_subbed.mp4"
+        burned_path = burned_path_cached
 
         # Log details before starting (so user sees progress immediately)
         _vid_size = video_path.stat().st_size / 1024 / 1024
@@ -4520,11 +4610,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             log_callback=_burn_log_cb,
             blur_y_pct=_blur_y_pct,
             blur_extra_zones=_blur_extra_zones,
+            target_aspect=_target_aspect,
+            aspect_pad_blur=_pad_blur,
         )
         # Emit collected burn logs
         for _msg, _lvl in _burn_logs:
             yield send(log=f"[Bước 4/5] {_msg}", level=_lvl)
         if ok:
+            _aspect_combined = _aspect_should_convert
             if _encode_mode == "blur":
                 yield send(log=f"[Bước 4/5] ✓ Video đã che phụ đề gốc: {burned_path.name}", level="success")
             else:
@@ -4539,13 +4632,21 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     else:
         yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề / che", level="info")
 
-    # ── Convert aspect ratio (sau khi burn xong, trước khi concat thumbnail) ──
+    # ── Fallback aspect conversion (normally folded into the burn encode) ─────
     # Nếu user chọn 9x16/16x9 mà video burned không đúng aspect đó → convert.
     # Khi 'auto' hoặc đã đúng aspect → bỏ qua. Đảm bảo chạy TRƯỚC concat
     # thumbnail để aspect của final khớp với thumbnail.
-    _target_aspect = str(data.get("target_aspect") or "auto").lower()
-    _pad_blur = bool(data.get("aspect_pad_blur") or False)
-    if _target_aspect in ("9x16", "16x9") and burned_path and burned_path.exists():
+    if _aspect_combined and burned_path and burned_path.exists():
+        yield send(
+            log=f"[Aspect] ✓ Đã gộp chuyển khung {_target_aspect} vào bước burn/che",
+            level="success",
+        )
+    if (
+        not _aspect_combined
+        and _target_aspect in ("9x16", "16x9")
+        and burned_path
+        and burned_path.exists()
+    ):
         try:
             _r = subprocess.run([ffmpeg, "-i", str(burned_path)],
                 capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -4578,15 +4679,19 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 # Nền mờ: video phóng to lấp đầy khung + làm mờ làm nền, video gốc
                 # (scale vừa) đặt giữa lên trên. Giống style Shorts/Reel.
                 yield send(log="[Aspect] Nen mo (blur) thay cho vien den", level="info")
-                # Match the preview background: scale 112%, blur strongly, then
-                # reduce RGB brightness to 70%.
-                bg_w = int(round(target_w * 1.12 / 2) * 2)
-                bg_h = int(round(target_h * 1.12 / 2) * 2)
+                if target_h > target_w:
+                    blur_w, blur_h = 360, 640
+                else:
+                    blur_w, blur_h = 640, 360
+                blur_zoom_w = int(round(blur_w * 1.12 / 2) * 2)
+                blur_zoom_h = int(round(blur_h * 1.12 / 2) * 2)
                 filter_complex = (
                     f"[0:v]split=2[bg][fg];"
-                    f"[bg]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
-                    f"crop={target_w}:{target_h},gblur=sigma=68,"
-                    f"colorchannelmixer=rr=0.7:gg=0.7:bb=0.7[bgb];"
+                    f"[bg]scale={blur_w}:{blur_h}:force_original_aspect_ratio=increase,"
+                    f"crop={blur_w}:{blur_h},scale={blur_zoom_w}:{blur_zoom_h},"
+                    f"crop={blur_w}:{blur_h},gblur=sigma=23,"
+                    f"colorchannelmixer=rr=0.7:gg=0.7:bb=0.7,"
+                    f"scale={target_w}:{target_h}:flags=bicubic[bgb];"
                     f"[fg]scale={target_w}:{target_h}:force_original_aspect_ratio=decrease[fgs];"
                     f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1[vout]"
                 )
