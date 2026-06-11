@@ -191,26 +191,9 @@ async function updateQueueItemDesc(url, desc) {
 }
 
 function startQueueDownload() {
-  // Show thumbnail mode selection modal first if thumbnail is enabled
-  const thumbEnabled = document.getElementById('thumb-enabled')?.checked ?? false;
-  if (thumbEnabled) {
-    _showThumbnailModeModal()
-      .then(mode => {
-        if (mode === null) return;  // User cancelled
-        window._batchThumbMode = mode;
-        // Validate before processing
-        return _preflightCheckThumbnail(mode).then(ok => {
-          if (!ok) return;
-          _runQueueViaProcessApi();
-        });
-      })
-      .catch(e => {
-        if (typeof toast === 'function') toast('Lỗi: ' + e.message, 'error');
-      });
-  } else {
-    window._batchThumbMode = 'none';
-    _runQueueViaProcessApi();
-  }
+  // Thumbnail flow disabled by request; process queue directly.
+  window._batchThumbMode = 'none';
+  _runQueueViaProcessApi();
 }
 
 // Show modal asking user how to handle thumbnails for the batch
@@ -354,11 +337,14 @@ function _buildQueueProcessPayload(videoUrl) {
     // Frame video
     frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
     frame_title:          document.getElementById('frame-title')?.value || '',
+    frame_title_enabled:  document.getElementById('frame-title-enabled')?.checked ?? true,
     frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
     frame_title_color:    document.getElementById('frame-title-color')?.value || '#000000',
     frame_title_color_2:  document.getElementById('frame-title-color-2')?.value || '#ff0000',
     frame_title_split_color: document.getElementById('frame-title-split-color')?.checked ?? true,
     frame_blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
+    frame_blur_top_pct:    parseFloat(document.getElementById('frame-blur-top')?.value || 0),
+    frame_blur_bottom_pct: parseFloat(document.getElementById('frame-blur-bottom')?.value || 0),
     frame_blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
     frame_blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
     frame_logo_path:      document.getElementById('frame-logo-path')?.dataset?.serverPath || '',
@@ -366,12 +352,13 @@ function _buildQueueProcessPayload(videoUrl) {
     frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
-    // Thumbnail
-    thumb_enabled:        document.getElementById('thumb-enabled')?.checked ?? false,
-    thumb_mode:           (window._batchThumbMode || (window._thumbState?.mode === 'none' ? 'frame' : window._thumbState?.mode || 'frame')),
-    thumb_path:           (window._batchThumbPath || window._thumbState?.path || ''),
-    thumb_title:          document.getElementById('thumb-title')?.value || '',
-    thumb_duration:       2.0,  // seconds to show thumbnail at start
+    video_overlays:       (typeof window._collectVideoOverlays === 'function') ? window._collectVideoOverlays() : [],
+    // Thumbnail flow disabled by request.
+    thumb_enabled:        false,
+    thumb_mode:           'none',
+    thumb_path:           '',
+    thumb_title:          '',
+    thumb_duration:       0,
   };
 }
 
@@ -416,16 +403,7 @@ function _runSingleQueueItem(item, index, total) {
               if (d.subtitle_path) {
                 window._publishLastSubtitlePath = d.subtitle_path;
               }
-              if (d.thumbnail_path) {
-                window._publishLastThumbnailPath = d.thumbnail_path;
-                if (typeof window._displayProcThumbnail === 'function') {
-                  window._displayProcThumbnail(d.thumbnail_path, d.thumbnail_image);
-                }
-              }
-              // ── Thumbnail AI failure event ──
-              if (d.thumb_failed && typeof _showThumbFailCard === 'function') {
-                _showThumbFailCard();
-              }
+              // Thumbnail stream events are ignored because the thumbnail flow is disabled.
               if (d.tts_incomplete && typeof _showTtsFailModal === 'function') {
                 _showTtsFailModal(d);
               }

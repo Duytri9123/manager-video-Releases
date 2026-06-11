@@ -247,15 +247,14 @@
     // A ready item exists (downloaded or local file, not yet kicked off)
     const hasReady = (window._batchQueue || []).some(t => t.status === 'ready');
 
-    // Pipeline already running or waiting for user (ASS/thumb review panels visible)
+    // Pipeline already running or waiting for user (ASS review panel visible)
     const isRunning = window._procRunning || window._step3Started;
 
-    // ASS or thumb review panels are open — pipeline is mid-flight, don't show start button
+    // ASS review panel is open — pipeline is mid-flight, don't show start button
     const assOpen   = document.getElementById('proc-ass-review-card')?.style.display !== 'none';
-    const thumbOpen = document.getElementById('proc-thumb-pick-card')?.style.display !== 'none';
 
     const onStep3 = window._procWizStep === 3;
-    const shouldShow = hasReady && !isRunning && !assOpen && !thumbOpen && onStep3;
+    const shouldShow = hasReady && !isRunning && !assOpen && onStep3;
     card.style.display = shouldShow ? 'block' : 'none';
   }
 
@@ -263,7 +262,7 @@
   window._step3StartProc = function() {
     // Apply skip flags from checkboxes before starting
     window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
-    window._procSkipThumbSession  = document.getElementById('step3-skip-thumb')?.checked ?? false;
+    window._procSkipThumbSession  = false;
     
     // Mark as started and running
     window._step3Started = true;
@@ -287,7 +286,7 @@
   /** Sync checkbox state to global flags in real-time */
   window._onStep3SkipChange = function() {
     window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
-    window._procSkipThumbSession  = document.getElementById('step3-skip-thumb')?.checked ?? false;
+    window._procSkipThumbSession  = false;
   };
 
   /** Render the step-3 queue status panel */
@@ -423,9 +422,7 @@
       window._procSkipThumbSession  = false;
       // Sync checkboxes back to unchecked
       const cbAss   = document.getElementById('step3-skip-ass');
-      const cbThumb = document.getElementById('step3-skip-thumb');
       if (cbAss)   cbAss.checked   = false;
-      if (cbThumb) cbThumb.checked = false;
     }
     _renderBatchQueue();
 
@@ -455,7 +452,7 @@
   // Session-only skip flag: resets when user manually starts a fresh batch
   // (auto-drain keeps it across videos so "Bỏ qua" applies to the rest of the run)
   window._procSkipReviewSession = false;
-  // Session-only skip flag for thumbnail picker
+  // Thumbnail flow disabled by request.
   window._procSkipThumbSession = false;
   window._procReviewResolve = null; // Promise resolver waiting for user confirm
   window._procAssPath = '';
@@ -500,20 +497,9 @@
       pPubOnAssConfirmed(path, content).catch(() => {});
     }
 
-    // Show thumbnail picker (instead of resuming directly)
-    const thumbCard = document.getElementById('proc-thumb-pick-card');
-    if (thumbCard) {
-      // Auto-skip thumbnail if flag is set
-      if (window._procSkipThumbSession) {
-        await procThumbPickSkip();
-      } else {
-        thumbCard.style.display = 'block';
-        thumbCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-    } else {
-      // Fallback: no thumbnail picker → resume directly
-      _procDoResume();
-    }
+    window._step3Confirmed = true;
+    procWizGo(4);
+    _procDoResume();
   }
 
   async function _procDoResume() {
@@ -529,172 +515,16 @@
     } catch (_) {}
   }
 
-  // ── Thumbnail picker (after ASS review) ────────────────────────────
-  function procThumbPickModeChange() {
-    const mode = document.querySelector('input[name="proc-thumb-pick-mode"]:checked')?.value || 'none';
-    const frameOpts  = document.getElementById('proc-thumb-pick-frame-opts');
-    const importOpts = document.getElementById('proc-thumb-pick-import-opts');
-    const common     = document.getElementById('proc-thumb-pick-common');
-    if (frameOpts)  frameOpts.style.display  = (mode === 'frame') ? 'block' : 'none';
-    if (importOpts) importOpts.style.display = (mode === 'import') ? 'block' : 'none';
-    if (common)     common.style.display     = (mode !== 'none') ? 'block' : 'none';
-  }
-
-  function procThumbPickPreview() {
-    const file = document.getElementById('proc-thumb-pick-file')?.files?.[0];
-    const img  = document.getElementById('proc-thumb-pick-preview');
-    if (!file || !img) return;
-    const reader = new FileReader();
-    reader.onload = (e) => { img.src = e.target.result; img.style.display = 'block'; };
-    reader.readAsDataURL(file);
-  }
-
-  async function procThumbPickContinue() {
-    const mode = document.querySelector('input[name="proc-thumb-pick-mode"]:checked')?.value || 'none';
-    const cfg = { thumb_enabled: mode !== 'none', thumb_mode: mode };
-
-    if (mode === 'frame') {
-      cfg.thumb_timestamp = parseFloat(document.getElementById('proc-thumb-pick-ts')?.value || 5);
-    } else if (mode === 'import') {
-      const file = document.getElementById('proc-thumb-pick-file')?.files?.[0];
-      if (!file) {
-        toast('Vui lòng chọn file ảnh', 'warning');
-        return;
-      }
-      // Upload the file first
-      try {
-        const form = new FormData();
-        form.append('file', file);
-        form.append('type', 'thumbnail');
-        const r = await fetch('/api/upload_anti_fp_image', { method: 'POST', body: form });
-        const d = await r.json();
-        if (!d.ok) {
-          toast('Upload ảnh thất bại: ' + (d.error || ''), 'error');
-          return;
-        }
-        cfg.thumb_path = d.path;
-      } catch (e) {
-        toast('Lỗi upload ảnh: ' + e.message, 'error');
-        return;
-      }
-    }
-
-    if (mode !== 'none') {
-      cfg.thumb_title    = document.getElementById('proc-thumb-pick-title')?.value || '';
-      cfg.thumb_duration = parseFloat(document.getElementById('proc-thumb-pick-duration')?.value || 2);
-    }
-
-    // Send config to server, then resume
-    try {
-      await fetch('/api/proc_set_thumb', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg)
-      });
-    } catch (_) {}
-
-    const card = document.getElementById('proc-thumb-pick-card');
-    if (card) card.style.display = 'none';
-    window._step3Confirmed = true;
-    procWizGo(4);
-    await _procDoResume();
-  }
-
-  async function procThumbPickSkip() {
-    try {
-      await fetch('/api/proc_set_thumb', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ thumb_enabled: false, thumb_mode: 'none' })
-      });
-    } catch (_) {}
-    const card = document.getElementById('proc-thumb-pick-card');
-    if (card) card.style.display = 'none';
-    window._step3Confirmed = true;
-    procWizGo(4);
-    await _procDoResume();
-  }
-
-  // ── Thumbnail failure recovery (when AI thumbnail fails mid-pipeline) ──
-  function _showThumbFailCard() {
-    const card = document.getElementById('proc-thumb-fail-card');
-    if (card) {
-      card.style.display = 'block';
-      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }
-
-  function _hideThumbFailCard() {
-    const card = document.getElementById('proc-thumb-fail-card');
-    if (card) card.style.display = 'none';
-    const fileInput = document.getElementById('proc-thumb-fail-file');
-    if (fileInput) fileInput.value = '';
-    const preview = document.getElementById('proc-thumb-fail-preview');
-    if (preview) { preview.src = ''; preview.style.display = 'none'; }
-  }
-
-  async function procThumbFailRetry() {
-    _hideThumbFailCard();
-    toast('🔄 Đang thử tạo lại thumbnail AI...', 'info');
-    try {
-      await fetch('/api/proc_retry_thumb', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'retry' })
-      });
-    } catch (e) {
-      toast('Lỗi gửi yêu cầu retry: ' + e.message, 'error');
-    }
-  }
-
-  async function procThumbFailUpload() {
-    const file = document.getElementById('proc-thumb-fail-file')?.files?.[0];
-    if (!file) return;
-    // Show preview
-    try {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = document.getElementById('proc-thumb-fail-preview');
-        if (img) { img.src = e.target.result; img.style.display = 'block'; }
-      };
-      reader.readAsDataURL(file);
-    } catch (_) {}
-
-    // Upload to server
-    try {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('type', 'thumbnail');
-      const r = await fetch('/api/upload_anti_fp_image', { method: 'POST', body: form });
-      const d = await r.json();
-      if (!d.ok) {
-        toast('Upload ảnh thất bại: ' + (d.error || ''), 'error');
-        return;
-      }
-      // Tell pipeline to use this image
-      await fetch('/api/proc_retry_thumb', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'upload', path: d.path })
-      });
-      _hideThumbFailCard();
-      toast('✓ Đã gửi ảnh thay thế cho pipeline', 'success');
-    } catch (e) {
-      toast('Lỗi upload ảnh: ' + e.message, 'error');
-    }
-  }
-
-  async function procThumbFailSkip() {
-    _hideThumbFailCard();
-    try {
-      await fetch('/api/proc_retry_thumb', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'skip' })
-      });
-    } catch (_) {}
-    toast('Đã bỏ qua thumbnail', 'info');
-  }
+  // Thumbnail picker/retry flow disabled by request; keep no-op handlers for stale UI/cache.
+  function procThumbPickModeChange() {}
+  function procThumbPickPreview() {}
+  async function procThumbPickContinue() { await _procDoResume(); }
+  async function procThumbPickSkip() { await _procDoResume(); }
+  function _showThumbFailCard() {}
+  function _hideThumbFailCard() {}
+  async function procThumbFailRetry() {}
+  async function procThumbFailUpload() {}
+  async function procThumbFailSkip() {}
 
   // ── TTS partial failure recovery ────────────────────────────────────
   function _hideTtsFailModal() {
@@ -911,8 +741,404 @@
     if (sel?.value === 'custom' && picker) return picker.value;
     return _colorPresets[sel?.value] || '#ffffff';
   }
+  function _ovClamp(v, min, max) {
+    v = parseFloat(v);
+    if (!Number.isFinite(v)) v = min;
+    return Math.max(min, Math.min(max, v));
+  }
+  function _ovHexValue(v, fallback) {
+    v = String(v || '').trim();
+    return /^#[0-9a-f]{6}$/i.test(v) ? v : fallback;
+  }
+  function _ovRgba(hex, opacity) {
+    const h = String(hex || '#000000').replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16) || 0;
+    const g = parseInt(h.slice(2, 4), 16) || 0;
+    const b = parseInt(h.slice(4, 6), 16) || 0;
+    return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, opacity))})`;
+  }
+  function _ovEsc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, ch => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    })[ch]);
+  }
+  function _ovRoundPct(v) {
+    return Math.round(_ovClamp(v, 0, 1) * 1000) / 10;
+  }
+  function _ovSecValue(v) {
+    if (v === '' || v === null || v === undefined) return '';
+    v = parseFloat(v);
+    return Number.isFinite(v) ? Math.max(0, v) : '';
+  }
+  window._videoOverlays = Array.isArray(window._videoOverlays) ? window._videoOverlays : [];
+  window._ovLayerCounter = window._ovLayerCounter || 0;
+  function _ovNewId() {
+    window._ovLayerCounter += 1;
+    return 'ov-' + Date.now().toString(36) + '-' + window._ovLayerCounter;
+  }
+  function _ovDefault(type) {
+    if (type === 'text') {
+      return {
+        id: _ovNewId(), type: 'text', enabled: true, open: true,
+        text: 'Text mới', x_pct: 0.50, y_pct: 0.18, size_pct: 0.05,
+        color: '#ffffff', box_color: '#000000', box_opacity: 0.50,
+        start_sec: '', end_sec: ''
+      };
+    }
+    return {
+      id: _ovNewId(), type: 'rect', enabled: true, open: true,
+      x_pct: 0.50, y_pct: 0.38, width_pct: 1.00, height_pct: 0.07,
+      color: '#000000', opacity: 0.55, radius_pct: 0.02,
+      start_sec: '', end_sec: ''
+    };
+  }
+  function _ovNormalizeLayer(raw) {
+    raw = raw || {};
+    const type = raw.type === 'text' ? 'text' : 'rect';
+    const base = _ovDefault(type);
+    base.id = raw.id || _ovNewId();
+    base.enabled = raw.enabled !== false;
+    base.open = raw.open === true;
+    base.x_pct = _ovClamp(raw.x_pct ?? base.x_pct, 0, 1);
+    base.y_pct = _ovClamp(raw.y_pct ?? base.y_pct, 0, 1);
+    base.start_sec = _ovSecValue(raw.start_sec);
+    base.end_sec = _ovSecValue(raw.end_sec);
+    if (type === 'text') {
+      base.text = String(raw.text ?? base.text);
+      base.size_pct = _ovClamp(raw.size_pct ?? base.size_pct, 0.01, 0.30);
+      base.color = _ovHexValue(raw.color, base.color);
+      base.box_color = _ovHexValue(raw.box_color, base.box_color);
+      base.box_opacity = _ovClamp(raw.box_opacity ?? base.box_opacity, 0, 1);
+    } else {
+      base.width_pct = _ovClamp(raw.width_pct ?? base.width_pct, 0.01, 1);
+      base.height_pct = _ovClamp(raw.height_pct ?? base.height_pct, 0.01, 1);
+      base.color = _ovHexValue(raw.color, base.color);
+      base.opacity = _ovClamp(raw.opacity ?? base.opacity, 0, 1);
+      base.radius_pct = _ovClamp(raw.radius_pct ?? base.radius_pct, 0, 0.5);
+    }
+    return base;
+  }
+  function _ovFind(id) {
+    return (window._videoOverlays || []).find(x => String(x.id) === String(id));
+  }
+  function _ovSyncHidden() {
+    const hidden = document.getElementById('ov-layers-json');
+    if (hidden) hidden.value = JSON.stringify(window._videoOverlays || []);
+  }
+  function _ovLoadFromHidden() {
+    const hidden = document.getElementById('ov-layers-json');
+    if (!hidden || !hidden.value) return;
+    try {
+      const parsed = JSON.parse(hidden.value);
+      if (Array.isArray(parsed)) window._videoOverlays = parsed.map(_ovNormalizeLayer);
+    } catch (_) {}
+    _ovSyncHidden();
+  }
+  function _ovTimeLabel(ov) {
+    const s = _ovSecValue(ov.start_sec);
+    const e = _ovSecValue(ov.end_sec);
+    if (s === '' && e === '') return 'cả video';
+    return (s === '' ? 'đầu' : s + 's') + ' → ' + (e === '' ? 'cuối' : e + 's');
+  }
+  function _ovVisibleAtPreviewTime(ov) {
+    const ts = parseFloat(document.getElementById('sub-preview-ts')?.value || 0) || 0;
+    const s = _ovSecValue(ov.start_sec);
+    const e = _ovSecValue(ov.end_sec);
+    if (s !== '' && ts < s) return false;
+    if (e !== '' && ts > e) return false;
+    return true;
+  }
+  function _ovSummary(ov) {
+    if (ov.type === 'text') {
+      return (ov.text || 'Text').slice(0, 32);
+    }
+    return 'Khối ' + _ovRoundPct(ov.width_pct) + '% × ' + _ovRoundPct(ov.height_pct) + '%';
+  }
+  function _ovLayerBody(ov) {
+    const id = _ovEsc(ov.id);
+    const common = `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+        <div class="field"><label>X %</label><input type="number" value="${_ovRoundPct(ov.x_pct)}" min="0" max="100" step="1" oninput="ovUpdateLayer('${id}','x_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+        <div class="field"><label>Y %</label><input type="number" value="${_ovRoundPct(ov.y_pct)}" min="0" max="100" step="1" oninput="ovUpdateLayer('${id}','y_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+        <div class="field"><label>Từ (s)</label><input type="number" value="${_ovEsc(ov.start_sec)}" min="0" step="0.5" placeholder="đầu" oninput="ovUpdateLayer('${id}','start_sec',this.value,true)" onchange="ovRenderLayerList()"></div>
+        <div class="field"><label>Đến (s)</label><input type="number" value="${_ovEsc(ov.end_sec)}" min="0" step="0.5" placeholder="cuối" oninput="ovUpdateLayer('${id}','end_sec',this.value,true)" onchange="ovRenderLayerList()"></div>
+      </div>`;
+    if (ov.type === 'text') {
+      return `
+        <input type="text" value="${_ovEsc(ov.text)}" placeholder="Nhập text..."
+          style="width:100%;font-size:12px;height:38px;box-sizing:border-box;margin-bottom:8px"
+          oninput="ovUpdateLayer('${id}','text',this.value,true)" onchange="ovRenderLayerList()">
+        ${common}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="field"><label>Cỡ %</label><input type="number" value="${_ovRoundPct(ov.size_pct)}" min="1" max="30" step="0.5" oninput="ovUpdateLayer('${id}','size_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+          <div class="field"><label>Màu chữ</label><input type="color" value="${_ovEsc(ov.color)}" style="height:38px" oninput="ovUpdateLayer('${id}','color',this.value,true)"></div>
+          <div class="field"><label>Màu nền</label><input type="color" value="${_ovEsc(ov.box_color)}" style="height:38px" oninput="ovUpdateLayer('${id}','box_color',this.value,true)"></div>
+        </div>
+        <div class="field"><label>Nền text ${Math.round((ov.box_opacity || 0) * 100)}%</label><input type="range" min="0" max="100" step="5" value="${Math.round((ov.box_opacity || 0) * 100)}" style="width:100%" oninput="ovUpdateLayer('${id}','box_opacity',this.value/100,true)" onchange="ovRenderLayerList()"></div>`;
+    }
+    return `
+      ${common}
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+        <div class="field"><label>Rộng %</label><input type="number" value="${_ovRoundPct(ov.width_pct)}" min="1" max="100" step="1" oninput="ovUpdateLayer('${id}','width_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+        <div class="field"><label>Cao %</label><input type="number" value="${_ovRoundPct(ov.height_pct)}" min="1" max="100" step="1" oninput="ovUpdateLayer('${id}','height_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+        <div class="field"><label>Bo góc %</label><input type="number" value="${_ovRoundPct(ov.radius_pct)}" min="0" max="50" step="1" oninput="ovUpdateLayer('${id}','radius_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+        <div class="field"><label>Màu khối</label><input type="color" value="${_ovEsc(ov.color)}" style="height:38px" oninput="ovUpdateLayer('${id}','color',this.value,true)"></div>
+      </div>
+      <div class="field"><label>Độ đậm ${Math.round((ov.opacity || 0) * 100)}%</label><input type="range" min="0" max="100" step="5" value="${Math.round((ov.opacity || 0) * 100)}" style="width:100%" oninput="ovUpdateLayer('${id}','opacity',this.value/100,true)" onchange="ovRenderLayerList()"></div>`;
+  }
+  function ovRenderLayerList() {
+    const list = document.getElementById('ov-layer-list');
+    if (!list) return;
+    const layers = window._videoOverlays || [];
+    if (!layers.length) {
+      list.innerHTML = '<div class="empty-state text-xs">Chưa có text/khối nào. Bấm + Text hoặc ▭ Khối để thêm.</div>';
+      _ovSyncHidden();
+      if (window.pe2RenderRanges) window.pe2RenderRanges();
+      return;
+    }
+    const sel = window._pe2Sel;
+    list.innerHTML = layers.map(ov => {
+      const selected = sel && sel.type === 'overlay' && String(sel.id) === String(ov.id);
+      return `
+        <div class="ov-layer-card ${ov.open ? 'open' : ''} ${selected ? 'pe2-selected' : ''}" data-ov-id="${_ovEsc(ov.id)}">
+          <button type="button" class="ov-layer-head" onclick="ovToggleLayer('${_ovEsc(ov.id)}')">
+            <span class="ov-layer-type">${ov.type === 'text' ? 'T' : '▭'}</span>
+            <span style="min-width:0;flex:1">
+              <span class="ov-layer-name">${_ovEsc(_ovSummary(ov))}</span><br>
+              <span class="ov-layer-meta">${_ovEsc(_ovTimeLabel(ov))} · X ${_ovRoundPct(ov.x_pct)}% · Y ${_ovRoundPct(ov.y_pct)}%</span>
+            </span>
+            <span class="ov-layer-actions">
+              <label class="check-item" style="margin:0;font-size:11px" onclick="event.stopPropagation()">
+                <input type="checkbox" ${ov.enabled ? 'checked' : ''} onchange="ovUpdateLayer('${_ovEsc(ov.id)}','enabled',this.checked)">
+                <span>Bật</span>
+              </label>
+              <span class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 7px" onclick="event.stopPropagation();ovRemoveLayer('${_ovEsc(ov.id)}')">🗑</span>
+            </span>
+          </button>
+          <div class="ov-layer-body" onclick="ovSelectLayer('${_ovEsc(ov.id)}', false)">
+            ${_ovLayerBody(ov)}
+          </div>
+        </div>`;
+    }).join('');
+    _ovSyncHidden();
+    if (window.pe2RenderRanges) window.pe2RenderRanges();
+  }
+  function ovSelectLayer(id, open) {
+    const ov = _ovFind(id);
+    if (!ov) return;
+    window._videoOverlays.forEach(x => { if (open) x.open = String(x.id) === String(id); });
+    window._pe2Sel = { type: 'overlay', id: ov.id };
+    if (open) ov.open = true;
+    ovRenderLayerList();
+    if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+    if (typeof pe2ApplySelection === 'function') pe2ApplySelection();
+  }
+  function ovToggleLayer(id) {
+    const ov = _ovFind(id);
+    if (!ov) return;
+    const next = !ov.open;
+    window._videoOverlays.forEach(x => { x.open = false; });
+    ov.open = next;
+    ovSelectLayer(id, false);
+  }
+  function ovAddText() {
+    window._videoOverlays.forEach(x => { x.open = false; });
+    const ov = _ovDefault('text');
+    window._videoOverlays.push(ov);
+    ovSelectLayer(ov.id, true);
+  }
+  function ovAddRect() {
+    window._videoOverlays.forEach(x => { x.open = false; });
+    const ov = _ovDefault('rect');
+    window._videoOverlays.push(ov);
+    ovSelectLayer(ov.id, true);
+  }
+  function ovRemoveLayer(id) {
+    window._videoOverlays = (window._videoOverlays || []).filter(x => String(x.id) !== String(id));
+    if (window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(id)) window._pe2Sel = null;
+    ovRenderLayerList();
+    if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+  }
+  function ovUpdateLayer(id, key, value, soft) {
+    const ov = _ovFind(id);
+    if (!ov) return;
+    if (key === 'enabled') ov.enabled = !!value;
+    else if (key === 'text') ov.text = String(value ?? '');
+    else if (key === 'color' || key === 'box_color') ov[key] = _ovHexValue(value, ov[key] || '#000000');
+    else if (key === 'start_sec' || key === 'end_sec') ov[key] = _ovSecValue(value);
+    else if (key === 'size_pct') ov.size_pct = _ovClamp(value, 0.01, 0.30);
+    else if (key === 'box_opacity' || key === 'opacity') ov[key] = _ovClamp(value, 0, 1);
+    else if (key === 'radius_pct') ov.radius_pct = _ovClamp(value, 0, 0.5);
+    else if (key === 'width_pct' || key === 'height_pct') ov[key] = _ovClamp(value, 0.01, 1);
+    else if (key === 'x_pct' || key === 'y_pct') ov[key] = _ovClamp(value, 0, 1);
+    _ovSyncHidden();
+    if (!soft) ovRenderLayerList();
+    if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+    if (window.pe2RenderRanges) window.pe2RenderRanges();
+  }
+  window.ovRenderLayerList = ovRenderLayerList;
+  window.ovSelectLayer = ovSelectLayer;
+  window.ovToggleLayer = ovToggleLayer;
+  window.ovAddText = ovAddText;
+  window.ovAddRect = ovAddRect;
+  window.ovRemoveLayer = ovRemoveLayer;
+  window.ovUpdateLayer = ovUpdateLayer;
+  function _collectVideoOverlays() {
+    return (window._videoOverlays || []).map(_ovNormalizeLayer).filter(ov => {
+      if (!ov.enabled) return false;
+      if (ov.type === 'text' && !String(ov.text || '').trim()) return false;
+      return true;
+    }).map(ov => {
+      const out = {
+        type: ov.type,
+        x_pct: ov.x_pct,
+        y_pct: ov.y_pct,
+        start_sec: ov.start_sec === '' ? null : ov.start_sec,
+        end_sec: ov.end_sec === '' ? null : ov.end_sec,
+      };
+      if (ov.type === 'text') {
+        out.text = ov.text;
+        out.size_pct = ov.size_pct;
+        out.color = ov.color;
+        out.box_color = ov.box_color;
+        out.box_opacity = ov.box_opacity;
+      } else {
+        out.width_pct = ov.width_pct;
+        out.height_pct = ov.height_pct;
+        out.color = ov.color;
+        out.opacity = ov.opacity;
+        out.radius_pct = ov.radius_pct;
+      }
+      return out;
+    });
+  }
+  window._collectVideoOverlays = _collectVideoOverlays;
+  function _drawOverlayText(ctx, ov, x, y, w, h) {
+    const text = String(ov.text || '').trim();
+    if (!text) return null;
+    const fontPx = Math.max(8, Math.round(h * (ov.size_pct || 0.05)));
+    ctx.save();
+    ctx.font = `bold ${fontPx}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const maxW = w * 0.9;
+    const words = text.split(/\s+/);
+    const lines = [];
+    let line = '';
+    words.forEach(word => {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    });
+    if (line) lines.push(line);
+    const lineH = fontPx * 1.25;
+    const padX = fontPx * 0.55;
+    const padY = fontPx * 0.35;
+    const textW = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width), 1));
+    const boxW = textW + padX * 2;
+    const boxH = lines.length * lineH + padY * 2;
+    const cx = x + w * Math.max(0, Math.min(1, ov.x_pct ?? 0.5));
+    const cy = y + h * Math.max(0, Math.min(1, ov.y_pct ?? 0.18));
+    if ((ov.box_opacity || 0) > 0) {
+      ctx.fillStyle = _ovRgba(ov.box_color || '#000000', ov.box_opacity || 0);
+      ctx.beginPath();
+      _roundRect(ctx, cx - boxW / 2, cy - boxH / 2, boxW, boxH, Math.min(fontPx * 0.4, boxH / 2));
+      ctx.fill();
+    }
+    ctx.fillStyle = ov.color || '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur = 4;
+    lines.forEach((l, i) => {
+      const yy = cy - ((lines.length - 1) * lineH) / 2 + i * lineH;
+      ctx.fillText(l, cx, yy);
+    });
+    ctx.restore();
+    return { x: cx - boxW / 2, y: cy - boxH / 2, w: boxW, h: boxH };
+  }
+  function _drawVideoOverlaysOnCanvas(ctx, vidX, vidY, vidW, vidH) {
+    (window._videoOverlays || []).filter(ov => ov.enabled !== false && _ovVisibleAtPreviewTime(ov)).forEach(ov => {
+      if (ov.type === 'rect') {
+        const rw = vidW * Math.max(0.01, Math.min(1, ov.width_pct || 0.8));
+        const rh = vidH * Math.max(0.01, Math.min(1, ov.height_pct || 0.12));
+        const rx = vidX + vidW * Math.max(0, Math.min(1, ov.x_pct ?? 0.5)) - rw / 2;
+        const ry = vidY + vidH * Math.max(0, Math.min(1, ov.y_pct ?? 0.5)) - rh / 2;
+        ctx.save();
+        ctx.fillStyle = _ovRgba(ov.color || '#000000', ov.opacity ?? 0.55);
+        ctx.beginPath();
+        _roundRect(ctx, rx, ry, rw, rh, Math.min(rw, rh) * Math.max(0, Math.min(0.5, ov.radius_pct || 0.02)));
+        ctx.fill();
+        ctx.restore();
+        if (window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id)) {
+          _drawCanvasSelection(ctx, rx, ry, rw, rh, true);
+        }
+      } else if (ov.type === 'text') {
+        const box = _drawOverlayText(ctx, ov, vidX, vidY, vidW, vidH);
+        if (box && window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id)) {
+          _drawCanvasSelection(ctx, box.x, box.y, box.w, box.h, true);
+        }
+      }
+    });
+  }
+  function _renderVideoOverlayDom(wrap, imgOffX, imgOffY, dispW, dispH) {
+    if (!wrap) return;
+    wrap.querySelectorAll('.video-overlay-el').forEach(el => el.remove());
+    (window._videoOverlays || []).filter(ov => ov.enabled !== false && _ovVisibleAtPreviewTime(ov)).forEach(ov => {
+      if (ov.type === 'text' && !String(ov.text || '').trim()) return;
+      const el = document.createElement('div');
+      el.className = 'video-overlay-el';
+      el.dataset.ovId = ov.id;
+      el.style.position = 'absolute';
+      el.style.pointerEvents = 'auto';
+      el.style.cursor = 'move';
+      el.style.zIndex = '3';
+      if (ov.type === 'rect') {
+        const w = dispW * Math.max(0.01, Math.min(1, ov.width_pct || 0.8));
+        const h = dispH * Math.max(0.01, Math.min(1, ov.height_pct || 0.12));
+        el.style.left = (imgOffX + dispW * (ov.x_pct ?? 0.5) - w / 2) + 'px';
+        el.style.top = (imgOffY + dispH * (ov.y_pct ?? 0.5) - h / 2) + 'px';
+        el.style.width = w + 'px';
+        el.style.height = h + 'px';
+        el.style.background = _ovRgba(ov.color || '#000000', ov.opacity ?? 0.55);
+        el.style.borderRadius = (Math.min(w, h) * Math.max(0, Math.min(0.5, ov.radius_pct || 0.02))) + 'px';
+      } else if (ov.type === 'text') {
+        el.textContent = ov.text || '';
+        el.style.left = (imgOffX + dispW * (ov.x_pct ?? 0.5)) + 'px';
+        el.style.top = (imgOffY + dispH * (ov.y_pct ?? 0.18)) + 'px';
+        el.style.transform = 'translate(-50%, -50%)';
+        el.style.maxWidth = (dispW * 0.9) + 'px';
+        el.style.textAlign = 'center';
+        el.style.wordBreak = 'break-word';
+        el.style.font = `700 ${Math.max(8, Math.round(dispH * (ov.size_pct || 0.05)))}px Arial, sans-serif`;
+        el.style.lineHeight = '1.25';
+        el.style.color = ov.color || '#ffffff';
+        el.style.textShadow = '0 2px 6px rgba(0,0,0,.85)';
+        el.style.padding = '0.35em 0.55em';
+        el.style.borderRadius = '0.35em';
+        el.style.background = _ovRgba(ov.box_color || '#000000', ov.box_opacity || 0);
+      }
+      const handles = ov.type === 'rect' ? ['e','s','se'] : ['se'];
+      handles.forEach(function(edge){
+        const hd = document.createElement('div');
+        hd.className = 'pe2-handle ' + edge;
+        hd.dataset.pe2handle = edge;
+        el.appendChild(hd);
+      });
+      wrap.appendChild(el);
+    });
+  }
   // Init picker on load
-  document.addEventListener('DOMContentLoaded', () => { _syncColorPicker(); });
+  document.addEventListener('DOMContentLoaded', () => {
+    _syncColorPicker();
+    _ovLoadFromHidden();
+    ovRenderLayerList();
+  });
 
   function _getPreviewVideoPath() {
     // Priority: uploaded file path → first ready/processing item in batch queue → proc-video field
@@ -964,11 +1190,15 @@
       if (blurC) blurC.style.display = 'none';
       // Xoá các div vùng che bổ sung của DOM để không bị hiển thị 2 lớp (canvas + DOM)
       wrap.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
+      wrap.querySelectorAll('.video-overlay-el').forEach(el => el.remove());
       return;
     }
 
     const img = document.getElementById('sub-preview-img');
-    if (!img || img.style.display === 'none') return; // no frame yet
+    if (!img || img.style.display === 'none') {
+      wrap.querySelectorAll('.video-overlay-el').forEach(el => el.remove());
+      return; // no frame yet
+    }
 
     const sample   = document.getElementById('sub-preview-sample')?.value || 'Phụ đề mẫu';
     const fontSize = parseInt(document.getElementById('proc-font-size')?.value || 32);
@@ -1105,10 +1335,12 @@
     overlay.style.right = imgOffX + 'px';
     overlay.textContent = sample;
 
+    _renderVideoOverlayDom(wrap, imgOffX, imgOffY, dispW, dispH);
+
     // ── Render extra blur zones on preview ──
     // Remove old extra blur elements
     wrap.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
-    if (blurOn && window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
+    if (window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
       window._procExtraBlurZones.forEach(zone => {
         const zH = (zone.height || 12) / 100;
         const zY = (zone.position || 50) / 100 - zH / 2;
@@ -1122,7 +1354,7 @@
         const div = document.createElement('div');
         div.className = 'extra-blur-zone';
         div.dataset.zoneId = zone.id;
-        div.style.cssText = `position:absolute;left:${imgOffX + ezLeft}px;top:${imgOffY + ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);`;
+          div.style.cssText = `position:absolute;left:${imgOffX + ezLeft}px;top:${imgOffY + ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);z-index:4;`;
         ['e','s','se'].forEach(function(edge){
           const hd = document.createElement('div');
           hd.className = 'pe2-handle ' + edge;
@@ -1215,7 +1447,7 @@
           };
           img.src = data.image;
           img.style.display = 'block';
-          // Lưu ảnh gốc không có logo để dùng cho AI thumbnail
+          // Lưu ảnh gốc không có logo để dùng lại cho preview.
           if (data.image && data.image.startsWith('data:image/')) {
             window._rawFrameB64 = data.image.split(',')[1] || null;
           } else {
@@ -1239,11 +1471,39 @@
   }
 
   window._step1Downloading = false;
+  function _step1DownloadOnlyEnabled() {
+    return document.getElementById('proc-download-only')?.checked || false;
+  }
+  function _step1GoFirstReadyToStep2(targetStep) {
+    const firstReady = (window._batchQueue || []).find(t => t.status === 'ready');
+    if (!firstReady) return false;
+    const pathEl = document.getElementById('proc-video');
+    const urlEl  = document.getElementById('proc-url');
+    if (/^https?:\/\//i.test(firstReady.val || '')) {
+      if (urlEl) urlEl.value = firstReady.val;
+      if (pathEl) pathEl.value = '';
+    } else {
+      if (pathEl) pathEl.value = firstReady.val || '';
+      if (urlEl) urlEl.value = '';
+    }
+    window._procCurrentTaskId = firstReady.id;
+    window._step3Started = false;
+    window._step3Confirmed = false;
+    const step = targetStep || 2;
+    _step1Log(`✅ Đã tải hết hàng chờ. Chuyển sang Bước ${step}.`, 'success');
+    setTimeout(() => procWizGo(step), 250);
+    return true;
+  }
   async function _runStep1QueueDownload() {
     if (window._step1Downloading) return;
     const pending = (window._batchQueue || []).find(t => t.status === 'pending');
     if (!pending) {
       _renderBatchQueue();
+      const target = window._step1AfterDownloadTarget;
+      if (target || _step1DownloadOnlyEnabled()) {
+        window._step1AfterDownloadTarget = null;
+        _step1GoFirstReadyToStep2(target || 2);
+      }
       return;
     }
 
@@ -1280,7 +1540,7 @@
           setTimeout(() => { if (typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame(); }, 300);
 
           // Auto-flow: skip Step 2, jump directly to Step 3
-          if (document.getElementById('proc-auto-flow')?.checked) {
+          if (document.getElementById('proc-auto-flow')?.checked && !_step1DownloadOnlyEnabled()) {
             _step1Log('🔁 Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
             window._step3Started = true;
             window._step3Confirmed = false;
@@ -1308,7 +1568,7 @@
         setTimeout(() => { if (typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame(); }, 300);
 
         // Auto-flow
-        if (document.getElementById('proc-auto-flow')?.checked) {
+        if (document.getElementById('proc-auto-flow')?.checked && !_step1DownloadOnlyEnabled()) {
           _step1Log('🔁 Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
           window._step3Started = true;
           window._step3Confirmed = false;
@@ -1335,6 +1595,12 @@
       const nextPending = (window._batchQueue || []).find(t => t.status === 'pending');
       if (nextPending) {
         setTimeout(() => _runStep1QueueDownload(), 600);
+      } else {
+        const target = window._step1AfterDownloadTarget;
+        if (target || _step1DownloadOnlyEnabled()) {
+          window._step1AfterDownloadTarget = null;
+          _step1GoFirstReadyToStep2(target || 2);
+        }
       }
     }
   }
@@ -1368,7 +1634,7 @@
     _runStep1QueueDownload();
   }
 
-  window.procWizStep2Continue = function() {
+  window.procWizStep2Continue = function(targetStep) {
     const firstReady = (window._batchQueue || []).find(t => t.status === 'ready');
     if (!firstReady) {
       // Check if all done — suggest going to next step
@@ -1383,6 +1649,7 @@
       const hasPending = (window._batchQueue || []).some(t => t.status === 'pending');
       if (hasPending) {
         toast('Đang tự động tải video...', 'info');
+        window._step1AfterDownloadTarget = targetStep || null;
         // Trigger download and wait for it to complete
         if (typeof _runStep1QueueDownload === 'function') {
           _runStep1QueueDownload();
@@ -1417,7 +1684,7 @@
     }
 
     // Settings are ready; continue to the confirmation/start step.
-    procWizGo(3);
+    procWizGo(targetStep || 3);
     
     // DO NOT auto-start processing — user must navigate to step 3 and click "Bắt đầu xử lý"
 
@@ -1445,8 +1712,10 @@
   window._frameLogoImg  = null;
   window._frameLogoFile = null;
   window._frameLogoIsGif = false;   // logo hiện tại có phải GIF động không
+  window._frameLogoSrc = '';
   window._frameAnimRAF  = null;     // id của vòng lặp animation (GIF)
-  window._rawFrameB64   = null; // Ảnh gốc từ video (không có logo) — dùng cho AI thumbnail
+  window._frameGifRestartTimer = null;
+  window._rawFrameB64   = null; // Ảnh gốc từ video (không có logo)
 
   /* Vòng lặp vẽ lại canvas để GIF logo chạy liên tục.
      drawImage lấy đúng khung GIF mà <img> đang hiển thị, nên vẽ lại đều đặn
@@ -1468,17 +1737,47 @@
     window._frameAnimRAF = requestAnimationFrame(_frameAnimLoop);
   }
   function _frameStartAnim() {
-    if (window._frameAnimRAF) return;            // đang chạy rồi
     if (!window._frameLogoIsGif) return;          // chỉ GIF mới cần
+    if (!document.getElementById('frame-enabled')?.checked) return;
+    _frameStartGifRestart();
+    if (window._frameAnimRAF) return;            // đang chạy rồi
     window._frameAnimLast = 0;
     window._frameAnimRAF = requestAnimationFrame(_frameAnimLoop);
   }
   function _frameStopAnim() {
     if (window._frameAnimRAF) { cancelAnimationFrame(window._frameAnimRAF); window._frameAnimRAF = null; }
+    _frameStopGifRestart();
+  }
+  function _frameStopGifRestart() {
+    if (window._frameGifRestartTimer) {
+      clearInterval(window._frameGifRestartTimer);
+      window._frameGifRestartTimer = null;
+    }
+  }
+  function _frameGifFreshSrc(src) {
+    src = String(src || '');
+    if (!src || src.startsWith('data:')) return src;
+    src = src.replace(/([?&])gif_replay=\d+/g, '').replace(/[?&]$/, '');
+    return src + (src.includes('?') ? '&' : '?') + 'gif_replay=' + Date.now();
+  }
+  function _frameStartGifRestart() {
+    if (window._frameGifRestartTimer || !window._frameLogoIsGif) return;
+    const reload = () => {
+      const src = window._frameLogoSrc || window._frameLogoImg?.src || '';
+      if (!src || !document.getElementById('frame-enabled')?.checked) return;
+      const fresh = new Image();
+      fresh.onload = () => {
+        window._frameLogoImg = fresh;
+        framePreviewUpdate();
+      };
+      fresh.src = _frameGifFreshSrc(src);
+    };
+    window._frameGifRestartTimer = setInterval(reload, 5000);
   }
   /* Gán logo cho preview + tự bật/tắt animation tùy GIF. */
   function _setFrameLogo(img, isGif) {
     window._frameLogoImg = img;
+    window._frameLogoSrc = img?.src || '';
     window._frameLogoIsGif = !!isGif;
     if (isGif) _frameStartAnim(); else _frameStopAnim();
     framePreviewUpdate();
@@ -1631,6 +1930,7 @@
 
     const titleEnabled = document.getElementById('frame-title-enabled')?.checked ?? true;
     const title       = titleEnabled ? (document.getElementById('frame-title')?.value || '') : '';
+    const hasTitle    = titleEnabled && title.trim();
     const titleSizePct= parseFloat(document.getElementById('frame-title-size')?.value || 5);
     const titleColor  = document.getElementById('frame-title-color')?.value || '#000000';
     const titleColor2 = document.getElementById('frame-title-color-2')?.value || '#ff0000';
@@ -1649,10 +1949,10 @@
     // Dùng độ phân giải video làm gốc vẽ (ổn định, không phụ thuộc kích thước hiển thị)
     const wrapW = srcImg.naturalWidth || wrap?.offsetWidth || 640;
 
-    // Title bar — chỉ hiện nếu titleEnabled
-    const titleFontPx = titleEnabled ? Math.max(10, Math.round(wrapW * titleSizePct / 100)) : 0;
+    // Title bar chỉ chiếm chỗ khi thật sự có nội dung tiêu đề.
+    const titleFontPx = hasTitle ? Math.max(10, Math.round(wrapW * titleSizePct / 100)) : 0;
     const sourceDisplayH = Math.round(wrapW * srcNH / srcNW);
-    const titleBarH = titleEnabled
+    const titleBarH = hasTitle
       ? (blurMode === 'expand'
           ? Math.round(titleFontPx * 2.4)
           : Math.max(40, Math.round(sourceDisplayH * 0.12)))
@@ -1773,12 +2073,12 @@
     }
 
     // ── Title bar (chỉ vẽ nếu titleEnabled) ──
-    if (titleEnabled && titleBarH > 0) {
+    if (hasTitle && titleBarH > 0) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, cW, titleBarH);
     }
 
-    if (titleEnabled && title) {
+    if (hasTitle) {
       ctx.font = `bold ${titleFontPx}px Arial, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -1863,7 +2163,7 @@
       const lH = Math.max(8, Math.round(vidH * logoSizePct));
       const lW = Math.round(lH * logoAR);
       const lX = Math.round(cW * logoLeftPct);
-      const titleOffset = (blurMode === 'overlay' && titleEnabled) ? titleBarH : 0;
+      const titleOffset = (blurMode === 'overlay' && hasTitle) ? titleBarH : 0;
       const lY = vidY + titleOffset + Math.round(vidH * logoTopPct);
       // Border radius: % of shorter side (0%=square, 50%=circle)
       const r  = Math.round(Math.min(lW, lH) * logoRadiusPct);
@@ -1875,7 +2175,8 @@
       ctx.restore();
     }
 
-    // ── Subtitle overlay on canvas (same as subtitle-only mode) ──
+    // ── Text/shape overlays, then subtitle overlay on top ──
+    _drawVideoOverlaysOnCanvas(ctx, vidX, vidY, vidW, vidH);
     _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
 
     // Compose in source space first, then place the complete foreground into
@@ -2037,35 +2338,35 @@
           _drawCanvasSelection(ctx, bX, bY, bW, bH, false);
         }
       }
+    }
 
-      // Draw extra blur zones
-      if (window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
-        window._procExtraBlurZones.forEach(zone => {
-          const zH = (zone.height || 12) / 100;
-          const zY = (zone.position || 50) / 100 - zH / 2;
-          const zW = (zone.width || 80) / 100;
-          const zXc = ((zone.x === undefined || zone.x === null) ? 50 : zone.x) / 100;
-          const zLeftFrac = Math.max(0, Math.min(1 - zW, zXc - zW / 2));
+    // Draw extra blur zones independently from the main "che phụ đề gốc" toggle.
+    if (window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
+      window._procExtraBlurZones.forEach(zone => {
+        const zH = (zone.height || 12) / 100;
+        const zY = (zone.position || 50) / 100 - zH / 2;
+        const zW = (zone.width || 80) / 100;
+        const zXc = ((zone.x === undefined || zone.x === null) ? 50 : zone.x) / 100;
+        const zLeftFrac = Math.max(0, Math.min(1 - zW, zXc - zW / 2));
 
-          const ezH = Math.round(vidH * zH);
-          const ezW = Math.round(vidW * zW);
-          const ezX = vidX + Math.round(vidW * zLeftFrac);
-          const ezY = vidY + Math.round(vidH * Math.max(0, Math.min(1 - zH, zY)));
+        const ezH = Math.round(vidH * zH);
+        const ezW = Math.round(vidW * zW);
+        const ezX = vidX + Math.round(vidW * zLeftFrac);
+        const ezY = vidY + Math.round(vidH * Math.max(0, Math.min(1 - zH, zY)));
 
-          ctx.save();
-          ctx.filter = 'blur(8px)';
-          ctx.drawImage(ctx.canvas, ezX, ezY, ezW, ezH, ezX - 4, ezY - 4, ezW + 8, ezH + 8);
-          ctx.restore();
-          ctx.fillStyle = 'rgba(0,0,0,0.35)';
-          ctx.fillRect(ezX, ezY, ezW, ezH);
+        ctx.save();
+        ctx.filter = 'blur(8px)';
+        ctx.drawImage(ctx.canvas, ezX, ezY, ezW, ezH, ezX - 4, ezY - 4, ezW + 8, ezH + 8);
+        ctx.restore();
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillRect(ezX, ezY, ezW, ezH);
 
-          // Draw selection outline + handles if this zone is selected
-          const sel = window._pe2Sel;
-          if (sel && sel.type === 'extra' && sel.id === zone.id) {
-            _drawCanvasSelection(ctx, ezX, ezY, ezW, ezH, true);
-          }
-        });
-      }
+        // Draw selection outline + handles if this zone is selected
+        const sel = window._pe2Sel;
+        if (sel && sel.type === 'extra' && sel.id === zone.id) {
+          _drawCanvasSelection(ctx, ezX, ezY, ezW, ezH, true);
+        }
+      });
     }
 
     if (!sample || !burnOn || !burnViOn) return;
@@ -2211,6 +2512,8 @@
       _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
     }
     if (typeof _syncColorPicker === 'function') _syncColorPicker();
+    if (typeof _ovLoadFromHidden === 'function') _ovLoadFromHidden();
+    if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
     if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
     return true;
   }
@@ -2274,8 +2577,8 @@
     { id:'frame-logo-top',      type:'value' },
     { id:'frame-logo-left',     type:'value' },
     { id:'frame-logo-radius',   type:'value' },
-    // Thumbnail
-    { id:'thumb-title',         type:'value' },
+    // Text / shape overlays
+    { id:'ov-layers-json',      type:'value' },
     { id:'sub-preview-sample',  type:'value' },
     { id:'sub-preview-ts',      type:'value' },
     // CapCut
@@ -2287,6 +2590,7 @@
 
   function procSaveDefaults() {
     const data = {};
+    if (typeof _ovSyncHidden === 'function') _ovSyncHidden();
     _PROC_FIELDS.forEach(f => {
       const el = document.getElementById(f.id);
       if (!el) return;
@@ -2343,6 +2647,8 @@
       if (typeof frameToggle === 'function') frameToggle();
       // Sync preview aspect layout
       if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
+      if (typeof _ovLoadFromHidden === 'function') _ovLoadFromHidden();
+      if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
       toast(`✅ Đã khôi phục cài đặt cho tỉ lệ ${aspect.replace('x', ':')}`, 'success');
     } catch (e) {
       toast('Lỗi khôi phục: ' + e.message, 'error');
@@ -2389,6 +2695,8 @@
           _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
         }
         if (typeof _syncColorPicker === 'function') _syncColorPicker();
+        if (typeof _ovLoadFromHidden === 'function') _ovLoadFromHidden();
+        if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
       }
       _updateAspectBadge();
       // Sync frame controls visibility on page load
@@ -2399,7 +2707,7 @@
     } catch (_) {}
   });
 
-  // ── Đổi khung hình Preview/Thumbnail (16:9, 9:16, hoặc auto) ───────────
+  // ── Đổi khung hình Preview (16:9, 9:16, hoặc auto) ───────────
   function _onPreviewAspectChange() {
     const sel = document.getElementById('proc-preview-aspect');
     const value = sel?.value || 'auto';
@@ -2420,7 +2728,6 @@
     const isVertical = aspect === '9x16';
 
     const subWrap   = document.getElementById('sub-preview-wrap');
-    const thumbWrap = document.getElementById('thumb-preview-wrap');
 
     // Khung xem trước phản ánh ĐÚNG khung sẽ xuất:
     //  - 'auto' (Tự nhận diện): giữ tỉ lệ video gốc, ảnh lấp đầy khung.
@@ -2487,9 +2794,6 @@
         if (_bgEl) { _bgEl.style.display = 'none'; _bgEl.removeAttribute('src'); }
       }
     }
-    // Thumbnail là ảnh cho nền tảng đăng → giữ theo tỉ lệ đích.
-    if (thumbWrap) thumbWrap.style.aspectRatio = isVertical ? '9 / 16' : '16 / 9';
-
     // Sync với window._procActiveAspect để các logic khác dùng
     window._procActiveAspect = aspect;
     if (typeof _updateAspectBadge === 'function') _updateAspectBadge();
@@ -2529,7 +2833,7 @@
       // Bỏ các div vùng che DOM còn sót (đã thêm ở chế độ phụ đề) để không bị
       // hiển thị 2 lớp với vùng che vẽ trên canvas khung.
       const _w = document.getElementById('sub-preview-wrap');
-      if (_w) _w.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
+      if (_w) _w.querySelectorAll('.extra-blur-zone,.video-overlay-el').forEach(el => el.remove());
       window._pe2Sel = null;
       // Keep img rendered but invisible (needed for naturalWidth/drawImage)
       if (img && img.src && img.naturalWidth) {
@@ -2795,8 +3099,7 @@
       window._thumbAiModelsLoaded = false; // cho phép thử lại lần sau
     }
   }
-  // Nạp ngay khi script sẵn sàng (không chặn UI)
-  loadThumbAiModels();
+  // Thumbnail flow disabled by request.
 
   async function generateThumbnailAI() {
     loadThumbAiModels();
@@ -2914,27 +3217,14 @@
     }
   }
 
-  // Listen for thumbnail_path in NDJSON stream from /api/process_video
-  // (Auto-display when pipeline finishes generating thumbnail)
-  window._displayProcThumbnail = function(thumbPath, thumbImage) {
-    const img = document.getElementById('thumb-preview-img');
-    const ph  = document.getElementById('thumb-placeholder');
-    const info = document.getElementById('thumb-output-info');
-    if (img && thumbImage) {
-      img.src = thumbImage;
-      img.style.display = 'block';
-    }
-    if (ph) {
-      if (thumbImage) {
-        ph.style.display = 'none';
-      } else {
-        ph.style.display = 'block';
-        ph.textContent = 'Thumbnail đã tạo: ' + (thumbPath || '').split(/[\\/]/).pop();
-      }
-    }
-    if (info && thumbPath) {
-      info.style.display = 'block';
-      info.textContent = '📁 ' + thumbPath;
-    }
-  };
+  // Thumbnail editor/generation is disabled by request. Keep no-op handlers so
+  // stale onclick/cache references do not break the process editor.
+  window._thumbState = { mode: 'none', path: '', b64: '' };
+  window.generateThumbnailPreview = async function() {};
+  window.thumbImportFile = function(input) { if (input) input.value = ''; };
+  window.thumbClear = function() { window._thumbState = { mode: 'none', path: '', b64: '' }; };
+  window.thumbToggleEnabled = function() {};
+  window.loadThumbAiModels = async function() {};
+  window.generateThumbnailAI = async function() {};
+  window._displayProcThumbnail = function() {};
   </script>

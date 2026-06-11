@@ -154,7 +154,6 @@ def _launch_app_window(url: str) -> int:
 
 def main() -> int:
     _prepare_stdio()
-    _patch_subprocess_no_console()
     os.chdir(APP_DIR)
     os.environ.setdefault("OPEN_BROWSER", "0")
     os.environ.setdefault("NGROK_ENABLED", "0")
@@ -170,6 +169,7 @@ def main() -> int:
         from core_app import socketio
 
         app = create_app()
+        _patch_subprocess_no_console()
 
         def _run_server() -> None:
             socketio.run(

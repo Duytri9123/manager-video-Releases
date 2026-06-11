@@ -33,6 +33,9 @@ logs/
 # Runtime output
 Downloaded/
 Transcripts/
+installer/
+dist_noconsole/
+
 dy_downloader.db
 *.db
 *.sqlite

@@ -114,24 +114,10 @@ def wait_thumb_retry_action(timeout: float = 600.0) -> dict:
 
 @bp.route("/api/proc_set_thumb", methods=["POST"])
 def proc_set_thumb():
-    """Set thumbnail config from frontend modal (sau khi review ASS xong).
-
-    Pipeline đọc giá trị này để override config thumbnail trước khi tạo.
-    Reset sau mỗi lần đọc để tránh leak giữa các video trong batch.
-    """
-    data = request.json or {}
-    cfg = {
-        "thumb_enabled": bool(data.get("thumb_enabled")),
-        "thumb_mode": str(data.get("thumb_mode") or "none").lower(),
-        "thumb_path": str(data.get("thumb_path") or "").strip(),
-        "thumb_title": str(data.get("thumb_title") or "").strip(),
-        "thumb_duration": float(data.get("thumb_duration") or 2.0),
-        "thumb_timestamp": float(data.get("thumb_timestamp") or 5.0),
-    }
+    """Thumbnail override is disabled for the process pipeline."""
     with _proc_thumb_lock:
         _proc_thumb_override.clear()
-        _proc_thumb_override.update(cfg)
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "disabled": True})
 
 
 def get_proc_thumb_override() -> dict:

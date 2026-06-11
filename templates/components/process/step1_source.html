@@ -68,12 +68,7 @@
             <span class="pe2-optcard-lbl">Bỏ qua kiểm tra ASS</span>
             <span class="pe2-optcard-badge">✓</span>
           </label>
-          <label class="pe2-optcard" title="Tự động bỏ qua bước chọn thumbnail">
-            <input type="checkbox" id="step3-skip-thumb" onchange="_onStep3SkipChange()">
-            <span class="pe2-optcard-ic">⏭</span>
-            <span class="pe2-optcard-lbl">Bỏ qua thumbnail</span>
-            <span class="pe2-optcard-badge">✓</span>
-          </label>
+          {# Thumbnail flow disabled by request. #}
         </div>
       </div>
 
@@ -89,6 +84,10 @@
             style="white-space:nowrap">
             📥 Tải hàng chờ
           </button>
+          <label class="check-item" style="margin:0;white-space:nowrap">
+            <input type="checkbox" id="proc-download-only">
+            <span>Chỉ tải video</span>
+          </label>
           <span class="text-xs text-muted" id="step1-dl-status">Nhấn để bắt đầu tải video gốc từ URL.</span>
         </div>
         <!-- Download log box -->
@@ -99,7 +98,7 @@
 
       <div class="btn-group mt-12" id="step1-next-btn-wrap" style="display:none">
         <button class="btn btn-primary w-full justify-center" style="font-weight:700"
-          onclick="window.procWizStep2Continue && window.procWizStep2Continue()">
+          onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
           ▶ Xử lý &amp; Xem kết quả (Bước 2) →
         </button>
       </div>

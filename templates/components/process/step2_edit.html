@@ -125,6 +125,19 @@
       .pe2-handle.s{ bottom:-7px; left:50%; transform:translateX(-50%); cursor:ns-resize; }
       .pe2-handle.se{ width:18px; height:18px; right:-9px; bottom:-9px; cursor:nwse-resize; background:var(--accent,#1a73e8); border-radius:4px; }
       .pe2-dragging *{ cursor:move !important; }
+      .pe2-screen .video-overlay-el{ z-index:3; pointer-events:auto !important; cursor:move; }
+      .pe2-screen .video-overlay-el:hover{ outline:2px dashed var(--accent,#3b82f6); outline-offset:1px; }
+      .pe2-screen .video-overlay-el:hover .pe2-handle,
+      .pe2-screen .video-overlay-el.pe2-selected .pe2-handle{ opacity:1; }
+      .ov-layer-card{ border:1px solid var(--border,#d7e3fb); border-radius:8px; margin-bottom:8px; background:var(--surface,#fff); overflow:hidden; }
+      .ov-layer-card.pe2-selected{ border-color:var(--accent,#1a73e8); box-shadow:0 0 0 2px rgba(26,115,232,.12); }
+      .ov-layer-head{ width:100%; border:0; background:var(--bg2,#f7f9ff); display:flex; align-items:center; gap:8px; padding:8px 10px; cursor:pointer; text-align:left; }
+      .ov-layer-type{ width:24px; height:24px; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; background:#e8f0fe; color:var(--accent,#1a73e8); font-weight:800; flex-shrink:0; }
+      .ov-layer-name{ font-size:12px; font-weight:700; color:var(--text,#1f2430); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .ov-layer-meta{ font-size:10px; color:var(--text-muted,#7d8cab); white-space:nowrap; }
+      .ov-layer-body{ padding:10px; display:none; border-top:1px solid var(--border,#d7e3fb); }
+      .ov-layer-card.open .ov-layer-body{ display:block; }
+      .ov-layer-actions{ margin-left:auto; display:flex; gap:4px; align-items:center; flex-shrink:0; }
 
       .pe2-ts-badge{
         font-family:monospace; font-size:12px; color:var(--text,#333); background:var(--bg3,#f0f0f2);
@@ -222,7 +235,7 @@
             <button class="pe2-tab active" data-pe2tab="subs"  onclick="pe2Tool('subs')"><span class="ic">💬</span>Phụ đề</button>
             <button class="pe2-tab"        data-pe2tab="blur"  onclick="pe2Tool('blur')"><span class="ic">🛡</span>Vùng che</button>
             <button class="pe2-tab"        data-pe2tab="frame" onclick="pe2Tool('frame')"><span class="ic">🎞</span>Khung</button>
-            <button class="pe2-tab"        data-pe2tab="thumb" onclick="pe2Tool('thumb')"><span class="ic">🖼</span>Thumb</button>
+            <button class="pe2-tab"        data-pe2tab="overlay" onclick="pe2Tool('overlay')"><span class="ic">▣</span>Chữ/Khối</button>
           </div>
 
           <div class="pe2-panel-body">
@@ -351,7 +364,21 @@
               </div>
             </div>
 
-            <!-- ══ PANE: Thumbnail ══ -->
+            <!-- ══ PANE: Chữ / Khối ══ -->
+            <div class="pe2-pane" data-pe2pane="overlay">
+              <div class="flex-between" style="margin-bottom:8px;gap:8px">
+                <div class="pe2-grp" style="margin:0">Chữ / hình khối</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 9px" onclick="ovAddText()">＋ Text</button>
+                  <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 9px" onclick="ovAddRect()">▭ Khối</button>
+                </div>
+              </div>
+              <input type="hidden" id="ov-layers-json" value="[]">
+              <div id="ov-layer-list"></div>
+            </div>
+
+            {#
+            Thumbnail flow disabled by request.
             <div class="pe2-pane" data-pe2pane="thumb">
               <div class="sub-preview-box" style="padding:10px">
                 <div class="flex-between" style="margin-bottom:8px;flex-wrap:wrap;gap:4px">
@@ -387,6 +414,7 @@
                 <div id="thumb-output-info" style="display:none;font-size:10px;color:var(--text-muted);margin-top:4px;word-break:break-all"></div>
               </div>
             </div>
+            #}
 
           </div><!-- /panel-body -->
           <div style="padding:12px 14px; border-top:1px solid var(--border); background:var(--bg2); display:flex; justify-content:space-between; align-items:center;">
@@ -454,7 +482,7 @@
       window.pe2Tool = function(name){
         var root = document.querySelector('[data-proc-step="2"] .pe2-editor');
         if (!root) return;
-        var titles = { subs:'⚙ Phụ đề & Dịch', blur:'🛡 Vùng che', frame:'🎞 Khung video', thumb:'🖼 Thumbnail' };
+        var titles = { subs:'⚙ Phụ đề & Dịch', blur:'🛡 Vùng che', frame:'🎞 Khung video', overlay:'▣ Chữ / Khối' };
         root.querySelectorAll('[data-pe2tab]').forEach(function(b){
           b.classList.toggle('active', b.getAttribute('data-pe2tab') === name);
         });
@@ -508,6 +536,7 @@
         window._pe2Sel = window._pe2Sel || null;   // {type, id}
         window.pe2ApplySelection = function(){
           wrap.querySelectorAll('.pe2-selected').forEach(function(el){ el.classList.remove('pe2-selected'); });
+          document.querySelectorAll('.ov-layer-card.pe2-selected').forEach(function(el){ el.classList.remove('pe2-selected'); });
           var s = window._pe2Sel;
           if (!s) return;
           var el = null;
@@ -518,8 +547,60 @@
             el = (cv && cv.style.display !== 'none') ? cv : bd;
           }
           else if (s.type === 'extra') el = wrap.querySelector('.extra-blur-zone[data-zone-id="' + s.id + '"]');
+          else if (s.type === 'overlay') {
+            el = wrap.querySelector('.video-overlay-el[data-ov-id="' + s.id + '"]');
+            var card = document.querySelector('.ov-layer-card[data-ov-id="' + s.id + '"]');
+            if (card) card.classList.add('pe2-selected');
+          }
           if (el) el.classList.add('pe2-selected');
         };
+
+        function _ovById(id){
+          return (window._videoOverlays || []).find(function(o){ return String(o.id) === String(id); });
+        }
+        function _ovBoundsFrac(ov){
+          if (!ov) return null;
+          var x = Number(ov.x_pct == null ? 0.5 : ov.x_pct);
+          var y = Number(ov.y_pct == null ? 0.5 : ov.y_pct);
+          if (ov.type === 'text') {
+            var size = Number(ov.size_pct || 0.05);
+            var txt = String(ov.text || 'Text');
+            var lines = Math.max(1, Math.ceil(txt.length / 18));
+            var w = clamp(txt.length * size * 0.35, 0.08, 0.9);
+            var h = clamp(lines * size * 1.45, 0.035, 0.6);
+            return { left:x - w/2, right:x + w/2, top:y - h/2, bottom:y + h/2, x:x, y:y, w:w, h:h };
+          }
+          var rw = Number(ov.width_pct || 0.8);
+          var rh = Number(ov.height_pct || 0.12);
+          return { left:x - rw/2, right:x + rw/2, top:y - rh/2, bottom:y + rh/2, x:x, y:y, w:rw, h:rh };
+        }
+        function _hitOverlay(fxv, fyv, handlesOnly){
+          var layers = window._videoOverlays || [];
+          var sel = window._pe2Sel;
+          var tol = 0.04;
+          if (sel && sel.type === 'overlay') {
+            var cur = _ovById(sel.id);
+            var b = _ovBoundsFrac(cur);
+            if (b) {
+              if (Math.abs(fxv - b.right) < tol && Math.abs(fyv - b.bottom) < tol) return { type:'ov-resize', id:cur.id, edge:'se' };
+              if (cur.type === 'rect' && Math.abs(fxv - b.right) < tol && Math.abs(fyv - b.y) < tol*2) return { type:'ov-resize', id:cur.id, edge:'e' };
+              if (cur.type === 'rect' && Math.abs(fyv - b.bottom) < tol && Math.abs(fxv - b.x) < tol*2) return { type:'ov-resize', id:cur.id, edge:'s' };
+              if (cur.type === 'text' && Math.abs(fxv - b.right) < tol && Math.abs(fyv - b.y) < tol*2) return { type:'ov-resize', id:cur.id, edge:'e' };
+              if (cur.type === 'text' && Math.abs(fyv - b.bottom) < tol && Math.abs(fxv - b.x) < tol*2) return { type:'ov-resize', id:cur.id, edge:'s' };
+            }
+          }
+          if (handlesOnly) return null;
+          for (var oi = layers.length - 1; oi >= 0; oi--) {
+            var ov = layers[oi];
+            if (ov.enabled === false) continue;
+            if (window._ovVisibleAtPreviewTime && !window._ovVisibleAtPreviewTime(ov)) continue;
+            var ob = _ovBoundsFrac(ov);
+            if (ob && fxv >= ob.left && fxv <= ob.right && fyv >= ob.top && fyv <= ob.bottom) {
+              return { type:'overlay', id:ov.id };
+            }
+          }
+          return null;
+        }
 
         document.addEventListener('pointerdown', function(e){
           if (!wrap.contains(e.target)) return;
@@ -539,7 +620,7 @@
             var fxv = (cx - g.vidX) / g.vidW;
             var fyv = (cy - g.vidY) / g.vidH;
 
-            var hit = null;
+            var hit = _hitOverlay(fxv, fyv, false);
             var zones = window._procExtraBlurZones || [];
 
             // First: test resize handles of the currently-selected extra zone
@@ -599,7 +680,12 @@
             if (hit) {
               drag = hit;
               // Selection follows the zone (resize keeps the same zone selected)
-              window._pe2Sel = (hit.type === 'resize') ? { type:'extra', id: hit.id } : hit;
+              window._pe2Sel = (hit.type === 'resize')
+                ? { type:'extra', id: hit.id }
+                : ((hit.type === 'ov-resize') ? { type:'overlay', id: hit.id } : hit);
+              if ((hit.type === 'overlay' || hit.type === 'ov-resize') && window.ovSelectLayer) {
+                window.ovSelectLayer(hit.id, false);
+              }
               document.body.classList.add('pe2-dragging');
               // Re-render canvas so the blue selection outline shows immediately
               if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
@@ -615,17 +701,26 @@
           var t = e.target;
           var handle = (t.closest ? t.closest('.pe2-handle') : null);
           if (handle){
+            var ovElH = handle.closest('.video-overlay-el');
             var zEl = handle.closest('.extra-blur-zone');
-            if (!zEl) return;
-            drag = { type:'resize', id: parseInt(zEl.dataset.zoneId), edge: handle.dataset.pe2handle };
-            window._pe2Sel = { type:'extra', id: drag.id };
+            if (ovElH) {
+              drag = { type:'ov-resize', id: ovElH.dataset.ovId, edge: handle.dataset.pe2handle };
+              window._pe2Sel = { type:'overlay', id: drag.id };
+              if (window.ovSelectLayer) window.ovSelectLayer(drag.id, false);
+            } else if (zEl) {
+              drag = { type:'resize', id: parseInt(zEl.dataset.zoneId), edge: handle.dataset.pe2handle };
+              window._pe2Sel = { type:'extra', id: drag.id };
+            } else return;
           } else {
             var zoneEl = (t.closest ? t.closest('.extra-blur-zone') : null);
+            var ovEl = (t.closest ? t.closest('.video-overlay-el') : null);
             if (t.id === 'sub-preview-text') drag = { type:'sub' };
             else if (t.id === 'sub-preview-blur' || t.id === 'sub-preview-blur-canvas') drag = { type:'blur' };
+            else if (ovEl) drag = { type:'overlay', id: ovEl.dataset.ovId };
             else if (zoneEl) drag = { type:'extra', id: parseInt(zoneEl.dataset.zoneId) };
             else { window._pe2Sel = null; pe2ApplySelection(); return; }   // bấm vùng trống → bỏ chọn
             window._pe2Sel = drag;
+            if (drag.type === 'overlay' && window.ovSelectLayer) window.ovSelectLayer(drag.id, false);
           }
           pe2ApplySelection();
           document.body.classList.add('pe2-dragging');
@@ -690,6 +785,26 @@
               if (drag.edge.indexOf('s') >= 0) zr.height = Math.round(clamp(2 * Math.abs(f   - yc) * 100, 3, 40));
               if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
             }
+          } else if (drag.type === 'overlay'){
+            var ov = _ovById(drag.id);
+            if (ov){
+              ov.x_pct = Math.round(fx * 1000) / 1000;
+              ov.y_pct = Math.round(f * 1000) / 1000;
+              if (window.ovRenderLayerList) window.ovRenderLayerList();
+            }
+          } else if (drag.type === 'ov-resize'){
+            var ro = _ovById(drag.id);
+            if (ro){
+              var ox = Number(ro.x_pct == null ? 0.5 : ro.x_pct);
+              var oy = Number(ro.y_pct == null ? 0.5 : ro.y_pct);
+              if (ro.type === 'text') {
+                ro.size_pct = Math.round(clamp(Math.max(Math.abs(f - oy) * 1.3, Math.abs(fx - ox) * 0.45), 0.01, 0.30) * 1000) / 1000;
+              } else {
+                if (drag.edge.indexOf('e') >= 0) ro.width_pct = Math.round(clamp(2 * Math.abs(fx - ox), 0.01, 1) * 1000) / 1000;
+                if (drag.edge.indexOf('s') >= 0) ro.height_pct = Math.round(clamp(2 * Math.abs(f - oy), 0.01, 1) * 1000) / 1000;
+              }
+              if (window.ovRenderLayerList) window.ovRenderLayerList();
+            }
           }
           if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
           pe2ApplySelection();   // giữ viền chọn + handle sau khi vẽ lại
@@ -750,6 +865,25 @@
           seg.style.width = width + '%';
           var lab = document.createElement('span');
           lab.textContent = _fmt(s) + '→' + _fmt(e);
+          seg.appendChild(lab);
+          box.appendChild(seg);
+        });
+        (window._videoOverlays || []).forEach(function(ov){
+          var hasS = !(ov.start_sec === '' || ov.start_sec === null || ov.start_sec === undefined);
+          var hasE = !(ov.end_sec === '' || ov.end_sec === null || ov.end_sec === undefined);
+          if (!hasS && !hasE) return;
+          var s = hasS ? Number(ov.start_sec) : 0;
+          var e = hasE ? Number(ov.end_sec) : dur;
+          if (!(e > s)) return;
+          var left = Math.max(0, Math.min(100, s / dur * 100));
+          var width = Math.max(1, Math.min(100 - left, (e - s) / dur * 100));
+          var seg = document.createElement('div');
+          seg.className = 'pe2-tl-range';
+          seg.style.left = left + '%';
+          seg.style.width = width + '%';
+          seg.style.background = ov.type === 'text' ? 'rgba(34,197,94,.28)' : 'rgba(59,130,246,.25)';
+          var lab = document.createElement('span');
+          lab.textContent = (ov.type === 'text' ? 'T ' : '▭ ') + _fmt(s) + '→' + _fmt(e);
           seg.appendChild(lab);
           box.appendChild(seg);
         });

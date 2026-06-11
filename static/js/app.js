@@ -925,12 +925,13 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
-    // Thumbnail
-    thumb_enabled:        document.getElementById('thumb-enabled')?.checked ?? false,
-    thumb_mode:           (window._batchThumbMode || (window._thumbState?.mode === 'none' ? 'frame' : window._thumbState?.mode || 'frame')),
-    thumb_path:           (window._batchThumbPath || window._thumbState?.path || ''),
-    thumb_title:          document.getElementById('thumb-title')?.value || '',
-    thumb_duration:       0.3,  // seconds to show thumbnail at start
+    video_overlays:       (typeof window._collectVideoOverlays === 'function') ? window._collectVideoOverlays() : [],
+    // Thumbnail flow disabled by request.
+    thumb_enabled:        false,
+    thumb_mode:           'none',
+    thumb_path:           '',
+    thumb_title:          '',
+    thumb_duration:       0,
   };
 
   const doRequest = (body, isFormData) => fetch('/api/process_video', {
@@ -1004,16 +1005,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
             if (d.subtitle_path) {
               window._publishLastSubtitlePath = d.subtitle_path;
             }
-            if (d.thumbnail_path) {
-              window._publishLastThumbnailPath = d.thumbnail_path;
-              if (typeof window._displayProcThumbnail === 'function') {
-                window._displayProcThumbnail(d.thumbnail_path, d.thumbnail_image);
-              }
-            }
-            // ── Thumbnail AI failure event ──
-            if (d.thumb_failed) {
-              if (typeof _showThumbFailCard === 'function') _showThumbFailCard();
-            }
+            // Thumbnail stream events are ignored because the thumbnail flow is disabled.
             if (d.tts_incomplete && typeof _showTtsFailModal === 'function') {
               _showTtsFailModal(d);
             }

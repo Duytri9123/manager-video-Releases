@@ -428,6 +428,182 @@ def _clamp_float(value: float, low: float, high: float) -> float:
     return max(low, min(high, v))
 
 
+def _normalize_hex_rgb(value: str, default: str = "#000000") -> str:
+    txt = str(value or "").strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", txt):
+        return txt.upper()
+    if re.fullmatch(r"[0-9a-fA-F]{6}", txt):
+        return ("#" + txt).upper()
+    return default
+
+
+def _normalize_video_overlays(raw) -> list[dict]:
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(raw, list):
+        return []
+
+    overlays: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        typ = str(item.get("type") or "").strip().lower()
+        if not _as_bool(item.get("enabled", True), True):
+            continue
+
+        def pct(name: str, default: float, low: float = 0.0, high: float = 1.0) -> float:
+            return _clamp_float(_as_float(item.get(name), default), low, high)
+
+        def opt_time(name: str):
+            val = item.get(name)
+            if val is None or str(val).strip() == "":
+                return None
+            try:
+                return max(0.0, float(val))
+            except Exception:
+                return None
+
+        start_sec = opt_time("start_sec")
+        end_sec = opt_time("end_sec")
+        if start_sec is not None and end_sec is not None and end_sec <= start_sec:
+            end_sec = None
+
+        if typ == "rect":
+            overlays.append({
+                "type": "rect",
+                "x_pct": pct("x_pct", 0.5),
+                "y_pct": pct("y_pct", 0.5),
+                "width_pct": pct("width_pct", 0.8, 0.01, 1.0),
+                "height_pct": pct("height_pct", 0.12, 0.01, 1.0),
+                "color": _normalize_hex_rgb(item.get("color"), "#000000"),
+                "opacity": pct("opacity", 0.55),
+                "start_sec": start_sec,
+                "end_sec": end_sec,
+            })
+        elif typ == "text":
+            text = str(item.get("text") or "").strip()
+            if not text:
+                continue
+            overlays.append({
+                "type": "text",
+                "text": text[:500],
+                "x_pct": pct("x_pct", 0.5),
+                "y_pct": pct("y_pct", 0.18),
+                "size_pct": pct("size_pct", 0.05, 0.01, 0.30),
+                "color": _normalize_hex_rgb(item.get("color"), "#FFFFFF"),
+                "box_color": _normalize_hex_rgb(item.get("box_color"), "#000000"),
+                "box_opacity": pct("box_opacity", 0.5),
+                "start_sec": start_sec,
+                "end_sec": end_sec,
+            })
+    return overlays
+
+
+def _ffmpeg_color(hex_color: str, opacity: float = 1.0) -> str:
+    rgb = _normalize_hex_rgb(hex_color, "#000000").lstrip("#")
+    alpha = _clamp_float(opacity, 0.0, 1.0)
+    return f"0x{rgb}@{alpha:.3f}"
+
+
+def _escape_drawtext_text(text: str) -> str:
+    return (
+        str(text or "")
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace(":", "\\:")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+        .replace("%", "\\%")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        .replace("\r", " ")
+        .replace("\n", " ")
+    )
+
+
+def _overlay_enable_expr(ov: dict) -> str:
+    st = ov.get("start_sec")
+    en = ov.get("end_sec")
+    if st is None and en is None:
+        return ""
+    s0 = float(st) if st is not None else 0.0
+    e0 = float(en) if en is not None else 1e9
+    return f":enable='between(t,{s0:.3f},{e0:.3f})'"
+
+
+def _append_video_overlay_filters(
+    filter_complex_parts: list[str],
+    curr_label: str,
+    overlays: list[dict],
+    src_w: int,
+    src_h: int,
+    frame_geom: Optional[tuple[int, int, int, int]] = None,
+    prefix: str = "ov",
+) -> str:
+    if not overlays:
+        return curr_label
+
+    if frame_geom:
+        base_x, base_y, base_w, base_h = frame_geom
+    else:
+        base_x, base_y, base_w, base_h = 0, 0, max(1, int(src_w)), max(1, int(src_h))
+
+    for idx, ov in enumerate(overlays):
+        next_label = f"{prefix}{idx}"
+        enable = _overlay_enable_expr(ov)
+        bx = float(base_x)
+        by = float(base_y)
+        bw = float(max(1, base_w))
+        bh = float(max(1, base_h))
+
+        if ov.get("type") == "rect":
+            w_pct = _clamp_float(ov.get("width_pct", 0.8), 0.01, 1.0)
+            h_pct = _clamp_float(ov.get("height_pct", 0.12), 0.01, 1.0)
+            x_pct = _clamp_float(ov.get("x_pct", 0.5), 0.0, 1.0)
+            y_pct = _clamp_float(ov.get("y_pct", 0.5), 0.0, 1.0)
+            color = _ffmpeg_color(ov.get("color", "#000000"), ov.get("opacity", 0.55))
+            x_expr = f"{bx:.3f}+{bw:.3f}*{x_pct:.6f}-{bw:.3f}*{w_pct:.6f}/2"
+            y_expr = f"{by:.3f}+{bh:.3f}*{y_pct:.6f}-{bh:.3f}*{h_pct:.6f}/2"
+            w_expr = f"{bw:.3f}*{w_pct:.6f}"
+            h_expr = f"{bh:.3f}*{h_pct:.6f}"
+            filter_complex_parts.append(
+                f"[{curr_label}]drawbox=x='{x_expr}':y='{y_expr}':w='{w_expr}':h='{h_expr}':"
+                f"color={color}:t=fill{enable}[{next_label}]"
+            )
+            curr_label = next_label
+            continue
+
+        if ov.get("type") == "text":
+            text = _escape_drawtext_text(ov.get("text", ""))
+            if not text:
+                continue
+            size_pct = _clamp_float(ov.get("size_pct", 0.05), 0.01, 0.30)
+            font_size = max(8, int(round(bh * size_pct)))
+            x_pct = _clamp_float(ov.get("x_pct", 0.5), 0.0, 1.0)
+            y_pct = _clamp_float(ov.get("y_pct", 0.18), 0.0, 1.0)
+            x_expr = f"{bx:.3f}+{bw:.3f}*{x_pct:.6f}-text_w/2"
+            y_expr = f"{by:.3f}+{bh:.3f}*{y_pct:.6f}-text_h/2"
+            font_color = _ffmpeg_color(ov.get("color", "#FFFFFF"), 1.0)
+            box_opacity = _clamp_float(ov.get("box_opacity", 0.5), 0.0, 1.0)
+            if box_opacity > 0.001:
+                box_color = _ffmpeg_color(ov.get("box_color", "#000000"), box_opacity)
+                box_opts = f":box=1:boxcolor={box_color}:boxborderw={max(2, int(font_size * 0.35))}"
+            else:
+                box_opts = ":box=0"
+            filter_complex_parts.append(
+                f"[{curr_label}]drawtext=text='{text}':fontcolor={font_color}:fontsize={font_size}:"
+                f"x='{x_expr}':y='{y_expr}'{box_opts}{enable}[{next_label}]"
+            )
+            curr_label = next_label
+
+    return curr_label
+
+
 def _fmt_hms(seconds: float) -> str:
     total = max(0.0, float(seconds))
     h, r = divmod(total, 3600)
@@ -1506,6 +1682,7 @@ def burn_subtitles(
     log_callback=None,
     blur_y_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
+    video_overlays: Optional[list] = None,
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
 ) -> tuple[bool, str]:
@@ -1551,6 +1728,7 @@ def burn_subtitles(
                          log_callback=log_callback,
                          blur_y_pct=blur_y_pct,
                          blur_extra_zones=blur_extra_zones,
+                         video_overlays=video_overlays,
                          target_aspect=target_aspect,
                          aspect_pad_blur=aspect_pad_blur)
 
@@ -1560,7 +1738,8 @@ def burn_subtitles(
                      font_size, font_color, outline_color, outline_width,
                      margin_v, subtitle_position,
                      blur_y_pct=blur_y_pct,
-                     blur_extra_zones=blur_extra_zones)
+                     blur_extra_zones=blur_extra_zones,
+                     video_overlays=video_overlays)
 
 
 def _burn_ass(
@@ -1591,6 +1770,7 @@ def _burn_ass(
     log_callback=None,
     blur_y_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
+    video_overlays: Optional[list] = None,
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
 ) -> tuple[bool, str]:
@@ -1777,7 +1957,7 @@ def _burn_ass(
                     y_start = 0.0
             active_zones.append((h_pct, w_pct, y_start, 0.5, None, None))
             
-        if blur_original and blur_extra_zones:
+        if blur_extra_zones:
             for ez in blur_extra_zones:
                 try:
                     ez_h = float(ez.get("height_pct", 0.12))
@@ -1811,7 +1991,7 @@ def _burn_ass(
             filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
             filter_complex_parts.append(
                 f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_left:.4f}:ih*{y:.4f},"
-                f"boxblur=luma_radius=20:luma_power=3[blurred_{idx}]"
+                f"boxblur=luma_radius=20:luma_power=3:chroma_radius=15:chroma_power=2[blurred_{idx}]"
             )
             filter_complex_parts.append(
                 f"[orig_{idx}][blurred_{idx}]overlay=W*{_left:.4f}:H*{y:.4f}{_en_expr}[{next_label}]"
@@ -1924,6 +2104,23 @@ def _burn_ass(
                 f"canvas {ow}x{oh}, blur cạnh {sw}px"
             )
 
+        _video_overlays = _normalize_video_overlays(video_overlays)
+        if _video_overlays:
+            _frame_geom = (
+                (_frame_vid_x, _frame_vid_y, _frame_vid_w, _frame_vid_h)
+                if _is_expand else None
+            )
+            curr_label = _append_video_overlay_filters(
+                filter_complex_parts,
+                curr_label,
+                _video_overlays,
+                _src_w,
+                _src_h,
+                frame_geom=_frame_geom,
+                prefix="vo",
+            )
+            _log(f"▣ Overlay video: {len(_video_overlays)} lớp chữ/khối")
+
         # Apply ASS before aspect conversion so positions remain relative to the
         # source video and match the editor's blur-zone coordinates.
         filter_complex_parts.append(f"[{curr_label}]ass='{ass_esc}'[subbed]")
@@ -1950,8 +2147,9 @@ def _burn_ass(
             # Read title bar height from ASS comments
             _title_bar_h_from_ass = 0
             try:
+                _title_bar_h_from_ass = _ass_comment_int("Title bar h px", 0)
                 _tbh_match = re.search(r"^; Title bar height:\s*([\d.]+)%", _ass_content, re.MULTILINE)
-                if _tbh_match:
+                if _title_bar_h_from_ass <= 0 and _tbh_match:
                     _title_bar_h_from_ass = int(_vid_h * float(_tbh_match.group(1)) / 100)
             except Exception:
                 pass
@@ -2089,6 +2287,7 @@ def _burn_srt(
     subtitle_position: str = "bottom",
     blur_y_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
+    video_overlays: Optional[list] = None,
 ) -> tuple[bool, str]:
     """
     Burn SRT subtitles into video.
@@ -2129,7 +2328,47 @@ def _burn_srt(
             f"Alignment={alignment}"
         )
 
-        if blur_original and blur_zone != "none":
+        try:
+            _vr = subprocess.run(
+                [ffmpeg, "-i", str(tmp_video)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            )
+            _vm = re.search(r"(\d{2,5})x(\d{2,5})", _vr.stderr or "")
+            _src_w, _src_h = (int(_vm.group(1)), int(_vm.group(2))) if _vm else (1280, 720)
+        except Exception:
+            _src_w, _src_h = 1280, 720
+
+        _video_overlays = _normalize_video_overlays(video_overlays)
+
+        def _encode_srt_with_optional_overlays(input_video: Path, out_video: Path, crf: str) -> tuple[bool, str]:
+            if _video_overlays:
+                filter_parts: list[str] = []
+                curr = _append_video_overlay_filters(
+                    filter_parts,
+                    "0:v",
+                    _video_overlays,
+                    _src_w,
+                    _src_h,
+                    prefix="svo",
+                )
+                filter_parts.append(f"[{curr}]subtitles='{srt_esc}':force_style='{sub_style}'[vout]")
+                return run_ffmpeg([
+                    ffmpeg, "-i", str(input_video),
+                    "-filter_complex", ";".join(filter_parts),
+                    "-map", "[vout]", "-map", "0:a?",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
+                    "-c:a", "copy",
+                    str(out_video), "-y", "-loglevel", "error"
+                ])
+            return run_ffmpeg([
+                ffmpeg, "-i", str(input_video),
+                "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", crf,
+                "-c:a", "copy",
+                str(out_video), "-y", "-loglevel", "error"
+            ])
+
+        if (blur_original and blur_zone != "none") or blur_extra_zones:
             # Two-pass approach: first blur the zone, then burn subtitles
             # Step A: blur zone → intermediate file
             tmp_blurred = Path(tmpdir) / "blurred.mp4"
@@ -2149,7 +2388,7 @@ def _burn_srt(
                         y_start = 0.0
                 active_zones.append((h_pct, w_pct, y_start, 0.5, None, None))
                 
-            if blur_original and blur_extra_zones:
+            if blur_extra_zones:
                 for ez in blur_extra_zones:
                     try:
                         ez_h = float(ez.get("height_pct", 0.12))
@@ -2177,7 +2416,7 @@ def _burn_srt(
                 filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
                 filter_complex_parts.append(
                     f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_left:.4f}:ih*{y:.4f},"
-                    f"boxblur=luma_radius=20:luma_power=3[blurred_{idx}]"
+                    f"boxblur=luma_radius=20:luma_power=3:chroma_radius=15:chroma_power=2[blurred_{idx}]"
                 )
                 filter_complex_parts.append(
                     f"[orig_{idx}][blurred_{idx}]overlay=W*{_left:.4f}:H*{y:.4f}{_en_expr}[{next_label}]"
@@ -2200,22 +2439,10 @@ def _burn_srt(
                 tmp_blurred = tmp_video
 
             # Step B: burn subtitles on top of blurred video
-            ok, err = run_ffmpeg([
-                ffmpeg, "-i", str(tmp_blurred),
-                "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-c:a", "copy",
-                str(tmp_out), "-y", "-loglevel", "error"
-            ])
+            ok, err = _encode_srt_with_optional_overlays(tmp_blurred, tmp_out, "23")
         else:
             # No blur - just burn subtitles directly
-            ok, err = run_ffmpeg([
-                ffmpeg, "-i", str(tmp_video),
-                "-vf", f"subtitles='{srt_esc}':force_style='{sub_style}'",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                "-c:a", "copy",
-                str(tmp_out), "-y", "-loglevel", "error"
-            ])
+            ok, err = _encode_srt_with_optional_overlays(tmp_video, tmp_out, "23")
 
         if ok and tmp_out.exists():
             shutil.copy2(str(tmp_out), str(output_path))
@@ -4309,9 +4536,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         if _duration <= 0:
                             _duration = 600.0
 
-                        # Auto-generate title if not provided
+                        # Empty title means no title bar. Do not auto-generate a
+                        # frame title, because it creates unexpected top padding.
                         _frame_title = str(data.get("frame_title") or "").strip()
-                        if not _frame_title:
+                        if False and not _frame_title:
                             yield send(log=f"[Bước 3/5] 🤖 AI đang tạo tiêu đề khung...", level="info")
                             try:
                                 _frame_title = generate_frame_title(
@@ -4327,6 +4555,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             except Exception as _e:
                                 yield send(log=f"[Bước 3/5] ⚠ Không tạo được tiêu đề: {_e}", level="warning")
                                 _frame_title = ""
+                        _frame_title_visible = (
+                            _as_bool(data.get("frame_title_enabled", True), True)
+                            and bool(_frame_title.strip())
+                        )
 
                         # Logo path — default to img/logo.png
                         _logo_path = str(data.get("frame_logo_path") or "").strip()
@@ -4347,7 +4579,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             outline_width=_scaled_outline_width,
                             margin_v=_scaled_margin_v,
                             alignment=alignment,
-                            title_text=_frame_title if _as_bool(data.get("frame_title_enabled", True), True) else "",
+                            title_text=_frame_title if _frame_title_visible else "",
                             title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
                             title_color=str(data.get("frame_title_color") or "#000000"),
                             title_color_2=str(data.get("frame_title_color_2") or "#ff0000"),
@@ -4358,7 +4590,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             # title rỗng, đây là double-safe).
                             title_bar_h_pct=(
                                 _as_float(data.get("frame_title_bar_h_pct"), 12.0)
-                                if _as_bool(data.get("frame_title_enabled", True), True)
+                                if _frame_title_visible
                                 else 0.0
                             ),
                             blur_w_pct=_as_float(data.get("frame_blur_w_pct"), 15.0),
@@ -4457,6 +4689,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _thumb_executor = None
     _thumb_target_path = out_dir / f"{stem}_thumb.jpg"
 
+    # Thumbnail flow disabled by request.
+    _thumb_enabled = False
+    _thumb_mode = "none"
+    _thumb_path_input = ""
+    _thumb_title = ""
+    _thumb_duration = 0.0
+
     if _thumb_enabled and _thumb_mode != "none" and do_burn:
         try:
             import concurrent.futures
@@ -4547,8 +4786,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         elif isinstance(_blur_extra_zones_raw, list):
             _blur_extra_zones = _blur_extra_zones_raw
 
+    _video_overlays = _normalize_video_overlays(data.get("video_overlays"))
+
     # Có cần che không? (bật "Che phụ đề gốc" + có vùng che hợp lệ)
-    _blur_enabled = bool(_blur_original_flag and (_blur_zone_val.lower() != "none" or _blur_extra_zones))
+    _blur_enabled = bool(
+        (_blur_original_flag and _blur_zone_val.lower() != "none")
+        or _blur_extra_zones
+    )
+    _overlay_enabled = bool(_video_overlays)
 
     # Chọn nguồn ASS cho bước encode:
     #   "sub"  → có ghi phụ đề: dùng srt_path (ASS đã dịch) + che (nếu bật)
@@ -4559,13 +4804,19 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if do_burn and srt_path.exists():
         _encode_srt = srt_path
         _encode_mode = "sub"
-    elif _blur_enabled:
+    elif _blur_enabled or _overlay_enabled:
         try:
             _empty_ass = out_dir / f"{stem}_bluronly.ass"
             write_ass([], _empty_ass, play_res_x=1280, play_res_y=720)
             _encode_srt = _empty_ass
-            _encode_mode = "blur"
-            yield send(log="[Bước 4/5] 🌫 Không ghi phụ đề nhưng vẫn che phụ đề gốc theo cấu hình", level="info")
+            _encode_mode = "edit"
+            if _blur_enabled and _overlay_enabled:
+                _edit_note = "che phụ đề gốc/vùng che và thêm chữ/khối"
+            elif _blur_enabled:
+                _edit_note = "che phụ đề gốc/vùng che"
+            else:
+                _edit_note = "thêm chữ/khối"
+            yield send(log=f"[Bước 4/5] ▣ Không ghi phụ đề nhưng vẫn encode để {_edit_note}", level="info")
         except Exception as _e_ass:
             yield send(log=f"[Bước 4/5] ⚠ Không tạo được ASS che: {_e_ass}", level="warning")
 
@@ -4775,7 +5026,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     elif _encode_mode != "skip" and _encode_srt and _encode_srt.exists():
         if _burn_cache_stale_reason:
             yield send(log=f"[Bước 4/5] ♻ Bỏ cache video phụ đề cũ ({_burn_cache_stale_reason}), encode lại từ ASS hiện tại", level="info")
-        if _encode_mode == "blur":
+        if _encode_mode == "edit":
+            yield send(log=f"[Bước 4/5] ▣ Đang áp dụng che/chữ/khối vào video...", level="info")
+        elif _encode_mode == "blur":
             yield send(log=f"[Bước 4/5] 🌫 Đang che phụ đề gốc (không ghi phụ đề)...", level="info")
         else:
             yield send(log=f"[Bước 4/5] 🔥 Đang burn phụ đề ASS vào video...", level="info")
@@ -4816,6 +5069,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             log_callback=_burn_log_cb,
             blur_y_pct=_blur_y_pct,
             blur_extra_zones=_blur_extra_zones,
+            video_overlays=_video_overlays,
             target_aspect=_target_aspect,
             aspect_pad_blur=_pad_blur,
         )
@@ -4824,7 +5078,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             yield send(log=f"[Bước 4/5] {_msg}", level=_lvl)
         if ok:
             _aspect_combined = _aspect_should_convert
-            if _encode_mode == "blur":
+            if _encode_mode == "edit":
+                yield send(log=f"[Bước 4/5] ✓ Video đã áp dụng che/chữ/khối: {burned_path.name}", level="success")
+            elif _encode_mode == "blur":
                 yield send(log=f"[Bước 4/5] ✓ Video đã che phụ đề gốc: {burned_path.name}", level="success")
             else:
                 yield send(log=f"[Bước 4/5] ✓ Video có phụ đề: {burned_path.name}", level="success")
@@ -4833,7 +5089,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         else:
             yield send(log=f"[Bước 4/5] ✗ Xử lý thất bại: {err}", level="error")
             burned_path = None
-    elif do_burn and not srt_path.exists() and not _blur_enabled:
+    elif do_burn and not srt_path.exists() and not _blur_enabled and not _overlay_enabled:
         yield send(log="[Bước 4/5] ⚠ Không có file phụ đề để burn", level="warning")
     else:
         yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề / che", level="info")
@@ -5215,15 +5471,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             if _default_logo.exists():
                 _logo_path = str(_default_logo)
 
-        thumb_ok, thumb_result = generate_thumbnail(
-            video_path=video_path,
-            output_path=thumb_path,
-            ffmpeg=ffmpeg,
-            timestamp=2.0,
-            title="Trạm giải trí",
-            subtitle_text=thumb_subtitle,
-            logo_path=_logo_path,
-        )
+        # Thumbnail flow disabled by request.
+        thumb_ok, thumb_result = False, "thumbnail disabled"
         if thumb_ok:
             # Encode base64 để frontend hiển thị trực tiếp (không cần serve static)
             thumb_b64 = ""
@@ -5239,7 +5488,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 thumbnail_path=str(thumb_path.resolve()),
                 thumbnail_image=thumb_b64,
             )
-        else:
+        elif thumb_result != "thumbnail disabled":
             yield send(log=f"[Thumbnail] ⚠ Không tạo được thumbnail: {thumb_result}", level="warning")
     except Exception as _thumb_err:
         yield send(log=f"[Thumbnail] ⚠ Lỗi tạo thumbnail: {_thumb_err}", level="warning")
