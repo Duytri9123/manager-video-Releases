@@ -43,6 +43,9 @@ playwright>=1.42.0
 # ── Tunneling ──
 pyngrok>=7.2.6
 
+# ── Desktop GUI wrapper ──
+PySide6>=6.8,<7
+
 # ── Douyin signing ──
 gmssl>=3.2.2
 
