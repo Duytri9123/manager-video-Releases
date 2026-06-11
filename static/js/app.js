@@ -1014,6 +1014,9 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
             if (d.thumb_failed) {
               if (typeof _showThumbFailCard === 'function') _showThumbFailCard();
             }
+            if (d.tts_incomplete && typeof _showTtsFailModal === 'function') {
+              _showTtsFailModal(d);
+            }
             if (d.overall !== undefined) _setProcProgress(d.overall, d.overall_lbl || '');
 
             // ── ASS Review event ──

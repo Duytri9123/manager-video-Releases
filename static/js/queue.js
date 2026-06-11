@@ -426,6 +426,9 @@ function _runSingleQueueItem(item, index, total) {
               if (d.thumb_failed && typeof _showThumbFailCard === 'function') {
                 _showThumbFailCard();
               }
+              if (d.tts_incomplete && typeof _showTtsFailModal === 'function') {
+                _showTtsFailModal(d);
+              }
             } catch (_) {}
           });
           read();

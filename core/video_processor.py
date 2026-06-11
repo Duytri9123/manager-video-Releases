@@ -25,7 +25,7 @@ FPT_TTS_ENDPOINT = "https://api.fpt.ai/hmi/tts/v5"
 # FPT key must come from env (FPT_TTS_API_KEY) or config (video_process.fpt_api_key).
 # Hard-coded keys removed for security.
 FPT_TTS_DEFAULT_KEY = ""
-TTS_CACHE_VERSION = "tts-ass-window-8s-v2"
+TTS_CACHE_VERSION = "tts-ass-window-8s-parallel-v3"
 
 # ElevenLabs TTS endpoint
 ELEVENLABS_TTS_ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
@@ -2998,6 +2998,7 @@ class MultiProviderTTS:
         auto_speed: bool = True,
         ffmpeg: str = "ffmpeg",
         pitch_semitones: float = 0.0,
+        indices: list[int] | None = None,
     ) -> list[dict]:
         """
         Generate TTS for all segments with bounded concurrency.
@@ -3062,13 +3063,24 @@ class MultiProviderTTS:
                                         str(pitched_path), "-y", "-loglevel", "error"], capture_output=True)
                                     if pitched_path.exists() and pitched_path.stat().st_size > 0:
                                         out_path = pitched_path
-                        return {"path": out_path, "start": seg["start"], "end": seg["end"]}
+                        return {
+                            "index": i,
+                            "path": out_path,
+                            "start": seg["start"],
+                            "end": seg["end"],
+                        }
                     await asyncio.sleep(0.25 * (_attempt + 1))
             return None
 
+        if indices is None:
+            task_indices = list(range(min(len(segments), len(translations))))
+        else:
+            task_indices = list(indices)
+            if len(task_indices) != min(len(segments), len(translations)):
+                raise ValueError("indices must match the number of TTS segments")
         tasks = [
             _gen_one(i, seg, text)
-            for i, (seg, text) in enumerate(zip(segments, translations))
+            for i, seg, text in zip(task_indices, segments, translations)
         ]
         results = await asyncio.gather(*tasks)
         clips = [r for r in results if r is not None]
@@ -4573,6 +4585,187 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             _burn_cache_valid = False
             _burn_cache_stale_reason = "không kiểm tra được thời gian cache"
 
+    # ── Start TTS in parallel with burn/aspect/thumbnail processing ───────────
+    _tts_executor = None
+    _tts_future = None
+    _tts_tmp_ctx = None
+    _tts_provider = None
+    _run_tts_indices = None
+    _tts_clips: list[dict] = []
+    _tts_concurrency = 4
+    _tts_retries = 2
+    _voice_cache_valid = False
+    _voice_cache_stale_reason = ""
+    voice_path = out_dir / f"{stem}_{target_language}_voice.mp4"
+
+    if do_voice and translated_texts:
+        try:
+            _voice_cache_valid = voice_path_cached.exists() and voice_path_cached.stat().st_size > 0
+            _voice_deps = [video_path]
+            if srt_path and Path(srt_path).exists():
+                _voice_deps.append(Path(srt_path))
+            if _encode_mode != "skip":
+                if not _burn_cache_valid:
+                    _voice_cache_valid = False
+                    _voice_cache_stale_reason = "video hình sẽ được encode lại"
+                elif burned_path_cached.exists():
+                    _voice_deps.append(burned_path_cached)
+            if _thumb_enabled:
+                _voice_cache_valid = False
+                _voice_cache_stale_reason = "thumbnail sẽ thay đổi video hình"
+            if _voice_cache_valid:
+                newest_dep = max(p.stat().st_mtime for p in _voice_deps)
+                _voice_cache_valid = voice_path_cached.stat().st_mtime >= newest_dep
+                if not _voice_cache_valid:
+                    _voice_cache_stale_reason = "ASS/video mới hơn cache"
+            if _voice_cache_valid:
+                try:
+                    voice_meta = json.loads(voice_meta_path_cached.read_text(encoding="utf-8"))
+                except Exception:
+                    voice_meta = {}
+                if (
+                    voice_meta.get("tts_cache_version") != TTS_CACHE_VERSION
+                    or voice_meta.get("complete") is not True
+                    or int(voice_meta.get("segments") or 0) != len(translated_texts)
+                ):
+                    _voice_cache_valid = False
+                    _voice_cache_stale_reason = "cache TTS không đầy đủ hoặc đã đổi cấu hình"
+        except Exception:
+            _voice_cache_valid = False
+            _voice_cache_stale_reason = "không kiểm tra được cache giọng"
+
+        if not _voice_cache_valid:
+            _req_engine = data.get("tts_engine", "fpt-ai")
+            _req_voice = data.get("tts_voice", "banmai")
+            try:
+                from core.tts_catalog import resolve_engine_voice as _resolve_ev
+                _eng_sel, _voice_sel, _ev_changed, _ev_note = _resolve_ev(
+                    _req_engine, _req_voice, target_language, cfg_raw
+                )
+            except Exception:
+                _eng_sel, _voice_sel, _ev_changed, _ev_note = _req_engine, _req_voice, False, ""
+            if _ev_changed:
+                yield send(
+                    log=(
+                        f"[TTS song song] 🌐 Giọng không hợp với {target_lang_name} — "
+                        f"tự chọn: {_req_engine}/{_req_voice or '∅'} → "
+                        f"{_eng_sel}/{_voice_sel or '∅'} ({_ev_note})"
+                    ),
+                    level="info",
+                )
+
+            _tts_provider = MultiProviderTTS(
+                voice=_voice_sel,
+                engine=_eng_sel,
+                fpt_api_key=(
+                    str(data.get("fpt_api_key") or "").strip()
+                    or str((cfg_raw.get("video_process") or {}).get("fpt_api_key") or "").strip()
+                    or os.getenv("FPT_AI_API_KEY", "").strip()
+                    or FPT_TTS_DEFAULT_KEY
+                ),
+                fpt_speed=_as_int(data.get("fpt_speed", 0), 0),
+                openai_api_key=(
+                    str(data.get("openai_api_key") or "").strip()
+                    or str((cfg_raw.get("video_process") or {}).get("openai_api_key") or "").strip()
+                    or str((cfg_raw.get("translation") or {}).get("openai_key") or "").strip()
+                    or os.getenv("OPENAI_API_KEY", "").strip()
+                ),
+                openai_model=str(data.get("openai_tts_model") or "tts-1"),
+                tts_lang=target_language,
+                elevenlabs_api_key=(
+                    str(data.get("elevenlabs_api_key") or "").strip()
+                    or str((cfg_raw.get("video_process") or {}).get("elevenlabs_api_key") or "").strip()
+                    or os.getenv("ELEVENLABS_API_KEY", "").strip()
+                ),
+                elevenlabs_voice_id=(
+                    str(data.get("elevenlabs_voice_id") or "").strip()
+                    or str((cfg_raw.get("video_process") or {}).get("elevenlabs_voice_id") or "").strip()
+                ),
+                elevenlabs_model=str(
+                    data.get("elevenlabs_model")
+                    or (cfg_raw.get("video_process") or {}).get("elevenlabs_model")
+                    or "eleven_multilingual_v2"
+                ),
+                fpt_fallback_elevenlabs=_as_bool(
+                    data.get(
+                        "fpt_fallback_elevenlabs",
+                        (cfg_raw.get("video_process") or {}).get("fpt_fallback_elevenlabs", True),
+                    ),
+                    True,
+                ),
+                fish_api_key=(
+                    str(data.get("fish_api_key") or "").strip()
+                    or str((cfg_raw.get("video_process") or {}).get("fish_api_key") or "").strip()
+                    or os.getenv("FISH_API_KEY", "").strip()
+                    or os.getenv("FISH_AUDIO_API_KEY", "").strip()
+                ),
+                fish_model=str(
+                    data.get("fish_model")
+                    or (cfg_raw.get("video_process") or {}).get("fish_model")
+                    or "s2-pro"
+                ),
+                fish_reference_id=str(
+                    data.get("fish_reference_id")
+                    or (cfg_raw.get("video_process") or {}).get("fish_reference_id")
+                    or ""
+                ),
+            )
+            _vp_cfg = cfg_raw.get("video_process") or {}
+            _tts_concurrency = max(
+                1,
+                _as_int(data.get("tts_concurrency", _vp_cfg.get("tts_concurrency", 4)), 4),
+            )
+            _tts_retries = max(
+                0,
+                _as_int(data.get("tts_retries", _vp_cfg.get("tts_retries", 2)), 2),
+            )
+            try:
+                _tts_tmp_ctx = tempfile.TemporaryDirectory(prefix="tts_parallel_")
+                _tts_tmp_path = Path(_tts_tmp_ctx.name)
+
+                def _run_tts_indices(indices: list[int]) -> list[dict]:
+                    batch_segments = [segments[i] for i in indices]
+                    batch_texts = [translated_texts[i] for i in indices]
+                    return asyncio.run(
+                        _tts_provider.generate_all(
+                            batch_segments,
+                            batch_texts,
+                            _tts_tmp_path,
+                            max_concurrency=_tts_concurrency,
+                            retries=_tts_retries,
+                            tts_speed=_as_float(data.get("tts_speed", 1.0), 1.0),
+                            auto_speed=_as_bool(data.get("auto_speed", True), True),
+                            ffmpeg=ffmpeg,
+                            pitch_semitones=_as_float(data.get("pitch_semitones", 0.0), 0.0),
+                            indices=indices,
+                        )
+                    )
+
+                import concurrent.futures as _cf
+                _tts_executor = _cf.ThreadPoolExecutor(max_workers=1)
+                _tts_future = _tts_executor.submit(_run_tts_indices, list(range(len(translated_texts))))
+                yield send(
+                    log=(
+                        f"[TTS song song] 🗣 Bắt đầu {len(translated_texts)} đoạn, "
+                        f"{_tts_concurrency} request đồng thời; burn chạy cùng lúc"
+                    ),
+                    level="info",
+                    overall=65,
+                    overall_lbl="Burn video + tạo TTS song song...",
+                )
+            except Exception as tts_start_err:
+                if _tts_executor:
+                    _tts_executor.shutdown(wait=False)
+                    _tts_executor = None
+                if _tts_tmp_ctx:
+                    _tts_tmp_ctx.cleanup()
+                    _tts_tmp_ctx = None
+                _run_tts_indices = None
+                yield send(
+                    log=f"[TTS song song] ⚠ Không thể khởi tạo luồng TTS: {tts_start_err}",
+                    level="warning",
+                )
+
     if _encode_mode == "sub" and not _frame_enabled_for_burn and _burn_cache_valid:
         burned_path = burned_path_cached
         final_output_path = burned_path
@@ -4841,210 +5034,164 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             except Exception:
                 pass
 
-    # ── Bước 5/5: Tạo giọng đọc (TTS) ───────────────────────────────────
-    # Resume: nếu file voice đã có → dùng lại
-    _voice_cache_valid = False
-    _voice_cache_stale_reason = ""
-    if do_voice and voice_path_cached.exists() and voice_path_cached.stat().st_size > 0:
-        try:
-            _voice_deps = [video_path]
-            if burned_path and Path(burned_path).exists():
-                _voice_deps.append(Path(burned_path))
-            if srt_path and Path(srt_path).exists():
-                _voice_deps.append(Path(srt_path))
-            _newest_voice_dep = max(p.stat().st_mtime for p in _voice_deps)
-            _voice_cache_valid = voice_path_cached.stat().st_mtime >= _newest_voice_dep
-            if not _voice_cache_valid:
-                _voice_cache_stale_reason = "ASS/video mới hơn cache"
-            if _voice_cache_valid:
+    # ── Bước 5/5: Chờ TTS song song, retry đoạn thiếu, rồi ghép giọng ─────────
+    try:
+        if do_voice and _voice_cache_valid:
+            final_output_path = voice_path_cached
+            yield send(log=f"[Bước 5/5] ♻ Dùng lại giọng {target_lang_name} cũ: {voice_path_cached.name}", level="info")
+            yield send(overall=92, overall_lbl="Dùng lại giọng cũ")
+        elif do_voice and translated_texts:
+            if _voice_cache_stale_reason:
+                yield send(log=f"[Bước 5/5] ♻ Bỏ cache giọng cũ ({_voice_cache_stale_reason})", level="info")
+            if _tts_future:
+                yield send(log="[Bước 5/5] ⏳ Burn đã xong, kiểm tra kết quả TTS song song...", level="info")
                 try:
-                    voice_meta = json.loads(voice_meta_path_cached.read_text(encoding="utf-8"))
-                except Exception:
-                    voice_meta = {}
-                if voice_meta.get("tts_cache_version") != TTS_CACHE_VERSION:
-                    _voice_cache_valid = False
-                    _voice_cache_stale_reason = "cách gộp câu TTS đã cập nhật"
-        except Exception:
-            _voice_cache_valid = False
-            _voice_cache_stale_reason = "không kiểm tra được thời gian cache"
+                    _tts_clips = _tts_future.result()
+                except Exception as _tts_err:
+                    _tts_clips = []
+                    yield send(log=f"[Bước 5/5] ⚠ Luồng TTS gặp lỗi: {_tts_err}", level="warning")
 
-    if do_voice and _voice_cache_valid:
-        final_output_path = voice_path_cached
-        yield send(log=f"[Bước 5/5] ♻ Dùng lại giọng {target_lang_name} cũ: {voice_path_cached.name}", level="info")
-        yield send(overall=92, overall_lbl="Dùng lại giọng cũ")
-    elif do_voice and translated_texts:
-        if _voice_cache_stale_reason:
-            yield send(log=f"[Bước 5/5] ♻ Bỏ cache giọng cũ ({_voice_cache_stale_reason}), tạo lại từ ASS hiện tại", level="info")
-        yield send(log=f"[Bước 5/5] 🗣 Đang tạo giọng {target_lang_name}...", level="info")
-        yield send(overall=85, overall_lbl="Đang tạo giọng nói...")
-        source_for_voice = burned_path if burned_path else video_path
-        voice_path = out_dir / f"{stem}_{target_language}_voice.mp4"
-        # ── Tự chọn engine/voice theo ngôn ngữ đích ──────────────────────────
-        # Engine/voice người dùng chọn có thể không nói được ngôn ngữ đích
-        # (vd FPT chỉ tiếng Việt, voice banmai cho target=ja). Bộ resolver sẽ
-        # giữ lựa chọn nếu hợp lệ, ngược lại tự đổi sang giọng/engine phù hợp.
-        _req_engine = data.get("tts_engine", "fpt-ai")
-        _req_voice = data.get("tts_voice", "banmai")
-        try:
-            from core.tts_catalog import resolve_engine_voice as _resolve_ev
-            _eng_sel, _voice_sel, _ev_changed, _ev_note = _resolve_ev(
-                _req_engine, _req_voice, target_language, cfg_raw
-            )
-        except Exception:
-            _eng_sel, _voice_sel, _ev_changed, _ev_note = _req_engine, _req_voice, False, ""
-        if _ev_changed:
-            yield send(
-                log=(
-                    f"[Bước 5/5] 🌐 Giọng không hợp với {target_lang_name} — "
-                    f"tự chọn: {_req_engine}/{_req_voice or '∅'} → "
-                    f"{_eng_sel}/{_voice_sel or '∅'} ({_ev_note})"
-                ),
-                level="info",
-            )
-        try:
-            with tempfile.TemporaryDirectory(prefix="tts_") as tts_tmpdir:
-                tts = MultiProviderTTS(
-                    voice=_voice_sel,
-                    engine=_eng_sel,
-                    fpt_api_key=(
-                        str(data.get("fpt_api_key") or "").strip()
-                        or str((cfg_raw.get("video_process") or {}).get("fpt_api_key") or "").strip()
-                        or os.getenv("FPT_AI_API_KEY", "").strip()
-                        or FPT_TTS_DEFAULT_KEY
-                    ),
-                    fpt_speed=_as_int(data.get("fpt_speed", 0), 0),
-                    openai_api_key=(
-                        str(data.get("openai_api_key") or "").strip()
-                        or str((cfg_raw.get("video_process") or {}).get("openai_api_key") or "").strip()
-                        or str((cfg_raw.get("translation") or {}).get("openai_key") or "").strip()
-                        or os.getenv("OPENAI_API_KEY", "").strip()
-                    ),
-                    openai_model=str(data.get("openai_tts_model") or "tts-1"),
-                    tts_lang=target_language,
-                    elevenlabs_api_key=(
-                        str(data.get("elevenlabs_api_key") or "").strip()
-                        or str((cfg_raw.get("video_process") or {}).get("elevenlabs_api_key") or "").strip()
-                        or os.getenv("ELEVENLABS_API_KEY", "").strip()
-                    ),
-                    elevenlabs_voice_id=(
-                        str(data.get("elevenlabs_voice_id") or "").strip()
-                        or str((cfg_raw.get("video_process") or {}).get("elevenlabs_voice_id") or "").strip()
-                    ),
-                    elevenlabs_model=str(
-                        data.get("elevenlabs_model")
-                        or (cfg_raw.get("video_process") or {}).get("elevenlabs_model")
-                        or "eleven_multilingual_v2"
-                    ),
-                    fpt_fallback_elevenlabs=_as_bool(
-                        data.get(
-                            "fpt_fallback_elevenlabs",
-                            (cfg_raw.get("video_process") or {}).get("fpt_fallback_elevenlabs", True),
-                        ),
-                        True,
-                    ),
-                    fish_api_key=(
-                        str(data.get("fish_api_key") or "").strip()
-                        or str((cfg_raw.get("video_process") or {}).get("fish_api_key") or "").strip()
-                        or os.getenv("FISH_API_KEY", "").strip()
-                        or os.getenv("FISH_AUDIO_API_KEY", "").strip()
-                    ),
-                    fish_model=str(
-                        data.get("fish_model")
-                        or (cfg_raw.get("video_process") or {}).get("fish_model")
-                        or "s2-pro"
-                    ),
-                    fish_reference_id=str(
-                        data.get("fish_reference_id")
-                        or (cfg_raw.get("video_process") or {}).get("fish_reference_id")
-                        or ""
-                    ),
-                )
-                _vp_cfg = cfg_raw.get("video_process") or {}
-                _tts_concurrency = _as_int(
-                    data.get("tts_concurrency", _vp_cfg.get("tts_concurrency", 4)),
-                    4,
-                )
-                _tts_retries = _as_int(
-                    data.get("tts_retries", _vp_cfg.get("tts_retries", 2)),
-                    2,
-                )
+            clip_by_index = {
+                int(clip.get("index")): clip
+                for clip in _tts_clips
+                if clip.get("index") is not None
+            }
+            missing_indices = [
+                i for i in range(len(translated_texts))
+                if i not in clip_by_index
+            ]
+
+            while missing_indices:
+                missing_details = [
+                    {
+                        "index": i,
+                        "start": float(segments[i].get("start", 0.0)),
+                        "end": float(segments[i].get("end", 0.0)),
+                        "text": str(translated_texts[i] or ""),
+                    }
+                    for i in missing_indices
+                ]
+                from routes.process import prepare_tts_retry_wait, wait_tts_retry_action
+                prepare_tts_retry_wait()
                 yield send(
+                    tts_incomplete=True,
+                    success_count=len(clip_by_index),
+                    total_count=len(translated_texts),
+                    missing_segments=missing_details,
                     log=(
-                        f"[Bước 5/5] ⚡ TTS: {len(translated_texts)} đoạn, "
-                        f"chạy song song {max(1, _tts_concurrency)} request"
+                        f"[Bước 5/5] ⚠ TTS thiếu {len(missing_indices)} đoạn "
+                        f"({len(clip_by_index)}/{len(translated_texts)}) — đang chờ xử lý"
                     ),
-                    level="info",
+                    level="warning",
+                    overall=88,
+                    overall_lbl="Chờ xử lý các đoạn TTS bị thiếu...",
                 )
-                tts_clips = asyncio.run(
-                    tts.generate_all(
-                        segments,
-                        translated_texts,
-                        Path(tts_tmpdir),
-                        max_concurrency=_tts_concurrency,
-                        retries=_tts_retries,
-                        tts_speed=_as_float(data.get("tts_speed", 1.0), 1.0),
-                        auto_speed=_as_bool(data.get("auto_speed", True), True),
-                        ffmpeg=ffmpeg,
-                        pitch_semitones=_as_float(data.get("pitch_semitones", 0.0), 0.0),
-                    )
-                )
-                yield send(
-                    log=f"[Bước 5/5] TTS clips thành công: {len(tts_clips)}/{len(translated_texts)}",
-                    level="info",
-                )
-                if tts_clips:
-                    first_start = float(tts_clips[0].get("start", 0.0))
-                    last_end = max(float(c.get("end", 0.0)) for c in tts_clips)
-                    coverage_ratio = 0.0
-                    if segments:
-                        src_end = max(float(s.get("end", 0.0)) for s in segments)
-                        if src_end > 0:
-                            coverage_ratio = min(100.0, max(0.0, (last_end / src_end) * 100.0))
+                action_data = wait_tts_retry_action(timeout=600)
+                action = str(action_data.get("action") or "cancel").lower()
+
+                if action == "retry":
                     yield send(
-                        log=(
-                            f"[Bước 5/5] Độ phủ timeline giọng: "
-                            f"{_fmt_hms(first_start)} → {_fmt_hms(last_end)} "
-                            f"(~{coverage_ratio:.1f}% thời lượng thoại)"
-                        ),
+                        log=f"[Bước 5/5] 🔄 Thử lại riêng {len(missing_indices)} đoạn TTS bị thiếu...",
                         level="info",
                     )
-                if len(tts_clips) < max(1, int(len(translated_texts) * 0.2)):
+                    if not callable(_run_tts_indices):
+                        retry_clips = []
+                        yield send(
+                            log="[Bước 5/5] ⚠ Tác vụ TTS chưa được khởi tạo; không thể thử lại",
+                            level="warning",
+                        )
+                    else:
+                        try:
+                            retry_clips = _run_tts_indices(missing_indices)
+                        except Exception as retry_err:
+                            retry_clips = []
+                            yield send(log=f"[Bước 5/5] ⚠ Retry TTS lỗi: {retry_err}", level="warning")
+                    for clip in retry_clips:
+                        if clip.get("index") is not None:
+                            clip_by_index[int(clip["index"])] = clip
+                    missing_indices = [
+                        i for i in range(len(translated_texts))
+                        if i not in clip_by_index
+                    ]
+                    if not missing_indices:
+                        yield send(log="[Bước 5/5] ✓ Đã tạo đủ toàn bộ đoạn TTS", level="success")
+                    continue
+
+                if action == "continue":
                     yield send(
-                        log="[Bước 5/5] ⚠ Quá ít clip TTS, có thể bị giới hạn dịch vụ. Hãy thử lại hoặc giảm tốc độ tạo giọng.",
+                        log=f"[Bước 5/5] ⚠ Tiếp tục với {len(missing_indices)} đoạn TTS bị thiếu theo xác nhận của người dùng",
                         level="warning",
                     )
+                    break
+
+                yield send(
+                    log="[Bước 5/5] ℹ Đã bỏ lồng tiếng; giữ kết quả burn/che video",
+                    level="warning",
+                )
+                clip_by_index.clear()
+                missing_indices = list(range(len(translated_texts)))
+                break
+
+            _tts_clips = [clip_by_index[i] for i in sorted(clip_by_index)]
+            yield send(
+                log=f"[Bước 5/5] TTS clips sẵn sàng: {len(_tts_clips)}/{len(translated_texts)}",
+                level="info",
+            )
+
+            if _tts_clips:
+                source_for_voice = burned_path if burned_path else video_path
+                yield send(
+                    log="[Bước 5/5] 🎚 Đang ghép giọng vào video (copy luồng hình, chỉ encode audio)...",
+                    level="info",
+                    overall=92,
+                    overall_lbl="Đang ghép giọng cuối...",
+                )
                 mixer = AudioMixer(ffmpeg)
                 ok, err = mixer.mix(
                     video_path=source_for_voice,
-                    tts_clips=tts_clips,
+                    tts_clips=_tts_clips,
                     output_path=voice_path,
                     keep_bg_music=_as_bool(data.get("keep_bg_music", False), False),
                     bg_volume=_as_float(data.get("bg_volume", 0.08), 0.08),
                     tts_volume=_as_float(data.get("tts_volume", 1.8), 1.8),
                 )
-            if ok:
-                try:
-                    voice_meta_path_cached.write_text(
-                        json.dumps(
-                            {
-                                "tts_cache_version": TTS_CACHE_VERSION,
-                                "subtitle_path": str(Path(srt_path).resolve()) if srt_path else "",
-                                "segments": len(translated_texts),
-                            },
-                            ensure_ascii=False,
-                            indent=2,
-                        ),
-                        encoding="utf-8",
-                    )
-                except Exception:
-                    pass
-                yield send(log=f"[Bước 5/5] ✓ Giọng {target_lang_name}: {voice_path.name}", level="success")
-                yield send(overall=92, overall_lbl="Tạo giọng xong")
-                final_output_path = voice_path
-            else:
-                yield send(log=f"[Bước 5/5] ✗ Tạo giọng thất bại: {err}", level="error")
-        except Exception as e:
-            yield send(log=f"[Bước 5/5] ✗ Lỗi tạo giọng: {e}", level="error")
+                if ok:
+                    complete = len(_tts_clips) == len(translated_texts)
+                    try:
+                        voice_meta_path_cached.write_text(
+                            json.dumps(
+                                {
+                                    "tts_cache_version": TTS_CACHE_VERSION,
+                                    "subtitle_path": str(Path(srt_path).resolve()) if srt_path else "",
+                                    "segments": len(translated_texts),
+                                    "generated_segments": len(_tts_clips),
+                                    "complete": complete,
+                                },
+                                ensure_ascii=False,
+                                indent=2,
+                            ),
+                            encoding="utf-8",
+                        )
+                    except Exception:
+                        pass
+                    yield send(log=f"[Bước 5/5] ✓ Giọng {target_lang_name}: {voice_path.name}", level="success")
+                    yield send(overall=96, overall_lbl="Ghép giọng xong")
+                    final_output_path = voice_path
+                else:
+                    yield send(log=f"[Bước 5/5] ✗ Ghép giọng thất bại: {err}", level="error")
+    except Exception as e:
+        yield send(log=f"[Bước 5/5] ✗ Lỗi xử lý giọng: {e}", level="error")
+    finally:
+        try:
+            if _tts_executor:
+                _tts_executor.shutdown(wait=False)
+        except Exception:
+            pass
+        try:
+            if _tts_tmp_ctx:
+                _tts_tmp_ctx.cleanup()
+        except Exception:
+            pass
 
     if not final_output_path:
         final_output_path = video_path.resolve()

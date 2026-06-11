@@ -30,6 +30,45 @@ _proc_thumb_retry_event.set()  # not waiting by default
 _proc_thumb_retry_action: dict = {}  # {action: 'retry'|'upload'|'skip', path?: str}
 _proc_thumb_retry_lock = _threading.Lock()
 
+# State cho retry các đoạn TTS bị thiếu.
+_proc_tts_retry_event = _threading.Event()
+_proc_tts_retry_event.set()
+_proc_tts_retry_action: dict = {}  # {action: 'retry'|'continue'|'cancel'}
+_proc_tts_retry_lock = _threading.Lock()
+
+
+@bp.route("/api/proc_retry_tts", methods=["POST"])
+def proc_retry_tts():
+    """Resolve a partial TTS generation result."""
+    data = request.json or {}
+    action = str(data.get("action") or "").strip().lower()
+    if action not in ("retry", "continue", "cancel"):
+        return jsonify({"ok": False, "error": "Invalid action"}), 400
+    with _proc_tts_retry_lock:
+        _proc_tts_retry_action.clear()
+        _proc_tts_retry_action["action"] = action
+    _proc_tts_retry_event.set()
+    return jsonify({"ok": True})
+
+
+def prepare_tts_retry_wait() -> None:
+    """Clear stale actions before emitting the modal event to the frontend."""
+    with _proc_tts_retry_lock:
+        _proc_tts_retry_action.clear()
+    _proc_tts_retry_event.clear()
+
+
+def wait_tts_retry_action(timeout: float = 600.0) -> dict:
+    """Wait for the user to retry, accept missing clips, or cancel."""
+    got = _proc_tts_retry_event.wait(timeout=timeout)
+    _proc_tts_retry_event.set()
+    if not got:
+        return {"action": "cancel"}
+    with _proc_tts_retry_lock:
+        cfg = dict(_proc_tts_retry_action)
+        _proc_tts_retry_action.clear()
+    return cfg or {"action": "cancel"}
+
 
 @bp.route("/api/proc_retry_thumb", methods=["POST"])
 def proc_retry_thumb():
