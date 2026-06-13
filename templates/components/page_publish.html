@@ -1,10 +1,7 @@
 <!-- PAGE: PUBLISH VIDEO -->
 <div id="page-publish" class="page">
-  <div class="page-layout-2col">
-    
-    <!-- LEFT COLUMN: MEDIA & AI CONTENT -->
-    <div class="col-left">
-      <div class="card premium-card">
+  <!-- Shared media selection + AI analysis (always visible at top) -->
+  <div class="card premium-card">
         <div class="card-header">
           <span class="card-title"><span class="nav-icon" style="margin-right:8px">📤</span>Đăng video lên đa nền tảng</span>
         </div>
@@ -75,29 +72,27 @@
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- RIGHT COLUMN: PLATFORM CONFIGURATION -->
-    <div class="col-right">
-      <div class="card premium-card">
-        <div class="platform-tabs-header">
-          <div class="platform-tab active" id="pub-tab-yt" onclick="pubSwitchTab('youtube')">
-            <span class="yt-color">▶</span><span>YouTube</span>
-            <div class="tab-toggle" id="pub-toggle-yt" onclick="event.stopPropagation();pubTogglePlatform('youtube')">✓</div>
-          </div>
-          <div class="platform-tab" id="pub-tab-tt" onclick="pubSwitchTab('tiktok')">
-            <span class="tt-color">🎵</span><span>TikTok</span>
-            <div class="tab-toggle" id="pub-toggle-tt" onclick="event.stopPropagation();pubTogglePlatform('tiktok')">✓</div>
-          </div>
-          <div class="platform-tab" id="pub-tab-fb" onclick="pubSwitchTab('facebook')">
-            <span class="fb-color">📘</span><span>Facebook</span>
-            <div class="tab-toggle" id="pub-toggle-fb" onclick="event.stopPropagation();pubTogglePlatform('facebook')">✓</div>
-          </div>
-        </div>
+  <!-- ════════════════ Platform tabs: left nav + right panes ════════════════ -->
+  <div class="publish-shell mt-16">
+    <nav class="publish-nav">
+      <div class="publish-tab active" id="pub-tab-yt" onclick="pubSwitchTab('youtube')">
+        <span class="tab-ico yt-color">▶</span><span class="tab-label">YouTube</span>
+        <div class="tab-toggle" id="pub-toggle-yt" onclick="event.stopPropagation();pubTogglePlatform('youtube')">✓</div>
+      </div>
+      <div class="publish-tab" id="pub-tab-tt" onclick="pubSwitchTab('tiktok')">
+        <span class="tab-ico tt-color">🎵</span><span class="tab-label">TikTok</span>
+        <div class="tab-toggle" id="pub-toggle-tt" onclick="event.stopPropagation();pubTogglePlatform('tiktok')">✓</div>
+      </div>
+      <div class="publish-tab" id="pub-tab-fb" onclick="pubSwitchTab('facebook')">
+        <span class="tab-ico fb-color">📘</span><span class="tab-label">Facebook</span>
+        <div class="tab-toggle" id="pub-toggle-fb" onclick="event.stopPropagation();pubTogglePlatform('facebook')">✓</div>
+      </div>
+    </nav>
 
-        <div class="platform-content">
-          <!-- YouTube Panel -->
-          <div id="pub-panel-youtube" class="platform-panel active">
+    <div class="publish-panes">
+      <!-- YouTube Panel -->
+          <div id="pub-panel-youtube" class="publish-pane active">
             <!-- Account Selector -->
             <div class="field" style="margin-bottom:8px">
               <label style="font-size:11px;color:var(--text-muted)">📺 Tài khoản YouTube</label>
@@ -203,7 +198,7 @@
           </div>
 
           <!-- TikTok Panel -->
-          <div id="pub-panel-tiktok" class="platform-panel">
+          <div id="pub-panel-tiktok" class="publish-pane">
             <div class="platform-header-row">
               <div class="platform-name"><span class="tt-color">🎵</span> TikTok</div>
               <div class="badge badge-accent">Đăng qua trình duyệt</div>
@@ -251,7 +246,7 @@
           </div>
 
           <!-- Facebook Panel -->
-          <div id="pub-panel-facebook" class="platform-panel">
+          <div id="pub-panel-facebook" class="publish-pane">
 
             <!-- Account Selector -->
             <div class="field" style="margin-bottom:8px">
@@ -358,12 +353,11 @@
             </div>
 
           </div>
-        </div>
 
-        <div class="log-box mt-12" id="pub-log" style="height:120px;display:none"></div>
-      </div>
-    </div>
-  </div>
+    </div><!-- /publish-panes -->
+
+    <div class="log-box mt-12" id="pub-log" style="height:120px;display:none"></div>
+  </div><!-- /publish-shell -->
 
   <!-- ═══════════════════════════════════════════════════════════
        BATCH PUBLISH — Import nhiều cặp video + ASS
@@ -523,7 +517,53 @@
   margin-top: 8px;
   min-height: 16px;
 }
+/* ── Left-nav platform layout (like config page) ───────────────────────── */
+#page-publish .publish-shell {
+  display: flex; gap: 18px; align-items: flex-start;
+}
+#page-publish .publish-nav {
+  flex: 0 0 195px; width: 195px;
+  display: flex; flex-direction: column; gap: 4px;
+  padding-right: 16px;
+  border-right: 1px solid var(--border);
+  position: sticky; top: 8px;
+}
+#page-publish .publish-nav .publish-tab {
+  width: 100%; margin: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; border-radius: 8px;
+  text-align: left; font-size: 13px; font-weight: 600; line-height: 1.3;
+  cursor: pointer; border: 1px solid transparent;
+  background: transparent; color: var(--text2); font-family: inherit;
+  transition: all .15s;
+  position: relative;
+}
+#page-publish .publish-nav .publish-tab:hover {
+  background: var(--accent-light); color: var(--accent); border-color: transparent;
+}
+#page-publish .publish-nav .publish-tab.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
+  box-shadow: 0 2px 8px rgba(26,115,232,.3); border-color: transparent;
+}
+#page-publish .publish-nav .publish-tab .tab-ico { font-size: 16px; flex: 0 0 auto; }
+#page-publish .publish-nav .publish-tab .tab-label { flex: 1; }
 
+/* Toggle checkmark inside tab */
+#page-publish .publish-nav .publish-tab .tab-toggle {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; line-height: 1;
+  cursor: pointer; flex-shrink: 0;
+  transition: background .15s;
+}
+#page-publish .publish-nav .publish-tab .tab-toggle:hover { background: var(--accent2); }
+
+#page-publish .publish-panes { flex: 1 1 auto; min-width: 0; }
+#page-publish .publish-pane { display: none; }
+#page-publish .publish-pane.active { display: block; animation: fadeUp .2s ease; }
+
+/* Keep old platform-tab styles for story page compatibility */
 .platform-tabs-header {
   display: flex;
   gap: 10px;
@@ -663,10 +703,24 @@
   min-height: 60px;
 }
 
+@media (max-width: 760px) {
+  #page-publish .publish-shell { flex-direction: column; gap: 12px; }
+  #page-publish .publish-nav {
+    flex: none; width: 100%;
+    flex-direction: row; flex-wrap: wrap;
+    padding-right: 0; padding-bottom: 10px;
+    border-right: none; border-bottom: 1px solid var(--border);
+    position: static;
+  }
+  #page-publish .publish-nav .publish-tab {
+    width: auto; flex: 1 1 auto; min-width: 110px; justify-content: center;
+  }
+}
 @media (max-width: 480px) {
   .settings-grid { grid-template-columns: 1fr; }
-  .platform-tabs-header { gap: 5px; }
-  .platform-tab { padding: 8px 4px; font-size: 11px; }
+  #page-publish .publish-nav .publish-tab { min-width: 0; flex: 1 1 30%; padding: 9px 8px; font-size: 12px; }
+  #page-publish .publish-nav .publish-tab .tab-label { display: none; }
+  #page-publish .publish-nav .publish-tab .tab-ico { font-size: 18px; }
 }
 
 /* ── YouTube Auth Status Bar ── */

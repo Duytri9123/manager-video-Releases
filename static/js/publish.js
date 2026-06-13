@@ -157,7 +157,7 @@ async function _pubLoadSubContent() {
   } catch (e) { toast('Lỗi xử lý phụ đề: ' + e.message, 'error'); }
 }
 
-/* ── Switch active tab (chỉ hiển thị 1 panel) ── */
+/* ── Switch active tab (left-nav layout → toggle active class) ── */
 function pubSwitchTab(platform) {
   if (!_pubPlatforms.includes(platform)) return;
   if (!window._pubEnabled[platform]) return;
@@ -168,13 +168,13 @@ function pubSwitchTab(platform) {
     const tab   = document.getElementById('pub-tab-' + tid);
     const panel = document.getElementById('pub-panel-' + p);
 
-    // Tab button: active = đang xem
+    // Tab button: active class toggle
     if (tab) {
       tab.classList.toggle('active', p === platform);
     }
-    // Panel: chỉ show panel đang active
+    // Panel: use CSS class to show/hide (publish-pane.active)
     if (panel) {
-      panel.style.display = (p === platform) ? 'block' : 'none';
+      panel.classList.toggle('active', p === platform);
     }
   });
 }
@@ -209,7 +209,7 @@ function pubTogglePlatform(platform) {
         // Tất cả đều tắt - ẩn hết panels
         _pubPlatforms.forEach(p => {
           const panel = document.getElementById('pub-panel-' + p);
-          if (panel) panel.style.display = 'none';
+          if (panel) panel.classList.remove('active');
         });
       }
     }

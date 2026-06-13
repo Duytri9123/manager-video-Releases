@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!btn) return;
   btn.onclick = async () => {
     btn.disabled = true;
-    btn.textContent = 'Đang thử...';
+    btn.textContent = 'Đang tạo giọng đọc...';
     try {
       const engine = document.getElementById('vp-tts-engine')?.value || 'edge-tts';
       const voice = document.getElementById('vp-tts-voice')?.value || 'vi-VN-HoaiMyNeural';
@@ -43,11 +43,12 @@ document.addEventListener('DOMContentLoaded', () => {
         audio.src = url;
         audio.style.display = 'block';
         audio.play();
+        toast('Tạo giọng đọc thành công!', 'success');
       } else {
-        toast('Không thử được giọng đọc!', 'error');
+        toast('Không thể tạo giọng đọc!', 'error');
       }
     } catch (e) {
-      toast('Lỗi thử giọng đọc: ' + e.message, 'error');
+      toast('Lỗi tạo giọng đọc: ' + e.message, 'error');
     }
     btn.disabled = false;
     btn.textContent = '▶ Thử giọng đọc';
