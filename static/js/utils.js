@@ -65,16 +65,4 @@ function switchSubTab(el, tabId, itemClass, pageClass) {
   target.classList.add('active');
 }
 
-// Shorthands for components
-function switchConfigTab(el, id) {
-  document.querySelectorAll('.cfg-tab').forEach(b => b.classList.remove('active'));
-  if (el) el.classList.add('active');
-  ['cfg-sec-general','cfg-sec-process','cfg-sec-integration'].forEach(sid => {
-    const el2 = document.getElementById(sid);
-    if (el2) el2.style.display = (sid === id) ? '' : 'none';
-  });
-  // Scroll content back to top so the user starts at the section header
-  const content = document.getElementById('content');
-  if (content) content.scrollTop = 0;
-}
 function switchProcTab(el, id) { switchSubTab(el, id, 'proc-menu-item', 'proc-subpage'); }

@@ -2,56 +2,56 @@
 <div id="page-config" class="page">
 
   <style>
-    /* ── Config page scoped styles ─────────────────────────────────────── */
-
-    /* Docked header + tabs (full-bleed, stick to top of content area) */
-    #page-config .cfg-sticky-top{
-      position:sticky;top:-18px;z-index:30;
-      background:var(--bg);
-      margin:-18px -18px 16px -18px;
-      padding:14px 18px 12px 18px;
-      border-bottom:1px solid var(--border);
-      box-shadow:0 4px 10px -6px rgba(26,115,232,.25);
+    /* ── Left-nav layout (like story page) ───────────────────────── */
+    #page-config .config-shell{
+      display:flex;gap:18px;align-items:flex-start;
     }
-    #page-config .cfg-head{
-      display:flex;align-items:center;gap:10px;margin-bottom:12px;
+    #page-config .config-nav{
+      flex:0 0 195px;width:195px;
+      display:flex;flex-direction:column;gap:4px;
+      padding-right:16px;
+      border-right:1px solid var(--border);
+      position:sticky;top:8px;
     }
-    #page-config .cfg-head h1{
-      font-size:18px;font-weight:700;color:var(--text);margin:0;
+    #page-config .config-nav .config-tab{
+      width:100%;margin:0;
+      display:flex;align-items:center;gap:10px;
+      padding:11px 14px;border-radius:8px;
+      text-align:left;font-size:13px;font-weight:600;line-height:1.3;
+      cursor:pointer;border:1px solid transparent;
+      background:transparent;color:var(--text2);font-family:inherit;
+      transition:all .15s;
     }
-    #page-config .cfg-head .cfg-head-sub{
-      font-size:12px;color:var(--text-muted);
+    #page-config .config-nav .config-tab:hover{
+      background:var(--accent-light);color:var(--accent);border-color:transparent;
     }
-
-    /* Segmented tab bar */
-    #page-config .cfg-tabbar{
-      display:flex;gap:6px;flex-wrap:wrap;
-      background:var(--bg3);padding:5px;
-      border:1px solid var(--border);border-radius:var(--radius);
-    }
-    #page-config .cfg-tab{
-      flex:1 1 0;min-width:150px;
-      display:inline-flex;align-items:center;justify-content:center;gap:7px;
-      padding:10px 14px;border-radius:var(--radius-sm);
-      font-size:13px;font-weight:600;cursor:pointer;
-      border:1px solid transparent;background:transparent;color:var(--text2);
-      transition:all .15s;white-space:nowrap;font-family:inherit;
-    }
-    #page-config .cfg-tab:hover{background:var(--accent-light);color:var(--accent)}
-    #page-config .cfg-tab.active{
+    #page-config .config-nav .config-tab.active{
       background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
-      box-shadow:0 2px 8px rgba(26,115,232,.3);
+      box-shadow:0 2px 8px rgba(26,115,232,.3);border-color:transparent;
     }
-    #page-config .cfg-tab .cfg-tab-ico{font-size:15px}
+    #page-config .config-nav .config-tab .tab-ico{font-size:16px;flex:0 0 auto}
 
-    /* Section intro banner */
-    #page-config .cfg-section-intro{
+    #page-config .config-panes{flex:1 1 auto;min-width:0}
+    #page-config .config-pane{display:none}
+    #page-config .config-pane.active{display:block;animation:fadeUp .2s ease}
+
+    /* Header */
+    #page-config .config-header{
+      display:flex;align-items:baseline;gap:10px;
+      margin-bottom:16px;padding-bottom:12px;
+      border-bottom:1px solid var(--border);
+    }
+    #page-config .config-header h1{font-size:18px;font-weight:700;color:var(--text);margin:0}
+    #page-config .config-header .config-head-sub{font-size:12px;color:var(--text-muted)}
+
+    /* Section intro */
+    #page-config .config-section-intro{
       display:flex;align-items:flex-start;gap:10px;
       background:var(--accent-light);border:1px solid rgba(26,115,232,.18);
       border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;
       font-size:12px;color:var(--text2);line-height:1.5;
     }
-    #page-config .cfg-section-intro .ico{font-size:18px;line-height:1;flex-shrink:0}
+    #page-config .config-section-intro .ico{font-size:18px;line-height:1;flex-shrink:0}
 
     /* 2-column card layout */
     #page-config .cfg-cards{
@@ -78,8 +78,8 @@
     #page-config .apikey-card input{background:#fff}
     #page-config .apikey-card .apikey-status{margin-top:6px;min-height:14px}
 
-    /* Docked save bar (full-bleed, stick to bottom of content area) */
-    #page-config .cfg-savebar{
+    /* Docked save bar */
+    #page-config .config-savebar{
       position:sticky;bottom:-18px;z-index:30;
       background:var(--bg2);
       margin:16px -18px -18px -18px;
@@ -88,415 +88,567 @@
       box-shadow:0 -4px 10px -6px rgba(26,115,232,.25);
     }
 
+    /* Cookie mode toggle inline */
+    #page-config .cookie-mode-row{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:12px;background:var(--bg3);border:1px solid var(--border);
+      border-radius:var(--radius-sm);margin-bottom:14px;
+    }
+
     @media(max-width:760px){
+      #page-config .config-shell{flex-direction:column;gap:12px}
+      #page-config .config-nav{
+        flex:none;width:100%;flex-direction:row;flex-wrap:wrap;
+        padding-right:0;padding-bottom:10px;
+        border-right:none;border-bottom:1px solid var(--border);
+        position:static;
+      }
+      #page-config .config-nav .config-tab{width:auto;flex:1 1 auto;min-width:100px;justify-content:center}
       #page-config .cfg-cards{grid-template-columns:1fr}
     }
-    @media(max-width:600px){
-      #page-config .cfg-tab{min-width:0;flex:1 1 30%;padding:9px 8px;font-size:12px}
-      #page-config .cfg-tab .cfg-tab-label{display:none}
-      #page-config .cfg-tab .cfg-tab-ico{font-size:18px}
-      #page-config .cfg-sticky-top{margin:-10px -10px 14px -10px;top:-10px}
-      #page-config .cfg-savebar{margin:14px -10px -10px -10px}
+    @media(max-width:480px){
+      #page-config .config-nav .config-tab{min-width:0;flex:1 1 45%;padding:9px 8px;font-size:12px}
+      #page-config .config-nav .config-tab .tab-label{display:none}
+      #page-config .config-nav .config-tab .tab-ico{font-size:18px}
+      #page-config .config-header h1{font-size:15px}
     }
+    /* Hidden fields compatibility */
+    #page-config .hidden-fields{display:none}
   </style>
 
-  <!-- Docked top: header + tabs -->
-  <div class="cfg-sticky-top">
-    <div class="cfg-head">
-      <h1>⚙️ Cấu hình</h1>
-      <span class="cfg-head-sub">Quản lý tải xuống, API và tài khoản đăng video</span>
-    </div>
-    <div class="cfg-tabbar">
-      <button class="cfg-tab active" onclick="switchConfigTab(this,'cfg-sec-general')">
-        <span class="cfg-tab-ico">📥</span><span class="cfg-tab-label">Tải xuống</span>
-      </button>
-      <button class="cfg-tab" onclick="switchConfigTab(this,'cfg-sec-process')">
-        <span class="cfg-tab-ico">🔑</span><span class="cfg-tab-label">API &amp; AI</span>
-      </button>
-      <button class="cfg-tab" onclick="switchConfigTab(this,'cfg-sec-integration')">
-        <span class="cfg-tab-ico">🔗</span><span class="cfg-tab-label">Tài khoản &amp; Đăng</span>
-      </button>
-    </div>
+  <!-- Header -->
+  <div class="config-header">
+    <h1>⚙️ Cấu hình</h1>
+    <span class="config-head-sub">Quản lý tải xuống, API và tài khoản đăng video</span>
   </div>
 
-  <!-- ════════════════ SECTION 1: Download ════════════════ -->
-  <div id="cfg-sec-general">
-
-    <div class="cfg-section-intro">
-      <span class="ico">📥</span>
-      <span>Thiết lập nguồn tải, thư mục lưu và các chế độ tải video từ Douyin / TikTok.</span>
-    </div>
-
-    <div class="cfg-cards">
-
-      <div class="card span-2">
-        <div class="card-header">
-          <span class="card-title">🔗 Danh sách URL</span>
-        </div>
-        <div class="field">
-          <label>URLs (mỗi dòng một URL)</label>
-          <textarea id="cfg-urls" rows="4" placeholder="https://www.douyin.com/user/...&#10;https://www.tiktok.com/@..."></textarea>
-        </div>
+  <!-- ════════════════ Shell: left nav + right panes ════════════════ -->
+  <div class="config-shell">
+    <nav class="config-nav">
+      <div class="config-tab active" onclick="switchConfigTab(this,'cfg-sec-general')">
+        <span class="tab-ico">📥</span><span class="tab-label">Tải xuống</span>
       </div>
-
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">📁 Đường dẫn &amp; Kết nối</span>
-        </div>
-        <div class="grid-2">
-          <div class="field">
-            <label>Thư mục lưu</label>
-            <input type="text" id="cfg-path" value="./Downloaded/" placeholder="./Downloaded/">
-          </div>
-          <div class="field">
-            <label>Proxy</label>
-            <input type="text" id="cfg-proxy" placeholder="http://127.0.0.1:7890">
-          </div>
-          <div class="field">
-            <label>Số luồng tải</label>
-            <input type="number" id="cfg-thread" min="1" max="20" value="5">
-          </div>
-          <div class="field">
-            <label>Số lần thử lại</label>
-            <input type="number" id="cfg-retry" min="0" max="10" value="3">
-          </div>
-          <div class="field">
-            <label>Ngày bắt đầu</label>
-            <input type="date" id="cfg-start">
-          </div>
-          <div class="field">
-            <label>Ngày kết thúc</label>
-            <input type="date" id="cfg-end">
-          </div>
-        </div>
+      <div class="config-tab" onclick="switchConfigTab(this,'cfg-sec-process')">
+        <span class="tab-ico">🔑</span><span class="tab-label">API &amp; AI</span>
       </div>
-
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">🗂 Tùy chọn lưu trữ</span>
-        </div>
-        <div class="check-grid">
-          <label class="check-item"><input type="checkbox" id="opt-music"><span>Tải nhạc nền</span></label>
-          <label class="check-item"><input type="checkbox" id="opt-cover"><span>Tải ảnh bìa</span></label>
-          <label class="check-item"><input type="checkbox" id="opt-json"><span>Lưu metadata JSON</span></label>
-          <label class="check-item"><input type="checkbox" id="opt-folder"><span>Tạo thư mục riêng</span></label>
-        </div>
+      <div class="config-tab" onclick="switchConfigTab(this,'cfg-sec-integration')">
+        <span class="tab-ico">🔗</span><span class="tab-label">Tài khoản &amp; Đăng</span>
       </div>
-
-      <div class="card span-2">
-        <div class="card-header">
-          <span class="card-title">📋 Chế độ tải</span>
-        </div>
-        <div class="check-grid mb-12" id="mode-checks">
-          <label class="check-item"><input type="checkbox" value="post" checked><span>Bài đăng</span></label>
-          <label class="check-item"><input type="checkbox" value="like"><span>Video đã thích</span></label>
-          <label class="check-item"><input type="checkbox" value="mix"><span>Hợp tuyển</span></label>
-          <label class="check-item"><input type="checkbox" value="music"><span>Nhạc</span></label>
-          <label class="check-item"><input type="checkbox" value="collect"><span>Bộ sưu tập</span></label>
-          <label class="check-item"><input type="checkbox" value="collectmix"><span>Bộ sưu tập Mix</span></label>
-        </div>
-        <div class="section-title">Số lượng tối đa (0 = không giới hạn)</div>
-        <div class="grid-3">
-          <div class="field"><label>Bài đăng</label><input type="number" id="n-post" min="0" value="0"></div>
-          <div class="field"><label>Đã thích</label><input type="number" id="n-like" min="0" value="0"></div>
-          <div class="field"><label>Bộ sưu tập</label><input type="number" id="n-collect" min="0" value="0"></div>
-          <div class="field"><label>Nhạc</label><input type="number" id="n-music" min="0" value="0"></div>
-          <div class="field"><label>Hợp tuyển</label><input type="number" id="n-mix" min="0" value="0"></div>
-          <div class="field"><label>Collect Mix</label><input type="number" id="n-collectmix" min="0" value="0"></div>
-        </div>
+      <div class="config-tab" onclick="switchConfigTab(this,'cfg-sec-cookies')">
+        <span class="tab-ico">🍪</span><span class="tab-label">Cookie</span>
       </div>
+    </nav>
 
-    </div><!-- /cfg-cards -->
+    <div class="config-panes">
 
-  </div><!-- end cfg-sec-general -->
+      <!-- ════════════════ SECTION 1: Download ════════════════ -->
+      <div id="cfg-sec-general" class="config-pane active">
 
-  <!-- ════════════════ SECTION 2: API & AI ════════════════ -->
-  <div id="cfg-sec-process" style="display:none">
-
-    <div class="cfg-section-intro">
-      <span class="ico">🔑</span>
-      <span>Nhập API key cho dịch thuật, phiên âm và lồng tiếng. Nhấn <b>Test</b> để kiểm tra hoặc rời khỏi ô để tự kiểm tra.</span>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">🌐 Provider ưu tiên</span>
-        <div class="card-actions">
-          <button class="btn btn-secondary btn-sm" onclick="testAllApiKeys()">🧪 Test tất cả</button>
+        <div class="config-section-intro">
+          <span class="ico">📥</span>
+          <span>Thiết lập nguồn tải, thư mục lưu và các chế độ tải video từ Douyin / TikTok.</span>
         </div>
-      </div>
-      <div class="grid-2">
-        <div class="field">
-          <label>Provider dịch thuật ưu tiên</label>
-          <select id="cfg-preferred-provider">
-            <option value="auto" selected>Auto (tự động chọn)</option>
-            <option value="9router">🔀 9Router (local gateway)</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="openai">OpenAI</option>
-            <option value="groq">Groq</option>
-            <option value="huggingface">HuggingFace</option>
-            <option value="google">Google Translate</option>
-          </select>
+
+        <div class="cfg-cards">
+          <div class="card span-2">
+            <div class="card-header">
+              <span class="card-title">🔗 Danh sách URL</span>
+            </div>
+            <div class="field">
+              <label>URLs (mỗi dòng một URL)</label>
+              <textarea id="cfg-urls" rows="4" placeholder="https://www.douyin.com/user/...&#10;https://www.tiktok.com/@..."></textarea>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">📁 Đường dẫn &amp; Kết nối</span>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Thư mục lưu</label>
+                <input type="text" id="cfg-path" value="./Downloaded/" placeholder="./Downloaded/">
+              </div>
+              <div class="field">
+                <label>Proxy</label>
+                <input type="text" id="cfg-proxy" placeholder="http://127.0.0.1:7890">
+              </div>
+              <div class="field">
+                <label>Số luồng tải</label>
+                <input type="number" id="cfg-thread" min="1" max="20" value="5">
+              </div>
+              <div class="field">
+                <label>Số lần thử lại</label>
+                <input type="number" id="cfg-retry" min="0" max="10" value="3">
+              </div>
+              <div class="field">
+                <label>Ngày bắt đầu</label>
+                <input type="date" id="cfg-start">
+              </div>
+              <div class="field">
+                <label>Ngày kết thúc</label>
+                <input type="date" id="cfg-end">
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🗂 Tùy chọn lưu trữ</span>
+            </div>
+            <div class="check-grid">
+              <label class="check-item"><input type="checkbox" id="opt-music"><span>Tải nhạc nền</span></label>
+              <label class="check-item"><input type="checkbox" id="opt-cover"><span>Tải ảnh bìa</span></label>
+              <label class="check-item"><input type="checkbox" id="opt-json"><span>Lưu metadata JSON</span></label>
+              <label class="check-item"><input type="checkbox" id="opt-folder"><span>Tạo thư mục riêng</span></label>
+            </div>
+          </div>
+
+          <div class="card span-2">
+            <div class="card-header">
+              <span class="card-title">📋 Chế độ tải</span>
+            </div>
+            <div class="check-grid mb-12" id="mode-checks">
+              <label class="check-item"><input type="checkbox" value="post" checked><span>Bài đăng</span></label>
+              <label class="check-item"><input type="checkbox" value="like"><span>Video đã thích</span></label>
+              <label class="check-item"><input type="checkbox" value="mix"><span>Hợp tuyển</span></label>
+              <label class="check-item"><input type="checkbox" value="music"><span>Nhạc</span></label>
+              <label class="check-item"><input type="checkbox" value="collect"><span>Bộ sưu tập</span></label>
+              <label class="check-item"><input type="checkbox" value="collectmix"><span>Bộ sưu tập Mix</span></label>
+            </div>
+            <div class="section-title">Số lượng tối đa (0 = không giới hạn)</div>
+            <div class="grid-3">
+              <div class="field"><label>Bài đăng</label><input type="number" id="n-post" min="0" value="0"></div>
+              <div class="field"><label>Đã thích</label><input type="number" id="n-like" min="0" value="0"></div>
+              <div class="field"><label>Bộ sưu tập</label><input type="number" id="n-collect" min="0" value="0"></div>
+              <div class="field"><label>Nhạc</label><input type="number" id="n-music" min="0" value="0"></div>
+              <div class="field"><label>Hợp tuyển</label><input type="number" id="n-mix" min="0" value="0"></div>
+              <div class="field"><label>Collect Mix</label><input type="number" id="n-collectmix" min="0" value="0"></div>
+            </div>
+          </div>
+        </div><!-- /cfg-cards -->
+
+      </div><!-- end cfg-sec-general -->
+
+      <!-- ════════════════ SECTION 2: API & AI ════════════════ -->
+      <div id="cfg-sec-process" class="config-pane">
+
+        <div class="config-section-intro">
+          <span class="ico">🔑</span>
+          <span>Nhập API key cho dịch thuật, phiên âm, TTS, sinh ảnh. Nhấn <b>Test</b> để kiểm tra hoặc rời khỏi ô để tự kiểm tra.</span>
         </div>
-        <div class="field" style="display:flex;align-items:flex-end">
-          <label class="check-item" style="width:100%">
-            <input type="checkbox" id="cfg-naming-enabled" checked>
-            <span>Đặt tên file tự động (AI)</span>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🌐 Provider ưu tiên</span>
+            <div class="card-actions">
+              <button class="btn btn-secondary btn-sm" onclick="testAllApiKeys()">🧪 Test tất cả</button>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Provider dịch thuật ưu tiên</label>
+              <select id="cfg-preferred-provider">
+                <option value="auto" selected>Auto (tự động chọn)</option>
+                <option value="9router">🔀 9Router (local gateway)</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="openai">OpenAI</option>
+                <option value="groq">Groq</option>
+                <option value="huggingface">HuggingFace</option>
+                <option value="google">Google Translate</option>
+              </select>
+            </div>
+            <div class="field" style="display:flex;align-items:flex-end">
+              <label class="check-item" style="width:100%">
+                <input type="checkbox" id="cfg-naming-enabled" checked>
+                <span>Đặt tên file tự động (AI)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🔑 API Keys</span>
+          </div>
+
+          <div class="apikey-grid">
+
+            <!-- 9Router (AI Gateway) -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>🔀 9Router<span class="apikey-hint">AI Gateway (chat, dịch, TTS)</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('9router')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-9router-key" placeholder="sk-{machineId}-{keyId}-{crc8}">
+              <div class="text-xs apikey-status" id="cfg-9router-status"></div>
+            </div>
+
+            <!-- DeepSeek -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>DeepSeek<span class="apikey-hint">Dịch thuật</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('deepseek')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-deepseek-key" placeholder="sk-...">
+              <div class="text-xs apikey-status" id="cfg-deepseek-status"></div>
+            </div>
+
+            <!-- Groq -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>Groq<span class="apikey-hint">Whisper phiên âm + Dịch</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('groq')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-groq-key" placeholder="gsk_...">
+              <input type="text" id="cfg-groq-model" placeholder="llama-3.1-8b-instant" style="margin-top:6px">
+              <div class="text-xs apikey-status" id="cfg-groq-status"></div>
+            </div>
+
+            <!-- OpenAI -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>OpenAI<span class="apikey-hint">Dịch thuật + Phiên âm</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('openai')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-openai-key" placeholder="sk-...">
+              <div class="text-xs apikey-status" id="cfg-openai-status"></div>
+            </div>
+
+            <!-- HuggingFace -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>HuggingFace<span class="apikey-hint">Token (dịch, TTS)</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('huggingface')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-hf-token" placeholder="hf_...">
+              <div class="text-xs apikey-status" id="cfg-hf-status"></div>
+            </div>
+
+            <!-- FPT AI -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>FPT AI<span class="apikey-hint">TTS giọng Việt</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('fpt')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-fpt-key" placeholder="...">
+              <div class="text-xs apikey-status" id="cfg-fpt-status"></div>
+            </div>
+
+            <!-- ElevenLabs -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>ElevenLabs<span class="apikey-hint">TTS đa ngôn ngữ (fallback)</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('elevenlabs')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-elevenlabs-key" placeholder="sk_...">
+              <div class="text-xs apikey-status" id="cfg-elevenlabs-status"></div>
+            </div>
+
+            <!-- Fish Audio -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>Fish Audio<span class="apikey-hint">TTS đa ngôn ngữ</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('fish-audio')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-fish-key" placeholder="...">
+              <div class="text-xs apikey-status" id="cfg-fish-status"></div>
+            </div>
+
+            <!-- Gemini Video -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>Gemini<span class="apikey-hint">Video gen (Veo 2) + Ảnh</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('gemini')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-gemini-key" placeholder="AIza...">
+              <div class="text-xs apikey-status" id="cfg-gemini-status"></div>
+            </div>
+
+            <!-- TMDb -->
+            <div class="apikey-card">
+              <div class="apikey-head">
+                <label>TMDb<span class="apikey-hint">API cho Review phim</span></label>
+                <button class="btn btn-secondary btn-xs" onclick="testApiKey('tmdb')">🧪 Test</button>
+              </div>
+              <input type="password" id="cfg-tmdb-key" placeholder="API Key (v3)">
+              <input type="password" id="cfg-tmdb-token" placeholder="Read Access Token (v4)" style="margin-top:6px">
+              <div class="text-xs apikey-status" id="cfg-tmdb-status"></div>
+            </div>
+
+          </div><!-- /apikey-grid -->
+        </div>
+
+        <!-- Hidden fields (kept for save/load compatibility) -->
+        <div class="hidden-fields">
+          <input type="checkbox" id="vp-enabled" checked>
+          <select id="vp-model"><option value="base" selected>base</option></select>
+          <select id="vp-lang"><option value="zh" selected>zh</option></select>
+          <select id="vp-process-mode"><option value="ai" selected>ai</option></select>
+          <select id="vp-blur-zone"><option value="bottom" selected>bottom</option></select>
+          <input type="number" id="vp-font-size" value="22">
+          <input type="checkbox" id="vp-burn">
+          <input type="checkbox" id="vp-blur-original" checked>
+          <input type="checkbox" id="vp-translate" checked>
+          <input type="checkbox" id="vp-burn-vi" checked>
+          <input type="checkbox" id="vp-voice" checked>
+          <input type="checkbox" id="vp-keep-bg">
+          <select id="vp-tts-engine"><option value="fpt-ai" selected>fpt-ai</option></select>
+          <select id="vp-tts-voice"><option value="banmai">banmai</option></select>
+          <input type="text" id="vp-tts-pitch" value="+0Hz">
+          <input type="text" id="vp-tts-rate" value="+0%">
+          <select id="vp-tts-emotion"><option value="default" selected>default</option></select>
+          <input type="number" id="vp-bg-volume" value="0.15">
+          <input type="range" id="vp-tts-speed" value="1.0">
+          <input type="checkbox" id="vp-auto-speed" checked>
+          <input type="checkbox" id="vp-afp-enabled">
+          <input type="checkbox" id="vp-afp-flip">
+          <input type="checkbox" id="vp-afp-vignette">
+          <input type="checkbox" id="vp-afp-vertical">
+          <input type="number" id="vp-afp-scale-w" value="0">
+          <input type="number" id="vp-afp-scale-h" value="0">
+          <input type="text" id="vp-afp-overlay-img">
+          <input type="number" id="vp-afp-brightness" value="0.02">
+          <input type="number" id="vp-afp-contrast" value="1.03">
+          <input type="text" id="vp-hf-model" value="facebook/mms-tts-vie">
+          <input type="text" id="vp-hf-device" value="cpu">
+          <input type="text" id="vp-hf-embeddings">
+        </div>
+
+      </div><!-- end cfg-sec-process -->
+
+      <!-- ════════════════ SECTION 3: Accounts & Upload ════════════════ -->
+      <div id="cfg-sec-integration" class="config-pane">
+
+        <div class="config-section-intro">
+          <span class="ico">🔗</span>
+          <span>Kết nối tài khoản YouTube / Facebook / TikTok và đặt mẫu mặc định khi đăng video.</span>
+        </div>
+
+        <div class="cfg-cards">
+
+          <!-- Hardware Info -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🖥 Phần cứng &amp; FFmpeg Preset</span>
+            </div>
+            <div class="card-body">
+              <div id="hardware-info-display">
+                <span class="text-xs text-muted">Đang tải thông tin phần cứng...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- YouTube API config -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🔑 Cấu hình YouTube API</span>
+            </div>
+            <div class="field">
+              <label>File client_secrets.json (Tải từ Google Cloud Console)</label>
+              <div style="display:flex;gap:10px;align-items:center;">
+                <input type="file" id="yt-secrets-file" accept=".json" style="display:none" onchange="uploadClientSecrets(this)">
+                <button class="btn btn-secondary w-full" onclick="document.getElementById('yt-secrets-file').click()">
+                  📂 Chọn file client_secrets.json
+                </button>
+              </div>
+              <div class="text-xs text-muted mt-8">
+                * File này dùng để xác thực OAuth với YouTube.
+              </div>
+            </div>
+          </div>
+
+          <!-- Multi-Account Management -->
+          <div class="card span-2">
+            <div class="card-header">
+              <span class="card-title">👥 Quản lý tài khoản</span>
+              <div class="card-actions">
+                <button class="btn btn-secondary btn-sm" onclick="migrateExistingAccounts()" title="Migrate tài khoản cũ sang hệ thống mới">
+                  🔄 Migrate
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="accounts-management-panel">
+                <span class="text-xs text-muted">Đang tải...</span>
+              </div>
+              <div class="btn-group mt-12">
+                <button class="btn btn-secondary btn-sm" onclick="addFacebookAccount()">
+                  📘 Thêm Facebook
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="if(typeof youtubeLogin==='function')youtubeLogin()">
+                  📺 Thêm YouTube
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Default upload settings -->
+          <div class="card span-2">
+            <div class="card-header">
+              <span class="card-title">📤 Cài đặt đăng video mặc định</span>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Nền tảng mặc định</label>
+                <select id="cfg-upload-platform">
+                  <option value="youtube" selected>YouTube</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="both">Cả hai</option>
+                </select>
+              </div>
+              <div class="field" style="display:flex;align-items:flex-end">
+                <label class="check-item" style="width:100%">
+                  <input type="checkbox" id="cfg-upload-auto">
+                  <span>Tự động đăng sau khi xử lý</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- YouTube template -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">▶ YouTube — Mặc định</span>
+            </div>
+            <div class="field">
+              <label>Template tiêu đề</label>
+              <input type="text" id="cfg-yt-title-template" placeholder="{title}" value="{title}">
+            </div>
+            <div class="field">
+              <label>Template mô tả</label>
+              <input type="text" id="cfg-yt-desc-template" placeholder="{title}" value="{title}">
+            </div>
+            <div class="field">
+              <label>Chế độ riêng tư mặc định</label>
+              <select id="cfg-yt-privacy">
+                <option value="private" selected>🔒 Riêng tư</option>
+                <option value="unlisted">🔗 Ẩn</option>
+                <option value="public">🌐 Công khai</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- TikTok template -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🎵 TikTok — Mặc định</span>
+            </div>
+            <div class="field">
+              <label>Template tiêu đề</label>
+              <input type="text" id="cfg-tt-title-template" placeholder="{title}" value="{title}">
+            </div>
+            <div class="field">
+              <label>Template caption</label>
+              <input type="text" id="cfg-tt-caption-template" placeholder="{title}" value="{title}">
+            </div>
+            <div class="field">
+              <label>Chế độ hiển thị mặc định</label>
+              <select id="cfg-tt-privacy">
+                <option value="private" selected>🔒 Riêng tư</option>
+                <option value="friends">👥 Bạn bè</option>
+                <option value="public">🌐 Công khai</option>
+              </select>
+            </div>
+          </div>
+
+        </div><!-- /cfg-cards -->
+
+      </div><!-- end cfg-sec-integration -->
+
+      <!-- ════════════════ SECTION 4: Cookie ════════════════ -->
+      <div id="cfg-sec-cookies" class="config-pane">
+
+        <div class="config-section-intro">
+          <span class="ico">🍪</span>
+          <span>Quản lý cookie TikTok / Douyin. Nhập thủ công, dán chuỗi cookie thô, hoặc tự động lấy từ trình duyệt.</span>
+        </div>
+
+        <!-- Cookie mode toggle -->
+        <div class="cookie-mode-row">
+          <div>
+            <div class="text-sm" id="ck-mode-desc">Sử dụng cookie mặc định từ hệ thống.</div>
+          </div>
+          <label class="toggle-wrap">
+            <input type="checkbox" class="toggle-input" id="ck-mode-toggle" onchange="onCookieModeChange()">
+            <div class="toggle"></div>
+            <span class="toggle-label text-sm">Cookie tùy chỉnh</span>
           </label>
         </div>
-      </div>
-    </div>
 
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">🔑 API Keys</span>
-      </div>
-
-      <div class="apikey-grid">
-
-        <!-- DeepSeek -->
-        <div class="apikey-card">
-          <div class="apikey-head">
-            <label>DeepSeek<span class="apikey-hint">Dịch thuật</span></label>
-            <button class="btn btn-secondary btn-xs" onclick="testApiKey('deepseek')">🧪 Test</button>
+        <div id="ck-custom-wrap" style="display:none">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">📋 Phân tích Cookie</span>
+            </div>
+            <div class="field">
+              <label>Dán chuỗi cookie thô vào đây</label>
+              <textarea id="ck-raw" rows="3" placeholder="ttwid=xxx; odin_tt=xxx; passport_csrf_token=xxx; ..."></textarea>
+            </div>
+            <div class="btn-group mt-8">
+              <button class="btn btn-primary btn-sm" onclick="parseCookie()">🔍 Phân tích</button>
+              <button class="btn btn-secondary btn-sm" onclick="autoFetchCookie()">⚡ Tự động lấy</button>
+            </div>
           </div>
-          <input type="password" id="cfg-deepseek-key" placeholder="sk-...">
-          <div class="text-xs apikey-status" id="cfg-deepseek-status"></div>
-        </div>
 
-        <!-- Groq -->
-        <div class="apikey-card">
-          <div class="apikey-head">
-            <label>Groq<span class="apikey-hint">Whisper phiên âm + Dịch</span></label>
-            <button class="btn btn-secondary btn-xs" onclick="testApiKey('groq')">🧪 Test</button>
-          </div>
-          <input type="password" id="cfg-groq-key" placeholder="gsk_...">
-          <input type="text" id="cfg-groq-model" placeholder="llama-3.1-8b-instant" style="margin-top:6px">
-          <div class="text-xs apikey-status" id="cfg-groq-status"></div>
-        </div>
-
-        <!-- OpenAI -->
-        <div class="apikey-card">
-          <div class="apikey-head">
-            <label>OpenAI<span class="apikey-hint">Dịch thuật</span></label>
-            <button class="btn btn-secondary btn-xs" onclick="testApiKey('openai')">🧪 Test</button>
-          </div>
-          <input type="password" id="cfg-openai-key" placeholder="sk-...">
-          <div class="text-xs apikey-status" id="cfg-openai-status"></div>
-        </div>
-
-        <!-- HuggingFace -->
-        <div class="apikey-card">
-          <div class="apikey-head">
-            <label>HuggingFace<span class="apikey-hint">Token</span></label>
-            <button class="btn btn-secondary btn-xs" onclick="testApiKey('huggingface')">🧪 Test</button>
-          </div>
-          <input type="password" id="cfg-hf-token" placeholder="hf_...">
-          <div class="text-xs apikey-status" id="cfg-hf-status"></div>
-        </div>
-
-        <!-- FPT AI -->
-        <div class="apikey-card">
-          <div class="apikey-head">
-            <label>FPT AI<span class="apikey-hint">TTS giọng Việt</span></label>
-            <button class="btn btn-secondary btn-xs" onclick="testApiKey('fpt')">🧪 Test</button>
-          </div>
-          <input type="password" id="cfg-fpt-key" placeholder="...">
-          <div class="text-xs apikey-status" id="cfg-fpt-status"></div>
-        </div>
-
-        <!-- ElevenLabs -->
-        <div class="apikey-card">
-          <div class="apikey-head">
-            <label>ElevenLabs<span class="apikey-hint">TTS đa ngôn ngữ (fallback)</span></label>
-            <button class="btn btn-secondary btn-xs" onclick="testApiKey('elevenlabs')">🧪 Test</button>
-          </div>
-          <input type="password" id="cfg-elevenlabs-key" placeholder="sk_...">
-          <div class="text-xs apikey-status" id="cfg-elevenlabs-status"></div>
-        </div>
-
-      </div><!-- /apikey-grid -->
-    </div>
-
-    <!-- Hidden fields (kept for config save/load compatibility) -->
-    <div style="display:none" aria-hidden="true">
-      <input type="checkbox" id="vp-enabled" checked>
-      <select id="vp-model"><option value="base" selected>base</option></select>
-      <select id="vp-lang"><option value="zh" selected>zh</option></select>
-      <select id="vp-process-mode"><option value="ai" selected>ai</option></select>
-      <select id="vp-blur-zone"><option value="bottom" selected>bottom</option></select>
-      <input type="number" id="vp-font-size" value="22">
-      <input type="checkbox" id="vp-burn">
-      <input type="checkbox" id="vp-blur-original" checked>
-      <input type="checkbox" id="vp-translate" checked>
-      <input type="checkbox" id="vp-burn-vi" checked>
-      <input type="checkbox" id="vp-voice" checked>
-      <input type="checkbox" id="vp-keep-bg">
-      <select id="vp-tts-engine"><option value="fpt-ai" selected>fpt-ai</option></select>
-      <select id="vp-tts-voice"><option value="banmai">banmai</option></select>
-      <input type="text" id="vp-tts-pitch" value="+0Hz">
-      <input type="text" id="vp-tts-rate" value="+0%">
-      <select id="vp-tts-emotion"><option value="default" selected>default</option></select>
-      <input type="number" id="vp-bg-volume" value="0.15">
-      <input type="range" id="vp-tts-speed" value="1.0">
-      <input type="checkbox" id="vp-auto-speed" checked>
-      <input type="checkbox" id="vp-afp-enabled">
-      <input type="checkbox" id="vp-afp-flip">
-      <input type="checkbox" id="vp-afp-vignette">
-      <input type="checkbox" id="vp-afp-vertical">
-      <input type="number" id="vp-afp-scale-w" value="0">
-      <input type="number" id="vp-afp-scale-h" value="0">
-      <input type="text" id="vp-afp-overlay-img">
-      <input type="number" id="vp-afp-brightness" value="0.02">
-      <input type="number" id="vp-afp-contrast" value="1.03">
-      <input type="text" id="vp-hf-model" value="facebook/mms-tts-vie">
-      <input type="text" id="vp-hf-device" value="cpu">
-      <input type="text" id="vp-hf-embeddings">
-    </div>
-
-  </div><!-- end cfg-sec-process -->
-
-  <!-- ════════════════ SECTION 3: Accounts & Upload ════════════════ -->
-  <div id="cfg-sec-integration" style="display:none">
-
-    <div class="cfg-section-intro">
-      <span class="ico">🔗</span>
-      <span>Kết nối tài khoản YouTube / Facebook / TikTok và đặt mẫu mặc định khi đăng video.</span>
-    </div>
-
-    <div class="cfg-cards">
-
-      <!-- Hardware Info -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">🖥 Phần cứng &amp; FFmpeg Preset</span>
-        </div>
-        <div class="card-body">
-          <div id="hardware-info-display">
-            <span class="text-xs text-muted">Đang tải thông tin phần cứng...</span>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🔑 Các trường Cookie</span>
+              <div class="card-actions">
+                <div class="status-bar" id="ck-status">
+                  <span class="dot dot-gray"></span>
+                  <span class="text-xs text-muted">Chưa kiểm tra</span>
+                </div>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>ttwid</label>
+                <input type="text" id="ck-ttwid" placeholder="ttwid value...">
+              </div>
+              <div class="field">
+                <label>odin_tt</label>
+                <input type="text" id="ck-odin_tt" placeholder="odin_tt value...">
+              </div>
+              <div class="field">
+                <label>passport_csrf_token</label>
+                <input type="text" id="ck-passport_csrf_token" placeholder="csrf token...">
+              </div>
+              <div class="field">
+                <label>msToken</label>
+                <input type="text" id="ck-msToken" placeholder="msToken value...">
+              </div>
+              <div class="field">
+                <label>sid_guard</label>
+                <input type="text" id="ck-sid_guard" placeholder="sid_guard value...">
+              </div>
+              <div class="field">
+                <label>s_v_web_id</label>
+                <input type="text" id="ck-s_v_web_id" placeholder="s_v_web_id value...">
+              </div>
+              <div class="field">
+                <label>__ac_nonce</label>
+                <input type="text" id="ck-__ac_nonce" placeholder="__ac_nonce value...">
+              </div>
+              <div class="field">
+                <label>__ac_signature</label>
+                <input type="text" id="ck-__ac_signature" placeholder="__ac_signature value...">
+              </div>
+            </div>
+            <div class="btn-group mt-12">
+              <button class="btn btn-primary" onclick="saveCookies()">💾 Lưu Cookie</button>
+              <button class="btn btn-secondary" onclick="validateCookie()">✅ Kiểm tra hợp lệ</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- YouTube API config -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">🔑 Cấu hình YouTube API</span>
-        </div>
-        <div class="field">
-          <label>File client_secrets.json (Tải từ Google Cloud Console)</label>
-          <div style="display:flex;gap:10px;align-items:center;">
-            <input type="file" id="yt-secrets-file" accept=".json" style="display:none" onchange="uploadClientSecrets(this)">
-            <button class="btn btn-secondary w-full" onclick="document.getElementById('yt-secrets-file').click()">
-              📂 Chọn file client_secrets.json
-            </button>
-          </div>
-          <div class="text-xs text-muted mt-8">
-            * File này dùng để xác thực OAuth với YouTube. Sau khi tải lên, bạn có thể Đăng nhập YouTube ở trang Đăng video.
-          </div>
-        </div>
-      </div>
+      </div><!-- end cfg-sec-cookies -->
 
-      <!-- Multi-Account Management -->
-      <div class="card span-2">
-        <div class="card-header">
-          <span class="card-title">👥 Quản lý tài khoản</span>
-          <div class="card-actions">
-            <button class="btn btn-secondary btn-sm" onclick="migrateExistingAccounts()" title="Migrate tài khoản cũ sang hệ thống mới">
-              🔄 Migrate
-            </button>
-          </div>
-        </div>
-        <div class="card-body">
-          <div id="accounts-management-panel">
-            <span class="text-xs text-muted">Đang tải...</span>
-          </div>
-          <div class="btn-group mt-12">
-            <button class="btn btn-secondary btn-sm" onclick="addFacebookAccount()">
-              📘 Thêm Facebook
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="if(typeof youtubeLogin==='function')youtubeLogin()">
-              📺 Thêm YouTube
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Default upload settings -->
-      <div class="card span-2">
-        <div class="card-header">
-          <span class="card-title">📤 Cài đặt đăng video mặc định</span>
-        </div>
-        <div class="grid-2">
-          <div class="field">
-            <label>Nền tảng mặc định</label>
-            <select id="cfg-upload-platform">
-              <option value="youtube" selected>YouTube</option>
-              <option value="tiktok">TikTok</option>
-              <option value="both">Cả hai</option>
-            </select>
-          </div>
-          <div class="field" style="display:flex;align-items:flex-end">
-            <label class="check-item" style="width:100%">
-              <input type="checkbox" id="cfg-upload-auto">
-              <span>Tự động đăng sau khi xử lý</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- YouTube template -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">▶ YouTube — Mặc định</span>
-        </div>
-        <div class="field">
-          <label>Template tiêu đề</label>
-          <input type="text" id="cfg-yt-title-template" placeholder="{title}" value="{title}">
-        </div>
-        <div class="field">
-          <label>Template mô tả</label>
-          <input type="text" id="cfg-yt-desc-template" placeholder="{title}" value="{title}">
-        </div>
-        <div class="field">
-          <label>Chế độ riêng tư mặc định</label>
-          <select id="cfg-yt-privacy">
-            <option value="private" selected>🔒 Riêng tư</option>
-            <option value="unlisted">🔗 Ẩn</option>
-            <option value="public">🌐 Công khai</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- TikTok template -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">🎵 TikTok — Mặc định</span>
-        </div>
-        <div class="field">
-          <label>Template tiêu đề</label>
-          <input type="text" id="cfg-tt-title-template" placeholder="{title}" value="{title}">
-        </div>
-        <div class="field">
-          <label>Template caption</label>
-          <input type="text" id="cfg-tt-caption-template" placeholder="{title}" value="{title}">
-        </div>
-        <div class="field">
-          <label>Chế độ hiển thị mặc định</label>
-          <select id="cfg-tt-privacy">
-            <option value="private" selected>🔒 Riêng tư</option>
-            <option value="friends">👥 Bạn bè</option>
-            <option value="public">🌐 Công khai</option>
-          </select>
-        </div>
-      </div>
-
-    </div><!-- /cfg-cards -->
-
-  </div><!-- end cfg-sec-integration -->
+    </div><!-- /config-panes -->
+  </div><!-- /config-shell -->
 
   <!-- Docked save bar -->
-  <div class="cfg-savebar">
+  <div class="config-savebar">
     <button class="btn btn-primary" onclick="saveConfig()" style="width:100%;justify-content:center;font-size:14px;padding:12px">
       💾 Lưu cấu hình
     </button>

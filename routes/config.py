@@ -359,6 +359,78 @@ def test_api_key():
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)})
 
+    # ── 9Router (AI Gateway) ──────────────────────────────────────────────────
+    elif provider == "9router":
+        try:
+            cfg = load_cfg()
+            nr = cfg.get("nine_router", {})
+            endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+            models_req = urllib.request.Request(
+                f"{endpoint}/models",
+                headers={"Authorization": f"Bearer {key}"},
+            )
+            with urllib.request.urlopen(models_req, timeout=10) as mr:
+                models_data = _json.loads(mr.read())
+            model_ids = [m.get("id", "") for m in models_data.get("data", [])]
+            return jsonify({"ok": True, "model": model_ids[0] if model_ids else "N/A", "quota": f"{len(model_ids)} models"})
+        except urllib.error.HTTPError as e:
+            return jsonify({"ok": False, "error": f"HTTP {e.code}: Không thể kết nối 9Router"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    # ── Gemini (Video gen / Image gen) ───────────────────────────────────────
+    elif provider == "gemini":
+        try:
+            payload = _json.dumps({
+                "contents": [{"parts": [{"text": "hi"}]}],
+            }).encode()
+            req = urllib.request.Request(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}",
+                data=payload, method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as r:
+                resp = _json.loads(r.read())
+            return jsonify({"ok": True, "model": "gemini-2.0-flash", "quota": "OK"})
+        except urllib.error.HTTPError as e:
+            body = ""
+            try: body = _json.loads(e.read()).get("error", {}).get("message", "")
+            except Exception: pass
+            return jsonify({"ok": False, "error": f"HTTP {e.code}: {body or e.reason}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    # ── TMDb (Movie Review API) ─────────────────────────────────────────────
+    elif provider == "tmdb":
+        try:
+            # Try Bearer token (v4) first
+            req = urllib.request.Request(
+                "https://api.themoviedb.org/3/movie/550?language=en-US",
+                headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    resp = _json.loads(r.read())
+                title = resp.get("title", "?")
+                return jsonify({"ok": True, "model": title, "quota": "TMDb API hoạt động (v4 token)"})
+            except urllib.error.HTTPError:
+                # Fallback to API key (v3)
+                req2 = urllib.request.Request(
+                    f"https://api.themoviedb.org/3/movie/550?api_key={key}&language=en-US",
+                    headers={"Accept": "application/json"},
+                )
+                with urllib.request.urlopen(req2, timeout=10) as r:
+                    resp = _json.loads(r.read())
+                title = resp.get("title", "?")
+                return jsonify({"ok": True, "model": title, "quota": "TMDb API hoạt động (v3 key)"})
+        except urllib.error.HTTPError as e:
+            body = ""
+            try: body = _json.loads(e.read()).get("status_message", "")
+            except Exception: pass
+            return jsonify({"ok": False, "error": f"HTTP {e.code}: {body or e.reason}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
     return jsonify({"ok": False, "error": f"Provider không hỗ trợ: {provider}"}), 400
 
 

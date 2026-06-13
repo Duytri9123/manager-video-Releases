@@ -1,9 +1,20 @@
 
-/* ── Config tab switcher is in utils.js ── */
+/* ── Config tab switcher ────────────────────────────────────────────────── */
+function switchConfigTab(el, sectionId) {
+  // Remove active from all nav tabs
+  document.querySelectorAll('#page-config .config-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  // Hide all panes, show target
+  document.querySelectorAll('#page-config .config-pane').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById(sectionId);
+  if (target) target.classList.add('active');
+  // Scroll content back to top
+  const content = document.getElementById('content');
+  if (content) content.scrollTop = 0;
+}
 
 // TTS thử giọng đọc
 document.addEventListener('DOMContentLoaded', () => {
-  // Init TTS voice options for config page
   if (typeof _syncVoiceOptions === 'function') {
     _syncVoiceOptions('vp-tts-engine', 'vp-tts-voice');
   }
@@ -92,6 +103,15 @@ async function loadConfig() {
   set('cfg-fpt-key', cfg.video_process?.fpt_api_key || '');
   // ElevenLabs key (stored in video_process)
   set('cfg-elevenlabs-key', cfg.video_process?.elevenlabs_api_key || '');
+  // Fish Audio key (stored in video_process)
+  set('cfg-fish-key', cfg.video_process?.fish_api_key || '');
+  // 9Router API key
+  set('cfg-9router-key', cfg.nine_router?.api_key || '');
+  // Gemini Video key
+  set('cfg-gemini-key', cfg.gemini_video?.api_key || '');
+  // TMDb keys
+  set('cfg-tmdb-key', cfg.movie?.tmdb_api_key || '');
+  set('cfg-tmdb-token', cfg.movie?.tmdb_read_token || '');
 
   // Upload defaults
   const upload = cfg.upload || {};
@@ -276,6 +296,7 @@ async function saveConfig() {
       tts_emotion: get('vp-tts-emotion') || 'default',
       fpt_api_key: get('cfg-fpt-key') || '',
       elevenlabs_api_key: get('cfg-elevenlabs-key') || '',
+      fish_api_key: get('cfg-fish-key') || '',
       elevenlabs_voice_id: '21m00Tcm4TlvDq8ikWAM',
       elevenlabs_model: 'eleven_multilingual_v2',
       fpt_fallback_elevenlabs: true,
@@ -294,18 +315,34 @@ async function saveConfig() {
     }
   };
 
+  // NineRouter, Gemini, TMDb keys
+  data.nine_router = {
+    api_key: get('cfg-9router-key'),
+  };
+  data.gemini_video = {
+    api_key: get('cfg-gemini-key'),
+  };
+  data.movie = {
+    tmdb_api_key: get('cfg-tmdb-key'),
+    tmdb_read_token: get('cfg-tmdb-token'),
+  };
+
   await API.post('/api/config', data);
   toast(t('toast_config_saved'), 'success');
 }
 
 /* ── API Key Test ─────────────────────────────────────────────────────────── */
 const _API_KEY_IDS = {
+  '9router':    { inputId: 'cfg-9router-key',    statusId: 'cfg-9router-status' },
   deepseek:    { inputId: 'cfg-deepseek-key',    statusId: 'cfg-deepseek-status' },
   groq:        { inputId: 'cfg-groq-key',         statusId: 'cfg-groq-status' },
   openai:      { inputId: 'cfg-openai-key',       statusId: 'cfg-openai-status' },
   huggingface: { inputId: 'cfg-hf-token',         statusId: 'cfg-hf-status' },
   fpt:         { inputId: 'cfg-fpt-key',          statusId: 'cfg-fpt-status' },
   elevenlabs:  { inputId: 'cfg-elevenlabs-key',   statusId: 'cfg-elevenlabs-status' },
+  'fish-audio':{ inputId: 'cfg-fish-key',         statusId: 'cfg-fish-status' },
+  gemini:      { inputId: 'cfg-gemini-key',       statusId: 'cfg-gemini-status' },
+  tmdb:        { inputId: 'cfg-tmdb-key',         statusId: 'cfg-tmdb-status' },
 };
 
 function _setKeyStatus(statusId, state, msg) {
@@ -396,5 +433,158 @@ async function uploadClientSecrets(input) {
     toast('Lỗi kết nối: ' + e.message, 'error');
   } finally {
     input.value = ''; // Reset input
+  }
+}
+
+/* ── Cookie Handlers ──────────────────────────────────────────────────────── */
+async function loadCookieMode() {
+  try {
+    const res = await fetch('/api/cookie_mode');
+    const data = await res.json();
+    const toggle = document.getElementById('ck-mode-toggle');
+    if (toggle) {
+      toggle.checked = data.mode === 'custom';
+      onCookieModeChange();
+    }
+  } catch (e) {
+    console.error('loadCookieMode error:', e);
+  }
+}
+
+async function loadCookieFields() {
+  try {
+    const cfg = await API.get('/api/config');
+    if (!cfg) return;
+    const cookies = cfg.cookies || {};
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+    set('ck-ttwid', cookies.ttwid || '');
+    set('ck-odin_tt', cookies.odin_tt || '');
+    set('ck-passport_csrf_token', cookies.passport_csrf_token || '');
+    set('ck-msToken', cookies.msToken || '');
+    set('ck-sid_guard', cookies.sid_guard || '');
+    set('ck-s_v_web_id', cookies.s_v_web_id || '');
+    set('ck-__ac_nonce', cookies.__ac_nonce || '');
+    set('ck-__ac_signature', cookies.__ac_signature || '');
+  } catch (e) {
+    console.error('loadCookieFields error:', e);
+  }
+}
+
+function onCookieModeChange() {
+  const toggle = document.getElementById('ck-mode-toggle');
+  const wrap = document.getElementById('ck-custom-wrap');
+  const desc = document.getElementById('ck-mode-desc');
+  if (!toggle || !wrap || !desc) return;
+  if (toggle.checked) {
+    wrap.style.display = 'block';
+    desc.textContent = 'Đang dùng cookie tùy chỉnh. Điền các trường bên dưới và nhấn Lưu.';
+  } else {
+    wrap.style.display = 'none';
+    desc.textContent = 'Sử dụng cookie mặc định từ hệ thống.';
+  }
+  // Save mode preference
+  fetch('/api/cookie_mode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: toggle.checked ? 'custom' : 'default' })
+  }).catch(() => {});
+}
+
+async function parseCookie() {
+  const raw = document.getElementById('ck-raw')?.value?.trim();
+  if (!raw) { toast('Vui lòng dán chuỗi cookie trước!', 'warning'); return; }
+  try {
+    const res = await fetch('/api/parse_cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw })
+    });
+    const data = await res.json();
+    if (data && typeof data === 'object') {
+      for (const [key, val] of Object.entries(data)) {
+        const el = document.getElementById('ck-' + key);
+        if (el) el.value = val;
+      }
+      toast('Phân tích cookie thành công!', 'success');
+    }
+  } catch (e) {
+    toast('Lỗi phân tích cookie: ' + e.message, 'error');
+  }
+}
+
+async function saveCookies() {
+  const get = id => document.getElementById(id)?.value?.trim() || '';
+  const cookies = {
+    ttwid: get('ck-ttwid'),
+    odin_tt: get('ck-odin_tt'),
+    passport_csrf_token: get('ck-passport_csrf_token'),
+    msToken: get('ck-msToken'),
+    sid_guard: get('ck-sid_guard'),
+    s_v_web_id: get('ck-s_v_web_id'),
+    __ac_nonce: get('ck-__ac_nonce'),
+    __ac_signature: get('ck-__ac_signature'),
+  };
+  try {
+    const res = await fetch('/api/cookies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cookies)
+    });
+    const data = await res.json();
+    if (data.ok) toast('Đã lưu cookie!', 'success');
+    else toast('Lỗi lưu cookie: ' + (data.error || ''), 'error');
+  } catch (e) {
+    toast('Lỗi lưu cookie: ' + e.message, 'error');
+  }
+}
+
+async function validateCookie() {
+  const get = id => document.getElementById(id)?.value?.trim() || '';
+  const cookies = {
+    ttwid: get('ck-ttwid'),
+    odin_tt: get('ck-odin_tt'),
+    passport_csrf_token: get('ck-passport_csrf_token'),
+    msToken: get('ck-msToken'),
+    sid_guard: get('ck-sid_guard'),
+    s_v_web_id: get('ck-s_v_web_id'),
+    __ac_nonce: get('ck-__ac_nonce'),
+    __ac_signature: get('ck-__ac_signature'),
+  };
+  const statusEl = document.getElementById('ck-status');
+  if (statusEl) {
+    statusEl.innerHTML = '<span class="dot dot-yellow"></span><span class="text-xs">Đang kiểm tra...</span>';
+  }
+  try {
+    const res = await fetch('/api/validate_cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cookies)
+    });
+    const data = await res.json();
+    if (statusEl) {
+      if (data.ok) {
+        statusEl.innerHTML = '<span class="dot dot-green"></span><span class="text-xs text-green">Cookie hợp lệ ✓</span>';
+      } else {
+        statusEl.innerHTML = '<span class="dot dot-red"></span><span class="text-xs text-red">Cookie không hợp lệ ✗</span>';
+      }
+    }
+  } catch (e) {
+    if (statusEl) {
+      statusEl.innerHTML = '<span class="dot dot-red"></span><span class="text-xs text-red">Lỗi: ' + e.message + '</span>';
+    }
+  }
+}
+
+async function autoFetchCookie() {
+  try {
+    const res = await fetch('/api/auto_fetch_cookie', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      toast('Đang mở trình duyệt để lấy cookie... Vui lòng đăng nhập và đợi!', 'info');
+    } else {
+      toast('Lỗi: ' + (data.error || ''), 'error');
+    }
+  } catch (e) {
+    toast('Lỗi: ' + e.message, 'error');
   }
 }

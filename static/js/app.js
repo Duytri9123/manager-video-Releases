@@ -707,8 +707,12 @@ function switchPage(name) {
     videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng', ads:'Video quảng cáo'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
-  if (name === 'config' && !window._configLoaded) { loadConfig(); window._configLoaded = true; }
-  if (name === 'cookies' && !window._cookiesLoaded) { loadCookieMode(); loadCookieFields(); window._cookiesLoaded = true; }
+  if (name === 'config' && !window._configLoaded) {
+    loadConfig();
+    loadCookieMode();
+    loadCookieFields();
+    window._configLoaded = true;
+  }
   if (name === 'history') { loadHistory(); if (typeof loadFiles === 'function') loadFiles(''); }
   if (name === 'content') cptSwitch('files');
   if (name === 'process') {
