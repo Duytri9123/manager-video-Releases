@@ -83,6 +83,74 @@ function _batchPubImportFiles(input) {
 }
 
 /* ════════════════════════════════════════════════════════════════
+   IMPORT FOLDER — quét thư mục, ghép cặp video + ASS theo tên
+════════════════════════════════════════════════════════════════ */
+function _batchPubImportFolder(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+
+  const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v'];
+  const subExts = ['.ass', '.srt'];
+
+  const videos = [];
+  const subs = [];
+
+  files.forEach(f => {
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
+    if (videoExts.includes(ext)) videos.push(f);
+    else if (subExts.includes(ext)) subs.push(f);
+  });
+
+  if (!videos.length) {
+    toast('Không tìm thấy file video nào trong thư mục', 'warning');
+    input.value = '';
+    return;
+  }
+
+  // Ghép cặp theo tên (bỏ extension)
+  const getBaseName = (name) => name.replace(/\.[^.]+$/, '').toLowerCase().trim();
+
+  const pairs = [];
+  const usedSubs = new Set();
+
+  videos.forEach(v => {
+    const vBase = getBaseName(v.name);
+    let matchedSub = null;
+    for (let i = 0; i < subs.length; i++) {
+      if (usedSubs.has(i)) continue;
+      const sBase = getBaseName(subs[i].name);
+      // Match by same base name, or one contains the other (handles _vi, _en suffixes)
+      if (sBase === vBase || vBase.includes(sBase) || sBase.includes(vBase)) {
+        matchedSub = subs[i];
+        usedSubs.add(i);
+        break;
+      }
+    }
+    pairs.push({
+      id: 'bp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      videoFile: v,
+      assFile: matchedSub,
+      videoName: v.name,
+      assName: matchedSub ? matchedSub.name : '(không có)',
+      aiResult: null,
+      status: 'pending',
+      error: '',
+    });
+  });
+
+  // Thêm vào queue
+  window._batchPubQueue.push(...pairs);
+  _batchPubRender();
+
+  const info = document.getElementById('batch-pub-info');
+  if (info) info.value = `${pairs.length} cặp video từ thư mục (${videos.length} video, ${subs.length} phụ đề)`;
+  toast(`✅ Đã import ${pairs.length} cặp video từ thư mục`, 'success');
+
+  // Reset input
+  input.value = '';
+}
+
+/* ════════════════════════════════════════════════════════════════
    RENDER QUEUE LIST
 ════════════════════════════════════════════════════════════════ */
 function _batchPubRender() {

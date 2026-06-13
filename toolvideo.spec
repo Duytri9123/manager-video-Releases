@@ -29,22 +29,14 @@ python_dll = Path(sys.base_prefix) / f"python{sys.version_info.major}{sys.versio
 if python_dll.exists():
     binaries.append((str(python_dll), "."))
 
-for package in (
-    "routes",
-    "core",
-    "auth",
-    "control",
-    "storage",
-    "tools",
-    "utils",
-):
-    hiddenimports += collect_submodules(package)
-
+# Rely on PyInstaller auto-detection from desktop_launcher.py imports.
+# Dynamic imports are covered by hiddenimports below.
 for package in (
     "av",
     "ctranslate2",
     "onnxruntime",
     "tokenizers",
+    "imageio_ffmpeg",
 ):
     binaries += collect_dynamic_libs(package)
 
@@ -52,6 +44,7 @@ for package in (
     "faster_whisper",
     "playwright",
     "pyngrok",
+    "google.genai",
 ):
     datas += collect_data_files(package)
 
@@ -61,6 +54,8 @@ for distribution in (
     "faster-whisper",
     "google-api-python-client",
     "google-auth-oauthlib",
+    "google-genai",
+    "imageio-ffmpeg",
     "onnxruntime",
     "playwright",
     "pyngrok",
@@ -81,17 +76,22 @@ hiddenimports += [
     "PySide6.QtWebEngineCore",
     "PySide6.QtWebEngineWidgets",
     "PySide6.QtWidgets",
+    "aiofiles",
     "av",
     "ctranslate2",
+    "edge_tts",
     "engineio.async_drivers.threading",
     "faster_whisper",
+    "google.genai",
     "googleapiclient.discovery",
     "googleapiclient.discovery_cache",
     "google_auth_oauthlib.flow",
+    "imageio_ffmpeg",
     "onnxruntime",
     "playwright.async_api",
     "pyngrok.ngrok",
     "simple_websocket",
+    "socks",
     "tokenizers",
     "unicodedata",
 ]
@@ -126,6 +126,10 @@ a = Analysis(
         "torchvision",
         "transformers",
         "whisper",
+        "PySide6.QtQml",
+        "PySide6.QtQuick",
+        "PySide6.QtQuickControls2",
+        "PySide6.QtQuickWidgets",
     ],
     noarchive=False,
     optimize=0,

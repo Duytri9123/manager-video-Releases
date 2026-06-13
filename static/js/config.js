@@ -438,6 +438,95 @@ async function uploadClientSecrets(input) {
 }
 
 /* ── Cookie Handlers ──────────────────────────────────────────────────────── */
+const COOKIE_FIELD_KEYS = ['ttwid','odin_tt','passport_csrf_token','msToken','sid_guard','s_v_web_id','__ac_nonce','__ac_signature'];
+
+function _validCookieName(name) {
+  return /^[A-Za-z0-9_$.-]+$/.test(String(name || ''));
+}
+
+function _collectCookieValues(payload, out = {}) {
+  if (Array.isArray(payload)) {
+    payload.forEach(item => _collectCookieValues(item, out));
+    return out;
+  }
+  if (!payload || typeof payload !== 'object') return out;
+
+  ['cookies', 'cookie', 'data'].forEach(key => {
+    if (payload[key] && typeof payload[key] === 'object') {
+      _collectCookieValues(payload[key], out);
+    }
+  });
+
+  if (typeof payload.name === 'string' && Object.prototype.hasOwnProperty.call(payload, 'value')) {
+    out[payload.name] = payload.value == null ? '' : String(payload.value);
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (['name','value','domain','path','expires','expirationDate','httpOnly','secure','sameSite'].includes(key)) continue;
+    if (!_validCookieName(key)) continue;
+    if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'value')) {
+      out[key] = value.value == null ? '' : String(value.value);
+    } else if (value == null || typeof value !== 'object') {
+      out[key] = value == null ? '' : String(value);
+    }
+  }
+  return out;
+}
+
+function _parseCookieText(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return {};
+
+  const jsonCandidates = [text];
+  const stripped = text.replace(/;\s*$/, '').trim();
+  if (!stripped.startsWith('{') && !stripped.startsWith('[')) {
+    jsonCandidates.push('{' + stripped.replace(/,\s*$/, '') + '}');
+  }
+  for (const candidate of jsonCandidates) {
+    try {
+      const parsed = _collectCookieValues(JSON.parse(candidate));
+      if (Object.keys(parsed).length) return parsed;
+    } catch (_) {}
+  }
+
+  const lineParsed = {};
+  const lineRe = /["']?([A-Za-z0-9_$.-]+)["']?\s*[:=]\s*["']([^"']*)["']/g;
+  let match;
+  while ((match = lineRe.exec(text)) !== null) {
+    if (_validCookieName(match[1])) lineParsed[match[1]] = match[2].trim();
+  }
+  if (Object.keys(lineParsed).length) return lineParsed;
+
+  let header = text;
+  if (/^cookie\s*:/i.test(header)) header = header.replace(/^cookie\s*:/i, '').trim();
+  if (/^document\.cookie\s*=/i.test(header)) {
+    header = header.replace(/^document\.cookie\s*=/i, '').trim().replace(/^["']|["'];?$/g, '');
+  }
+
+  const headerParsed = {};
+  header.split(';').forEach(item => {
+    const part = item.trim();
+    const pos = part.indexOf('=');
+    if (pos <= 0) return;
+    const key = part.slice(0, pos).trim();
+    const value = part.slice(pos + 1).trim();
+    if (_validCookieName(key)) headerParsed[key] = value;
+  });
+  return headerParsed;
+}
+
+function _fillCookieFields(parsed) {
+  let filled = 0;
+  for (const key of COOKIE_FIELD_KEYS) {
+    const el = document.getElementById('ck-' + key);
+    if (el && Object.prototype.hasOwnProperty.call(parsed, key)) {
+      el.value = parsed[key] || '';
+      filled++;
+    }
+  }
+  return filled;
+}
+
 async function loadCookieMode() {
   try {
     const res = await fetch('/api/cookie_mode');
@@ -510,6 +599,38 @@ async function parseCookie() {
     }
   } catch (e) {
     toast('Lỗi phân tích cookie: ' + e.message, 'error');
+  }
+}
+
+async function parseCookie() {
+  const raw = document.getElementById('ck-raw')?.value?.trim();
+  if (!raw) { toast('Vui long dan chuoi cookie truoc!', 'warning'); return; }
+  try {
+    let data = _parseCookieText(raw);
+    if (!Object.keys(data).length) {
+      const res = await fetch('/api/parse_cookie', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw })
+      });
+      data = await res.json();
+    }
+
+    const filled = data && typeof data === 'object' ? _fillCookieFields(data) : 0;
+    const statusEl = document.getElementById('ck-status');
+    if (filled > 0) {
+      if (statusEl) {
+        statusEl.innerHTML = `<span class="dot dot-green"></span><span class="text-xs text-green">Da phan tich ${filled} truong</span>`;
+      }
+      toast(`Da phan tich va dien ${filled} truong cookie!`, 'success');
+    } else {
+      if (statusEl) {
+        statusEl.innerHTML = '<span class="dot dot-red"></span><span class="text-xs text-red">Khong tim thay truong cookie phu hop</span>';
+      }
+      toast('Khong tim thay truong cookie phu hop trong noi dung da dan.', 'warning');
+    }
+  } catch (e) {
+    toast('Loi phan tich cookie: ' + e.message, 'error');
   }
 }
 

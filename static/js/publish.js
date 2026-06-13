@@ -157,7 +157,42 @@ async function _pubLoadSubContent() {
   } catch (e) { toast('Lỗi xử lý phụ đề: ' + e.message, 'error'); }
 }
 
-/* ── Switch active tab (left-nav layout → toggle active class) ── */
+/* ── Switch main tabs (Đa nền tảng / Hàng loạt) ── */
+function pubSwitchMainTab(el, sectionId) {
+  document.querySelectorAll('#page-publish .publish-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#page-publish .publish-pane').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const pane = document.getElementById(sectionId);
+  if (pane) {
+    pane.classList.add('active');
+    // Scroll pane content to top
+    const content = document.getElementById('content');
+    if (content) content.scrollTop = 0;
+  }
+  // Update batch platform status when switching to batch tab
+  if (sectionId === 'pub-sec-batch') {
+    _batchPubUpdatePlatformStatus();
+  }
+}
+
+/* ── Update batch platform status chips ── */
+function _batchPubUpdatePlatformStatus() {
+  const platforms = ['youtube', 'tiktok', 'facebook'];
+  const ids = { youtube: 'yt', tiktok: 'tt', facebook: 'fb' };
+  platforms.forEach(p => {
+    const chip = document.getElementById('batch-plat-' + ids[p]);
+    if (!chip) return;
+    const enabled = window._pubEnabled[p];
+    chip.classList.toggle('enabled', enabled);
+    chip.classList.toggle('disabled', !enabled);
+    const dot = chip.querySelector('.dot');
+    if (dot) {
+      dot.className = 'dot ' + (enabled ? 'dot-green' : 'dot-gray');
+    }
+  });
+}
+
+/* ── Switch active tab (chỉ hiển thị 1 panel) ── */
 function pubSwitchTab(platform) {
   if (!_pubPlatforms.includes(platform)) return;
   if (!window._pubEnabled[platform]) return;
@@ -168,13 +203,13 @@ function pubSwitchTab(platform) {
     const tab   = document.getElementById('pub-tab-' + tid);
     const panel = document.getElementById('pub-panel-' + p);
 
-    // Tab button: active class toggle
+    // Tab button: active = đang xem
     if (tab) {
       tab.classList.toggle('active', p === platform);
     }
-    // Panel: use CSS class to show/hide (publish-pane.active)
+    // Panel: chỉ show panel đang active
     if (panel) {
-      panel.classList.toggle('active', p === platform);
+      panel.style.display = (p === platform) ? 'block' : 'none';
     }
   });
 }
@@ -209,11 +244,13 @@ function pubTogglePlatform(platform) {
         // Tất cả đều tắt - ẩn hết panels
         _pubPlatforms.forEach(p => {
           const panel = document.getElementById('pub-panel-' + p);
-          if (panel) panel.classList.remove('active');
+          if (panel) panel.style.display = 'none';
         });
       }
     }
   }
+  // Update batch platform status chips
+  _batchPubUpdatePlatformStatus();
 }
 
 /* ── AI Analyze ── */
