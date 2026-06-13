@@ -22,10 +22,108 @@ _LANGS = ("vi", "en", "zh", "ja", "ko", "th", "id", "es", "pt", "fr", "de", "ru"
 _CACHE: Dict[str, Any] = {"ts": 0.0, "endpoint": "", "engines": None, "status": None}
 _CACHE_TTL = 30.0
 
+_GEMINI_TTS_VOICES: List[Tuple[str, str]] = [
+    ("Zephyr", "Zephyr (female, bright)"),
+    ("Puck", "Puck (male, upbeat)"),
+    ("Charon", "Charon (male, informative)"),
+    ("Kore", "Kore (female, firm)"),
+    ("Fenrir", "Fenrir (male, excitable)"),
+    ("Leda", "Leda (female, youthful)"),
+    ("Orus", "Orus (male, firm)"),
+    ("Aoede", "Aoede (female, breezy)"),
+    ("Callirrhoe", "Callirrhoe (female, easy-going)"),
+    ("Autonoe", "Autonoe (female, bright)"),
+    ("Enceladus", "Enceladus (male, breathy)"),
+    ("Iapetus", "Iapetus (male, clear)"),
+    ("Umbriel", "Umbriel (male, easy-going)"),
+    ("Algieba", "Algieba (male, smooth)"),
+    ("Despina", "Despina (female, smooth)"),
+    ("Erinome", "Erinome (female, clear)"),
+    ("Algenib", "Algenib (male, gravelly)"),
+    ("Rasalgethi", "Rasalgethi (male, informative)"),
+    ("Laomedeia", "Laomedeia (female, upbeat)"),
+    ("Achernar", "Achernar (female, soft)"),
+    ("Alnilam", "Alnilam (male, firm)"),
+    ("Schedar", "Schedar (male, even)"),
+    ("Gacrux", "Gacrux (female, mature)"),
+    ("Pulcherrima", "Pulcherrima (female, forward)"),
+    ("Achird", "Achird (male, friendly)"),
+    ("Zubenelgenubi", "Zubenelgenubi (male, casual)"),
+    ("Vindemiatrix", "Vindemiatrix (female, gentle)"),
+    ("Sadachbia", "Sadachbia (male, lively)"),
+    ("Sadaltager", "Sadaltager (male, knowledgeable)"),
+    ("Sulafat", "Sulafat (female, warm)"),
+]
+
+_GOOGLE_CLOUD_SAMPLE_VOICES: Dict[str, List[Tuple[str, str]]] = {
+    "vi": [
+        ("google-tts/vi-VN-Standard-A", "vi-VN Standard A (female)"),
+        ("google-tts/vi-VN-Standard-B", "vi-VN Standard B (male)"),
+        ("google-tts/vi-VN-Wavenet-A", "vi-VN Wavenet A (female)"),
+        ("google-tts/vi-VN-Wavenet-B", "vi-VN Wavenet B (male)"),
+    ],
+    "en": [
+        ("google-tts/en-US-Neural2-F", "en-US Neural2 F (female)"),
+        ("google-tts/en-US-Neural2-J", "en-US Neural2 J (male)"),
+        ("google-tts/en-US-Wavenet-F", "en-US Wavenet F (female)"),
+        ("google-tts/en-US-Wavenet-D", "en-US Wavenet D (male)"),
+    ],
+    "zh": [
+        ("google-tts/cmn-CN-Wavenet-A", "cmn-CN Wavenet A (female)"),
+        ("google-tts/cmn-CN-Wavenet-B", "cmn-CN Wavenet B (male)"),
+    ],
+    "ja": [
+        ("google-tts/ja-JP-Neural2-B", "ja-JP Neural2 B (female)"),
+        ("google-tts/ja-JP-Neural2-C", "ja-JP Neural2 C (male)"),
+    ],
+    "ko": [
+        ("google-tts/ko-KR-Neural2-A", "ko-KR Neural2 A (female)"),
+        ("google-tts/ko-KR-Neural2-C", "ko-KR Neural2 C (male)"),
+    ],
+}
+
+
+def _vieneu_preset_voices() -> List[Tuple[str, str]]:
+    fallback = [
+        ("Ngọc Linh", "Ngọc Linh (nữ, giọng tươi sáng)"),
+        ("Ngọc Lan", "Ngọc Lan (nữ, giọng dịu dàng)"),
+        ("Mỹ Duyên", "Mỹ Duyên (nữ, giọng mượt mà)"),
+        ("Trúc Ly", "Trúc Ly (nữ, giọng trẻ trung)"),
+        ("Gia Bảo", "Gia Bảo (nam, giọng mượt mà)"),
+        ("Thái Sơn", "Thái Sơn (nam, giọng chắc khỏe)"),
+        ("Đức Trí", "Đức Trí (nam, giọng rõ ràng)"),
+        ("Xuân Vĩnh", "Xuân Vĩnh (nam, giọng vui tươi)"),
+        ("Trọng Hữu", "Trọng Hữu (nam, giọng uyên bác)"),
+        ("Bình An", "Bình An (nam, giọng điềm đạm)"),
+    ]
+    try:
+        import json as _json
+        from importlib import resources as _resources
+
+        asset = _resources.files("vieneu").joinpath("assets/voices_v3_turbo.json")
+        data = _json.loads(asset.read_text(encoding="utf-8"))
+        rows = []
+        for name, info in (data.get("presets") or {}).items():
+            desc = str(info.get("description") or "").strip()
+            label = f"{name} ({desc})" if desc else name
+            rows.append((name, label))
+        return rows or fallback
+    except Exception:
+        return fallback
+
 
 def local_tts_engines() -> List[Dict[str, Any]]:
     """Return built-in/local TTS engines."""
     return [
+        {
+            "id": "vieneu",
+            "label": "VieNeu TTS (local, tieng Viet)",
+            "default": "Ngọc Linh",
+            "backend": "local",
+            "voices": {
+                "vi": _vieneu_preset_voices(),
+            },
+        },
         {
             "id": "edge-tts",
             "label": "Edge TTS (Microsoft, mien phi)",
@@ -37,23 +135,40 @@ def local_tts_engines() -> List[Dict[str, Any]]:
                     ("vi-VN-NamMinhNeural", "Nam Minh (nam, mien Bac)"),
                 ],
                 "en": [
+                    ("en-US-AvaNeural", "Ava (female, US, expressive)"),
+                    ("en-US-AndrewNeural", "Andrew (male, US, expressive)"),
+                    ("en-US-EmmaNeural", "Emma (female, US, multilingual)"),
+                    ("en-US-BrianNeural", "Brian (male, US, multilingual)"),
                     ("en-US-JennyNeural", "Jenny (female, US)"),
                     ("en-US-AriaNeural", "Aria (female, US)"),
                     ("en-US-GuyNeural", "Guy (male, US)"),
+                    ("en-US-DavisNeural", "Davis (male, US, expressive)"),
+                    ("en-US-JaneNeural", "Jane (female, US, expressive)"),
+                    ("en-US-JasonNeural", "Jason (male, US, expressive)"),
+                    ("en-US-NancyNeural", "Nancy (female, US, expressive)"),
                     ("en-GB-SoniaNeural", "Sonia (female, UK)"),
                     ("en-GB-RyanNeural", "Ryan (male, UK)"),
+                    ("en-GB-LibbyNeural", "Libby (female, UK)"),
                 ],
                 "zh": [
                     ("zh-CN-XiaoxiaoNeural", "Xiaoxiao (female, CN)"),
+                    ("zh-CN-XiaoyiNeural", "Xiaoyi (female, CN)"),
                     ("zh-CN-YunxiNeural", "Yunxi (male, CN)"),
+                    ("zh-CN-YunjianNeural", "Yunjian (male, CN)"),
+                    ("zh-CN-YunxiaNeural", "Yunxia (male, CN)"),
+                    ("zh-CN-YunyangNeural", "Yunyang (male, CN)"),
                 ],
                 "ja": [
                     ("ja-JP-NanamiNeural", "Nanami (female)"),
                     ("ja-JP-KeitaNeural", "Keita (male)"),
+                    ("ja-JP-AoiNeural", "Aoi (female)"),
+                    ("ja-JP-DaichiNeural", "Daichi (male)"),
                 ],
                 "ko": [
                     ("ko-KR-SunHiNeural", "SunHi (female)"),
                     ("ko-KR-InJoonNeural", "InJoon (male)"),
+                    ("ko-KR-BongJinNeural", "BongJin (male)"),
+                    ("ko-KR-GookMinNeural", "GookMin (male)"),
                 ],
                 "th": [
                     ("th-TH-PremwadeeNeural", "Premwadee (female)"),
@@ -170,8 +285,16 @@ def local_tts_engines() -> List[Dict[str, Any]]:
             "default": "vi",
             "backend": "local",
             "voices": {
-                "vi": [("vi", "Tieng Viet mac dinh")],
-                "en": [("en", "English default")],
+                "vi": [
+                    ("vi|com.vn", "Tieng Viet (Google VN)"),
+                    ("vi|com", "Tieng Viet (Google default)"),
+                ],
+                "en": [
+                    ("en|com", "English US (Google)"),
+                    ("en|co.uk", "English UK (Google)"),
+                    ("en|com.au", "English AU (Google)"),
+                    ("en|ca", "English CA (Google)"),
+                ],
                 "zh": [("zh", "Chinese default")],
                 "ja": [("ja", "Japanese default")],
                 "ko": [("ko", "Korean default")],
@@ -364,11 +487,11 @@ _PROVIDER_TTS_VOICES: Dict[str, List[Tuple[str, str]]] = {
         ("onyx", "Onyx (male)"),
         ("fable", "Fable (storyteller)"),
     ],
-    "gemini": [
-        ("Kore", "Kore (female)"),
-        ("Charon", "Charon (male)"),
-        ("Puck", "Puck (cheerful)"),
-        ("Aoede", "Aoede (warm)"),
+    "gemini": _GEMINI_TTS_VOICES,
+    "google-tts": [
+        row
+        for rows in _GOOGLE_CLOUD_SAMPLE_VOICES.values()
+        for row in rows
     ],
     "elevenlabs": [
         ("21m00Tcm4TlvDq8ikWAM", "Rachel (female)"),
@@ -450,6 +573,64 @@ def _static_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
     return [engine] if engine else []
 
 
+def _shortcut_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
+    """Provider-specific shortcuts for the Transcribe/TTS UI.
+
+    The consolidated 9Router selector is still the most flexible option. These
+    shortcuts expose common provider groups directly as normal engine entries.
+    """
+    engines: List[Dict[str, Any]] = []
+
+    gemini_model = _has_model(
+        models,
+        r"^gemini/(?:gemini-3\.1.*tts|gemini-2\.5.*tts)",
+        r"gemini.*tts",
+    )
+    if gemini_model:
+        engines.append({
+            "id": "9r:gemini",
+            "label": "Google Gemini TTS (9Router, cam xuc)",
+            "default": "Kore",
+            "defaultModel": gemini_model,
+            "backend": "9router",
+            "provider": "gemini",
+            "voices": {"multi": _GEMINI_TTS_VOICES},
+        })
+
+    google_model = _has_model(models, r"^(?:google-tts|google/.+tts|gcp/.+tts)")
+    if google_model:
+        voices = {
+            lang: rows
+            for lang, rows in _GOOGLE_CLOUD_SAMPLE_VOICES.items()
+            if rows
+        }
+        voices.setdefault("multi", _PROVIDER_TTS_VOICES["google-tts"])
+        engines.append({
+            "id": "9r:google-tts",
+            "label": "Google Cloud TTS (9Router)",
+            "default": _PROVIDER_TTS_VOICES["google-tts"][0][0],
+            "defaultModel": google_model,
+            "backend": "9router",
+            "provider": "google-tts",
+            "voices": voices,
+        })
+
+    edge_model = _has_model(models, r"^edge-tts(?:/|$)", r"microsoft.*tts", r"azure.*tts")
+    if edge_model:
+        edge = _local_engine_by_id("edge-tts") or {}
+        engines.append({
+            "id": "9r:edge-tts",
+            "label": "Microsoft Edge TTS (9Router)",
+            "default": "vi-VN-HoaiMyNeural",
+            "defaultModel": edge_model,
+            "backend": "9router",
+            "provider": "edge-tts",
+            "voices": edge.get("voices") or {},
+        })
+
+    return engines
+
+
 def _dynamic_provider_engine(
     endpoint: str,
     api_key: str,
@@ -516,6 +697,7 @@ def nine_router_tts_engines(cfg: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], 
     status["models_count"] = len(models)
     if models:
         engines.extend(_static_9router_engines(models))
+        engines.extend(_shortcut_9router_engines(models))
 
     seen = set()
     deduped = []

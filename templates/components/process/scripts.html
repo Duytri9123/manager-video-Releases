@@ -629,6 +629,9 @@
       video_path:     videoPath,
       title:          document.getElementById('frame-title')?.value || '',
       title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
+      title_weight:   parseInt(document.getElementById('frame-title-weight')?.value || 400, 10),
+      title_bar_h_pct: parseFloat(document.getElementById('frame-title-bar-h')?.value || 6),
+      title_margin_x_pct: parseFloat(document.getElementById('frame-title-margin-x')?.value || 5),
       title_color:    document.getElementById('frame-title-color')?.value || '#000000',
       blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
       blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
@@ -781,6 +784,7 @@
       return {
         id: _ovNewId(), type: 'text', enabled: true, open: true,
         text: 'Text mới', x_pct: 0.50, y_pct: 0.18, size_pct: 0.05,
+        weight: 700, padding_pct: 0.55,
         color: '#ffffff', box_color: '#000000', box_opacity: 0.50,
         start_sec: '', end_sec: ''
       };
@@ -806,6 +810,8 @@
     if (type === 'text') {
       base.text = String(raw.text ?? base.text);
       base.size_pct = _ovClamp(raw.size_pct ?? base.size_pct, 0.01, 0.30);
+      base.weight = Math.max(300, Math.min(900, parseInt(raw.weight ?? base.weight, 10) || base.weight));
+      base.padding_pct = _ovClamp(raw.padding_pct ?? base.padding_pct, 0, 1.5);
       base.color = _ovHexValue(raw.color, base.color);
       base.box_color = _ovHexValue(raw.box_color, base.box_color);
       base.box_opacity = _ovClamp(raw.box_opacity ?? base.box_opacity, 0, 1);
@@ -854,10 +860,22 @@
     }
     return 'Khối ' + _ovRoundPct(ov.width_pct) + '% × ' + _ovRoundPct(ov.height_pct) + '%';
   }
+  function _ovWeightOptions(value) {
+    const current = parseInt(value || 700, 10);
+    return [
+      [300, 'Mảnh'],
+      [400, 'Thường'],
+      [500, 'Vừa'],
+      [600, 'Đậm nhẹ'],
+      [700, 'Đậm'],
+      [800, 'Rất đậm'],
+      [900, 'Siêu đậm']
+    ].map(([v, label]) => `<option value="${v}" ${current === v ? 'selected' : ''}>${label}</option>`).join('');
+  }
   function _ovLayerBody(ov) {
     const id = _ovEsc(ov.id);
     const common = `
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:8px">
         <div class="field"><label>X %</label><input type="number" value="${_ovRoundPct(ov.x_pct)}" min="0" max="100" step="1" oninput="ovUpdateLayer('${id}','x_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
         <div class="field"><label>Y %</label><input type="number" value="${_ovRoundPct(ov.y_pct)}" min="0" max="100" step="1" oninput="ovUpdateLayer('${id}','y_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
         <div class="field"><label>Từ (s)</label><input type="number" value="${_ovEsc(ov.start_sec)}" min="0" step="0.5" placeholder="đầu" oninput="ovUpdateLayer('${id}','start_sec',this.value,true)" onchange="ovRenderLayerList()"></div>
@@ -869,8 +887,10 @@
           style="width:100%;font-size:12px;height:38px;box-sizing:border-box;margin-bottom:8px"
           oninput="ovUpdateLayer('${id}','text',this.value,true)" onchange="ovRenderLayerList()">
         ${common}
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:8px">
           <div class="field"><label>Cỡ %</label><input type="number" value="${_ovRoundPct(ov.size_pct)}" min="1" max="30" step="0.5" oninput="ovUpdateLayer('${id}','size_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+          <div class="field"><label>Độ đậm</label><select style="height:38px" oninput="ovUpdateLayer('${id}','weight',parseInt(this.value,10),true)" onchange="ovRenderLayerList()">${_ovWeightOptions(ov.weight)}</select></div>
+          <div class="field"><label>Lề text %</label><input type="number" value="${Math.round((ov.padding_pct ?? 0.55) * 100)}" min="0" max="150" step="5" oninput="ovUpdateLayer('${id}','padding_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
           <div class="field"><label>Màu chữ</label><input type="color" value="${_ovEsc(ov.color)}" style="height:38px" oninput="ovUpdateLayer('${id}','color',this.value,true)"></div>
           <div class="field"><label>Màu nền</label><input type="color" value="${_ovEsc(ov.box_color)}" style="height:38px" oninput="ovUpdateLayer('${id}','box_color',this.value,true)"></div>
         </div>
@@ -878,7 +898,7 @@
     }
     return `
       ${common}
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:8px">
         <div class="field"><label>Rộng %</label><input type="number" value="${_ovRoundPct(ov.width_pct)}" min="1" max="100" step="1" oninput="ovUpdateLayer('${id}','width_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
         <div class="field"><label>Cao %</label><input type="number" value="${_ovRoundPct(ov.height_pct)}" min="1" max="100" step="1" oninput="ovUpdateLayer('${id}','height_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
         <div class="field"><label>Bo góc %</label><input type="number" value="${_ovRoundPct(ov.radius_pct)}" min="0" max="50" step="1" oninput="ovUpdateLayer('${id}','radius_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
@@ -915,7 +935,7 @@
               <span class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 7px" onclick="event.stopPropagation();ovRemoveLayer('${_ovEsc(ov.id)}')">🗑</span>
             </span>
           </button>
-          <div class="ov-layer-body" onclick="ovSelectLayer('${_ovEsc(ov.id)}', false)">
+          <div class="ov-layer-body" onclick="if(!event.target.closest('input,select,textarea,button,label')) ovSelectLayer('${_ovEsc(ov.id)}', false)">
             ${_ovLayerBody(ov)}
           </div>
         </div>`;
@@ -926,10 +946,20 @@
   function ovSelectLayer(id, open) {
     const ov = _ovFind(id);
     if (!ov) return;
-    window._videoOverlays.forEach(x => { if (open) x.open = String(x.id) === String(id); });
+    const wasSelected = window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id);
+    let needsRender = !wasSelected;
+    window._videoOverlays.forEach(x => {
+      if (!open) return;
+      const shouldOpen = String(x.id) === String(id);
+      if (x.open !== shouldOpen) needsRender = true;
+      x.open = shouldOpen;
+    });
     window._pe2Sel = { type: 'overlay', id: ov.id };
-    if (open) ov.open = true;
-    ovRenderLayerList();
+    if (open && !ov.open) {
+      ov.open = true;
+      needsRender = true;
+    }
+    if (needsRender) ovRenderLayerList();
     if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
     if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
     if (typeof pe2ApplySelection === 'function') pe2ApplySelection();
@@ -940,21 +970,28 @@
     const next = !ov.open;
     window._videoOverlays.forEach(x => { x.open = false; });
     ov.open = next;
-    ovSelectLayer(id, false);
+    window._pe2Sel = { type: 'overlay', id: ov.id };
+    ovRenderLayerList();
+    if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+    if (typeof pe2ApplySelection === 'function') pe2ApplySelection();
   }
   function ovAddText() {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
     window._videoOverlays.forEach(x => { x.open = false; });
     const ov = _ovDefault('text');
     window._videoOverlays.push(ov);
     ovSelectLayer(ov.id, true);
   }
   function ovAddRect() {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
     window._videoOverlays.forEach(x => { x.open = false; });
     const ov = _ovDefault('rect');
     window._videoOverlays.push(ov);
     ovSelectLayer(ov.id, true);
   }
   function ovRemoveLayer(id) {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
     window._videoOverlays = (window._videoOverlays || []).filter(x => String(x.id) !== String(id));
     if (window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(id)) window._pe2Sel = null;
     ovRenderLayerList();
@@ -964,11 +1001,14 @@
   function ovUpdateLayer(id, key, value, soft) {
     const ov = _ovFind(id);
     if (!ov) return;
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
     if (key === 'enabled') ov.enabled = !!value;
     else if (key === 'text') ov.text = String(value ?? '');
     else if (key === 'color' || key === 'box_color') ov[key] = _ovHexValue(value, ov[key] || '#000000');
     else if (key === 'start_sec' || key === 'end_sec') ov[key] = _ovSecValue(value);
     else if (key === 'size_pct') ov.size_pct = _ovClamp(value, 0.01, 0.30);
+    else if (key === 'weight') ov.weight = Math.max(300, Math.min(900, parseInt(value, 10) || 700));
+    else if (key === 'padding_pct') ov.padding_pct = _ovClamp(value, 0, 1.5);
     else if (key === 'box_opacity' || key === 'opacity') ov[key] = _ovClamp(value, 0, 1);
     else if (key === 'radius_pct') ov.radius_pct = _ovClamp(value, 0, 0.5);
     else if (key === 'width_pct' || key === 'height_pct') ov[key] = _ovClamp(value, 0.01, 1);
@@ -1002,6 +1042,8 @@
       if (ov.type === 'text') {
         out.text = ov.text;
         out.size_pct = ov.size_pct;
+        out.weight = ov.weight;
+        out.padding_pct = ov.padding_pct;
         out.color = ov.color;
         out.box_color = ov.box_color;
         out.box_opacity = ov.box_opacity;
@@ -1020,8 +1062,10 @@
     const text = String(ov.text || '').trim();
     if (!text) return null;
     const fontPx = Math.max(8, Math.round(h * (ov.size_pct || 0.05)));
+    const weight = Math.max(300, Math.min(900, parseInt(ov.weight || 700, 10) || 700));
+    const padMul = Math.max(0, Math.min(1.5, Number(ov.padding_pct ?? 0.55)));
     ctx.save();
-    ctx.font = `bold ${fontPx}px Arial, sans-serif`;
+    ctx.font = `${weight} ${fontPx}px Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const maxW = w * 0.9;
@@ -1039,8 +1083,8 @@
     });
     if (line) lines.push(line);
     const lineH = fontPx * 1.25;
-    const padX = fontPx * 0.55;
-    const padY = fontPx * 0.35;
+    const padX = fontPx * padMul;
+    const padY = fontPx * padMul * 0.65;
     const textW = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width), 1));
     const boxW = textW + padX * 2;
     const boxH = lines.length * lineH + padY * 2;
@@ -1108,6 +1152,8 @@
         el.style.background = _ovRgba(ov.color || '#000000', ov.opacity ?? 0.55);
         el.style.borderRadius = (Math.min(w, h) * Math.max(0, Math.min(0.5, ov.radius_pct || 0.02))) + 'px';
       } else if (ov.type === 'text') {
+        const weight = Math.max(300, Math.min(900, parseInt(ov.weight || 700, 10) || 700));
+        const padMul = Math.max(0, Math.min(1.5, Number(ov.padding_pct ?? 0.55)));
         el.textContent = ov.text || '';
         el.style.left = (imgOffX + dispW * (ov.x_pct ?? 0.5)) + 'px';
         el.style.top = (imgOffY + dispH * (ov.y_pct ?? 0.18)) + 'px';
@@ -1115,15 +1161,15 @@
         el.style.maxWidth = (dispW * 0.9) + 'px';
         el.style.textAlign = 'center';
         el.style.wordBreak = 'break-word';
-        el.style.font = `700 ${Math.max(8, Math.round(dispH * (ov.size_pct || 0.05)))}px Arial, sans-serif`;
+        el.style.font = `${weight} ${Math.max(8, Math.round(dispH * (ov.size_pct || 0.05)))}px Arial, sans-serif`;
         el.style.lineHeight = '1.25';
         el.style.color = ov.color || '#ffffff';
         el.style.textShadow = '0 2px 6px rgba(0,0,0,.85)';
-        el.style.padding = '0.35em 0.55em';
+        el.style.padding = (padMul * 0.65) + 'em ' + padMul + 'em';
         el.style.borderRadius = '0.35em';
         el.style.background = _ovRgba(ov.box_color || '#000000', ov.box_opacity || 0);
       }
-      const handles = ov.type === 'rect' ? ['e','s','se'] : ['se'];
+      const handles = ['nw','n','ne','e','se','s','sw','w'];
       handles.forEach(function(edge){
         const hd = document.createElement('div');
         hd.className = 'pe2-handle ' + edge;
@@ -1355,7 +1401,7 @@
         div.className = 'extra-blur-zone';
         div.dataset.zoneId = zone.id;
           div.style.cssText = `position:absolute;left:${imgOffX + ezLeft}px;top:${imgOffY + ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);z-index:4;`;
-        ['e','s','se'].forEach(function(edge){
+        ['nw','n','ne','e','se','s','sw','w'].forEach(function(edge){
           const hd = document.createElement('div');
           hd.className = 'pe2-handle ' + edge;
           hd.dataset.pe2handle = edge;
@@ -1932,6 +1978,11 @@
     const title       = titleEnabled ? (document.getElementById('frame-title')?.value || '') : '';
     const hasTitle    = titleEnabled && title.trim();
     const titleSizePct= parseFloat(document.getElementById('frame-title-size')?.value || 5);
+    const titleWeight = Math.max(300, Math.min(900, parseInt(document.getElementById('frame-title-weight')?.value || 400, 10) || 400));
+    const titleBarPct = parseFloat(document.getElementById('frame-title-bar-h')?.value || 6);
+    const titleMarginXPct = parseFloat(document.getElementById('frame-title-margin-x')?.value || 5);
+    const titleXPct   = parseFloat(document.getElementById('frame-title-x')?.value || 50) / 100;
+    const titleYPct   = parseFloat(document.getElementById('frame-title-y')?.value || 50) / 100;
     const titleColor  = document.getElementById('frame-title-color')?.value || '#000000';
     const titleColor2 = document.getElementById('frame-title-color-2')?.value || '#ff0000';
     const titleSplit  = document.getElementById('frame-title-split-color')?.checked ?? true;
@@ -1953,9 +2004,7 @@
     const titleFontPx = hasTitle ? Math.max(10, Math.round(wrapW * titleSizePct / 100)) : 0;
     const sourceDisplayH = Math.round(wrapW * srcNH / srcNW);
     const titleBarH = hasTitle
-      ? (blurMode === 'expand'
-          ? Math.round(titleFontPx * 2.4)
-          : Math.max(40, Math.round(sourceDisplayH * 0.12)))
+      ? Math.max(40, Math.round(sourceDisplayH * Math.max(3, Math.min(20, titleBarPct)) / 100))
       : 0;
 
     // Side blur width in preview pixels
@@ -1989,6 +2038,7 @@
 
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, cW, cH);
+    let frameInteractiveSource = {};
 
     // ── Draw main video ──
     ctx.drawImage(srcImg, vidX, vidY, vidW, vidH);
@@ -2076,14 +2126,18 @@
     if (hasTitle && titleBarH > 0) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, cW, titleBarH);
+      frameInteractiveSource.titleBar = { x: 0, y: 0, w: cW, h: titleBarH };
     }
 
     if (hasTitle) {
-      ctx.font = `bold ${titleFontPx}px Arial, sans-serif`;
+      ctx.font = `${titleWeight} ${titleFontPx}px Arial, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const maxW = cW * 0.9;
+      const titleMarginX = cW * Math.max(0, Math.min(40, titleMarginXPct)) / 100;
+      const maxW = Math.max(titleFontPx, cW - titleMarginX * 2);
       const upper = title.toUpperCase();
+      let titleCenterX = Math.max(titleMarginX, Math.min(cW - titleMarginX, cW * Math.max(0, Math.min(1, titleXPct))));
+      const titleCenterY = Math.max(titleFontPx / 2, Math.min(titleBarH - titleFontPx / 2, titleBarH * Math.max(0, Math.min(1, titleYPct))));
 
       // Build lines with word wrap
       const words = upper.split(' ');
@@ -2095,7 +2149,11 @@
       }
       if (line) lines.push(line);
       const lH = titleFontPx * 1.3;
-      const startY = (titleBarH - lines.length * lH) / 2 + lH / 2;
+      const titleBlockH = lines.length * lH;
+      const startY = titleCenterY - titleBlockH / 2 + lH / 2;
+      const lineWidths = lines.map(l => ctx.measureText(l).width);
+      const titleBlockW = Math.min(maxW, Math.max(...lineWidths, titleFontPx));
+      titleCenterX = Math.max(titleMarginX + titleBlockW / 2, Math.min(cW - titleMarginX - titleBlockW / 2, titleCenterX));
 
       if (titleSplit && upper.length > 1) {
         // Split-color rendering: split at "|" or at word midpoint across the full title
@@ -2126,7 +2184,7 @@
           else rl = test;
         }
         if (rl) rwLines.push(rl);
-        const sY = (titleBarH - rwLines.length * lH) / 2 + lH / 2;
+        const sY = titleCenterY - (rwLines.length * lH) / 2 + lH / 2;
 
         // Render: walk through words; switch color when we pass part1's length
         const part1Words = part1.split(' ').length;
@@ -2138,7 +2196,7 @@
           const widths = lineWords.map(w => ctx.measureText(w).width);
           const spaceW = ctx.measureText(' ').width;
           const totalW = widths.reduce((a, b) => a + b, 0) + spaceW * (lineWords.length - 1);
-          let x = (cW - totalW) / 2;
+          let x = titleCenterX - totalW / 2;
           const y = sY + i * lH;
           lineWords.forEach((w, j) => {
             ctx.fillStyle = (wordIdx < part1Words) ? titleColor : titleColor2;
@@ -2151,7 +2209,17 @@
         ctx.textAlign = 'center';
       } else {
         ctx.fillStyle = titleColor;
-        lines.forEach((l, i) => ctx.fillText(l, cW / 2, startY + i * lH));
+        lines.forEach((l, i) => ctx.fillText(l, titleCenterX, startY + i * lH));
+      }
+      const titleBounds = {
+        x: titleCenterX - titleBlockW / 2 - titleFontPx * 0.25,
+        y: titleCenterY - titleBlockH / 2 - titleFontPx * 0.15,
+        w: titleBlockW + titleFontPx * 0.5,
+        h: titleBlockH + titleFontPx * 0.3
+      };
+      frameInteractiveSource.title = titleBounds;
+      if (window._pe2Sel && window._pe2Sel.type === 'frame-title') {
+        _drawCanvasSelection(ctx, titleBounds.x, titleBounds.y, titleBounds.w, titleBounds.h, true);
       }
     }
 
@@ -2162,7 +2230,7 @@
       const logoAR = logoNW / (logoNH || 1);
       const lH = Math.max(8, Math.round(vidH * logoSizePct));
       const lW = Math.round(lH * logoAR);
-      const lX = Math.round(cW * logoLeftPct);
+      const lX = vidX + Math.round(vidW * logoLeftPct);
       const titleOffset = (blurMode === 'overlay' && hasTitle) ? titleBarH : 0;
       const lY = vidY + titleOffset + Math.round(vidH * logoTopPct);
       // Border radius: % of shorter side (0%=square, 50%=circle)
@@ -2173,11 +2241,16 @@
       ctx.clip();
       ctx.drawImage(window._frameLogoImg, lX, lY, lW, lH);
       ctx.restore();
+      frameInteractiveSource.logo = { x: lX, y: lY, w: lW, h: lH };
+      if (window._pe2Sel && window._pe2Sel.type === 'frame-logo') {
+        _drawCanvasSelection(ctx, lX, lY, lW, lH, true);
+      }
     }
 
     // ── Text/shape overlays, then subtitle overlay on top ──
     _drawVideoOverlaysOnCanvas(ctx, vidX, vidY, vidW, vidH);
-    _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
+    const subBounds = _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
+    if (subBounds) frameInteractiveSource.sub = subBounds;
 
     // Compose in source space first, then place the complete foreground into
     // the selected output aspect. This is the same order used by FFmpeg.
@@ -2198,6 +2271,9 @@
     let finalVidW = vidW;
     let finalVidH = vidH;
     let finalTitleBarH = titleBarH;
+    let fgScale = 1;
+    let fgX = 0;
+    let fgY = 0;
 
     if (shouldConvert) {
       const composed = document.createElement('canvas');
@@ -2223,11 +2299,11 @@
         outCtx.restore();
       }
 
-      const fgScale = Math.min(finalCW / cW, finalCH / cH);
+      fgScale = Math.min(finalCW / cW, finalCH / cH);
       const fgW = cW * fgScale;
       const fgH = cH * fgScale;
-      const fgX = (finalCW - fgW) / 2;
-      const fgY = (finalCH - fgH) / 2;
+      fgX = (finalCW - fgW) / 2;
+      fgY = (finalCH - fgH) / 2;
       outCtx.drawImage(composed, fgX, fgY, fgW, fgH);
 
       finalVidX = fgX + vidX * fgScale;
@@ -2254,12 +2330,32 @@
       vidW: finalVidW,
       vidH: finalVidH,
       cW: finalCW,
-      cH: finalCH
+      cH: finalCH,
+      srcCW: cW,
+      srcCH: cH,
+      srcVidX: vidX,
+      srcVidY: vidY,
+      srcVidW: vidW,
+      srcVidH: vidH,
+      srcTitleBarH: titleBarH,
+      fgScale,
+      fgX,
+      fgY
     };
+    window._frameInteractiveSource = frameInteractiveSource;
+    window._frameInteractive = Object.fromEntries(Object.entries(frameInteractiveSource).map(([key, box]) => ([
+      key,
+      {
+        x: fgX + box.x * fgScale,
+        y: fgY + box.y * fgScale,
+        w: box.w * fgScale,
+        h: box.h * fgScale
+      }
+    ])));
   }
 
-  /** Draw a blue selection outline (+ resize handles for extra zones) on canvas */
-  function _drawCanvasSelection(ctx, x, y, w, h, withHandles) {
+  /** Legacy selection painter kept for reference. */
+  function _drawCanvasSelectionLegacy(ctx, x, y, w, h, withHandles) {
     ctx.save();
     // Blue selection rectangle
     ctx.strokeStyle = '#1a73e8';
@@ -2284,6 +2380,48 @@
       ctx.beginPath();
       ctx.arc(x + w / 2, y + h, hr, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function _drawCanvasSelection(ctx, x, y, w, h, withHandles) {
+    ctx.save();
+    const rx = Math.round(x) + 0.5;
+    const ry = Math.round(y) + 0.5;
+    const rw = Math.max(1, Math.round(w));
+    const rh = Math.max(1, Math.round(h));
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([]);
+    ctx.strokeRect(rx, ry, rw, rh);
+
+    ctx.strokeStyle = '#1a73e8';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(rx, ry, rw, rh);
+
+    if (withHandles) {
+      const hs = 10;
+      const hh = hs / 2;
+      const pts = [
+        [rx, ry],
+        [rx + rw / 2, ry],
+        [rx + rw, ry],
+        [rx + rw, ry + rh / 2],
+        [rx + rw, ry + rh],
+        [rx + rw / 2, ry + rh],
+        [rx, ry + rh],
+        [rx, ry + rh / 2]
+      ];
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#1a73e8';
+      ctx.lineWidth = 2;
+      pts.forEach(([px, py]) => {
+        ctx.beginPath();
+        ctx.rect(Math.round(px - hh) + 0.5, Math.round(py - hh) + 0.5, hs, hs);
+        ctx.fill();
+        ctx.stroke();
+      });
     }
     ctx.restore();
   }
@@ -2335,7 +2473,7 @@
 
         // Draw selection outline if main blur zone is selected
         if (window._pe2Sel && window._pe2Sel.type === 'blur') {
-          _drawCanvasSelection(ctx, bX, bY, bW, bH, false);
+          _drawCanvasSelection(ctx, bX, bY, bW, bH, true);
         }
       }
     }
@@ -2369,7 +2507,7 @@
       });
     }
 
-    if (!sample || !burnOn || !burnViOn) return;
+    if (!sample || !burnOn || !burnViOn) return null;
 
     // Scale relative to video area height (same formula as _renderSubOverlay)
     const scaledFont   = Math.max(6, Math.round(vidH * fontPct   / 100));
@@ -2400,13 +2538,26 @@
     if (line) lines.push(line);
 
     const lH = scaledFont * 1.3;
+    const lineWidths = lines.map(l => ctx.measureText(l).width);
+    const textW = Math.min(maxW, Math.max(...lineWidths, scaledFont));
+    const textH = lines.length * lH;
+    const textBounds = {
+      x: textX - textW / 2 - scaledFont * 0.25,
+      y: pos === 'top' ? textY - scaledFont * 0.1 : textY - textH - scaledFont * 0.1,
+      w: textW + scaledFont * 0.5,
+      h: textH + scaledFont * 0.2
+    };
     if (pos === 'top') {
       lines.forEach((l, i) => ctx.fillText(l, textX, textY + i * lH));
     } else {
       // Draw from bottom up
-      lines.reverse().forEach((l, i) => ctx.fillText(l, textX, textY - i * lH));
+      [...lines].reverse().forEach((l, i) => ctx.fillText(l, textX, textY - i * lH));
     }
     ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    if (window._pe2Sel && window._pe2Sel.type === 'sub') {
+      _drawCanvasSelection(ctx, textBounds.x, textBounds.y, textBounds.w, textBounds.h, true);
+    }
+    return textBounds;
   }
 
   /* ════════════════════════════════════════════════════════
@@ -2564,6 +2715,11 @@
     { id:'frame-title',         type:'value' },
     { id:'frame-title-enabled', type:'checkbox' },
     { id:'frame-title-size',    type:'value' },
+    { id:'frame-title-weight',  type:'value' },
+    { id:'frame-title-bar-h',   type:'value' },
+    { id:'frame-title-margin-x', type:'value' },
+    { id:'frame-title-x',       type:'value' },
+    { id:'frame-title-y',       type:'value' },
     { id:'frame-title-color',   type:'value' },
     { id:'frame-title-color-hex', type:'value' },
     { id:'frame-title-color-2', type:'value' },
@@ -2940,57 +3096,94 @@
 
   // ── Multiple blur zones ────────────────────────────────────────────────────
   window._procExtraBlurZones = [];
+  window._procExtraBlurOpenIds = window._procExtraBlurOpenIds || [];
   let _blurZoneCounter = 0;
 
   function procAddBlurZone() {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
     _blurZoneCounter++;
     const id = _blurZoneCounter;
     window._procExtraBlurZones.push({ id, height: 12, position: 50, width: 80, x: 50, start: '', end: '', zone: 'custom' });
+    window._procExtraBlurOpenIds = [id];
     _renderExtraBlurZones();
     subPreviewUpdate();
   }
 
   function procRemoveBlurZone(id) {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
     window._procExtraBlurZones = window._procExtraBlurZones.filter(z => z.id !== id);
+    window._procExtraBlurOpenIds = (window._procExtraBlurOpenIds || []).filter(openId => openId !== id);
     _renderExtraBlurZones();
     subPreviewUpdate();
+  }
+
+  function procRememberBlurZoneOpen(id, isOpen) {
+    const openIds = new Set(window._procExtraBlurOpenIds || []);
+    if (isOpen) openIds.add(id);
+    else openIds.delete(id);
+    window._procExtraBlurOpenIds = Array.from(openIds);
   }
 
   function _renderExtraBlurZones() {
     const container = document.getElementById('proc-blur-extra-list');
     if (!container) return;
-    container.innerHTML = window._procExtraBlurZones.map(z => {
+    const liveDetails = Array.from(container.querySelectorAll('.pe2-extra-zone'));
+    const openIds = new Set(
+      liveDetails.length
+        ? liveDetails.filter(el => el.open).map(el => parseInt(el.dataset.blurId, 10))
+        : (window._procExtraBlurOpenIds || [])
+    );
+    const selectedExtraId = (window._pe2Sel && window._pe2Sel.type === 'extra') ? window._pe2Sel.id : null;
+    if (selectedExtraId != null) openIds.add(parseInt(selectedExtraId, 10));
+    const zoneIds = new Set((window._procExtraBlurZones || []).map(z => z.id));
+    window._procExtraBlurOpenIds = Array.from(openIds).filter(id => zoneIds.has(id));
+    container.innerHTML = window._procExtraBlurZones.map((z, idx) => {
       var st = (z.start === '' || z.start == null) ? '' : z.start;
       var en = (z.end === '' || z.end == null) ? '' : z.end;
       var rangeTxt = '⏱ Burn ' + (st !== '' ? ('từ ' + st + 's') : 'từ đầu') + ' ' + (en !== '' ? ('đến ' + en + 's') : 'đến cuối');
+      var xVal = z.x ?? 50;
+      var wVal = z.width ?? 80;
+      var openAttr = openIds.has(z.id) ? ' open' : '';
       return `
-      <div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px" data-blur-id="${z.id}">
-        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px">
-          <div class="field"><label>Cao %</label><input type="number" value="${z.height}" min="3" max="40" step="1" style="height:36px" onchange="procUpdateBlurZone(${z.id},'height',this.value)" oninput="subPreviewUpdate()"></div>
-          <div class="field"><label>Y %</label><input type="number" value="${z.position}" min="0" max="100" step="1" style="height:36px" onchange="procUpdateBlurZone(${z.id},'position',this.value)" oninput="subPreviewUpdate()"></div>
-          <div class="field"><label>X %</label><input type="number" value="${z.x ?? 50}" min="0" max="100" step="1" style="height:36px" onchange="procUpdateBlurZone(${z.id},'x',this.value)" oninput="subPreviewUpdate()"></div>
-          <div class="field"><label>Rộng %</label><input type="number" value="${z.width ?? 80}" min="20" max="100" step="5" style="height:36px" onchange="procUpdateBlurZone(${z.id},'width',this.value)" oninput="subPreviewUpdate()"></div>
+      <details class="pe2-extra-zone" data-blur-id="${z.id}"${openAttr} ontoggle="procRememberBlurZoneOpen(${z.id}, this.open)">
+        <summary>
+          <span class="pe2-extra-zone-caret">▶</span>
+          <span class="pe2-extra-zone-main">
+            <span class="pe2-extra-zone-title">Vùng che ${idx + 1}</span>
+            <span class="pe2-extra-zone-meta">Cao ${z.height}% · Y ${z.position}% · X ${xVal}% · Rộng ${wVal}%</span>
+            <span class="pe2-extra-zone-meta">${rangeTxt}</span>
+          </span>
+          <button type="button" class="btn btn-secondary btn-sm" style="height:30px;padding:0 9px;font-size:13px;flex:0 0 auto" onclick="event.preventDefault();event.stopPropagation();procRemoveBlurZone(${z.id})" title="Xóa vùng che">🗑</button>
+        </summary>
+        <div class="pe2-extra-zone-body">
+        <div class="pe2-extra-zone-grid">
+          <div class="field"><label>Cao %</label><input type="number" value="${z.height}" min="3" max="40" step="1" style="height:36px" oninput="procUpdateBlurZone(${z.id},'height',this.value,true)"></div>
+          <div class="field"><label>Y %</label><input type="number" value="${z.position}" min="0" max="100" step="1" style="height:36px" oninput="procUpdateBlurZone(${z.id},'position',this.value,true)"></div>
+          <div class="field"><label>X %</label><input type="number" value="${xVal}" min="0" max="100" step="1" style="height:36px" oninput="procUpdateBlurZone(${z.id},'x',this.value,true)"></div>
+          <div class="field"><label>Rộng %</label><input type="number" value="${wVal}" min="20" max="100" step="5" style="height:36px" oninput="procUpdateBlurZone(${z.id},'width',this.value,true)"></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;margin-top:6px">
-          <div class="field"><label>Từ (s)</label><input type="number" value="${st}" min="0" step="0.5" placeholder="đầu" style="height:36px" onchange="procUpdateBlurZone(${z.id},'start',this.value)"></div>
-          <div class="field"><label>Đến (s)</label><input type="number" value="${en}" min="0" step="0.5" placeholder="cuối" style="height:36px" onchange="procUpdateBlurZone(${z.id},'end',this.value)"></div>
-          <button class="btn btn-secondary btn-sm" style="height:36px;padding:0 10px;font-size:14px" onclick="procRemoveBlurZone(${z.id})" title="Xóa vùng che">🗑</button>
+        <div class="pe2-extra-zone-time">
+          <div class="field"><label>Từ (s)</label><input type="number" value="${st}" min="0" step="0.5" placeholder="đầu" style="height:36px" oninput="procUpdateBlurZone(${z.id},'start',this.value,true)" onchange="procUpdateBlurZone(${z.id},'start',this.value)"></div>
+          <div class="field"><label>Đến (s)</label><input type="number" value="${en}" min="0" step="0.5" placeholder="cuối" style="height:36px" oninput="procUpdateBlurZone(${z.id},'end',this.value,true)" onchange="procUpdateBlurZone(${z.id},'end',this.value)"></div>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:5px">${rangeTxt}</div>
-      </div>`;
+        </div>
+      </details>`;
     }).join('');
     if (window.pe2RenderRanges) window.pe2RenderRanges();
   }
 
-  function procUpdateBlurZone(id, key, val) {
+  function procUpdateBlurZone(id, key, val, soft) {
     const zone = window._procExtraBlurZones.find(z => z.id === id);
     if (!zone) return;
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
     if (key === 'start' || key === 'end') {
       zone[key] = (val === '' || val === null || val === undefined) ? '' : (parseFloat(val) || 0);
-      _renderExtraBlurZones();   // cập nhật dòng "Burn từ … đến …"
+      if (!soft) _renderExtraBlurZones();   // cập nhật dòng "Burn từ … đến …"
     } else {
       zone[key] = parseFloat(val) || 0;
     }
+    subPreviewUpdate();
+    if (window.pe2RenderRanges) window.pe2RenderRanges();
   }
 
 

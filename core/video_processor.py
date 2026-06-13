@@ -495,6 +495,8 @@ def _normalize_video_overlays(raw) -> list[dict]:
                 "x_pct": pct("x_pct", 0.5),
                 "y_pct": pct("y_pct", 0.18),
                 "size_pct": pct("size_pct", 0.05, 0.01, 0.30),
+                "weight": int(_clamp_float(_as_float(item.get("weight"), 700.0), 300.0, 900.0)),
+                "padding_pct": pct("padding_pct", 0.55, 0.0, 1.5),
                 "color": _normalize_hex_rgb(item.get("color"), "#FFFFFF"),
                 "box_color": _normalize_hex_rgb(item.get("box_color"), "#000000"),
                 "box_opacity": pct("box_opacity", 0.5),
@@ -584,6 +586,9 @@ def _append_video_overlay_filters(
                 continue
             size_pct = _clamp_float(ov.get("size_pct", 0.05), 0.01, 0.30)
             font_size = max(8, int(round(bh * size_pct)))
+            weight = int(_clamp_float(ov.get("weight", 700), 300, 900))
+            overlay_font = "Arial Bold" if weight >= 600 else "Arial"
+            padding_pct = _clamp_float(ov.get("padding_pct", 0.55), 0.0, 1.5)
             x_pct = _clamp_float(ov.get("x_pct", 0.5), 0.0, 1.0)
             y_pct = _clamp_float(ov.get("y_pct", 0.18), 0.0, 1.0)
             x_expr = f"{bx:.3f}+{bw:.3f}*{x_pct:.6f}-text_w/2"
@@ -592,11 +597,11 @@ def _append_video_overlay_filters(
             box_opacity = _clamp_float(ov.get("box_opacity", 0.5), 0.0, 1.0)
             if box_opacity > 0.001:
                 box_color = _ffmpeg_color(ov.get("box_color", "#000000"), box_opacity)
-                box_opts = f":box=1:boxcolor={box_color}:boxborderw={max(2, int(font_size * 0.35))}"
+                box_opts = f":box=1:boxcolor={box_color}:boxborderw={max(0, int(font_size * padding_pct))}"
             else:
                 box_opts = ":box=0"
             filter_complex_parts.append(
-                f"[{curr_label}]drawtext=text='{text}':fontcolor={font_color}:fontsize={font_size}:"
+                f"[{curr_label}]drawtext=text='{text}':font='{overlay_font}':fontcolor={font_color}:fontsize={font_size}:"
                 f"x='{x_expr}':y='{y_expr}'{box_opts}{enable}[{next_label}]"
             )
             curr_label = next_label
@@ -628,6 +633,100 @@ def has_audio_track(video_path: Path, ffmpeg: str) -> bool:
         return "Audio:" in stderr
     except Exception:
         return False
+
+
+def apply_audio_effects(
+    input_path: Path,
+    output_path: Path,
+    ffmpeg: str,
+    pitch_semitones: float = 0.0,
+    speed: float = 1.0,
+    bass: int = 0,
+    mid: int = 0,
+    treble: int = 0,
+    compression: bool = False,
+    reverb: int = 0,
+) -> tuple[bool, str]:
+    """
+    Apply audio effects to an audio file using FFmpeg filters.
+    
+    Args:
+        input_path: Input audio file path
+        output_path: Output audio file path
+        ffmpeg: Path to ffmpeg executable
+        pitch_semitones: Pitch shift in semitones (-12 to 12)
+        speed: Playback speed multiplier (0.5 to 2.0)
+        bass: Bass gain in dB (-20 to 20)
+        mid: Midrange gain in dB (-20 to 20)
+        treble: Treble gain in dB (-20 to 20)
+        compression: Enable dynamic range compression
+        reverb: Reverb amount (0-100)
+    
+    Returns:
+        Tuple of (success, error_message)
+    """
+    try:
+        input_path = Path(input_path)
+        output_path = Path(output_path)
+        
+        filters = []
+        
+        # Pitch shift using rubberband filter
+        if pitch_semitones != 0.0:
+            # rubberband pitch: factor = 2^(semitones/12)
+            factor = 2 ** (pitch_semitones / 12.0)
+            filters.append(f"rubberband=pitch={factor}")
+        
+        # Speed change using atempo filter (chain if > 2x)
+        if speed != 1.0:
+            # atempo only supports 0.5-2.0, chain multiple if needed
+            if speed <= 2.0:
+                filters.append(f"atempo={speed}")
+            else:
+                # Chain multiple atempo filters for speeds > 2x
+                filters.append(f"atempo=2.0,atempo={speed/2.0}")
+        
+        # Equalizer for bass, mid, treble
+        if bass != 0:
+            filters.append(f"equalizer=frequency=100:width_type=h:width=100:g={bass}")
+        if mid != 0:
+            filters.append(f"equalizer=frequency=1000:width_type=h:width=1000:g={mid}")
+        if treble != 0:
+            filters.append(f"equalizer=frequency=5000:width_type=h:width=5000:g={treble}")
+        
+        # Compression using compand
+        if compression:
+            filters.append("compand=attacks=0.02:decays=0.1:points=-70/-70|-40/-20|-20/-10|0/-5|20/0:soft-knee=6")
+        
+        # Reverb using aecho filter
+        if reverb > 0:
+            # Convert 0-100 scale to 0.0-1.0
+            reverb_amount = reverb / 100.0
+            filters.append(f"aecho=0.8:0.9:{1000 * reverb_amount}:{reverb_amount}|{reverb_amount * 0.5}")
+        
+        if not filters:
+            # No effects, just copy
+            args = [
+                ffmpeg, "-i", str(input_path),
+                "-c:a", "copy",
+                "-y", str(output_path)
+            ]
+        else:
+            # Apply filter chain
+            filter_complex = ",".join(filters)
+            args = [
+                ffmpeg, "-i", str(input_path),
+                "-af", filter_complex,
+                "-c:a", "libmp3lame",
+                "-b:a", "192k",
+                "-y", str(output_path)
+            ]
+        
+        success, error = run_ffmpeg(args, desc="Applying audio effects", timeout=300)
+        return success, error
+        
+    except Exception as e:
+        return False, str(e)
 
 
 # ── Image path helper ─────────────────────────────────────────────────────────
@@ -1321,6 +1420,9 @@ def make_vertical_video(
     title: str = "",
     title_enabled: bool = True,
     title_size_pct: float = 5.0,
+    title_weight: int = 400,
+    title_bar_h_pct: float = 6.0,
+    title_margin_x_pct: float = 5.0,
     title_color: str = "#000000",
     blur_w_pct: float = 15.0,
     blur_top_pct: float = 0.0,
@@ -1370,7 +1472,7 @@ def make_vertical_video(
     # Title bar (chỉ nếu enabled)
     if title_enabled and title:
         title_font_px = max(16, int(target_w * title_size_pct / 100))
-        title_bar_h   = int(title_font_px * 2.4)
+        title_bar_h   = max(40, int(target_h * _clamp_float(title_bar_h_pct, 3.0, 20.0) / 100))
         title_bar_h   = title_bar_h + (title_bar_h % 2)
     else:
         title_font_px = 0
@@ -1383,6 +1485,8 @@ def make_vertical_video(
         return f"0x{h.upper()}" if len(h) == 6 else "0xFF0000"
 
     title_ffcolor = _hex_to_ffmpeg(title_color)
+    title_font_name = "Arial Bold" if int(_clamp_float(title_weight, 300, 900)) >= 600 else "Arial"
+    title_margin_px = max(0, int(target_w * _clamp_float(title_margin_x_pct, 0.0, 40.0) / 100))
     blur_str = 20
 
     with tempfile.TemporaryDirectory(prefix="frame_video_") as tmpdir:
@@ -1436,8 +1540,8 @@ def make_vertical_video(
             safe_title = title.replace("'", "\\'").replace(":", "\\:")
             filters.append(
                 f"[c6]drawtext=text='{safe_title}':fontsize={title_font_px}:"
-                f"fontcolor={title_ffcolor}:x=(w-text_w)/2:y={title_bar_h//2}-text_h/2:"
-                f"font='Arial'[c7]"
+                f"fontcolor={title_ffcolor}:x='max({title_margin_px},min((w-text_w)/2,w-text_w-{title_margin_px}))':y={title_bar_h//2}-text_h/2:"
+                f"font='{title_font_name}'[c7]"
             )
             last = "c7"
         else:
@@ -1624,7 +1728,7 @@ def make_vertical_video(
             return False, f"Frame video failed: {err}"
 
         # Add logo if provided
-        if logo_path and Path(logo_path).exists():
+        if logo_path and Path(logo_path).exists() and logo_size_pct > 0:
             logo_h_px   = max(20, int(out_h_vid * logo_size_pct / 100))
             logo_top_px = title_bar_h + int(out_h_vid * logo_top_pct / 100)
             logo_left_px = int(out_w * 0.03)
@@ -2127,7 +2231,7 @@ def _burn_ass(
         filter_complex = ";".join(filter_complex_parts)
 
         # Add logo overlay if available
-        if _logo_file and _logo_file.exists():
+        if _logo_file and _logo_file.exists() and _logo_size_pct > 0:
             extra_inputs = ["-i", str(_logo_file)]
 
             # Get video dimensions to calculate logo size and position in pixels
@@ -2645,11 +2749,15 @@ def write_ass_with_frame(
     # Frame: Title bar (overlay on top of video)
     title_text: str = "",
     title_size_pct: float = 7.0,
+    title_weight: int = 400,
+    title_x_pct: float = 50.0,
+    title_y_pct: float = 50.0,
     title_color: str = "#000000",
     title_color_2: str = "#ff0000",  # Second color for emphasis part of title
     title_split_color: bool = True,  # Enable split-color (half/half)
     title_bar_color: str = "#ffffff",
-    title_bar_h_pct: float = 12.0,  # height of title bar as % of PlayResY
+    title_bar_h_pct: float = 6.0,  # height of title bar as % of PlayResY
+    title_margin_x_pct: float = 5.0,
     # Frame: Side blur panels (overlay on sides of video)
     blur_w_pct: float = 15.0,
     blur_top_pct: float = 0.0,  # Top blur strip height as % of PlayResY
@@ -2686,6 +2794,8 @@ def write_ass_with_frame(
         play_res_x/y: must match video dimensions (width × height)
         title_text: text to show in title bar (overlay on top of video)
         title_size_pct: title font size as % of width
+        title_weight: title font weight; >=600 renders bold in ASS
+        title_margin_x_pct: horizontal title margin as % of width
         title_color: title text color (#RRGGBB)
         title_bar_color: title bar background color
         title_bar_h_pct: title bar height as % of video height
@@ -2700,6 +2810,7 @@ def write_ass_with_frame(
     title_bar_h = 0 if title_bar_h_pct <= 0 else max(40, int(play_res_y * title_bar_h_pct / 100))
     title_bar_h = title_bar_h + (title_bar_h % 2)
     title_font_px = max(16, int(play_res_x * title_size_pct / 100))
+    title_bold = -1 if int(_clamp_float(title_weight, 300, 900)) >= 600 else 0
 
     side_w = max(0, int(play_res_x * blur_w_pct / 100))
 
@@ -2712,9 +2823,6 @@ def write_ass_with_frame(
     if frame_mode == "expand":
         # Khớp với preview: chiều cao dải tiêu đề tính theo cỡ chữ (font × 2.4),
         # không dùng title_bar_h_pct cố định.
-        if title_bar_h > 0:
-            title_bar_h = max(40, int(round(title_font_px * 2.4)))
-            title_bar_h += title_bar_h % 2
         vid_w = max(2, play_res_x - 2 * side_w)
         vid_w -= vid_w % 2
         vid_h = max(2, int(round(vid_w * play_res_y / max(1, play_res_x))))
@@ -2753,10 +2861,10 @@ def write_ass_with_frame(
         f"Style: TitleBar,Arial,1,&H00{title_bar_bgr},&H00{title_bar_bgr},&H00{title_bar_bgr},&H00{title_bar_bgr},"
         f"0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1"
     )
-    # Title text style — BOLD, no outline (title bar has white background)
+    # Title text style — configurable bold, no outline (title bar has white background)
     styles.append(
         f"Style: TitleText,{font_name},{title_font_px},&H00{title_text_bgr},&H000000FF,&H00000000,&H00000000,"
-        f"-1,0,0,0,100,100,0,0,1,0,0,8,10,10,{title_bar_h // 4},1"
+        f"{title_bold},0,0,0,100,100,0,0,1,0,0,8,10,10,{title_bar_h // 4},1"
     )
     # Side blur panel style (semi-transparent)
     styles.append(
@@ -2801,6 +2909,10 @@ WrapStyle: 0
 ; Side width px: {side_w}
 ; Title bar h px: {title_bar_h}
 ; Title: {title_text}
+; Title weight: {title_weight}
+; Title x: {title_x_pct}%
+; Title y: {title_y_pct}%
+; Title margin x: {title_margin_x_pct}%
 ; Title color: {title_color} / {title_color_2} (split)
 ; Title bar height: {title_bar_h_pct}%
 ; Blur width: {blur_w_pct}%
@@ -2841,8 +2953,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     # 2. Title text (centered in title bar) — UPPERCASE, split color, no outline
     if has_title:
-        # Position title at 35% of title bar height (higher up for better visual)
-        title_y = int(title_bar_h * 0.35)
+        title_margin_x = int(out_w * _clamp_float(title_margin_x_pct, 0.0, 40.0) / 100.0)
+        title_x = int(out_w * _clamp_float(title_x_pct, 0.0, 100.0) / 100.0)
+        title_x = max(title_margin_x, min(max(title_margin_x, out_w - title_margin_x), title_x))
+        title_y = int(title_bar_h * _clamp_float(title_y_pct, 0.0, 100.0) / 100.0)
         # Uppercase the title for impact
         safe_title = title_text.replace("{", "").replace("}", "").replace("\\", "").upper()
 
@@ -2869,13 +2983,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # No outline (\bord0) — clean look matching the title bar background
             if part2:
                 colored_title = (
-                    f"{{\\an8\\pos({out_w // 2},{title_y})\\bord0}}"
+                    f"{{\\an5\\pos({title_x},{title_y})\\bord0}}"
                     f"{{\\c&H00{color1_bgr}&}}{part1} "
                     f"{{\\c&H00{color2_bgr}&}}{part2}"
                 )
             else:
                 colored_title = (
-                    f"{{\\an8\\pos({out_w // 2},{title_y})\\bord0}}"
+                    f"{{\\an5\\pos({title_x},{title_y})\\bord0}}"
                     f"{{\\c&H00{color1_bgr}&}}{part1}"
                 )
             lines.append(
@@ -2884,7 +2998,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         else:
             lines.append(
                 f"Dialogue: 4,{start_time},{end_time},TitleText,,0,0,0,,"
-                f"{{\\an8\\pos({out_w // 2},{title_y})\\bord0}}{safe_title}"
+                f"{{\\an5\\pos({title_x},{title_y})\\bord0}}{safe_title}"
             )
 
     # 3. Left blur panel (semi-transparent) — phủ phần video (từ vid_y, cao vid_h)
@@ -3011,6 +3125,8 @@ def _max_tts_chars_for_engine(engine: str) -> int:
         return 700
     if engine == "gtts":
         return 200
+    if engine == "vieneu":
+        return 240
     if engine == "elevenlabs":
         return 2500
     if engine == "fish-audio":
@@ -3036,6 +3152,10 @@ class MultiProviderTTS:
         openai_api_key: str = "",
         openai_model: str = "tts-1",
         tts_lang: str = "vi",
+        tts_rate: str = "+0%",
+        tts_pitch: str = "+0Hz",
+        tts_emotion: str = "default",
+        tts_persona: str = "",
         elevenlabs_api_key: str = "",
         elevenlabs_voice_id: str = "",
         elevenlabs_model: str = "eleven_multilingual_v2",
@@ -3051,6 +3171,10 @@ class MultiProviderTTS:
         self.openai_api_key = (openai_api_key or "").strip()
         self.openai_model = openai_model or "tts-1"
         self.tts_lang = tts_lang or "vi"
+        self.tts_rate = tts_rate or "+0%"
+        self.tts_pitch = tts_pitch or "+0Hz"
+        self.tts_emotion = tts_emotion or "default"
+        self.tts_persona = (tts_persona or "").strip()
         self.elevenlabs_api_key = (elevenlabs_api_key or "").strip() or os.getenv("ELEVENLABS_API_KEY", "").strip()
         self.elevenlabs_voice_id = (elevenlabs_voice_id or "").strip() or ELEVENLABS_DEFAULT_VOICE_ID
         self.elevenlabs_model = elevenlabs_model or "eleven_multilingual_v2"
@@ -3119,12 +3243,27 @@ class MultiProviderTTS:
             except Exception:
                 pass
 
+        elif engine == "vieneu":
+            try:
+                ok = _tts_vieneu(
+                    text,
+                    self.voice,
+                    out_path,
+                    style=self.tts_emotion,
+                )
+                if ok:
+                    return True
+            except Exception:
+                pass
+
         elif engine == "9router" or engine.startswith("9r:"):
             try:
                 ok = await _tts_nine_router(
                     text, self.voice, out_path,
                     engine=engine,
                     language=self.tts_lang,
+                    style=self.tts_emotion,
+                    persona=self.tts_persona,
                 )
                 if ok:
                     return True
@@ -3149,7 +3288,14 @@ class MultiProviderTTS:
 
         elif engine == "edge-tts":
             try:
-                ok = await _tts_edge(text, self.voice, out_path)
+                ok = await _tts_edge(
+                    text,
+                    self.voice,
+                    out_path,
+                    rate=self.tts_rate,
+                    pitch=self.tts_pitch,
+                    style=self.tts_emotion,
+                )
                 if ok:
                     return True
             except Exception:
@@ -3157,7 +3303,7 @@ class MultiProviderTTS:
 
         elif engine == "gtts":
             try:
-                ok = _tts_gtts(text, self.tts_lang, out_path)
+                ok = _tts_gtts(text, self.tts_lang, out_path, self.voice)
                 if ok:
                     return True
             except Exception:
@@ -3355,6 +3501,92 @@ def _apply_atempo(ffmpeg: str, src: Path, dst: Path, speed: float) -> bool:
     return ok
 
 
+_EDGE_TTS_STYLE_ALIASES = {
+    "default": "",
+    "neutral": "",
+    "excited": "excited",
+    "cheerful": "cheerful",
+    "sad": "sad",
+    "angry": "angry",
+    "friendly": "friendly",
+    "hopeful": "hopeful",
+    "empathetic": "empathetic",
+    "customerservice": "customerservice",
+    "newscast": "newscast",
+    "newscast-formal": "newscast-formal",
+    "newscast-casual": "newscast-casual",
+    "narration": "narration-professional",
+    "narration-professional": "narration-professional",
+    "shouting": "shouting",
+    "whispering": "whispering",
+    "terrified": "terrified",
+    "unfriendly": "unfriendly",
+    "assistant": "assistant",
+    "calm": "calm",
+}
+_EDGE_TTS_STYLE_VAR = None
+_EDGE_TTS_ORIGINAL_MKSSML = None
+
+
+def _edge_locale_from_voice(voice: str) -> str:
+    parts = str(voice or "").split("-")
+    if len(parts) >= 2:
+        return f"{parts[0]}-{parts[1]}"
+    return "en-US"
+
+
+def _normalize_edge_style(style: str) -> str:
+    raw = str(style or "").strip().lower().replace("_", "-")
+    return _EDGE_TTS_STYLE_ALIASES.get(raw, raw if raw and raw != "default" else "")
+
+
+def _install_edge_style_patch(edge_tts_module) -> None:
+    """Patch edge-tts SSML generation once so style can be task-local.
+
+    The public edge-tts API exposes rate/pitch but not Microsoft mstts styles.
+    We keep the original behavior when no context-local style is set.
+    """
+    global _EDGE_TTS_STYLE_VAR, _EDGE_TTS_ORIGINAL_MKSSML
+    import contextvars
+
+    import edge_tts.communicate as edge_comm
+
+    if _EDGE_TTS_STYLE_VAR is None:
+        _EDGE_TTS_STYLE_VAR = contextvars.ContextVar("edge_tts_style", default="")
+    if getattr(edge_comm.mkssml, "_toolvideo_style_patch", False):
+        return
+
+    original_mkssml = edge_comm.mkssml
+    _EDGE_TTS_ORIGINAL_MKSSML = original_mkssml
+
+    def styled_mkssml(tc, escaped_text):
+        style_name = _EDGE_TTS_STYLE_VAR.get("") if _EDGE_TTS_STYLE_VAR else ""
+        if not style_name:
+            return original_mkssml(tc, escaped_text)
+        if isinstance(escaped_text, bytes):
+            escaped = escaped_text.decode("utf-8")
+        else:
+            escaped = escaped_text
+        locale = _edge_locale_from_voice(getattr(tc, "voice", ""))
+        return (
+            "<speak version='1.0' "
+            "xmlns='http://www.w3.org/2001/10/synthesis' "
+            "xmlns:mstts='https://www.w3.org/2001/mstts' "
+            f"xml:lang='{locale}'>"
+            f"<voice name='{tc.voice}'>"
+            f"<mstts:express-as style='{style_name}'>"
+            f"<prosody pitch='{tc.pitch}' rate='{tc.rate}' volume='{tc.volume}'>"
+            f"{escaped}"
+            "</prosody>"
+            "</mstts:express-as>"
+            "</voice>"
+            "</speak>"
+        )
+
+    styled_mkssml._toolvideo_style_patch = True
+    edge_comm.mkssml = styled_mkssml
+
+
 async def _tts_edge(text: str, voice: str, out_path: Path, rate: str = "+0%",
                     pitch: str = "+0Hz", style: str = "default") -> bool:
     """Generate TTS audio using edge-tts.
@@ -3384,34 +3616,57 @@ async def _tts_edge(text: str, voice: str, out_path: Path, rate: str = "+0%",
         if pitch and pitch.strip() and pitch.strip().lower() not in ("+0hz", "0hz", "default"):
             kwargs["pitch"] = pitch
 
-        # Retry up to 2 times on "No audio was received" errors
-        last_err = None
-        for _retry in range(3):
+        async def _save_with_optional_style(style_name: str = "") -> bool:
+            token = None
+            if style_name:
+                _install_edge_style_patch(edge_tts)
+                token = _EDGE_TTS_STYLE_VAR.set(style_name) if _EDGE_TTS_STYLE_VAR else None
             try:
-                communicate = edge_tts.Communicate(text, voice, **kwargs)
-                await communicate.save(str(out_path))
-                if out_path.exists() and out_path.stat().st_size > 0:
-                    return True
-            except TypeError:
-                # Older edge-tts that doesn't support `pitch`
-                communicate = edge_tts.Communicate(text, voice, rate=rate)
-                await communicate.save(str(out_path))
-                if out_path.exists() and out_path.stat().st_size > 0:
-                    return True
-            except Exception as e:
-                last_err = e
-                err_msg = str(e).lower()
-                if "no audio was received" in err_msg:
-                    # Retry after short delay — edge-tts sometimes has transient failures
-                    await asyncio.sleep(1.0 * (_retry + 1))
-                    continue
-                else:
-                    raise RuntimeError(f"edge-tts failed: {e}")
+                # Retry up to 2 times on "No audio was received" errors
+                last_err = None
+                for _retry in range(3):
+                    try:
+                        communicate = edge_tts.Communicate(text, voice, **kwargs)
+                        await communicate.save(str(out_path))
+                        if out_path.exists() and out_path.stat().st_size > 0:
+                            return True
+                    except TypeError:
+                        # Older edge-tts that doesn't support `pitch`
+                        communicate = edge_tts.Communicate(text, voice, rate=rate)
+                        await communicate.save(str(out_path))
+                        if out_path.exists() and out_path.stat().st_size > 0:
+                            return True
+                    except Exception as e:
+                        last_err = e
+                        err_msg = str(e).lower()
+                        if "no audio was received" in err_msg:
+                            # Retry after short delay — edge-tts sometimes has transient failures
+                            await asyncio.sleep(1.0 * (_retry + 1))
+                            continue
+                        raise RuntimeError(f"edge-tts failed: {e}")
 
-        # All retries exhausted
-        if last_err:
-            raise RuntimeError(f"edge-tts failed after 3 attempts: {last_err}")
-        return False
+                # All retries exhausted
+                if last_err:
+                    raise RuntimeError(f"edge-tts failed after 3 attempts: {last_err}")
+                return False
+            finally:
+                if token is not None and _EDGE_TTS_STYLE_VAR is not None:
+                    _EDGE_TTS_STYLE_VAR.reset(token)
+
+        style_name = _normalize_edge_style(style)
+        if style_name:
+            try:
+                return await _save_with_optional_style(style_name)
+            except Exception:
+                # Unsupported styles vary by voice. Retry plain prosody so the
+                # user still gets audio instead of a hard failure.
+                try:
+                    if out_path.exists():
+                        out_path.unlink()
+                except Exception:
+                    pass
+
+        return await _save_with_optional_style("")
     except RuntimeError:
         raise
     except Exception as e:
@@ -3642,6 +3897,164 @@ def _nine_router_model_for_engine(engine: str, voice: str, cfg: dict) -> tuple[s
     return default_model or "openai/tts-1", "", fallbacks
 
 
+_GEMINI_TTS_STYLE_PREFIX = {
+    "cheerful": "Say cheerfully: ",
+    "excited": "[excited] ",
+    "sad": "Say sadly and gently: ",
+    "angry": "Say angrily, with controlled intensity: ",
+    "friendly": "Say in a warm, friendly tone: ",
+    "hopeful": "Say with a hopeful tone: ",
+    "empathetic": "Say with empathy: ",
+    "customerservice": "Say like a helpful customer service agent: ",
+    "newscast": "Read like a TV news anchor: ",
+    "newscast-formal": "Read like a formal news anchor: ",
+    "newscast-casual": "Read like a casual news presenter: ",
+    "narration": "Narrate professionally: ",
+    "narration-professional": "Narrate professionally: ",
+    "shouting": "[shouting] ",
+    "whispering": "[whispers] ",
+    "terrified": "Say with a fearful, tense tone: ",
+    "serious": "[serious] ",
+}
+
+
+_VIENEU_TTS_INSTANCE = None
+
+
+def _vieneu_emotion_from_style(style: str) -> str:
+    key = str(style or "").strip().lower().replace("_", "-")
+    mapping = {
+        "default": "natural",
+        "neutral": "natural",
+        "natural": "natural",
+        "cheerful": "happy",
+        "excited": "happy",
+        "friendly": "happy",
+        "hopeful": "happy",
+        "sad": "sad",
+        "angry": "angry",
+        "empathetic": "sad",
+        "narration": "natural",
+        "narration-professional": "natural",
+        "newscast": "natural",
+        "customerservice": "natural",
+        "whispering": "natural",
+        "shouting": "angry",
+    }
+    return mapping.get(key, key or "natural")
+
+
+def _vieneu_text_with_cue(text: str, style: str) -> str:
+    key = str(style or "").strip().lower().replace("_", "-")
+    cue = {
+        "cheerful": "[cười] ",
+        "excited": "[cười] ",
+        "friendly": "[cười] ",
+        "sad": "[thở dài] ",
+        "empathetic": "[thở dài] ",
+        "whispering": "[thì thầm] ",
+    }.get(key, "")
+    clean = str(text or "").strip()
+    return clean if not cue or clean.startswith("[") else cue + clean
+
+
+def _get_vieneu_tts():
+    """Load VieNeu v3 Turbo once per process."""
+    global _VIENEU_TTS_INSTANCE
+    if _VIENEU_TTS_INSTANCE is not None:
+        return _VIENEU_TTS_INSTANCE
+    try:
+        from vieneu import Vieneu
+    except Exception as exc:
+        raise RuntimeError("VieNeu chưa được cài. Chạy: pip install vieneu") from exc
+    try:
+        _VIENEU_TTS_INSTANCE = Vieneu(mode="v3turbo", backend="onnx")
+    except Exception as exc:
+        raise RuntimeError(f"Không load được VieNeu TTS: {exc}") from exc
+    return _VIENEU_TTS_INSTANCE
+
+
+def _tts_vieneu(
+    text: str,
+    voice: str,
+    out_path: Path,
+    style: str = "default",
+    ref_audio: str = "",
+    apply_watermark: bool = False,
+) -> bool:
+    """Generate Vietnamese TTS with local VieNeu and write MP3/WAV."""
+    payload_text = str(text or "").strip()
+    if not payload_text:
+        return False
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tts = _get_vieneu_tts()
+    emotion = _vieneu_emotion_from_style(style)
+    infer_kwargs = {
+        "voice": (voice or "Ngọc Linh").strip() or "Ngọc Linh",
+        "emotion": emotion,
+        "apply_watermark": bool(apply_watermark),
+        "max_chars": 240,
+    }
+    if ref_audio:
+        infer_kwargs.pop("voice", None)
+        infer_kwargs["ref_audio"] = ref_audio
+    wav = tts.infer(_vieneu_text_with_cue(payload_text, style), **infer_kwargs)
+    if wav is None or len(wav) == 0:
+        return False
+
+    suffix = out_path.suffix.lower()
+    if suffix == ".wav":
+        tts.save(wav, out_path)
+        return out_path.exists() and out_path.stat().st_size > 0
+
+    import tempfile as _tmp
+    with _tmp.TemporaryDirectory(prefix="vieneu_tts_") as _td:
+        wav_path = Path(_td) / "vieneu.wav"
+        tts.save(wav, wav_path)
+        ffmpeg_bin = find_ffmpeg()
+        if not ffmpeg_bin:
+            raise RuntimeError("FFmpeg required to convert VieNeu WAV to MP3")
+        ok, err = run_ffmpeg([
+            ffmpeg_bin, "-y", "-i", str(wav_path),
+            "-c:a", "libmp3lame", "-b:a", "192k",
+            str(out_path), "-loglevel", "error",
+        ], "vieneu_to_mp3", timeout=300)
+        if not ok:
+            raise RuntimeError(f"VieNeu convert MP3 failed: {err}")
+    return out_path.exists() and out_path.stat().st_size > 0
+
+
+def _is_gemini_tts_selection(engine: str, voice: str) -> bool:
+    eng = str(engine or "").strip().lower()
+    selected = str(voice or "").strip().lower()
+    return eng in ("9r:gemini", "9router-gemini") or (
+        eng == "9router" and selected.startswith("gemini/")
+    )
+
+
+def _decorate_gemini_tts_text(
+    text: str,
+    engine: str,
+    voice: str,
+    style: str = "default",
+    persona: str = "",
+) -> str:
+    if not _is_gemini_tts_selection(engine, voice):
+        return text
+    key = str(style or "").strip().lower().replace("_", "-")
+    clean = str(text or "").lstrip()
+    if key and key != "default" and not (clean.startswith("[") or clean.lower().startswith("say ")):
+        prefix = _GEMINI_TTS_STYLE_PREFIX.get(key)
+        if not prefix:
+            prefix = f"Say with a {key.replace('-', ' ')} tone: "
+        clean = prefix + clean
+    persona = str(persona or "").strip()
+    if persona:
+        return f"Read with this voice/persona: {persona}. {clean}"
+    return clean
+
+
 async def _tts_nine_router(
     text: str,
     voice: str,
@@ -3651,12 +4064,14 @@ async def _tts_nine_router(
     endpoint: str = "",
     response_format: str = "mp3",
     language: str = "",
+    style: str = "default",
+    persona: str = "",
 ) -> bool:
     """Generate TTS through 9Router /v1/audio/speech."""
     import aiohttp
     import urllib.parse as _urlparse
 
-    payload_text = str(text or "").strip()
+    payload_text = _decorate_gemini_tts_text(str(text or "").strip(), engine, voice, style, persona)
     if not payload_text:
         return False
 
@@ -3707,11 +4122,19 @@ async def _tts_minimax(text: str, voice: str, out_path: Path, language: str = ""
     )
 
 
-def _tts_gtts(text: str, lang: str, out_path: Path) -> bool:
+def _tts_gtts(text: str, lang: str, out_path: Path, voice: str = "") -> bool:
     """Fallback TTS using gTTS."""
     try:
         from gtts import gTTS
-        tts = gTTS(text=text, lang=lang, slow=False)
+        voice = str(voice or "").strip()
+        tld = "com"
+        if "|" in voice:
+            lang_part, tld_part = voice.split("|", 1)
+            lang = lang_part.strip() or lang
+            tld = tld_part.strip() or tld
+        elif voice and re.fullmatch(r"[a-z]{2,3}(?:-[A-Z]{2})?", voice):
+            lang = voice.split("-", 1)[0].lower()
+        tts = gTTS(text=text, lang=(lang or "vi"), tld=tld, slow=False)
         tts.save(str(out_path))
         return out_path.exists()
     except Exception as e:
@@ -3904,6 +4327,9 @@ async def convert_voice(
     elevenlabs_api_key: str = "",   # ElevenLabs key
     elevenlabs_voice_id: str = "",  # ElevenLabs voice ID
     target_lang: str = "vi",        # ngôn ngữ đích của translated_texts
+    tts_rate: str = "+0%",
+    tts_pitch: str = "+0Hz",
+    tts_emotion: str = "default",
 ) -> tuple[bool, str]:
     """
     Replace original audio with TTS voice.
@@ -3968,6 +4394,9 @@ async def convert_voice(
             fpt_api_key=fpt_api_key,
             fpt_speed=fpt_speed,
             tts_lang=_lang,
+            tts_rate=tts_rate,
+            tts_pitch=tts_pitch,
+            tts_emotion=tts_emotion,
             elevenlabs_api_key=el_key,
             elevenlabs_voice_id=el_voice,
             fpt_fallback_elevenlabs=bool(el_key),
@@ -4323,6 +4752,85 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     vi_ass_path = None
     final_output_path = None
 
+    def _write_edit_only_ass(out_path: Path) -> Path:
+        """Create an ASS file for visual edits without subtitle dialogue."""
+        alignment = 8 if str(data.get("subtitle_position", "bottom")).lower() == "top" else 2
+        _orig_font_size = _as_int(data.get("font_size", 32), 32)
+        _orig_margin_v = effective_margin_v
+        _orig_outline_width = _as_int(data.get("outline_width", 2), 2)
+        _scaled_font_size = max(8, int(_orig_font_size * _vh / 720))
+        _scaled_margin_v = max(0, int(_orig_margin_v * _vh / 720))
+        _scaled_outline_width = max(1, int(_orig_outline_width * _vh / 720))
+
+        if _as_bool(data.get("frame_enabled", False), False):
+            _duration = get_media_duration_seconds(ffmpeg, video_path)
+            if _duration <= 0:
+                _duration = 600.0
+            _frame_title = str(data.get("frame_title") or "").strip()
+            _frame_title_visible = (
+                _as_bool(data.get("frame_title_enabled", True), True)
+                and bool(_frame_title)
+            )
+            _logo_path = str(data.get("frame_logo_path") or "").strip()
+            if not _logo_path:
+                _default_logo = Path(__file__).parent.parent / "img" / "logo.png"
+                if _default_logo.exists():
+                    _logo_path = str(_default_logo)
+            return write_ass_with_frame(
+                segments=[],
+                out_path=out_path,
+                video_duration=_duration,
+                play_res_x=_vw,
+                play_res_y=_vh,
+                font_size=_scaled_font_size,
+                font_color=data.get("font_color", "white"),
+                outline_color=data.get("outline_color", "black"),
+                outline_width=_scaled_outline_width,
+                margin_v=_scaled_margin_v,
+                alignment=alignment,
+                title_text=_frame_title if _frame_title_visible else "",
+                title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
+                title_weight=int(_as_float(data.get("frame_title_weight"), 400.0)),
+                title_x_pct=_as_float(data.get("frame_title_x_pct"), 50.0),
+                title_y_pct=_as_float(data.get("frame_title_y_pct"), 50.0),
+                title_color=str(data.get("frame_title_color") or "#000000"),
+                title_color_2=str(data.get("frame_title_color_2") or "#ff0000"),
+                title_split_color=_as_bool(data.get("frame_title_split_color", True), True),
+                title_bar_color=str(data.get("frame_title_bar_color") or "#ffffff"),
+                title_bar_h_pct=(
+                    _as_float(data.get("frame_title_bar_h_pct"), 6.0)
+                    if _frame_title_visible
+                    else 0.0
+                ),
+                title_margin_x_pct=_as_float(data.get("frame_title_margin_x_pct"), 5.0),
+                blur_w_pct=_as_float(data.get("frame_blur_w_pct"), 15.0),
+                blur_top_pct=_as_float(data.get("frame_blur_top_pct"), 0.0),
+                blur_bottom_pct=_as_float(data.get("frame_blur_bottom_pct"), 0.0),
+                blur_opacity=_as_float(data.get("frame_blur_opacity"), 0.6),
+                blur_color=str(data.get("frame_blur_color") or "#000000"),
+                logo_path=_logo_path,
+                logo_size_pct=_as_float(data.get("frame_logo_size_pct"), 6.0),
+                logo_top_pct=_as_float(data.get("frame_logo_top_pct"), 3.0),
+                logo_left_pct=_as_float(data.get("frame_logo_left_pct"), 3.0),
+                logo_radius_pct=_as_float(data.get("frame_logo_radius_pct"), 50.0),
+                logo_position=str(data.get("frame_logo_position") or "top-left"),
+                frame_mode=str(data.get("frame_blur_mode") or "overlay"),
+                target_aspect=_target_aspect,
+            )
+
+        return write_ass(
+            [],
+            out_path,
+            font_size=_scaled_font_size,
+            font_color=data.get("font_color", "white"),
+            outline_color=data.get("outline_color", "black"),
+            outline_width=_scaled_outline_width,
+            margin_v=_scaled_margin_v,
+            alignment=alignment,
+            play_res_x=_vw,
+            play_res_y=_vh,
+        )
+
     # ── Bước 1/5: Xác nhận video đã tải ──────────────────────────────────────
     _vid_size_mb = video_path.stat().st_size / 1024 / 1024
     yield send(log=f"[Bước 1/5] 📥 Video đã sẵn sàng: {video_path.name} ({_vid_size_mb:.1f} MB)", level="success")
@@ -4581,6 +5089,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             alignment=alignment,
                             title_text=_frame_title if _frame_title_visible else "",
                             title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
+                            title_weight=int(_as_float(data.get("frame_title_weight"), 400.0)),
+                            title_x_pct=_as_float(data.get("frame_title_x_pct"), 50.0),
+                            title_y_pct=_as_float(data.get("frame_title_y_pct"), 50.0),
                             title_color=str(data.get("frame_title_color") or "#000000"),
                             title_color_2=str(data.get("frame_title_color_2") or "#ff0000"),
                             title_split_color=_as_bool(data.get("frame_title_split_color", True), True),
@@ -4589,10 +5100,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             # hoàn toàn không vẽ dải trắng (dù logic vẽ đã skip khi
                             # title rỗng, đây là double-safe).
                             title_bar_h_pct=(
-                                _as_float(data.get("frame_title_bar_h_pct"), 12.0)
+                                _as_float(data.get("frame_title_bar_h_pct"), 6.0)
                                 if _frame_title_visible
                                 else 0.0
                             ),
+                            title_margin_x_pct=_as_float(data.get("frame_title_margin_x_pct"), 5.0),
                             blur_w_pct=_as_float(data.get("frame_blur_w_pct"), 15.0),
                             blur_top_pct=_as_float(data.get("frame_blur_top_pct"), 0.0),
                             blur_bottom_pct=_as_float(data.get("frame_blur_bottom_pct"), 0.0),
@@ -4759,7 +5271,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         _srt_is_translated = (srt_path != source_srt_path)
         do_burn_effective = bool(do_burn_vi and _srt_is_translated)
         if not do_burn_effective:
-            yield send(log="[Bước 4/5] ℹ Tắt ghi phụ đề (chỉ giữ phụ đề gốc) → bỏ qua burn để không in phụ đề gốc lên video", level="info")
+            yield send(log="[Bước 4/5] ℹ Tắt ghi phụ đề: không in phụ đề gốc; nếu có chỉnh sửa video vẫn render", level="info")
     do_burn = do_burn_effective
 
     # ── Tham số che (blur) vùng phụ đề gốc ───────────────────────────────────
@@ -4794,6 +5306,12 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         or _blur_extra_zones
     )
     _overlay_enabled = bool(_video_overlays)
+    _visual_edit_enabled = bool(
+        _blur_enabled
+        or _overlay_enabled
+        or _frame_enabled_for_burn
+        or _aspect_should_convert
+    )
 
     # Chọn nguồn ASS cho bước encode:
     #   "sub"  → có ghi phụ đề: dùng srt_path (ASS đã dịch) + che (nếu bật)
@@ -4804,18 +5322,22 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if do_burn and srt_path.exists():
         _encode_srt = srt_path
         _encode_mode = "sub"
-    elif _blur_enabled or _overlay_enabled:
+    elif _visual_edit_enabled:
         try:
             _empty_ass = out_dir / f"{stem}_bluronly.ass"
-            write_ass([], _empty_ass, play_res_x=1280, play_res_y=720)
+            _write_edit_only_ass(_empty_ass)
             _encode_srt = _empty_ass
             _encode_mode = "edit"
-            if _blur_enabled and _overlay_enabled:
-                _edit_note = "che phụ đề gốc/vùng che và thêm chữ/khối"
-            elif _blur_enabled:
-                _edit_note = "che phụ đề gốc/vùng che"
-            else:
-                _edit_note = "thêm chữ/khối"
+            _edit_reasons = []
+            if _blur_enabled:
+                _edit_reasons.append("che phụ đề/vùng che")
+            if _overlay_enabled:
+                _edit_reasons.append("chữ/khối")
+            if _frame_enabled_for_burn:
+                _edit_reasons.append("khung/logo")
+            if _aspect_should_convert:
+                _edit_reasons.append(f"chuyển khung {_target_aspect}")
+            _edit_note = ", ".join(_edit_reasons) or "chỉnh sửa video"
             yield send(log=f"[Bước 4/5] ▣ Không ghi phụ đề nhưng vẫn encode để {_edit_note}", level="info")
         except Exception as _e_ass:
             yield send(log=f"[Bước 4/5] ⚠ Không tạo được ASS che: {_e_ass}", level="warning")
@@ -4923,6 +5445,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 ),
                 openai_model=str(data.get("openai_tts_model") or "tts-1"),
                 tts_lang=target_language,
+                tts_rate=str(data.get("tts_rate") or "+0%"),
+                tts_pitch=str(data.get("tts_pitch") or "+0Hz"),
+                tts_emotion=str(data.get("tts_emotion") or "default"),
                 elevenlabs_api_key=(
                     str(data.get("elevenlabs_api_key") or "").strip()
                     or str((cfg_raw.get("video_process") or {}).get("elevenlabs_api_key") or "").strip()
@@ -5027,7 +5552,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         if _burn_cache_stale_reason:
             yield send(log=f"[Bước 4/5] ♻ Bỏ cache video phụ đề cũ ({_burn_cache_stale_reason}), encode lại từ ASS hiện tại", level="info")
         if _encode_mode == "edit":
-            yield send(log=f"[Bước 4/5] ▣ Đang áp dụng che/chữ/khối vào video...", level="info")
+            yield send(log=f"[Bước 4/5] ▣ Đang áp dụng chỉnh sửa video...", level="info")
         elif _encode_mode == "blur":
             yield send(log=f"[Bước 4/5] 🌫 Đang che phụ đề gốc (không ghi phụ đề)...", level="info")
         else:
@@ -5079,7 +5604,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         if ok:
             _aspect_combined = _aspect_should_convert
             if _encode_mode == "edit":
-                yield send(log=f"[Bước 4/5] ✓ Video đã áp dụng che/chữ/khối: {burned_path.name}", level="success")
+                yield send(log=f"[Bước 4/5] ✓ Video đã áp dụng chỉnh sửa: {burned_path.name}", level="success")
             elif _encode_mode == "blur":
                 yield send(log=f"[Bước 4/5] ✓ Video đã che phụ đề gốc: {burned_path.name}", level="success")
             else:
@@ -5089,7 +5614,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         else:
             yield send(log=f"[Bước 4/5] ✗ Xử lý thất bại: {err}", level="error")
             burned_path = None
-    elif do_burn and not srt_path.exists() and not _blur_enabled and not _overlay_enabled:
+    elif do_burn and not srt_path.exists() and not _visual_edit_enabled:
         yield send(log="[Bước 4/5] ⚠ Không có file phụ đề để burn", level="warning")
     else:
         yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề / che", level="info")

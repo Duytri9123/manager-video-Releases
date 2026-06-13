@@ -14,14 +14,30 @@
         <div class="card-body">
           <div class="grid-2">
             <div class="field">
+              <label>Ngôn ngữ giọng TTS</label>
+              <select id="tr-tts-lang">
+                <option value="vi" selected>Tiếng Việt</option>
+                <option value="en">Tiếng Anh</option>
+                <option value="zh">Tiếng Trung</option>
+                <option value="ja">Tiếng Nhật</option>
+                <option value="ko">Tiếng Hàn</option>
+                <option value="th">Tiếng Thái</option>
+                <option value="id">Tiếng Indonesia</option>
+                <option value="fr">Tiếng Pháp</option>
+                <option value="de">Tiếng Đức</option>
+                <option value="es">Tiếng Tây Ban Nha</option>
+              </select>
+            </div>
+            <div class="field">
               <label>TTS Engine</label>
               <select id="tr-tts-engine">
-                <option value="fpt-ai" selected>FPT AI TTS</option>
-                <option value="edge-tts">Edge TTS (Microsoft)</option>
+                <option value="vieneu" selected>VieNeu TTS (local)</option>
+                <option value="edge-tts">Microsoft Edge TTS</option>
+                <option value="gtts">Google gTTS (dự phòng)</option>
+                <option value="fpt-ai">FPT AI TTS</option>
                 <option value="elevenlabs">ElevenLabs TTS</option>
                 <option value="fish-audio">Fish Audio TTS (đa ngôn ngữ)</option>
                 <option value="minimax">MiniMax TTS</option>
-                <option value="gtts">gTTS (Google)</option>
               </select>
             </div>
             <div class="field">
@@ -42,12 +58,20 @@
             <select id="tr-tts-emotion">
               <option value="default" selected>Mặc định</option>
               <option value="cheerful">Vui vẻ</option>
-              <option value="sad">Buồn</option>
-              <option value="angry">Giận dữ</option>
               <option value="excited">Hào hứng</option>
               <option value="friendly">Thân thiện</option>
+              <option value="empathetic">Đồng cảm</option>
+              <option value="hopeful">Hy vọng</option>
+              <option value="sad">Buồn</option>
+              <option value="angry">Giận dữ</option>
+              <option value="newscast">Bản tin</option>
+              <option value="narration-professional">Kể chuyện chuyên nghiệp</option>
+              <option value="customerservice">Tư vấn viên</option>
+              <option value="whispering">Thì thầm</option>
+              <option value="shouting">Nhấn mạnh</option>
             </select>
           </div>
+          <input type="hidden" id="tr-tts-persona" value="">
           <div class="field">
             <label>Nội dung nghe thử / tạo MP3</label>
             <textarea id="tr-preview-text" rows="4" placeholder="Nhập văn bản để nghe thử hoặc tạo file MP3..."></textarea>
@@ -106,9 +130,123 @@
     <!-- RIGHT: Progress + Log -->
     <div>
 
-      <!-- Progress card -->
-      <div class="card">
-         <!-- Settings card -->
+      <div class="card card-collapsible card-has-body" id="tr-voice-manager-card">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span class="card-title">🎙 Quản lý giọng đọc</span>
+        </div>
+        <div class="card-body">
+          <div class="tr-voice-workbench">
+            <div class="tr-voice-mode-nav">
+              <button type="button" class="tr-voice-mode active" data-tr-voice-panel="library">
+                <span>🎧</span><b>Danh sách giọng</b>
+              </button>
+              <button type="button" class="tr-voice-mode" data-tr-voice-panel="editor">
+                <span>➕</span><b>Thêm / sửa giọng</b>
+              </button>
+              <button type="button" class="tr-voice-mode" data-tr-voice-panel="hidden">
+                <span>🗂</span><b>Đã xóa / ẩn</b>
+              </button>
+            </div>
+
+            <div class="tr-voice-panel-wrap">
+              <div class="tr-voice-panel active" id="tr-voice-panel-library">
+                <div class="tr-voice-toolbar">
+                  <div class="tr-voice-tabs">
+                    <button type="button" class="btn btn-secondary btn-sm active" data-tr-voice-filter="all">★ Tất cả</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-tr-voice-filter="female">Nữ</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-tr-voice-filter="male">Nam</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-tr-voice-filter="fav">Yêu thích</button>
+                  </div>
+                  <input type="text" id="tr-voice-search" placeholder="Tìm tên giọng, engine, voice ID...">
+                </div>
+                <div id="tr-voice-library" class="tr-voice-library"></div>
+              </div>
+
+              <div class="tr-voice-panel" id="tr-voice-panel-editor">
+                <input type="hidden" id="tr-voice-edit-key">
+                <div class="grid-2">
+                  <div class="field">
+                    <label>Tên hiển thị</label>
+                    <input type="text" id="tr-voice-name" placeholder="vd: Bích Ngọc">
+                  </div>
+                  <div class="field">
+                    <label>Engine</label>
+                    <select id="tr-voice-engine">
+                      <option value="vieneu">VieNeu local</option>
+                      <option value="edge-tts">Microsoft Edge TTS</option>
+                      <option value="gtts">Google gTTS</option>
+                      <option value="9r:gemini">Google Gemini TTS (9Router)</option>
+                      <option value="9r:google-tts">Google Cloud TTS (9Router)</option>
+                      <option value="9router">9Router tổng hợp</option>
+                      <option value="fpt-ai">FPT AI</option>
+                      <option value="elevenlabs">ElevenLabs</option>
+                      <option value="fish-audio">Fish Audio</option>
+                      <option value="minimax">MiniMax</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Voice ID / tên voice gốc</label>
+                    <input type="text" id="tr-voice-id" placeholder="vd: Ngọc Linh, Kore, Aoede, vi-VN-HoaiMyNeural">
+                  </div>
+                  <div class="field">
+                    <label>Giới tính</label>
+                    <select id="tr-voice-gender">
+                      <option value="female">Nữ</option>
+                      <option value="male">Nam</option>
+                      <option value="other">Khác</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Ngôn ngữ</label>
+                    <select id="tr-voice-lang">
+                      <option value="vi">Tiếng Việt</option>
+                      <option value="en">Tiếng Anh</option>
+                      <option value="multi">Đa ngôn ngữ</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Cảm xúc mặc định</label>
+                    <select id="tr-voice-emotion">
+                      <option value="default">Mặc định</option>
+                      <option value="cheerful">Vui vẻ</option>
+                      <option value="friendly">Thân thiện</option>
+                      <option value="excited">Hào hứng</option>
+                      <option value="narration-professional">Kể chuyện</option>
+                      <option value="sad">Buồn</option>
+                      <option value="angry">Giận dữ</option>
+                      <option value="whispering">Thì thầm</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Đặc tả / nhân vật giọng</label>
+                  <input type="text" id="tr-voice-persona" placeholder="vd: nữ 24 tuổi, Hà Nội, kể chuyện hơi thở nhẹ, phát âm rõ">
+                </div>
+                <div class="field">
+                  <label>Câu nghe thử mặc định</label>
+                  <textarea id="tr-voice-text" rows="2" placeholder="Câu này sẽ tự điền khi chọn giọng"></textarea>
+                </div>
+                <div class="tr-voice-editor-actions">
+                  <label class="check-item"><input type="checkbox" id="tr-voice-favorite"> Yêu thích</label>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="saveTranscribeManagedVoice()">💾 Lưu giọng</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="resetTranscribeVoiceEditor()">Làm mới</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="tr-voice-delete" onclick="deleteTranscribeManagedVoice()" disabled>Xóa khỏi danh sách</button>
+                </div>
+              </div>
+
+              <div class="tr-voice-panel" id="tr-voice-panel-hidden">
+                <div class="flex-center gap-8 mb-8">
+                  <span class="text-sm text-muted" style="flex:1">Giọng có sẵn sẽ được ẩn, giọng tự thêm sẽ bị xóa thật.</span>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="restoreAllTranscribeHiddenVoices()">Khôi phục tất cả</button>
+                </div>
+                <div id="tr-voice-hidden-list" class="tr-voice-hidden-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings card -->
       <div class="card card-collapsible card-has-body">
         <div class="card-header" onclick="toggleCard(this)">
           <span class="card-title">🎙 Cài đặt phiên âm</span>
@@ -177,6 +315,8 @@
         </div>
       </div>
 
+      <!-- Progress card -->
+      <div class="card">
         <div class="card-header">
           <span class="card-title">📊 Tiến trình</span>
         </div>
@@ -209,6 +349,158 @@
 
     </div><!-- end right -->
   </div><!-- end page-layout-2col -->
+
+  <style>
+    .tr-voice-workbench {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr);
+      gap: 14px;
+      min-height: 410px;
+    }
+    .tr-voice-mode-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border-right: 1px solid var(--border, #c7d7f5);
+      padding-right: 14px;
+    }
+    .tr-voice-mode {
+      border: 1px solid var(--border, #c7d7f5);
+      border-radius: 8px;
+      background: var(--bg, #f8fbff);
+      color: var(--text, #172033);
+      min-height: 62px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .tr-voice-mode.active {
+      border-color: var(--accent, #2563eb);
+      background: var(--accent-light, #eaf1ff);
+      color: var(--accent, #2563eb);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
+    }
+    .tr-voice-panel {
+      display: none;
+    }
+    .tr-voice-panel.active {
+      display: block;
+    }
+    .tr-voice-toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, auto) minmax(220px, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .tr-voice-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .tr-voice-tabs .active {
+      background: var(--accent, #2563eb);
+      color: #fff;
+      border-color: var(--accent, #2563eb);
+    }
+    .tr-voice-library {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      max-height: 360px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .tr-voice-card {
+      border: 1px solid var(--border, #c7d7f5);
+      border-radius: 8px;
+      background: var(--bg, #f8fbff);
+      padding: 10px 12px;
+      min-height: 58px;
+      text-align: left;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: minmax(120px, 1.2fr) minmax(160px, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .tr-voice-card:hover,
+    .tr-voice-card.selected {
+      border-color: var(--accent, #2563eb);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
+    }
+    .tr-voice-card-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text, #172033);
+    }
+    .tr-voice-card small {
+      color: var(--text-muted, #64748b);
+      font-size: 11.5px;
+      overflow-wrap: anywhere;
+    }
+    .tr-voice-card-meta {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-top: auto;
+    }
+    .tr-voice-pill {
+      border-radius: 999px;
+      padding: 2px 6px;
+      background: var(--accent-light, #eaf1ff);
+      color: var(--text, #172033);
+      font-size: 10px;
+      line-height: 1.2;
+    }
+    .tr-voice-editor-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .tr-voice-hidden-list {
+      display: grid;
+      gap: 8px;
+      max-height: 320px;
+      overflow: auto;
+    }
+    .tr-voice-hidden-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--border, #c7d7f5);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--bg, #f8fbff);
+    }
+    @media (max-width: 760px) {
+      .tr-voice-workbench {
+        grid-template-columns: 1fr;
+      }
+      .tr-voice-mode-nav {
+        border-right: 0;
+        border-bottom: 1px solid var(--border, #c7d7f5);
+        padding-right: 0;
+        padding-bottom: 12px;
+      }
+      .tr-voice-toolbar {
+        grid-template-columns: 1fr;
+      }
+      .tr-voice-card {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 
   <script>
   document.addEventListener('DOMContentLoaded', function() {

@@ -94,12 +94,17 @@ def tts_preview():
     tts_pitch = str(data.get("tts_pitch") or "+0Hz").strip()
     tts_rate = str(data.get("tts_rate") or "+0%").strip()
     tts_emotion = str(data.get("tts_emotion") or "default").strip()
+    tts_persona = str(data.get("tts_persona") or data.get("voice_prompt") or "").strip()
 
     if not text:
         return jsonify({"ok": False, "error": "Text preview is empty"}), 400
 
     try:
-        from core.video_processor import _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs, _tts_nine_router, FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID
+        from core.video_processor import (
+            _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs,
+            _tts_nine_router, _tts_vieneu,
+            FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID,
+        )
         cfg = load_cfg()
         vp_cfg = cfg.get("video_process") or {}
         fpt_api_key = (
@@ -133,14 +138,29 @@ def tts_preview():
         with tempfile.TemporaryDirectory(prefix="tts_preview_") as tmpdir:
             out_path = Path(tmpdir) / "preview.mp3"
             try:
-                if tts_engine == "9router" or tts_engine.startswith("9r:"):
+                if tts_engine == "vieneu":
+                    ok = _tts_vieneu(
+                        text,
+                        tts_voice,
+                        out_path,
+                        style=tts_emotion,
+                        ref_audio=str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip(),
+                    )
+                elif tts_engine == "9router" or tts_engine.startswith("9r:"):
                     ok = asyncio.run(_tts_nine_router(
                         text, tts_voice, out_path,
                         engine=tts_engine,
                         language=str(data.get("tts_lang") or data.get("language") or ""),
+                        style=tts_emotion,
+                        persona=tts_persona,
                     ))
                 elif tts_engine == "gtts":
-                    ok = _tts_gtts(text, str(data.get("tts_lang") or data.get("language") or "vi"), out_path)
+                    ok = _tts_gtts(
+                        text,
+                        str(data.get("tts_lang") or data.get("language") or "vi"),
+                        out_path,
+                        tts_voice,
+                    )
                 elif tts_engine == "fpt-ai":
                     try:
                         ok = asyncio.run(_tts_fpt_ai(text, tts_voice, out_path, fpt_api_key, fpt_speed))
@@ -247,6 +267,7 @@ def tts_from_ass():
     tts_pitch   = str(data.get("tts_pitch")   or "+0Hz")
     tts_rate    = str(data.get("tts_rate")    or "+0%")
     tts_emotion = str(data.get("tts_emotion") or "default")
+    tts_persona = str(data.get("tts_persona") or data.get("voice_prompt") or "").strip()
     fx_enabled  = str(data.get("fx_enabled")  or "false").lower() in ("true", "1")
     fx_params = {
         "pitch":       float(data.get("fx_pitch")   or 1.5),
@@ -324,6 +345,11 @@ def tts_from_ass():
                 tts = MultiProviderTTS(
                     voice=tts_voice, engine=tts_engine,
                     fpt_api_key=fpt_api_key, fpt_speed=0,
+                    tts_lang=str(data.get("tts_lang") or data.get("language") or ""),
+                    tts_rate=tts_rate,
+                    tts_pitch=tts_pitch,
+                    tts_emotion=tts_emotion,
+                    tts_persona=tts_persona,
                     elevenlabs_api_key=elevenlabs_api_key,
                     elevenlabs_voice_id=elevenlabs_voice_id,
                     fish_api_key=(
@@ -536,6 +562,8 @@ def tts_to_mp3():
         max_chars = 1500
     elif tts_engine == "9router" or tts_engine.startswith("9r:"):
         max_chars = 1500
+    elif tts_engine == "vieneu":
+        max_chars = 240
     else:
         max_chars = 1500
 
@@ -554,14 +582,30 @@ def tts_to_mp3():
             for idx, chunk in enumerate(chunks):
                 clip_path = tmpdir / f"chunk_{idx:04d}.mp3"
                 try:
-                    if tts_engine == "9router" or tts_engine.startswith("9r:"):
+                    if tts_engine == "vieneu":
+                        from core.video_processor import _tts_vieneu
+                        ok = _tts_vieneu(
+                            chunk,
+                            tts_voice,
+                            clip_path,
+                            style=tts_emotion,
+                            ref_audio=str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip(),
+                        )
+                    elif tts_engine == "9router" or tts_engine.startswith("9r:"):
                         ok = _asyncio.run(_tts_nine_router(
                             chunk, tts_voice, clip_path,
                             engine=tts_engine,
                             language=str(data.get("tts_lang") or data.get("language") or ""),
+                            style=tts_emotion,
+                            persona=tts_persona,
                         ))
                     elif tts_engine == "gtts":
-                        ok = _tts_gtts(chunk, str(data.get("tts_lang") or data.get("language") or "vi"), clip_path)
+                        ok = _tts_gtts(
+                            chunk,
+                            str(data.get("tts_lang") or data.get("language") or "vi"),
+                            clip_path,
+                            tts_voice,
+                        )
                     elif tts_engine == "elevenlabs":
                         ok = _asyncio.run(_tts_elevenlabs(chunk, tts_voice, clip_path, elevenlabs_api_key))
                     elif tts_engine == "fish-audio":

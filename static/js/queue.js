@@ -339,6 +339,11 @@ function _buildQueueProcessPayload(videoUrl) {
     frame_title:          document.getElementById('frame-title')?.value || '',
     frame_title_enabled:  document.getElementById('frame-title-enabled')?.checked ?? true,
     frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
+    frame_title_weight:   parseInt(document.getElementById('frame-title-weight')?.value || 400, 10),
+    frame_title_bar_h_pct: parseFloat(document.getElementById('frame-title-bar-h')?.value || 6),
+    frame_title_margin_x_pct: parseFloat(document.getElementById('frame-title-margin-x')?.value || 5),
+    frame_title_x_pct:    parseFloat(document.getElementById('frame-title-x')?.value || 50),
+    frame_title_y_pct:    parseFloat(document.getElementById('frame-title-y')?.value || 50),
     frame_title_color:    document.getElementById('frame-title-color')?.value || '#000000',
     frame_title_color_2:  document.getElementById('frame-title-color-2')?.value || '#ff0000',
     frame_title_split_color: document.getElementById('frame-title-split-color')?.checked ?? true,
@@ -348,7 +353,10 @@ function _buildQueueProcessPayload(videoUrl) {
     frame_blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
     frame_blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
     frame_logo_path:      document.getElementById('frame-logo-path')?.dataset?.serverPath || '',
-    frame_logo_size_pct:  parseFloat(document.getElementById('frame-logo-size')?.value || 12),
+    frame_logo_size_pct:  (() => {
+      const v = document.getElementById('frame-logo-size')?.value;
+      return (v === '' || v == null) ? 12 : parseFloat(v);
+    })(),
     frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),

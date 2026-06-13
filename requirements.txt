@@ -33,6 +33,7 @@ cairosvg>=2.7.0  # optional: SVG rendering (needs Cairo DLL on Windows)
 faster-whisper>=1.0.0
 edge-tts>=6.1.0
 gtts>=2.5.0
+vieneu>=3.0.5
 # elevenlabs SDK optional (install manually if needed: pip install elevenlabs)
 # Note: Windows users may need to enable Long Path support first.
 # Our implementation uses aiohttp directly and does NOT require the SDK.

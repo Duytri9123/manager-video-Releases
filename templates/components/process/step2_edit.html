@@ -7,7 +7,7 @@
         background:var(--bg2,#fff); border:1px solid var(--border,#e3e3e8); border-radius:14px;
         overflow:hidden; color:var(--text,#1f2430); display:flex; flex-direction:column;
         box-shadow:var(--shadow,0 4px 16px rgba(0,0,0,.06));
-        height:calc(100vh - 230px); min-height:460px;
+        height:calc(100vh - 210px); min-height:460px;
       }
 
       .pe2-body{ display:flex; align-items:stretch; flex:1 1 auto; min-height:0; }
@@ -112,21 +112,32 @@
       .pe2-screen #sub-preview-text:hover,
       .pe2-screen #sub-preview-blur:hover,
       .pe2-screen #sub-preview-blur-canvas:hover,
-      .pe2-screen .extra-blur-zone:hover{ outline:2px dashed var(--accent,#3b82f6); outline-offset:1px; }
-      .pe2-screen .pe2-selected{ box-shadow:inset 0 0 0 2px var(--accent,#1a73e8), 0 0 0 2px rgba(26,115,232,.35) !important; }
+      .pe2-screen .extra-blur-zone:hover{ outline:1.5px solid rgba(26,115,232,.7); outline-offset:1px; }
+      .pe2-screen .pe2-selected{
+        outline:2px solid var(--accent,#1a73e8) !important;
+        outline-offset:0;
+        box-shadow:0 0 0 1px rgba(255,255,255,.9), 0 6px 18px rgba(26,115,232,.22) !important;
+        overflow:visible !important;
+      }
       .pe2-handle{
-        position:absolute; width:14px; height:14px; background:var(--accent,#1a73e8);
-        border:2px solid #fff; border-radius:50%; z-index:10; pointer-events:auto;
-        box-shadow:0 1px 3px rgba(0,0,0,.45); opacity:0; transition:opacity .12s;
+        position:absolute; width:11px; height:11px; background:#fff;
+        border:2px solid var(--accent,#1a73e8); border-radius:2px; z-index:20; pointer-events:auto;
+        box-sizing:border-box; box-shadow:0 1px 4px rgba(15,23,42,.25), 0 0 0 1px rgba(255,255,255,.8);
+        opacity:0; transition:opacity .12s;
       }
       .pe2-screen .extra-blur-zone:hover .pe2-handle,
       .pe2-screen .extra-blur-zone.pe2-selected .pe2-handle{ opacity:1; }
-      .pe2-handle.e{ right:-7px; top:50%; transform:translateY(-50%); cursor:ew-resize; }
-      .pe2-handle.s{ bottom:-7px; left:50%; transform:translateX(-50%); cursor:ns-resize; }
-      .pe2-handle.se{ width:18px; height:18px; right:-9px; bottom:-9px; cursor:nwse-resize; background:var(--accent,#1a73e8); border-radius:4px; }
+      .pe2-handle.nw{ left:-6px; top:-6px; cursor:nwse-resize; }
+      .pe2-handle.n{ left:50%; top:-6px; transform:translateX(-50%); cursor:ns-resize; }
+      .pe2-handle.ne{ right:-6px; top:-6px; cursor:nesw-resize; }
+      .pe2-handle.e{ right:-6px; top:50%; transform:translateY(-50%); cursor:ew-resize; }
+      .pe2-handle.se{ right:-6px; bottom:-6px; cursor:nwse-resize; }
+      .pe2-handle.s{ bottom:-6px; left:50%; transform:translateX(-50%); cursor:ns-resize; }
+      .pe2-handle.sw{ left:-6px; bottom:-6px; cursor:nesw-resize; }
+      .pe2-handle.w{ left:-6px; top:50%; transform:translateY(-50%); cursor:ew-resize; }
       .pe2-dragging *{ cursor:move !important; }
       .pe2-screen .video-overlay-el{ z-index:3; pointer-events:auto !important; cursor:move; }
-      .pe2-screen .video-overlay-el:hover{ outline:2px dashed var(--accent,#3b82f6); outline-offset:1px; }
+      .pe2-screen .video-overlay-el:hover{ outline:1.5px solid rgba(26,115,232,.7); outline-offset:1px; }
       .pe2-screen .video-overlay-el:hover .pe2-handle,
       .pe2-screen .video-overlay-el.pe2-selected .pe2-handle{ opacity:1; }
       .ov-layer-card{ border:1px solid var(--border,#d7e3fb); border-radius:8px; margin-bottom:8px; background:var(--surface,#fff); overflow:hidden; }
@@ -196,6 +207,52 @@
       .pe2-editor .field input[type=number],
       .pe2-editor .field select{ height:38px; box-sizing:border-box; }
       .pe2-panel #frame-controls > div[style*="grid"]{ grid-template-columns:repeat(2,1fr) !important; }
+      .pe2-frame-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:10px; }
+      .pe2-frame-grid .wide{ grid-column:1 / -1; }
+      .pe2-frame-grid .field input,
+      .pe2-frame-grid .field select{ min-width:0; width:100%; }
+      .pe2-frame-dropdown{
+        border:1px solid var(--border,#d8d8de); border-radius:8px; background:var(--bg2,#fff);
+        margin-bottom:10px; overflow:hidden;
+      }
+      .pe2-frame-dropdown summary{
+        list-style:none; display:flex; align-items:center; justify-content:space-between;
+        gap:8px; padding:9px 10px; cursor:pointer; user-select:none; min-width:0;
+      }
+      .pe2-frame-dropdown summary::-webkit-details-marker{ display:none; }
+      .pe2-frame-title{ display:flex; align-items:center; gap:6px; min-width:0; font-size:12px; font-weight:700; color:var(--text,#1f2430); }
+      .pe2-frame-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+      .pe2-frame-caret{ color:var(--text-muted,#6b7280); transition:transform .15s ease; flex:0 0 auto; }
+      .pe2-frame-dropdown[open] > summary .pe2-frame-caret{ transform:rotate(90deg); }
+      .pe2-frame-body{ border-top:1px solid var(--border,#e3e3e8); padding:10px; }
+      .pe2-frame-section{
+        border:1px solid var(--border,#d8d8de); border-radius:8px; background:var(--bg2,#fff);
+        margin-bottom:10px; overflow:hidden;
+      }
+      .pe2-frame-section summary{
+        list-style:none; display:flex; align-items:center; justify-content:space-between;
+        gap:8px; padding:8px 10px; cursor:pointer; user-select:none; min-width:0;
+      }
+      .pe2-frame-section summary::-webkit-details-marker{ display:none; }
+      .pe2-frame-section[open] > summary .pe2-frame-caret{ transform:rotate(90deg); }
+      .pe2-frame-section-body{ border-top:1px solid var(--border,#e3e3e8); padding:10px; }
+      .pe2-extra-zone{
+        border:1px solid var(--border,#d8d8de); border-radius:8px; background:var(--bg2,#fff);
+        margin-bottom:8px; overflow:hidden;
+      }
+      .pe2-extra-zone summary{
+        list-style:none; display:flex; align-items:center; gap:8px; padding:9px 10px;
+        cursor:pointer; user-select:none; min-width:0;
+      }
+      .pe2-extra-zone summary::-webkit-details-marker{ display:none; }
+      .pe2-extra-zone-caret{ color:var(--text-muted,#6b7280); transition:transform .15s ease; flex:0 0 auto; }
+      .pe2-extra-zone[open] .pe2-extra-zone-caret{ transform:rotate(90deg); }
+      .pe2-extra-zone-main{ min-width:0; flex:1 1 auto; }
+      .pe2-extra-zone-title{ display:block; font-size:12px; font-weight:700; color:var(--text,#1f2430); line-height:1.25; }
+      .pe2-extra-zone-meta{ display:block; font-size:10px; color:var(--text-muted,#6b7280); line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .pe2-extra-zone-body{ border-top:1px solid var(--border,#e3e3e8); padding:9px 10px 10px; }
+      .pe2-extra-zone-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+      .pe2-extra-zone-time{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
       .pe2-pane{ display:none; }
       .pe2-pane.active{ display:block; }
 
@@ -306,25 +363,38 @@
 
             <!-- ══ PANE: Khung video ══ -->
             <div class="pe2-pane" data-pe2pane="frame">
-              <div class="flex-between mb-6">
-                <span style="font-size:12px;font-weight:700;color:var(--text,#1f2430)">🎞 Khung video</span>
-                <label class="toggle-wrap">
-                  <input type="checkbox" class="toggle-input" id="frame-enabled" onchange="frameToggle()">
-                  <div class="toggle"></div>
-                  <span class="toggle-label text-sm">Bật</span>
-                </label>
-              </div>
+              <details class="pe2-frame-dropdown" id="frame-dropdown" open>
+                <summary>
+                  <span class="pe2-frame-title"><span class="pe2-frame-caret">▶</span><span>🎞 Khung video</span></span>
+                  <span class="pe2-frame-actions" onclick="event.stopPropagation()">
+                    <label class="toggle-wrap" onclick="event.stopPropagation()">
+                      <input type="checkbox" class="toggle-input" id="frame-enabled" onchange="frameToggle()" onclick="event.stopPropagation()">
+                      <div class="toggle"></div>
+                      <span class="toggle-label text-sm">Bật</span>
+                    </label>
+                  </span>
+                </summary>
 
-              <div id="frame-controls" style="display:none">
+              <div id="frame-controls" class="pe2-frame-body" style="display:none">
+                <details class="pe2-frame-section" id="frame-title-dropdown" open>
+                  <summary>
+                    <span class="pe2-frame-title"><span class="pe2-frame-caret">&#9654;</span><span>Tiêu đề</span></span>
+                  </summary>
+                  <div class="pe2-frame-section-body">
                 <!-- Tiêu đề: 3 cột (title | hiện | cỡ chữ) -->
-                <div style="display:grid;grid-template-columns:3fr 1fr 1fr;gap:8px;margin-bottom:8px">
-                  <div class="field"><label>📝 Tiêu đề</label><input type="text" id="frame-title" placeholder="Nhập tiêu đề..." style="height:38px" oninput="framePreviewUpdate()"></div>
+                <div class="pe2-frame-grid">
+                  <div class="field wide"><label>📝 Tiêu đề</label><input type="text" id="frame-title" placeholder="Nhập tiêu đề..." style="height:38px" oninput="framePreviewUpdate()"></div>
                   <div class="field"><label>Hiện</label><label class="check-item w-full" style="height:38px;margin:0;box-sizing:border-box;justify-content:center"><input type="checkbox" id="frame-title-enabled" checked onchange="framePreviewUpdate()"><span style="font-size:11px">Bật</span></label></div>
                   <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="frame-title-size" value="5" min="1" max="15" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Độ đậm</label><select id="frame-title-weight" style="height:38px" onchange="framePreviewUpdate()"><option value="300">Mảnh</option><option value="400" selected>Thường</option><option value="500">Vừa</option><option value="600">Đậm nhẹ</option><option value="700">Đậm</option><option value="800">Rất đậm</option><option value="900">Siêu đậm</option></select></div>
+                  <div class="field"><label>Cao khung (%)</label><input type="number" id="frame-title-bar-h" value="6" min="3" max="20" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Lề ngang (%)</label><input type="number" id="frame-title-margin-x" value="5" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Tiêu đề X (%)</label><input type="number" id="frame-title-x" value="50" min="0" max="100" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Tiêu đề Y (%)</label><input type="number" id="frame-title-y" value="50" min="0" max="100" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
                 </div>
 
                 <!-- Màu: 3 cột (màu1 | màu2 | chia màu) -->
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="pe2-frame-grid">
                   <div class="field"><label>Màu 1</label>
                     <div style="display:flex;gap:3px;height:38px"><input type="color" id="frame-title-color" value="#000000" style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:4px;cursor:pointer;box-sizing:border-box" oninput="document.getElementById('frame-title-color-hex').value=this.value;framePreviewUpdate()"><input type="text" id="frame-title-color-hex" value="#000000" style="flex:1;font-family:monospace;font-size:11px;height:38px;box-sizing:border-box;min-width:0" oninput="document.getElementById('frame-title-color').value=this.value;framePreviewUpdate()"></div>
                   </div>
@@ -333,9 +403,11 @@
                   </div>
                   <div class="field"><label>Chia màu</label><label class="check-item w-full" style="height:38px;margin:0;box-sizing:border-box;justify-content:center"><input type="checkbox" id="frame-title-split-color" checked onchange="framePreviewUpdate()"><span style="font-size:11px">Bật (|)</span></label></div>
                 </div>
+                  </div>
+                </details>
 
                 <!-- Blur: 4 cột -->
-                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+                <div class="pe2-frame-grid">
                   <div class="field"><label>Mờ trên (%)</label><input type="number" id="frame-blur-top" value="0" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
                   <div class="field"><label>Mờ dưới (%)</label><input type="number" id="frame-blur-bottom" value="0" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
                   <div class="field"><label>Mờ bên (%)</label><input type="number" id="frame-blur-w" value="15" min="0" max="40" step="1" style="height:38px" oninput="framePreviewUpdate()"></div>
@@ -350,8 +422,8 @@
                 </div>
 
                 <!-- Logo: 4 cột (file | size | top | left) -->
-                <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
-                  <div class="field"><label>🏷 Logo</label>
+                <div class="pe2-frame-grid">
+                  <div class="field wide"><label>🏷 Logo</label>
                     <div style="display:flex;gap:3px;height:38px"><input type="text" id="frame-logo-path" placeholder="Chọn file..." readonly style="flex:1;font-size:11px;height:38px;box-sizing:border-box"><button class="btn btn-secondary btn-sm" style="padding:0 8px;height:38px;box-sizing:border-box" onclick="document.getElementById('frame-logo-file').click()">📂</button><input type="file" id="frame-logo-file" accept="image/*" style="display:none" onchange="frameSetLogo(this)"></div>
                   </div>
                   <div class="field"><label>Size%</label><input type="number" id="frame-logo-size" value="12" min="2" max="40" step="0.5" style="height:38px" oninput="framePreviewUpdate()"></div>
@@ -362,6 +434,7 @@
                 <!-- Bo tròn: full width -->
                 <div class="field"><label>Bo tròn (<span id="frame-logo-radius-val">50</span>%)</label><input type="range" id="frame-logo-radius" min="0" max="50" step="1" value="50" style="width:100%" oninput="document.getElementById('frame-logo-radius-val').textContent=this.value;framePreviewUpdate()"></div>
               </div>
+              </details>
             </div>
 
             <!-- ══ PANE: Chữ / Khối ══ -->
@@ -513,17 +586,64 @@
 
       // ── Zoom preview ──
       window._pe2Zoom = window._pe2Zoom || 1;
+      window._pe2PanX = window._pe2PanX || 0;
+      window._pe2PanY = window._pe2PanY || 0;
       window.pe2ApplyZoom = function(){
         var col = document.getElementById('proc-preview-col');
         var v = document.getElementById('pe2-zoom-val');
-        if (col){ col.style.transform = 'scale(' + window._pe2Zoom + ')'; col.style.transformOrigin = 'center center'; }
+        if (col){
+          col.style.transform = 'translate(' + (window._pe2PanX || 0) + 'px,' + (window._pe2PanY || 0) + 'px) scale(' + window._pe2Zoom + ')';
+          col.style.transformOrigin = 'center center';
+        }
         if (v) v.textContent = Math.round(window._pe2Zoom * 100) + '%';
       };
       window.pe2Zoom = function(d){
         window._pe2Zoom = Math.max(0.3, Math.min(3, (window._pe2Zoom || 1) + d));
         pe2ApplyZoom();
       };
-      window.pe2ZoomReset = function(){ window._pe2Zoom = 1; pe2ApplyZoom(); };
+      window.pe2ZoomReset = function(){ window._pe2Zoom = 1; window._pe2PanX = 0; window._pe2PanY = 0; pe2ApplyZoom(); };
+
+      (function(){
+        var screen = document.querySelector('[data-proc-step="2"] .pe2-screen');
+        if (!screen || screen.dataset.pe2ZoomPanReady) return;
+        screen.dataset.pe2ZoomPanReady = '1';
+        var panDrag = null;
+        function insidePreview(target){
+          var wrap = document.getElementById('sub-preview-wrap');
+          return !!(wrap && wrap.contains(target));
+        }
+        screen.addEventListener('wheel', function(e){
+          if (insidePreview(e.target)) return;
+          e.preventDefault();
+          pe2Zoom(e.deltaY < 0 ? 0.1 : -0.1);
+        }, { passive:false });
+        screen.addEventListener('pointerdown', function(e){
+          if (e.button !== 0) return;
+          panDrag = {
+            x: e.clientX,
+            y: e.clientY,
+            px: window._pe2PanX || 0,
+            py: window._pe2PanY || 0
+          };
+          if (screen.setPointerCapture) screen.setPointerCapture(e.pointerId);
+          screen.style.cursor = 'grabbing';
+          e.preventDefault();
+        });
+        screen.addEventListener('pointermove', function(e){
+          if (!panDrag) return;
+          window._pe2PanX = panDrag.px + e.clientX - panDrag.x;
+          window._pe2PanY = panDrag.py + e.clientY - panDrag.y;
+          pe2ApplyZoom();
+        });
+        function stopPan(e){
+          if (!panDrag) return;
+          panDrag = null;
+          if (screen.releasePointerCapture) screen.releasePointerCapture(e.pointerId);
+          screen.style.cursor = '';
+        }
+        screen.addEventListener('pointerup', stopPan);
+        screen.addEventListener('pointercancel', stopPan);
+      })();
 
       // ── Kéo-thả thành phần trên preview (chỉ ở chế độ phụ đề) ──
       (function(){
@@ -531,6 +651,164 @@
         if (!wrap) return;
         var drag = null;
         var clamp = function(v, min, max){ return Math.max(min, Math.min(max, v)); };
+        var undoFields = [
+          'proc-font-size','proc-margin-v','proc-sub-pos','proc-blur-height','proc-blur-y',
+          'proc-burn','proc-burn-vi','proc-blur-original','proc-preview-aspect','proc-aspect-blur-bg',
+          'frame-enabled','frame-title','frame-title-enabled','frame-title-size','frame-title-weight','frame-title-bar-h','frame-title-margin-x','frame-title-x','frame-title-y',
+          'frame-title-color','frame-title-color-hex','frame-title-color-2','frame-title-color-2-hex',
+          'frame-title-split-color','frame-blur-w','frame-blur-top','frame-blur-bottom','frame-blur-opacity',
+          'frame-logo-size','frame-logo-top','frame-logo-left','frame-logo-radius','ov-layers-json'
+        ];
+        var undoFieldSet = new Set(undoFields);
+        var clone = function(v){ return JSON.parse(JSON.stringify(v == null ? null : v)); };
+        function _fieldValue(id){
+          var el = document.getElementById(id);
+          if (!el) return undefined;
+          return (el.type === 'checkbox') ? !!el.checked : el.value;
+        }
+        function _setFieldValue(id, value){
+          var el = document.getElementById(id);
+          if (!el || value === undefined) return;
+          if (el.type === 'checkbox') el.checked = !!value;
+          else el.value = value;
+        }
+        function _pe2Snapshot(){
+          try { if (typeof _ovSyncHidden === 'function') _ovSyncHidden(); } catch (_) {}
+          var fields = {};
+          undoFields.forEach(function(id){ fields[id] = _fieldValue(id); });
+          var blurMode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay';
+          return {
+            fields: fields,
+            blurMode: blurMode,
+            extraZones: clone(window._procExtraBlurZones || []),
+            overlays: clone(window._videoOverlays || []),
+            selection: clone(window._pe2Sel || null)
+          };
+        }
+        function _pe2ApplySnapshot(snap){
+          if (!snap) return;
+          window._pe2Restoring = true;
+          try {
+            Object.keys(snap.fields || {}).forEach(function(id){ _setFieldValue(id, snap.fields[id]); });
+            var radio = document.querySelector('input[name="frame-blur-mode"][value="' + (snap.blurMode || 'overlay') + '"]');
+            if (radio) radio.checked = true;
+            window._procExtraBlurZones = clone(snap.extraZones || []);
+            window._videoOverlays = clone(snap.overlays || []);
+            window._pe2Sel = clone(snap.selection || null);
+            var radiusVal = document.getElementById('frame-logo-radius-val');
+            var radiusInput = document.getElementById('frame-logo-radius');
+            if (radiusVal && radiusInput) radiusVal.textContent = radiusInput.value;
+            try { if (typeof _ovSyncHidden === 'function') _ovSyncHidden(); } catch (_) {}
+            if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
+            if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
+            if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
+            if (typeof frameToggle === 'function') frameToggle();
+            else if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+            if (typeof pe2ApplySelection === 'function') pe2ApplySelection();
+          } finally {
+            window._pe2Restoring = false;
+          }
+        }
+        function _pe2PushSnapshot(snap){
+          if (!snap || window._pe2Restoring) return;
+          window._pe2UndoStack = window._pe2UndoStack || [];
+          var key = JSON.stringify(snap);
+          var last = window._pe2UndoStack.length ? window._pe2UndoStack[window._pe2UndoStack.length - 1] : null;
+          if (last && last.key === key) return;
+          window._pe2UndoStack.push({ key:key, snap:snap });
+          if (window._pe2UndoStack.length > 60) window._pe2UndoStack.shift();
+        }
+        window.pe2PushUndo = function(){ _pe2PushSnapshot(_pe2Snapshot()); };
+        window.pe2Undo = function(){
+          var stack = window._pe2UndoStack || [];
+          var entry = stack.pop();
+          if (!entry) {
+            if (window.toast) toast('Không còn thao tác để hoàn tác', 'info');
+            return;
+          }
+          _pe2ApplySnapshot(entry.snap);
+        };
+        function _isTextEditing(el){
+          if (!el) return false;
+          var tag = (el.tagName || '').toLowerCase();
+          return tag === 'textarea' || tag === 'select' || tag === 'input';
+        }
+        function _pe2SetChecked(id, checked){
+          var el = document.getElementById(id);
+          if (!el) return false;
+          el.checked = !!checked;
+          el.dispatchEvent(new Event('change', { bubbles:true }));
+          return true;
+        }
+        function _pe2RefreshAfterDelete(){
+          if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
+          if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
+          if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+          if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+          if (typeof pe2ApplySelection === 'function') pe2ApplySelection();
+        }
+        function _pe2DeleteSelection(){
+          var s = window._pe2Sel;
+          if (!s) return false;
+          if (window.pe2PushUndo) window.pe2PushUndo();
+
+          if (s.type === 'overlay' && typeof ovRemoveLayer === 'function') {
+            ovRemoveLayer(s.id);
+            return true;
+          }
+          if (s.type === 'extra' && typeof procRemoveBlurZone === 'function') {
+            procRemoveBlurZone(s.id);
+            return true;
+          }
+          if (s.type === 'sub') {
+            _pe2SetChecked('proc-burn-vi', false);
+          } else if (s.type === 'blur') {
+            _pe2SetChecked('proc-blur-original', false);
+          } else if (s.type === 'frame-title') {
+            _pe2SetChecked('frame-title-enabled', false);
+          } else if (s.type === 'frame-logo') {
+            var logoSize = document.getElementById('frame-logo-size');
+            if (logoSize) logoSize.value = '0';
+            window._frameLogoImg = null;
+            window._frameLogoSrc = '';
+            window._frameLogoIsGif = false;
+            if (typeof _frameStopAnim === 'function') _frameStopAnim();
+          } else {
+            return false;
+          }
+
+          window._pe2Sel = null;
+          _pe2RefreshAfterDelete();
+          return true;
+        }
+        document.addEventListener('keydown', function(e){
+          var editor = document.querySelector('[data-proc-step="2"] .pe2-editor');
+          if (!editor || editor.closest('.proc-step')?.style.display === 'none') return;
+          if ((e.ctrlKey || e.metaKey) && !e.shiftKey && String(e.key || '').toLowerCase() === 'z') {
+            if (_isTextEditing(document.activeElement)) return;
+            e.preventDefault();
+            window.pe2Undo();
+            return;
+          }
+          if ((e.key === 'Backspace' || e.key === 'Delete') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            if (_isTextEditing(document.activeElement)) return;
+            if (_pe2DeleteSelection()) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }
+        }, true);
+        document.addEventListener('focusin', function(e){
+          var el = e.target;
+          if (!el || !undoFieldSet.has(el.id)) return;
+          el._pe2UndoSnap = _pe2Snapshot();
+        }, true);
+        document.addEventListener('change', function(e){
+          var el = e.target;
+          if (!el || !undoFieldSet.has(el.id) || !el._pe2UndoSnap) return;
+          _pe2PushSnapshot(el._pe2UndoSnap);
+          el._pe2UndoSnap = null;
+        }, true);
 
         // Đánh dấu thành phần đang chọn (giữ trạng thái khi vẽ lại)
         window._pe2Sel = window._pe2Sel || null;   // {type, id}
@@ -574,6 +852,38 @@
           var rh = Number(ov.height_pct || 0.12);
           return { left:x - rw/2, right:x + rw/2, top:y - rh/2, bottom:y + rh/2, x:x, y:y, w:rw, h:rh };
         }
+        function _pe2HandlePoints(left, top, right, bottom){
+          var midX = (left + right) / 2;
+          var midY = (top + bottom) / 2;
+          return [
+            { edge:'nw', x:left, y:top },
+            { edge:'n',  x:midX, y:top },
+            { edge:'ne', x:right, y:top },
+            { edge:'e',  x:right, y:midY },
+            { edge:'se', x:right, y:bottom },
+            { edge:'s',  x:midX, y:bottom },
+            { edge:'sw', x:left, y:bottom },
+            { edge:'w',  x:left, y:midY }
+          ];
+        }
+        function _pe2HandleHitRect(left, top, right, bottom, x, y, tol){
+          var pts = _pe2HandlePoints(left, top, right, bottom);
+          for (var i = 0; i < pts.length; i++) {
+            if (Math.abs(x - pts[i].x) <= tol && Math.abs(y - pts[i].y) <= tol) return pts[i].edge;
+          }
+          return null;
+        }
+        function _pe2CursorForEdge(edge){
+          if (edge === 'nw' || edge === 'se') return 'nwse-resize';
+          if (edge === 'ne' || edge === 'sw') return 'nesw-resize';
+          if (edge === 'e' || edge === 'w') return 'ew-resize';
+          if (edge === 'n' || edge === 's') return 'ns-resize';
+          return 'move';
+        }
+        function _pe2CursorForHit(hit){
+          if (!hit) return '';
+          return hit.edge ? _pe2CursorForEdge(hit.edge) : 'move';
+        }
         function _hitOverlay(fxv, fyv, handlesOnly){
           var layers = window._videoOverlays || [];
           var sel = window._pe2Sel;
@@ -582,11 +892,8 @@
             var cur = _ovById(sel.id);
             var b = _ovBoundsFrac(cur);
             if (b) {
-              if (Math.abs(fxv - b.right) < tol && Math.abs(fyv - b.bottom) < tol) return { type:'ov-resize', id:cur.id, edge:'se' };
-              if (cur.type === 'rect' && Math.abs(fxv - b.right) < tol && Math.abs(fyv - b.y) < tol*2) return { type:'ov-resize', id:cur.id, edge:'e' };
-              if (cur.type === 'rect' && Math.abs(fyv - b.bottom) < tol && Math.abs(fxv - b.x) < tol*2) return { type:'ov-resize', id:cur.id, edge:'s' };
-              if (cur.type === 'text' && Math.abs(fxv - b.right) < tol && Math.abs(fyv - b.y) < tol*2) return { type:'ov-resize', id:cur.id, edge:'e' };
-              if (cur.type === 'text' && Math.abs(fyv - b.bottom) < tol && Math.abs(fxv - b.x) < tol*2) return { type:'ov-resize', id:cur.id, edge:'s' };
+              var edge = _pe2HandleHitRect(b.left, b.top, b.right, b.bottom, fxv, fyv, tol);
+              if (edge) return { type:'ov-resize', id:cur.id, edge:edge };
             }
           }
           if (handlesOnly) return null;
@@ -600,6 +907,97 @@
             }
           }
           return null;
+        }
+        function _boxHit(box, x, y){
+          return box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+        }
+        function _boxHandle(box, x, y){
+          if (!box) return null;
+          var tol = Math.max(8, Math.min(16, Math.min(box.w || 0, box.h || 0) * 0.14));
+          return _pe2HandleHitRect(box.x, box.y, box.x + box.w, box.y + box.h, x, y, tol);
+        }
+        function _extraBoundsFrac(z){
+          if (!z) return null;
+          var w = Math.max(0.01, Math.min(1, (z.width || 80) / 100));
+          var h = Math.max(0.01, Math.min(1, (z.height || 12) / 100));
+          var xc = ((z.x === undefined || z.x === null) ? 50 : z.x) / 100;
+          var yc = ((z.position === undefined || z.position === null) ? 50 : z.position) / 100;
+          var left = Math.max(0, Math.min(1 - w, xc - w / 2));
+          var top = Math.max(0, Math.min(1 - h, yc - h / 2));
+          return { left:left, top:top, right:left + w, bottom:top + h, x:left + w / 2, y:top + h / 2, w:w, h:h };
+        }
+        function _mainBlurBoundsFrac(){
+          if (!document.getElementById('proc-blur-original')?.checked) return null;
+          var h = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
+          var yVal = document.getElementById('proc-blur-y')?.value?.trim();
+          var yc = (yVal !== '' && yVal !== undefined)
+            ? parseFloat(yVal) / 100
+            : ((document.getElementById('proc-sub-pos')?.value === 'top') ? h / 2 + 0.06 : 1 - h / 2 - 0.06);
+          var w = 0.80;
+          var left = 0.5 - w / 2;
+          var top = Math.max(0, Math.min(1 - h, yc - h / 2));
+          return { left:left, top:top, right:left + w, bottom:top + h, x:0.5, y:top + h / 2, w:w, h:h };
+        }
+        function _hitExtraHandle(fxv, fyv){
+          var sel = window._pe2Sel;
+          if (!sel || sel.type !== 'extra') return null;
+          var z = (window._procExtraBlurZones || []).find(function(item){ return item.id === sel.id; });
+          var b = _extraBoundsFrac(z);
+          var edge = b ? _pe2HandleHitRect(b.left, b.top, b.right, b.bottom, fxv, fyv, 0.04) : null;
+          return edge ? { type:'resize', id:sel.id, edge:edge } : null;
+        }
+        function _hitMainBlurHandle(fxv, fyv){
+          var sel = window._pe2Sel;
+          if (!sel || sel.type !== 'blur') return null;
+          var b = _mainBlurBoundsFrac();
+          var edge = b ? _pe2HandleHitRect(b.left, b.top, b.right, b.bottom, fxv, fyv, 0.04) : null;
+          return edge ? { type:'blur-resize', edge:edge } : null;
+        }
+        function _hitFrameInteractive(cx, cy){
+          var items = window._frameInteractive || {};
+          var sel = window._pe2Sel;
+          if (sel && sel.type === 'frame-logo') {
+            var logoHandle = _boxHandle(items.logo, cx, cy);
+            if (logoHandle) return { type:'frame-logo-resize', edge:logoHandle };
+          }
+          if (sel && sel.type === 'frame-title') {
+            var titleHandle = _boxHandle(items.title, cx, cy);
+            if (titleHandle) return { type:'frame-title-resize', edge:titleHandle };
+          }
+          if (sel && sel.type === 'sub') {
+            var subHandle = _boxHandle(items.sub, cx, cy);
+            if (subHandle) return { type:'sub-resize', edge:subHandle };
+          }
+          if (_boxHit(items.logo, cx, cy)) return { type:'frame-logo' };
+          if (_boxHit(items.title, cx, cy)) return { type:'frame-title' };
+          if (_boxHit(items.titleBar, cx, cy)) return { type:'frame-title' };
+          if (_boxHit(items.sub, cx, cy)) return { type:'sub' };
+          return null;
+        }
+        function _frameSourcePointFromEvent(e, g){
+          var canvas = document.getElementById('frame-preview-canvas');
+          var crect = canvas ? canvas.getBoundingClientRect() : wrap.getBoundingClientRect();
+          var cx = (e.clientX - crect.left) / (crect.width || 1) * (g.cW || 1);
+          var cy = (e.clientY - crect.top) / (crect.height || 1) * (g.cH || 1);
+          var scale = g.fgScale || 1;
+          return {
+            x: (cx - (g.fgX || 0)) / scale,
+            y: (cy - (g.fgY || 0)) / scale
+          };
+        }
+        function _setNumericValue(id, value, digits){
+          var el = document.getElementById(id);
+          if (!el) return;
+          var factor = Math.pow(10, digits == null ? 1 : digits);
+          el.value = Math.round(value * factor) / factor;
+        }
+        function _frameTitleActive(){
+          return (document.getElementById('frame-title-enabled')?.checked ?? true)
+            && !!(document.getElementById('frame-title')?.value || '').trim();
+        }
+        function _frameLogoTitleOffset(g){
+          var mode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay';
+          return (mode === 'overlay' && _frameTitleActive()) ? (g.srcTitleBarH || 0) : 0;
         }
 
         document.addEventListener('pointerdown', function(e){
@@ -620,41 +1018,19 @@
             var fxv = (cx - g.vidX) / g.vidW;
             var fyv = (cy - g.vidY) / g.vidH;
 
-            var hit = _hitOverlay(fxv, fyv, false);
+            var hit = _hitFrameInteractive(cx, cy) || _hitOverlay(fxv, fyv, false);
             var zones = window._procExtraBlurZones || [];
 
             // First: test resize handles of the currently-selected extra zone
-            var curSel = window._pe2Sel;
-            if (curSel && curSel.type === 'extra') {
-              var sz = zones.find(function(z){ return z.id === curSel.id; });
-              if (sz) {
-                var szw = (sz.width || 80) / 100;
-                var szh = (sz.height || 12) / 100;
-                var szxc = ((sz.x == null) ? 50 : sz.x) / 100;
-                var szyc = (sz.position || 50) / 100;
-                var rightF = szxc + szw/2, bottomF = szyc + szh/2;
-                var tol = 0.04;  // handle hit tolerance in fraction
-                // East handle (right-middle)
-                if (Math.abs(fxv - rightF) < tol && Math.abs(fyv - szyc) < tol*2) {
-                  hit = { type:'resize', id: sz.id, edge: 'e' };
-                }
-                // South handle (bottom-middle)
-                else if (Math.abs(fyv - bottomF) < tol && Math.abs(fxv - szxc) < tol*2) {
-                  hit = { type:'resize', id: sz.id, edge: 's' };
-                }
-              }
-            }
+            var extraHandleHit = _hitExtraHandle(fxv, fyv);
+            if (extraHandleHit) hit = extraHandleHit;
 
             // Test extra blur zones (top-most first)
             if (!hit) {
               for (var zi = zones.length - 1; zi >= 0; zi--) {
                 var z = zones[zi];
-                var zw = (z.width || 80) / 100;
-                var zh = (z.height || 12) / 100;
-                var zxc = ((z.x == null) ? 50 : z.x) / 100;
-                var zyc = (z.position || 50) / 100;
-                if (fxv >= zxc - zw/2 && fxv <= zxc + zw/2 &&
-                    fyv >= zyc - zh/2 && fyv <= zyc + zh/2) {
+                var zb = _extraBoundsFrac(z);
+                if (zb && fxv >= zb.left && fxv <= zb.right && fyv >= zb.top && fyv <= zb.bottom) {
                   hit = { type:'extra', id: z.id };
                   break;
                 }
@@ -675,14 +1051,25 @@
                   fyv >= myc - mbh/2 && fyv <= myc + mbh/2) {
                 hit = { type:'blur' };
               }
+              var blurHandleHit = _hitMainBlurHandle(fxv, fyv);
+              if (blurHandleHit) hit = blurHandleHit;
             }
 
             if (hit) {
+              if (window.pe2PushUndo) window.pe2PushUndo();
               drag = hit;
               // Selection follows the zone (resize keeps the same zone selected)
               window._pe2Sel = (hit.type === 'resize')
                 ? { type:'extra', id: hit.id }
-                : ((hit.type === 'ov-resize') ? { type:'overlay', id: hit.id } : hit);
+                : ((hit.type === 'ov-resize')
+                  ? { type:'overlay', id: hit.id }
+                  : ((hit.type === 'frame-logo-resize')
+                    ? { type:'frame-logo' }
+                    : ((hit.type === 'frame-title-resize')
+                      ? { type:'frame-title' }
+                      : ((hit.type === 'sub-resize')
+                        ? { type:'sub' }
+                        : ((hit.type === 'blur-resize') ? { type:'blur' } : hit)))));
               if ((hit.type === 'overlay' || hit.type === 'ov-resize') && window.ovSelectLayer) {
                 window.ovSelectLayer(hit.id, false);
               }
@@ -722,10 +1109,58 @@
             window._pe2Sel = drag;
             if (drag.type === 'overlay' && window.ovSelectLayer) window.ovSelectLayer(drag.id, false);
           }
+          if (window.pe2PushUndo) window.pe2PushUndo();
           pe2ApplySelection();
           document.body.classList.add('pe2-dragging');
           e.preventDefault(); e.stopPropagation();
         }, true);
+
+        function _pe2CanvasHoverHit(e){
+          var frameOn = document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked;
+          if (!frameOn) return null;
+          var canvas = document.getElementById('frame-preview-canvas');
+          var g = window._frameGeom;
+          if (!canvas || !g || !g.vidH) return null;
+          var rect = canvas.getBoundingClientRect();
+          if (!rect.width || !rect.height) return null;
+          if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return null;
+          var cx = (e.clientX - rect.left) / rect.width  * g.cW;
+          var cy = (e.clientY - rect.top)  / rect.height * g.cH;
+          var fxv = (cx - g.vidX) / g.vidW;
+          var fyv = (cy - g.vidY) / g.vidH;
+
+          var hit = _hitFrameInteractive(cx, cy) || _hitOverlay(fxv, fyv, false);
+          var extraHandleHit = _hitExtraHandle(fxv, fyv);
+          if (extraHandleHit) hit = extraHandleHit;
+          var blurHandleHit = _hitMainBlurHandle(fxv, fyv);
+          if (blurHandleHit) hit = blurHandleHit;
+          if (hit) return hit;
+
+          var zones = window._procExtraBlurZones || [];
+          for (var zi = zones.length - 1; zi >= 0; zi--) {
+            var zb = _extraBoundsFrac(zones[zi]);
+            if (zb && fxv >= zb.left && fxv <= zb.right && fyv >= zb.top && fyv <= zb.bottom) {
+              return { type:'extra', id:zones[zi].id };
+            }
+          }
+          var mb = _mainBlurBoundsFrac();
+          if (mb && fxv >= mb.left && fxv <= mb.right && fyv >= mb.top && fyv <= mb.bottom) {
+            return { type:'blur' };
+          }
+          return null;
+        }
+
+        document.addEventListener('pointermove', function(e){
+          if (drag || !wrap.contains(e.target)) return;
+          var canvas = document.getElementById('frame-preview-canvas');
+          if (!canvas) return;
+          var hit = _pe2CanvasHoverHit(e);
+          canvas.style.cursor = _pe2CursorForHit(hit) || '';
+        }, true);
+        wrap.addEventListener('mouseleave', function(){
+          var canvas = document.getElementById('frame-preview-canvas');
+          if (canvas) canvas.style.cursor = '';
+        });
 
         document.addEventListener('pointermove', function(e){
           if (!drag) return;
@@ -768,6 +1203,24 @@
           } else if (drag.type === 'blur'){
             var by = document.getElementById('proc-blur-y');
             if (by) by.value = Math.round(f * 100);
+          } else if (drag.type === 'blur-resize'){
+            var byResize = document.getElementById('proc-blur-y')?.value?.trim();
+            var hEl = document.getElementById('proc-blur-height');
+            var curH = parseFloat(hEl?.value || 15) / 100;
+            var center = (byResize !== '' && byResize !== undefined)
+              ? parseFloat(byResize) / 100
+              : ((document.getElementById('proc-sub-pos')?.value === 'top') ? curH/2 + 0.06 : 1 - curH/2 - 0.06);
+            if (hEl) hEl.value = Math.round(clamp(2 * Math.abs(f - center) * 100, 3, 45));
+          } else if (drag.type === 'sub-resize'){
+            var subSrc = window._frameInteractiveSource?.sub;
+            if (subSrc) {
+              var spSubR = _frameSourcePointFromEvent(e, g || {});
+              var cxSub = subSrc.x + subSrc.w / 2;
+              var cySub = subSrc.y + subSrc.h / 2;
+              var srcVidHSub = Math.max(1, g?.srcVidH || g?.vidH || 1);
+              var subSizePct = Math.max(Math.abs(spSubR.x - cxSub) * 0.35, Math.abs(spSubR.y - cySub) * 1.25) / srcVidHSub * 100;
+              _setNumericValue('proc-font-size', clamp(subSizePct, 1, 20), 1);
+            }
           } else if (drag.type === 'extra'){
             var z = (window._procExtraBlurZones || []).find(function(x){ return x.id === drag.id; });
             if (z){
@@ -778,11 +1231,28 @@
           } else if (drag.type === 'resize'){
             var zr = (window._procExtraBlurZones || []).find(function(x){ return x.id === drag.id; });
             if (zr){
-              var rfx = fx;
+              var edgeZ = drag.edge || '';
+              var w0 = Math.max(0.01, Math.min(1, (zr.width || 80) / 100));
+              var h0 = Math.max(0.01, Math.min(1, (zr.height || 12) / 100));
               var xc = ((zr.x === undefined || zr.x === null) ? 50 : zr.x) / 100;
               var yc = ((zr.position === undefined || zr.position === null) ? 50 : zr.position) / 100;
-              if (drag.edge.indexOf('e') >= 0) zr.width  = Math.round(clamp(2 * Math.abs(rfx - xc) * 100, 20, 100));
-              if (drag.edge.indexOf('s') >= 0) zr.height = Math.round(clamp(2 * Math.abs(f   - yc) * 100, 3, 40));
+              var left = Math.max(0, Math.min(1 - w0, xc - w0 / 2));
+              var right = left + w0;
+              var top = Math.max(0, Math.min(1 - h0, yc - h0 / 2));
+              var bottom = top + h0;
+              var minW = 0.20;
+              var minH = 0.03;
+              var maxH = 0.40;
+              if (edgeZ.indexOf('w') >= 0) left = clamp(fx, Math.max(0, right - 1), right - minW);
+              else if (edgeZ.indexOf('e') >= 0) right = clamp(fx, left + minW, 1);
+              if (edgeZ.indexOf('n') >= 0) top = clamp(f, Math.max(0, bottom - maxH), bottom - minH);
+              else if (edgeZ.indexOf('s') >= 0) bottom = clamp(f, top + minH, Math.min(1, top + maxH));
+              var newW = Math.max(minW, Math.min(1, right - left));
+              var newH = Math.max(minH, Math.min(maxH, bottom - top));
+              zr.width = Math.round(newW * 100);
+              zr.height = Math.round(newH * 100);
+              zr.x = Math.round((left + newW / 2) * 100);
+              zr.position = Math.round((top + newH / 2) * 100);
               if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
             }
           } else if (drag.type === 'overlay'){
@@ -792,16 +1262,70 @@
               ov.y_pct = Math.round(f * 1000) / 1000;
               if (window.ovRenderLayerList) window.ovRenderLayerList();
             }
+          } else if (drag.type === 'frame-title'){
+            var spTitle = _frameSourcePointFromEvent(e, g || {});
+            var srcCW = Math.max(1, g?.srcCW || g?.cW || 1);
+            var titleH = Math.max(1, g?.srcTitleBarH || g?.titleBarH || 1);
+            _setNumericValue('frame-title-x', clamp(spTitle.x / srcCW * 100, 0, 100), 1);
+            _setNumericValue('frame-title-y', clamp(spTitle.y / titleH * 100, 0, 100), 1);
+          } else if (drag.type === 'frame-title-resize'){
+            var spTitleR = _frameSourcePointFromEvent(e, g || {});
+            var titleSrc = window._frameInteractiveSource?.title;
+            if (titleSrc) {
+              var cxTitle = titleSrc.x + titleSrc.w / 2;
+              var cyTitle = titleSrc.y + titleSrc.h / 2;
+              var srcWTitle = Math.max(1, g?.srcCW || g?.cW || 1);
+              var sizePct = Math.max(Math.abs(spTitleR.x - cxTitle) * 0.45, Math.abs(spTitleR.y - cyTitle) * 1.6) / srcWTitle * 100;
+              _setNumericValue('frame-title-size', clamp(sizePct, 1, 15), 1);
+            }
+          } else if (drag.type === 'frame-logo'){
+            var spLogo = _frameSourcePointFromEvent(e, g || {});
+            var srcVidX = g?.srcVidX || 0;
+            var srcVidY = g?.srcVidY || 0;
+            var srcVidW = Math.max(1, g?.srcVidW || g?.vidW || 1);
+            var srcVidH = Math.max(1, g?.srcVidH || g?.vidH || 1);
+            var titleOffset = _frameLogoTitleOffset(g || {});
+            _setNumericValue('frame-logo-left', clamp((spLogo.x - srcVidX) / srcVidW * 100, 0, 90), 1);
+            _setNumericValue('frame-logo-top', clamp((spLogo.y - srcVidY - titleOffset) / srcVidH * 100, 0, 90), 1);
+          } else if (drag.type === 'frame-logo-resize'){
+            var spLogoR = _frameSourcePointFromEvent(e, g || {});
+            var logoSrc = window._frameInteractiveSource?.logo;
+            if (logoSrc) {
+              var cyLogo = logoSrc.y + logoSrc.h / 2;
+              var srcVidHR = Math.max(1, g?.srcVidH || g?.vidH || 1);
+              var logoPct = Math.abs(spLogoR.y - cyLogo) * 2 / srcVidHR * 100;
+              _setNumericValue('frame-logo-size', clamp(logoPct, 2, 40), 1);
+            }
           } else if (drag.type === 'ov-resize'){
             var ro = _ovById(drag.id);
             if (ro){
               var ox = Number(ro.x_pct == null ? 0.5 : ro.x_pct);
               var oy = Number(ro.y_pct == null ? 0.5 : ro.y_pct);
+              var edgeO = drag.edge || '';
               if (ro.type === 'text') {
-                ro.size_pct = Math.round(clamp(Math.max(Math.abs(f - oy) * 1.3, Math.abs(fx - ox) * 0.45), 0.01, 0.30) * 1000) / 1000;
+                var sizeByAxis = 0;
+                if (edgeO.indexOf('w') >= 0 || edgeO.indexOf('e') >= 0) sizeByAxis = Math.max(sizeByAxis, Math.abs(fx - ox) * 0.45);
+                if (edgeO.indexOf('n') >= 0 || edgeO.indexOf('s') >= 0) sizeByAxis = Math.max(sizeByAxis, Math.abs(f - oy) * 1.3);
+                if (!sizeByAxis) sizeByAxis = Math.max(Math.abs(f - oy) * 1.3, Math.abs(fx - ox) * 0.45);
+                ro.size_pct = Math.round(clamp(sizeByAxis, 0.01, 0.30) * 1000) / 1000;
               } else {
-                if (drag.edge.indexOf('e') >= 0) ro.width_pct = Math.round(clamp(2 * Math.abs(fx - ox), 0.01, 1) * 1000) / 1000;
-                if (drag.edge.indexOf('s') >= 0) ro.height_pct = Math.round(clamp(2 * Math.abs(f - oy), 0.01, 1) * 1000) / 1000;
+                var rw0 = Math.max(0.01, Math.min(1, Number(ro.width_pct || 0.8)));
+                var rh0 = Math.max(0.01, Math.min(1, Number(ro.height_pct || 0.12)));
+                var rLeft = Math.max(0, Math.min(1 - rw0, ox - rw0 / 2));
+                var rRight = rLeft + rw0;
+                var rTop = Math.max(0, Math.min(1 - rh0, oy - rh0 / 2));
+                var rBottom = rTop + rh0;
+                var minRect = 0.01;
+                if (edgeO.indexOf('w') >= 0) rLeft = clamp(fx, 0, rRight - minRect);
+                else if (edgeO.indexOf('e') >= 0) rRight = clamp(fx, rLeft + minRect, 1);
+                if (edgeO.indexOf('n') >= 0) rTop = clamp(f, 0, rBottom - minRect);
+                else if (edgeO.indexOf('s') >= 0) rBottom = clamp(f, rTop + minRect, 1);
+                var newRectW = Math.max(minRect, Math.min(1, rRight - rLeft));
+                var newRectH = Math.max(minRect, Math.min(1, rBottom - rTop));
+                ro.width_pct = Math.round(newRectW * 1000) / 1000;
+                ro.height_pct = Math.round(newRectH * 1000) / 1000;
+                ro.x_pct = Math.round((rLeft + newRectW / 2) * 1000) / 1000;
+                ro.y_pct = Math.round((rTop + newRectH / 2) * 1000) / 1000;
               }
               if (window.ovRenderLayerList) window.ovRenderLayerList();
             }

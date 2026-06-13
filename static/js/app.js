@@ -3,6 +3,18 @@
 window._trSelectedFile = null;
 
 const TTS_VOICE_PRESETS = {
+  vieneu: [
+    { value: 'Ngọc Linh', label: 'Ngọc Linh (VieNeu - Nữ, tươi sáng)' },
+    { value: 'Ngọc Lan', label: 'Ngọc Lan (VieNeu - Nữ, dịu dàng)' },
+    { value: 'Mỹ Duyên', label: 'Mỹ Duyên (VieNeu - Nữ, mượt mà)' },
+    { value: 'Trúc Ly', label: 'Trúc Ly (VieNeu - Nữ, trẻ trung)' },
+    { value: 'Gia Bảo', label: 'Gia Bảo (VieNeu - Nam, mượt mà)' },
+    { value: 'Thái Sơn', label: 'Thái Sơn (VieNeu - Nam, chắc khỏe)' },
+    { value: 'Đức Trí', label: 'Đức Trí (VieNeu - Nam, rõ ràng)' },
+    { value: 'Xuân Vĩnh', label: 'Xuân Vĩnh (VieNeu - Nam, vui tươi)' },
+    { value: 'Trọng Hữu', label: 'Trọng Hữu (VieNeu - Nam, uyên bác)' },
+    { value: 'Bình An', label: 'Bình An (VieNeu - Nam, điềm đạm)' },
+  ],
   'fpt-ai': [
     { value: 'banmai', label: 'Ban Mai (FPT - Nữ)' },
     { value: 'thuminh', label: 'Thu Minh (FPT - Nữ)' },
@@ -10,8 +22,31 @@ const TTS_VOICE_PRESETS = {
     { value: 'leminh', label: 'Le Minh (FPT - Nam)' },
   ],
   'edge-tts': [
-    { value: 'vi-VN-HoaiMyNeural', label: 'Hoai My (Edge - Nữ)' },
-    { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Edge - Nam)' },
+    { value: 'vi-VN-HoaiMyNeural', label: 'Hoài My (Microsoft - Nữ)' },
+    { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Microsoft - Nam)' },
+    { value: 'en-US-AvaNeural', label: 'Ava (Microsoft - Nữ, expressive)' },
+    { value: 'en-US-AndrewNeural', label: 'Andrew (Microsoft - Nam, expressive)' },
+    { value: 'en-US-EmmaNeural', label: 'Emma (Microsoft - Nữ)' },
+    { value: 'en-US-BrianNeural', label: 'Brian (Microsoft - Nam)' },
+  ],
+  '9r:gemini': [
+    { value: 'Kore', label: 'Kore (Google Gemini - Nữ, chắc)' },
+    { value: 'Puck', label: 'Puck (Google Gemini - Nam, vui)' },
+    { value: 'Aoede', label: 'Aoede (Google Gemini - Nữ, ấm)' },
+    { value: 'Charon', label: 'Charon (Google Gemini - Nam, dẫn chuyện)' },
+    { value: 'Zephyr', label: 'Zephyr (Google Gemini - Nữ, sáng)' },
+    { value: 'Laomedeia', label: 'Laomedeia (Google Gemini - Nữ, hào hứng)' },
+    { value: 'Achird', label: 'Achird (Google Gemini - Nam, thân thiện)' },
+  ],
+  '9r:google-tts': [
+    { value: 'google-tts/vi-VN-Wavenet-A', label: 'vi-VN Wavenet A (Google - Nữ)' },
+    { value: 'google-tts/vi-VN-Wavenet-B', label: 'vi-VN Wavenet B (Google - Nam)' },
+    { value: 'google-tts/en-US-Neural2-F', label: 'en-US Neural2 F (Google - Nữ)' },
+    { value: 'google-tts/en-US-Neural2-J', label: 'en-US Neural2 J (Google - Nam)' },
+  ],
+  '9r:edge-tts': [
+    { value: 'vi-VN-HoaiMyNeural', label: 'Hoài My (Microsoft 9Router - Nữ)' },
+    { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Microsoft 9Router - Nam)' },
   ],
   'elevenlabs': [
     { value: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel (ElevenLabs - Nữ EN)' },
@@ -35,16 +70,24 @@ const TTS_VOICE_PRESETS = {
     { value: 'Friendly_Person', label: 'Friendly Person (MiniMax)' },
   ],
   gtts: [
-    { value: 'vi', label: 'Vietnamese (gTTS)' },
+    { value: 'vi|com.vn', label: 'Tiếng Việt (Google gTTS VN)' },
+    { value: 'vi|com', label: 'Tiếng Việt (Google gTTS default)' },
+    { value: 'en|com', label: 'English US (Google gTTS)' },
+    { value: 'en|co.uk', label: 'English UK (Google gTTS)' },
+    { value: 'en|com.au', label: 'English AU (Google gTTS)' },
   ],
 };
 
 const TTS_DEFAULT_VOICE = {
+  vieneu: 'Ngọc Linh',
   'fpt-ai':  'banmai',
   'edge-tts': 'vi-VN-HoaiMyNeural',
+  '9r:gemini': 'Kore',
+  '9r:google-tts': 'google-tts/vi-VN-Wavenet-A',
+  '9r:edge-tts': 'vi-VN-HoaiMyNeural',
   'elevenlabs': '21m00Tcm4TlvDq8ikWAM',
   'minimax': 'Calm_Woman',
-  gtts: 'vi',
+  gtts: 'vi|com.vn',
 };
 
 /* ── Edge TTS voices per target language ── */
@@ -70,7 +113,7 @@ function _engineSupportsLang(eng, lang) {
 
 function _getTtsTargetLangForSelect(engineSelectId) {
   const id = String(engineSelectId || '');
-  if (id.startsWith('tr-')) return document.getElementById('tr-lang')?.value || 'vi';
+  if (id.startsWith('tr-')) return document.getElementById('tr-tts-lang')?.value || 'vi';
   if (id.startsWith('mv-')) return document.getElementById('mv-lang')?.value || 'vi';
   if (id.startsWith('vp-')) return 'vi';
   return document.getElementById('proc-target-lang')?.value || 'vi';
@@ -80,7 +123,7 @@ function _pickTtsEngineForLang(lang, currentId) {
   const catalog = TTS_ENGINE_CATALOG || [];
   const current = catalog.find(e => String(e.id || '').toLowerCase() === String(currentId || '').toLowerCase());
   if (current && _engineSupportsLang(current, lang)) return current;
-  for (const id of ['edge-tts', 'gtts', 'elevenlabs', 'fpt-ai']) {
+  for (const id of ['vieneu', 'edge-tts', 'gtts', 'elevenlabs', 'fpt-ai']) {
     const found = catalog.find(e => String(e.id || '').toLowerCase() === id && _engineSupportsLang(e, lang));
     if (found) return found;
   }
@@ -170,18 +213,32 @@ const EDGE_TTS_BY_LANG = {
     { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Nam - VN)' },
   ],
   en: [
+    { value: 'en-US-AvaNeural', label: 'Ava (Female - US, expressive)' },
+    { value: 'en-US-AndrewNeural', label: 'Andrew (Male - US, expressive)' },
+    { value: 'en-US-EmmaNeural', label: 'Emma (Female - US)' },
+    { value: 'en-US-BrianNeural', label: 'Brian (Male - US)' },
     { value: 'en-US-JennyNeural', label: 'Jenny (Female - US)' },
     { value: 'en-US-GuyNeural', label: 'Guy (Male - US)' },
     { value: 'en-US-AriaNeural', label: 'Aria (Female - US)' },
+    { value: 'en-US-DavisNeural', label: 'Davis (Male - US)' },
+    { value: 'en-US-JaneNeural', label: 'Jane (Female - US)' },
+    { value: 'en-US-JasonNeural', label: 'Jason (Male - US)' },
+    { value: 'en-US-NancyNeural', label: 'Nancy (Female - US)' },
     { value: 'en-GB-SoniaNeural', label: 'Sonia (Female - UK)' },
+    { value: 'en-GB-RyanNeural', label: 'Ryan (Male - UK)' },
+    { value: 'en-GB-LibbyNeural', label: 'Libby (Female - UK)' },
   ],
   ja: [
     { value: 'ja-JP-NanamiNeural', label: 'Nanami (女性 - JP)' },
     { value: 'ja-JP-KeitaNeural', label: 'Keita (男性 - JP)' },
+    { value: 'ja-JP-AoiNeural', label: 'Aoi (女性 - JP)' },
+    { value: 'ja-JP-DaichiNeural', label: 'Daichi (男性 - JP)' },
   ],
   ko: [
     { value: 'ko-KR-SunHiNeural', label: 'Sun-Hi (여성 - KR)' },
     { value: 'ko-KR-InJoonNeural', label: 'InJoon (남성 - KR)' },
+    { value: 'ko-KR-BongJinNeural', label: 'BongJin (남성 - KR)' },
+    { value: 'ko-KR-GookMinNeural', label: 'GookMin (남성 - KR)' },
   ],
   th: [
     { value: 'th-TH-PremwadeeNeural', label: 'Premwadee (หญิง - TH)' },
@@ -222,14 +279,18 @@ const EDGE_TTS_BY_LANG = {
   ],
   zh: [
     { value: 'zh-CN-XiaoxiaoNeural', label: 'Xiaoxiao (女 - CN)' },
+    { value: 'zh-CN-XiaoyiNeural', label: 'Xiaoyi (女 - CN)' },
     { value: 'zh-CN-YunxiNeural', label: 'Yunxi (男 - CN)' },
+    { value: 'zh-CN-YunjianNeural', label: 'Yunjian (男 - CN)' },
+    { value: 'zh-CN-YunxiaNeural', label: 'Yunxia (男 - CN)' },
+    { value: 'zh-CN-YunyangNeural', label: 'Yunyang (男 - CN)' },
   ],
 };
 
 /* ── gTTS language codes ── */
 const GTTS_BY_LANG = {
-  vi: 'vi', en: 'en', ja: 'ja', ko: 'ko', th: 'th', id: 'id',
-  es: 'es', pt: 'pt', fr: 'fr', de: 'de', ru: 'ru', ar: 'ar', hi: 'hi', zh: 'zh',
+  vi: 'vi|com.vn', en: 'en|com', ja: 'ja|com', ko: 'ko|com', th: 'th|com', id: 'id|com',
+  es: 'es|com', pt: 'pt|com', fr: 'fr|com', de: 'de|com', ru: 'ru|com', ar: 'ar|com', hi: 'hi|com', zh: 'zh|com',
 };
 
 /**
@@ -382,8 +443,14 @@ function _9rRenderVoicePop(engineSelectId) {
   if (!cat || !modelSel || !pop) return;
   const model = (cat.models || []).find(m => m.id === modelSel.value) || {};
   const prov = model.provider || '';
-  const voices = (cat.voicesByProvider && cat.voicesByProvider[prov])
+  const baseVoices = (cat.voicesByProvider && cat.voicesByProvider[prov])
     || (cat.voices && cat.voices.multi) || [];
+  const customVoices = (typeof _getTranscribeCustomVoices === 'function')
+    ? _getTranscribeCustomVoices()
+        .filter(item => String(item.engine || '').toLowerCase() === String(engineEl.value || '').toLowerCase())
+        .map(item => [item.voice, `${item.label} (tự thêm)`])
+    : [];
+  const voices = [...baseVoices, ...customVoices];
   const filter = (input?.value || '').trim().toLowerCase();
   pop.innerHTML = '';
   let shown = 0;
@@ -569,7 +636,7 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
       const fallbackLang = voicesByLang.vi ? 'vi' : Object.keys(voicesByLang)[0];
       rawList = voicesByLang[fallbackLang] || [];
     }
-    const preset = _catalogVoicesToPreset(rawList);
+    const preset = _mergeManagedVoicePreset(engine, _catalogVoicesToPreset(rawList), targetLang);
     if (preset.length) {
       const current = voiceEl.value || '';
       voiceEl.innerHTML = '';
@@ -594,7 +661,7 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
 
   // For non-Vietnamese target: always use Edge TTS voices for that language
   if (targetLang !== 'vi' && engine === 'edge-tts') {
-    const voices = EDGE_TTS_BY_LANG[targetLang] || EDGE_TTS_BY_LANG['en'];
+    const voices = _mergeManagedVoicePreset(engine, EDGE_TTS_BY_LANG[targetLang] || EDGE_TTS_BY_LANG['en'], targetLang);
     const current = voiceEl.value || '';
     voiceEl.innerHTML = '';
     voices.forEach(item => {
@@ -608,9 +675,9 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
     return;
   }
 
-  const preset = engine === 'gtts' && GTTS_BY_LANG[targetLang]
+  const preset = _mergeManagedVoicePreset(engine, engine === 'gtts' && GTTS_BY_LANG[targetLang]
     ? [{ value: GTTS_BY_LANG[targetLang], label: `${targetLang} (gTTS)` }]
-    : (TTS_VOICE_PRESETS[engine] || TTS_VOICE_PRESETS['fpt-ai']);
+    : (TTS_VOICE_PRESETS[engine] || TTS_VOICE_PRESETS['fpt-ai']), targetLang);
   const current = voiceEl.value || '';
 
   voiceEl.innerHTML = '';
@@ -656,6 +723,21 @@ function switchPage(name) {
         _loadTtsEngineCatalog().then(() => {
           _refreshTtsEngineSelects();
           _onTargetLangChange();
+        });
+      }
+    });
+  }
+  if (name === 'transcribe') {
+    requestAnimationFrame(() => {
+      if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
+        _refreshTtsEngineSelects();
+        _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+        renderTranscribeVoiceLibrary();
+      } else {
+        _loadTtsEngineCatalog().then(() => {
+          _refreshTtsEngineSelects();
+          _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+          renderTranscribeVoiceLibrary();
         });
       }
     });
@@ -909,6 +991,11 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     frame_title:          document.getElementById('frame-title')?.value || '',
     frame_title_enabled:  document.getElementById('frame-title-enabled')?.checked ?? true,
     frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
+    frame_title_weight:   parseInt(document.getElementById('frame-title-weight')?.value || 400, 10),
+    frame_title_bar_h_pct: parseFloat(document.getElementById('frame-title-bar-h')?.value || 6),
+    frame_title_margin_x_pct: parseFloat(document.getElementById('frame-title-margin-x')?.value || 5),
+    frame_title_x_pct:    parseFloat(document.getElementById('frame-title-x')?.value || 50),
+    frame_title_y_pct:    parseFloat(document.getElementById('frame-title-y')?.value || 50),
     frame_title_color:    document.getElementById('frame-title-color')?.value || '#000000',
     frame_title_color_2:  document.getElementById('frame-title-color-2')?.value || '#ff0000',
     frame_title_split_color: document.getElementById('frame-title-split-color')?.checked ?? true,
@@ -921,7 +1008,10 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
       // Logo uploaded via /api/upload_anti_fp_image — path stored in input
       return document.getElementById('frame-logo-path')?.dataset?.serverPath || '';
     })(),
-    frame_logo_size_pct:  parseFloat(document.getElementById('frame-logo-size')?.value || 12),
+    frame_logo_size_pct:  (() => {
+      const v = document.getElementById('frame-logo-size')?.value;
+      return (v === '' || v == null) ? 12 : parseFloat(v);
+    })(),
     frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
@@ -1400,9 +1490,12 @@ async function generateTtsFromAss() {
   const params = {
     output_dir:  outDir,
     ..._resolveTtsEngineVoice('tr'),
+    tts_lang:    document.getElementById('tr-tts-lang')?.value || 'vi',
+    language:    document.getElementById('tr-tts-lang')?.value || 'vi',
     tts_pitch:   _sanitizeVoiceParam(document.getElementById('tr-tts-pitch')?.value  || '+0Hz'),
     tts_rate:    _sanitizeVoiceParam(document.getElementById('tr-tts-rate')?.value   || '+0%'),
     tts_emotion: document.getElementById('tr-tts-emotion')?.value || 'default',
+    tts_persona: document.getElementById('tr-tts-persona')?.value || '',
     fx_enabled:  String(document.getElementById('tr-fx-enabled')?.checked || false),
     fx_pitch:    document.getElementById('tr-fx-pitch')?.value   || '1.5',
     fx_speed:    document.getElementById('tr-fx-speed')?.value   || '1.08',
@@ -1491,6 +1584,779 @@ function _setTrProgress(overallPct, overallLbl, filePct, fileLbl) {
   setProgress('pb-tr-file', 'lbl-tr-file', Number(filePct) || 0, fileLbl || '--');
 }
 
+const TRANSCRIBE_VOICE_SAMPLES = [
+  {
+    id: 'ms_vi_female_cheerful',
+    label: 'MS nữ vui vẻ',
+    lang: 'vi',
+    engine: 'edge-tts',
+    voice: 'vi-VN-HoaiMyNeural',
+    emotion: 'cheerful',
+    rate: '+6%',
+    pitch: '+0Hz',
+    text: 'Xin chào, đây là giọng nữ vui vẻ, rõ ràng và tự nhiên cho video tiếng Việt.',
+  },
+  {
+    id: 'ms_vi_male_story',
+    label: 'MS nam kể chuyện',
+    lang: 'vi',
+    engine: 'edge-tts',
+    voice: 'vi-VN-NamMinhNeural',
+    emotion: 'narration-professional',
+    rate: '-3%',
+    pitch: '-2Hz',
+    text: 'Đêm xuống, câu chuyện bắt đầu bằng một nhịp kể trầm ấm và cuốn hút.',
+  },
+  {
+    id: 'ms_vi_newscast',
+    label: 'MS bản tin',
+    lang: 'vi',
+    engine: 'edge-tts',
+    voice: 'vi-VN-HoaiMyNeural',
+    emotion: 'newscast',
+    rate: '+2%',
+    pitch: '+0Hz',
+    text: 'Bản tin hôm nay có những chuyển động đáng chú ý, được trình bày ngắn gọn và mạch lạc.',
+  },
+  {
+    id: 'ms_vi_sad',
+    label: 'MS buồn nhẹ',
+    lang: 'vi',
+    engine: 'edge-tts',
+    voice: 'vi-VN-HoaiMyNeural',
+    emotion: 'sad',
+    rate: '-8%',
+    pitch: '-3Hz',
+    text: 'Có những khoảnh khắc lặng xuống, khi giọng đọc cần chậm rãi và nhiều cảm xúc hơn.',
+  },
+  {
+    id: 'vieneu_vi_female_bright',
+    label: 'VieNeu nữ sáng',
+    lang: 'vi',
+    engine: 'vieneu',
+    voice: 'Ngọc Linh',
+    emotion: 'cheerful',
+    rate: '+4%',
+    pitch: '+0Hz',
+    text: 'Xin chào, đây là mẫu giọng VieNeu nữ tươi sáng, rõ lời và giàu năng lượng cho video tiếng Việt.',
+  },
+  {
+    id: 'vieneu_vi_female_soft',
+    label: 'VieNeu nữ dịu',
+    lang: 'vi',
+    engine: 'vieneu',
+    voice: 'Ngọc Lan',
+    emotion: 'friendly',
+    rate: '+0%',
+    pitch: '+0Hz',
+    text: 'Giọng đọc dịu dàng sẽ giúp nội dung chia sẻ trở nên gần gũi, tự nhiên và dễ nghe hơn.',
+  },
+  {
+    id: 'vieneu_vi_male_story',
+    label: 'VieNeu nam kể chuyện',
+    lang: 'vi',
+    engine: 'vieneu',
+    voice: 'Gia Bảo',
+    emotion: 'narration-professional',
+    rate: '-3%',
+    pitch: '-1Hz',
+    text: 'Trong một buổi chiều yên tĩnh, câu chuyện mở ra bằng nhịp kể trầm ấm và cuốn hút.',
+  },
+  {
+    id: 'vieneu_vi_male_upbeat',
+    label: 'VieNeu nam vui',
+    lang: 'vi',
+    engine: 'vieneu',
+    voice: 'Xuân Vĩnh',
+    emotion: 'excited',
+    rate: '+6%',
+    pitch: '+1Hz',
+    text: 'Hôm nay chúng ta bắt đầu một ý tưởng mới, nhanh, sáng và tràn đầy năng lượng.',
+  },
+  {
+    id: 'gtts_vi_basic',
+    label: 'Google gTTS Việt',
+    lang: 'vi',
+    engine: 'gtts',
+    voice: 'vi|com.vn',
+    emotion: 'default',
+    rate: '+0%',
+    pitch: '+0Hz',
+    text: 'Đây là mẫu giọng Google gTTS tiếng Việt, dùng làm phương án dự phòng đơn giản.',
+  },
+  {
+    id: 'ms_en_female',
+    label: 'MS EN nữ',
+    lang: 'en',
+    engine: 'edge-tts',
+    voice: 'en-US-AvaNeural',
+    emotion: 'friendly',
+    rate: '+0%',
+    pitch: '+0Hz',
+    text: 'Hello, this is a warm and friendly English voice sample for narration.',
+  },
+  {
+    id: 'gtts_en_bright',
+    label: 'Google gTTS EN',
+    lang: 'en',
+    engine: 'gtts',
+    voice: 'en|com',
+    emotion: 'cheerful',
+    rate: '+0%',
+    pitch: '+0Hz',
+    text: 'Hello, this is a simple Google gTTS English sample for quick preview.',
+  },
+];
+
+const TRANSCRIBE_CUSTOM_VOICE_KEY = 'toolvideo.transcribe.customVoices.v1';
+const TRANSCRIBE_HIDDEN_VOICE_KEY = 'toolvideo.transcribe.hiddenVoices.v1';
+let TRANSCRIBE_VOICE_FILTER = 'all';
+
+const TRANSCRIBE_GOOGLE_PERSONA_VOICES = [
+  {
+    id: 'google_persona_bich_ngoc',
+    label: 'Bích Ngọc',
+    lang: 'vi',
+    engine: '9r:gemini',
+    voice: 'Kore',
+    gender: 'female',
+    favorite: true,
+    emotion: 'friendly',
+    source: 'Google persona',
+    persona: 'Vietnamese female voice, Hanoi accent, warm, confident, natural pauses, clear pronunciation.',
+    text: 'Xin chào, tôi là Bích Ngọc. Giọng đọc này ấm áp, rõ lời và phù hợp với nội dung chia sẻ.',
+  },
+  {
+    id: 'google_persona_bao_tram',
+    label: 'Bảo Trâm',
+    lang: 'vi',
+    engine: '9r:gemini',
+    voice: 'Aoede',
+    gender: 'female',
+    favorite: true,
+    emotion: 'cheerful',
+    source: 'Google persona',
+    persona: 'Vietnamese young female voice, bright, soft, sincere, expressive but not dramatic.',
+    text: 'Đây là Bảo Trâm, một giọng nữ sáng, mềm và tự nhiên cho video tiếng Việt.',
+  },
+  {
+    id: 'google_persona_diem_my',
+    label: 'Diễm My',
+    lang: 'vi',
+    engine: '9r:gemini',
+    voice: 'Laomedeia',
+    gender: 'female',
+    favorite: false,
+    emotion: 'excited',
+    source: 'Google persona',
+    persona: 'Vietnamese female presenter voice, energetic, youthful, smiling tone, suitable for social videos.',
+    text: 'Hôm nay chúng ta bắt đầu một chủ đề mới với nhịp đọc tươi sáng và nhiều năng lượng.',
+  },
+  {
+    id: 'google_persona_lan_phuong',
+    label: 'Lan Phương',
+    lang: 'vi',
+    engine: '9r:gemini',
+    voice: 'Sulafat',
+    gender: 'female',
+    favorite: false,
+    emotion: 'narration-professional',
+    source: 'Google persona',
+    persona: 'Vietnamese female narrator, calm, warm, mature, documentary style, precise articulation.',
+    text: 'Câu chuyện bắt đầu trong một buổi chiều yên tĩnh, khi mọi thứ dần thay đổi.',
+  },
+  {
+    id: 'google_persona_nhat_nam',
+    label: 'Nhật Nam',
+    lang: 'vi',
+    engine: '9r:gemini',
+    voice: 'Charon',
+    gender: 'male',
+    favorite: true,
+    emotion: 'narration-professional',
+    source: 'Google persona',
+    persona: 'Vietnamese male narrator, low warm tone, cinematic, steady pacing, emotionally restrained.',
+    text: 'Xin chào, tôi là Nhật Nam. Đây là chất giọng nam trầm, kể chuyện chậm rãi và cuốn hút.',
+  },
+  {
+    id: 'google_persona_hoang_long',
+    label: 'Hoàng Long',
+    lang: 'vi',
+    engine: '9r:gemini',
+    voice: 'Puck',
+    gender: 'male',
+    favorite: false,
+    emotion: 'excited',
+    source: 'Google persona',
+    persona: 'Vietnamese male voice, upbeat, friendly, fast but clear, suitable for short-form content.',
+    text: 'Chúng ta vào việc ngay nhé, nội dung hôm nay sẽ nhanh, rõ và đầy năng lượng.',
+  },
+  {
+    id: 'google_persona_quang_minh',
+    label: 'Quang Minh',
+    lang: 'vi',
+    engine: '9r:gemini',
+    voice: 'Achird',
+    gender: 'male',
+    favorite: false,
+    emotion: 'friendly',
+    source: 'Google persona',
+    persona: 'Vietnamese male voice, friendly, trustworthy, conversational, clear northern pronunciation.',
+    text: 'Đây là Quang Minh, một giọng nam thân thiện và dễ nghe cho nội dung hướng dẫn.',
+  },
+  {
+    id: 'google_persona_hai_dang',
+    label: 'Hải Đăng',
+    lang: 'vi',
+    engine: '9r:gemini',
+    voice: 'Rasalgethi',
+    gender: 'male',
+    favorite: false,
+    emotion: 'newscast',
+    source: 'Google persona',
+    persona: 'Vietnamese male newsreader, authoritative, articulate, formal but still natural.',
+    text: 'Bản tin hôm nay được trình bày với nhịp đọc rõ ràng, chắc chắn và chuyên nghiệp.',
+  },
+];
+
+function _trVoiceGenderFromLabel(label) {
+  const raw = String(label || '').toLowerCase();
+  if (raw.includes('nữ') || raw.includes('female') || raw.includes('woman') || raw.includes('girl')) return 'female';
+  if (raw.includes('nam') || raw.includes('male') || raw.includes('man') || raw.includes('boy')) return 'male';
+  return 'other';
+}
+
+function _trVoiceGenderLabel(gender) {
+  if (gender === 'female') return 'Nữ';
+  if (gender === 'male') return 'Nam';
+  return 'Khác';
+}
+
+function _trVoiceLangLabel(lang) {
+  const map = { vi: 'VI', en: 'EN', multi: 'Multi' };
+  return map[lang] || String(lang || 'VI').toUpperCase();
+}
+
+function _trVoiceEngineLabel(engine) {
+  const found = (TTS_ENGINE_CATALOG || []).find(e => String(e.id || '').toLowerCase() === String(engine || '').toLowerCase());
+  if (found) return found.label || found.id;
+  const map = {
+    vieneu: 'VieNeu',
+    'edge-tts': 'Microsoft',
+    gtts: 'Google gTTS',
+    '9r:gemini': 'Google Gemini',
+    '9r:google-tts': 'Google Cloud',
+    '9r:edge-tts': 'Microsoft 9R',
+    '9router': '9Router',
+    'fpt-ai': 'FPT AI',
+    elevenlabs: 'ElevenLabs',
+    'fish-audio': 'Fish Audio',
+    minimax: 'MiniMax',
+  };
+  return map[engine] || engine || 'TTS';
+}
+
+function _trNormalizeVoiceItem(raw, idx = 0) {
+  const engine = String(raw?.engine || 'vieneu').trim();
+  const voice = String(raw?.voice || raw?.value || '').trim();
+  const label = String(raw?.label || raw?.name || voice || 'Giọng mới').trim();
+  const lang = String(raw?.lang || 'vi').trim();
+  return {
+    id: String(raw?.id || `custom_${Date.now()}_${idx}`).trim(),
+    label,
+    engine,
+    voice,
+    lang,
+    gender: String(raw?.gender || _trVoiceGenderFromLabel(`${label} ${raw?.description || ''}`)).trim(),
+    favorite: !!raw?.favorite,
+    emotion: String(raw?.emotion || 'default').trim(),
+    rate: String(raw?.rate || '+0%').trim(),
+    pitch: String(raw?.pitch || '+0Hz').trim(),
+    text: String(raw?.text || '').trim(),
+    persona: String(raw?.persona || raw?.description || '').trim(),
+    source: String(raw?.source || 'Tự thêm').trim(),
+    readonly: !!raw?.readonly,
+    custom: !!raw?.custom,
+  };
+}
+
+function _getTranscribeCustomVoices() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(TRANSCRIBE_CUSTOM_VOICE_KEY) || '[]');
+    if (!Array.isArray(rows)) return [];
+    return rows.map((item, idx) => _trNormalizeVoiceItem({ ...item, custom: true }, idx)).filter(v => v.voice);
+  } catch (_) {
+    return [];
+  }
+}
+
+function _saveTranscribeCustomVoices(rows) {
+  localStorage.setItem(TRANSCRIBE_CUSTOM_VOICE_KEY, JSON.stringify(rows || []));
+}
+
+function _getTranscribeHiddenVoiceIds() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(TRANSCRIBE_HIDDEN_VOICE_KEY) || '[]');
+    return new Set(Array.isArray(rows) ? rows.map(String) : []);
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function _saveTranscribeHiddenVoiceIds(ids) {
+  localStorage.setItem(TRANSCRIBE_HIDDEN_VOICE_KEY, JSON.stringify(Array.from(ids || [])));
+}
+
+function _getTranscribeBuiltInVoices() {
+  const rows = [];
+  const addPreset = (engine, item, idx) => {
+    if (!item?.value) return;
+    rows.push(_trNormalizeVoiceItem({
+      id: `preset_${engine}_${String(item.value).replace(/[^a-z0-9]+/gi, '_')}_${idx}`,
+      label: String(item.label || item.value).replace(/\s*\([^)]*\)\s*$/, '') || item.value,
+      engine,
+      voice: item.value,
+      lang: engine === 'gtts' && String(item.value).startsWith('en') ? 'en' : 'vi',
+      gender: _trVoiceGenderFromLabel(item.label || item.value),
+      source: _trVoiceEngineLabel(engine),
+      readonly: true,
+    }));
+  };
+
+  ['vieneu', 'edge-tts', 'gtts'].forEach(engine => {
+    (TTS_VOICE_PRESETS[engine] || []).forEach((item, idx) => addPreset(engine, item, idx));
+  });
+
+  TRANSCRIBE_GOOGLE_PERSONA_VOICES.forEach(item => {
+    rows.push(_trNormalizeVoiceItem({ ...item, readonly: true }));
+  });
+
+  const seen = new Set();
+  return rows.filter(item => {
+    const key = `${item.id}|${item.engine}|${item.voice}|${item.label}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return item.voice;
+  });
+}
+
+function _getTranscribeAllVoices() {
+  return [..._getTranscribeBuiltInVoices(), ..._getTranscribeCustomVoices()];
+}
+
+function _getTranscribeManagedVoices() {
+  const hidden = _getTranscribeHiddenVoiceIds();
+  return _getTranscribeAllVoices().filter(item => !hidden.has(item.id));
+}
+
+function _getTranscribeHiddenVoices() {
+  const hidden = _getTranscribeHiddenVoiceIds();
+  return _getTranscribeAllVoices().filter(item => hidden.has(item.id));
+}
+
+function _mergeManagedVoicePreset(engine, preset, lang = '') {
+  const rows = Array.isArray(preset) ? [...preset] : [];
+  const custom = _getTranscribeCustomVoices().filter(item => {
+    if (String(item.engine || '').toLowerCase() !== String(engine || '').toLowerCase()) return false;
+    if (!lang || !item.lang || item.lang === 'multi') return true;
+    return item.lang === lang;
+  });
+  custom.forEach(item => {
+    if (!rows.some(row => row.value === item.voice)) {
+      rows.push({ value: item.voice, label: `${item.label} (${item.source || 'Tự thêm'})` });
+    }
+  });
+  return rows;
+}
+
+function _ensureTranscribeEngineOption(engine, label) {
+  const engineEl = document.getElementById('tr-tts-engine');
+  if (!engineEl || !engine) return;
+  if (Array.from(engineEl.options || []).some(opt => opt.value === engine)) return;
+  const opt = document.createElement('option');
+  opt.value = engine;
+  opt.textContent = label || _trVoiceEngineLabel(engine);
+  engineEl.appendChild(opt);
+}
+
+function _set9RouterVoiceFromManaged(item) {
+  const key = _9rKey('tr-tts-engine');
+  const voiceInput = document.getElementById(key + '-9r-voice');
+  if (voiceInput) voiceInput.value = item.voice || '';
+  const modelSel = document.getElementById(key + '-9r-model');
+  if (modelSel && item.model && Array.from(modelSel.options || []).some(opt => opt.value === item.model)) {
+    modelSel.value = item.model;
+  }
+}
+
+function renderTranscribeVoiceLibrary() {
+  const box = document.getElementById('tr-voice-library');
+  if (!box) return;
+  const q = String(document.getElementById('tr-voice-search')?.value || '').trim().toLowerCase();
+  const selectedEngine = document.getElementById('tr-tts-engine')?.value || '';
+  const selectedVoice = (selectedEngine === '9router' || String(selectedEngine).startsWith('9r:'))
+    ? (document.getElementById(_9rKey('tr-tts-engine') + '-9r-voice')?.value || '')
+    : (document.getElementById('tr-tts-voice')?.value || '');
+  let rows = _getTranscribeManagedVoices();
+
+  if (TRANSCRIBE_VOICE_FILTER === 'female' || TRANSCRIBE_VOICE_FILTER === 'male') {
+    rows = rows.filter(item => item.gender === TRANSCRIBE_VOICE_FILTER);
+  } else if (TRANSCRIBE_VOICE_FILTER === 'fav') {
+    rows = rows.filter(item => item.favorite);
+  }
+  if (q) {
+    rows = rows.filter(item => [
+      item.label, item.voice, item.engine, item.source, item.persona,
+    ].join(' ').toLowerCase().includes(q));
+  }
+
+  box.innerHTML = '';
+  if (!rows.length) {
+    const empty = document.createElement('div');
+    empty.className = 'text-muted text-sm';
+    empty.textContent = 'Chưa có giọng phù hợp.';
+    box.appendChild(empty);
+    return;
+  }
+
+  rows.slice(0, 120).forEach(item => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tr-voice-card';
+    if (item.engine === selectedEngine && item.voice === selectedVoice) btn.classList.add('selected');
+    btn.dataset.voiceId = item.id;
+
+    const title = document.createElement('div');
+    title.className = 'tr-voice-card-title';
+    const name = document.createElement('span');
+    name.textContent = item.label;
+    const star = document.createElement('span');
+    star.textContent = item.favorite ? '★' : '';
+    title.appendChild(name);
+    title.appendChild(star);
+
+    const detail = document.createElement('small');
+    detail.textContent = `${_trVoiceEngineLabel(item.engine)} · ${item.voice}`;
+
+    const meta = document.createElement('div');
+    meta.className = 'tr-voice-card-meta';
+    [_trVoiceGenderLabel(item.gender), _trVoiceLangLabel(item.lang), item.source || 'Voice'].forEach(text => {
+      const pill = document.createElement('span');
+      pill.className = 'tr-voice-pill';
+      pill.textContent = text;
+      meta.appendChild(pill);
+    });
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-secondary btn-sm';
+    delBtn.textContent = 'Xóa';
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteTranscribeVoiceById(item.id);
+    });
+    meta.appendChild(delBtn);
+
+    btn.appendChild(title);
+    btn.appendChild(detail);
+    btn.appendChild(meta);
+    btn.addEventListener('click', () => applyTranscribeManagedVoice(item.id, false));
+    box.appendChild(btn);
+  });
+}
+
+function fillTranscribeVoiceEditor(item) {
+  const isCustom = !!item?.custom;
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value ?? '';
+  };
+  set('tr-voice-edit-key', item?.id || '');
+  set('tr-voice-name', item?.label || '');
+  set('tr-voice-engine', item?.engine || document.getElementById('tr-tts-engine')?.value || 'vieneu');
+  set('tr-voice-id', item?.voice || '');
+  set('tr-voice-gender', item?.gender || 'female');
+  set('tr-voice-lang', item?.lang || 'vi');
+  set('tr-voice-emotion', item?.emotion || 'default');
+  set('tr-voice-persona', item?.persona || '');
+  set('tr-voice-text', item?.text || '');
+  const fav = document.getElementById('tr-voice-favorite');
+  if (fav) fav.checked = !!item?.favorite;
+  const del = document.getElementById('tr-voice-delete');
+  if (del) {
+    del.disabled = !item?.id;
+    del.textContent = isCustom ? 'Xóa giọng' : 'Ẩn khỏi danh sách';
+  }
+}
+
+function resetTranscribeVoiceEditor() {
+  fillTranscribeVoiceEditor({
+    label: '',
+    engine: document.getElementById('tr-tts-engine')?.value || 'vieneu',
+    voice: '',
+    gender: 'female',
+    lang: document.getElementById('tr-tts-lang')?.value || 'vi',
+    emotion: document.getElementById('tr-tts-emotion')?.value || 'default',
+    persona: '',
+    text: '',
+    favorite: false,
+  });
+}
+
+function applyTranscribeManagedVoice(voiceId, autoPreview = false) {
+  const item = _getTranscribeManagedVoices().find(v => v.id === voiceId);
+  if (!item) return;
+  _ensureTranscribeEngineOption(item.engine, _trVoiceEngineLabel(item.engine));
+
+  const langEl = document.getElementById('tr-tts-lang');
+  if (langEl && item.lang && item.lang !== 'multi') langEl.value = item.lang;
+  const engineEl = document.getElementById('tr-tts-engine');
+  if (engineEl) engineEl.value = item.engine;
+  _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+
+  if (item.engine === '9router' || String(item.engine).startsWith('9r:')) {
+    _set9RouterVoiceFromManaged(item);
+  } else {
+    const voiceEl = document.getElementById('tr-tts-voice');
+    if (voiceEl && item.voice) {
+      if (!Array.from(voiceEl.options || []).some(opt => opt.value === item.voice)) {
+        const opt = document.createElement('option');
+        opt.value = item.voice;
+        opt.textContent = item.label || item.voice;
+        voiceEl.appendChild(opt);
+      }
+      voiceEl.value = item.voice;
+    }
+  }
+
+  const emotionEl = document.getElementById('tr-tts-emotion');
+  if (emotionEl) emotionEl.value = item.emotion || 'default';
+  const rateEl = document.getElementById('tr-tts-rate');
+  if (rateEl) rateEl.value = item.rate || '+0%';
+  const pitchEl = document.getElementById('tr-tts-pitch');
+  if (pitchEl) pitchEl.value = item.pitch || '+0Hz';
+  const personaEl = document.getElementById('tr-tts-persona');
+  if (personaEl) personaEl.value = item.persona || '';
+  const textEl = document.getElementById('tr-preview-text');
+  if (textEl && item.text) textEl.value = item.text;
+
+  fillTranscribeVoiceEditor(item);
+  _appendTrLog(`Đã chọn giọng: ${item.label} · ${_trVoiceEngineLabel(item.engine)}/${item.voice}`, 'info');
+  renderTranscribeVoiceLibrary();
+  if (autoPreview) previewTranscribeVoice();
+}
+
+function saveTranscribeManagedVoice() {
+  const voice = String(document.getElementById('tr-voice-id')?.value || '').trim();
+  const label = String(document.getElementById('tr-voice-name')?.value || '').trim() || voice;
+  const engine = String(document.getElementById('tr-voice-engine')?.value || 'vieneu').trim();
+  if (!voice) {
+    alert('Vui lòng nhập Voice ID / tên voice gốc.');
+    document.getElementById('tr-voice-id')?.focus();
+    return;
+  }
+
+  const editKey = String(document.getElementById('tr-voice-edit-key')?.value || '').trim();
+  const rows = _getTranscribeCustomVoices();
+  const isEditingCustom = rows.some(v => v.id === editKey);
+  const item = _trNormalizeVoiceItem({
+    id: isEditingCustom ? editKey : `custom_${Date.now()}`,
+    label,
+    engine,
+    voice,
+    gender: document.getElementById('tr-voice-gender')?.value || 'other',
+    lang: document.getElementById('tr-voice-lang')?.value || 'vi',
+    emotion: document.getElementById('tr-voice-emotion')?.value || 'default',
+    persona: document.getElementById('tr-voice-persona')?.value || '',
+    text: document.getElementById('tr-voice-text')?.value || '',
+    favorite: !!document.getElementById('tr-voice-favorite')?.checked,
+    source: 'Tự thêm',
+    custom: true,
+  });
+
+  const idx = rows.findIndex(v => v.id === item.id);
+  if (idx >= 0) rows[idx] = item;
+  else rows.push(item);
+  _saveTranscribeCustomVoices(rows);
+  applyTranscribeManagedVoice(item.id, false);
+  if (typeof toast === 'function') toast('Đã lưu giọng đọc', 'success');
+}
+
+function deleteTranscribeManagedVoice() {
+  const editKey = String(document.getElementById('tr-voice-edit-key')?.value || '').trim();
+  if (editKey) deleteTranscribeVoiceById(editKey);
+}
+
+function deleteTranscribeVoiceById(voiceId) {
+  const item = _getTranscribeAllVoices().find(v => v.id === voiceId);
+  if (!item) return;
+
+  if (item.custom) {
+    const rows = _getTranscribeCustomVoices().filter(v => v.id !== voiceId);
+    _saveTranscribeCustomVoices(rows);
+  } else {
+    const hidden = _getTranscribeHiddenVoiceIds();
+    hidden.add(voiceId);
+    _saveTranscribeHiddenVoiceIds(hidden);
+  }
+
+  resetTranscribeVoiceEditor();
+  renderTranscribeVoiceLibrary();
+  renderTranscribeHiddenVoices();
+  if (typeof toast === 'function') {
+    toast(item.custom ? 'Đã xóa giọng tự thêm' : 'Đã ẩn giọng khỏi danh sách', 'success');
+  }
+}
+
+function restoreTranscribeHiddenVoice(voiceId) {
+  const hidden = _getTranscribeHiddenVoiceIds();
+  hidden.delete(voiceId);
+  _saveTranscribeHiddenVoiceIds(hidden);
+  renderTranscribeVoiceLibrary();
+  renderTranscribeHiddenVoices();
+}
+
+function restoreAllTranscribeHiddenVoices() {
+  _saveTranscribeHiddenVoiceIds(new Set());
+  renderTranscribeVoiceLibrary();
+  renderTranscribeHiddenVoices();
+  if (typeof toast === 'function') toast('Đã khôi phục danh sách giọng', 'success');
+}
+
+function renderTranscribeHiddenVoices() {
+  const box = document.getElementById('tr-voice-hidden-list');
+  if (!box) return;
+  const rows = _getTranscribeHiddenVoices();
+  box.innerHTML = '';
+  if (!rows.length) {
+    const empty = document.createElement('div');
+    empty.className = 'text-muted text-sm';
+    empty.textContent = 'Chưa có giọng nào bị ẩn.';
+    box.appendChild(empty);
+    return;
+  }
+  rows.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'tr-voice-hidden-row';
+    const info = document.createElement('div');
+    info.innerHTML = '<b></b><div class="text-xs text-muted"></div>';
+    info.querySelector('b').textContent = item.label;
+    info.querySelector('div').textContent = `${_trVoiceEngineLabel(item.engine)} · ${item.voice}`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.textContent = 'Khôi phục';
+    btn.addEventListener('click', () => restoreTranscribeHiddenVoice(item.id));
+    row.appendChild(info);
+    row.appendChild(btn);
+    box.appendChild(row);
+  });
+}
+
+function switchTranscribeVoicePanel(panel) {
+  const target = panel || 'library';
+  document.querySelectorAll('[data-tr-voice-panel]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.trVoicePanel === target);
+  });
+  document.querySelectorAll('.tr-voice-panel').forEach(el => {
+    el.classList.toggle('active', el.id === `tr-voice-panel-${target}`);
+  });
+  if (target === 'hidden') renderTranscribeHiddenVoices();
+}
+
+function initTranscribeVoiceManager() {
+  document.querySelectorAll('[data-tr-voice-panel]').forEach(btn => {
+    btn.addEventListener('click', () => switchTranscribeVoicePanel(btn.dataset.trVoicePanel || 'library'));
+  });
+  document.querySelectorAll('[data-tr-voice-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      TRANSCRIBE_VOICE_FILTER = btn.dataset.trVoiceFilter || 'all';
+      document.querySelectorAll('[data-tr-voice-filter]').forEach(b => b.classList.toggle('active', b === btn));
+      renderTranscribeVoiceLibrary();
+    });
+  });
+  document.getElementById('tr-voice-search')?.addEventListener('input', renderTranscribeVoiceLibrary);
+  ['tr-tts-engine', 'tr-tts-voice'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', renderTranscribeVoiceLibrary);
+  });
+  resetTranscribeVoiceEditor();
+  renderTranscribeVoiceLibrary();
+  renderTranscribeHiddenVoices();
+  switchTranscribeVoicePanel('library');
+}
+
+function renderTranscribeVoiceSamples() {
+  const box = document.getElementById('tr-voice-samples');
+  if (!box || box.dataset.rendered === '1') return;
+  box.innerHTML = '';
+  TRANSCRIBE_VOICE_SAMPLES.forEach(sample => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.textContent = sample.label;
+    btn.addEventListener('click', () => applyTranscribeVoiceSample(sample.id, true));
+    box.appendChild(btn);
+  });
+  box.dataset.rendered = '1';
+}
+
+function _selectTranscribeEngine(sample) {
+  const engineEl = document.getElementById('tr-tts-engine');
+  if (!engineEl) return { engine: '', fallback: false };
+  const hasEngine = Array.from(engineEl.options || []).some(opt => opt.value === sample.engine);
+  let engine = sample.engine;
+  let fallback = false;
+  if (!hasEngine && sample.fallbackEngine) {
+    const hasFallback = Array.from(engineEl.options || []).some(opt => opt.value === sample.fallbackEngine);
+    if (hasFallback) {
+      engine = sample.fallbackEngine;
+      fallback = true;
+    }
+  }
+  engineEl.value = engine;
+  return { engine, fallback };
+}
+
+function _selectTranscribeVoice(voiceId) {
+  const voiceEl = document.getElementById('tr-tts-voice');
+  if (!voiceEl || !voiceId) return;
+  const hasVoice = Array.from(voiceEl.options || []).some(opt => opt.value === voiceId);
+  if (hasVoice) voiceEl.value = voiceId;
+}
+
+async function applyTranscribeVoiceSample(sampleId, autoPreview = false) {
+  const sample = TRANSCRIBE_VOICE_SAMPLES.find(item => item.id === sampleId);
+  if (!sample) return;
+
+  try { await _loadTtsEngineCatalog(); } catch (_) {}
+
+  const langEl = document.getElementById('tr-tts-lang');
+  if (langEl) langEl.value = sample.lang || 'vi';
+
+  const { engine, fallback } = _selectTranscribeEngine(sample);
+  _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+
+  const voiceId = fallback ? (sample.fallbackVoice || '') : sample.voice;
+  _selectTranscribeVoice(voiceId);
+
+  const emotionEl = document.getElementById('tr-tts-emotion');
+  if (emotionEl) emotionEl.value = fallback ? 'default' : (sample.emotion || 'default');
+  const rateEl = document.getElementById('tr-tts-rate');
+  if (rateEl) rateEl.value = sample.rate || '+0%';
+  const pitchEl = document.getElementById('tr-tts-pitch');
+  if (pitchEl) pitchEl.value = sample.pitch || '+0Hz';
+  const textEl = document.getElementById('tr-preview-text');
+  if (textEl) textEl.value = sample.text || textEl.value || '';
+  const personaEl = document.getElementById('tr-tts-persona');
+  if (personaEl) personaEl.value = sample.persona || '';
+
+  if (fallback && typeof toast === 'function') {
+    toast('Chưa thấy engine mẫu đã chọn, đã dùng giọng dự phòng.', 'warning');
+  }
+  _appendTrLog(`Mẫu giọng: ${sample.label} · ${engine}/${voiceId || 'auto'}`, 'info');
+  renderTranscribeVoiceLibrary();
+  if (autoPreview) await previewTranscribeVoice();
+}
+
 async function createMp3FromText() {
   const textInput = document.getElementById('tr-preview-text');
   const text = textInput?.value?.trim() || '';
@@ -1511,9 +2377,12 @@ async function createMp3FromText() {
       body: JSON.stringify({
         text,
         ..._resolveTtsEngineVoice('tr'),
+        tts_lang: document.getElementById('tr-tts-lang')?.value || 'vi',
+        language: document.getElementById('tr-tts-lang')?.value || 'vi',
         tts_pitch: _sanitizeVoiceParam(document.getElementById('tr-tts-pitch')?.value || '+0Hz'),
         tts_rate: _sanitizeVoiceParam(document.getElementById('tr-tts-rate')?.value || '+0%'),
         tts_emotion: document.getElementById('tr-tts-emotion')?.value || 'default',
+        tts_persona: document.getElementById('tr-tts-persona')?.value || '',
         fx_enabled: document.getElementById('tr-fx-enabled')?.checked || false,
         fx_pitch: parseFloat(document.getElementById('tr-fx-pitch')?.value || '1.5'),
         fx_speed: parseFloat(document.getElementById('tr-fx-speed')?.value || '1.08'),
@@ -1601,9 +2470,12 @@ async function previewTranscribeVoice() {
       body: JSON.stringify({
         text,
         ..._resolveTtsEngineVoice('tr'),
+        tts_lang: document.getElementById('tr-tts-lang')?.value || 'vi',
+        language: document.getElementById('tr-tts-lang')?.value || 'vi',
         tts_pitch: _sanitizeVoiceParam(document.getElementById('tr-tts-pitch')?.value || '+0Hz'),
         tts_rate: _sanitizeVoiceParam(document.getElementById('tr-tts-rate')?.value || '+0%'),
         tts_emotion: document.getElementById('tr-tts-emotion')?.value || 'default',
+        tts_persona: document.getElementById('tr-tts-persona')?.value || '',
         fx_enabled: document.getElementById('tr-fx-enabled')?.checked || false,
         fx_pitch: parseFloat(document.getElementById('tr-fx-pitch')?.value || '1.5'),
         fx_speed: parseFloat(document.getElementById('tr-fx-speed')?.value || '1.08'),
@@ -1865,7 +2737,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tr-tts-engine')?.addEventListener('change', function() {
     _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
   });
+  document.getElementById('tr-tts-lang')?.addEventListener('change', function() {
+    _ensureTtsEngineForLang('tr-tts-engine', this.value || 'vi');
+    _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+    renderTranscribeVoiceLibrary();
+  });
   _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+  initTranscribeVoiceManager();
 
   setProcessMode(window._procMode || 'ai');
 
