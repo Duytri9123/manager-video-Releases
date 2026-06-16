@@ -372,62 +372,100 @@ class YouTubeUploader:
                 )
             )
             
-            # Execute with progress tracking + retry on transient network errors
-            import socket
+            # ── Resumable upload with exponential backoff retry ──────────────
+            # Per Google's official documentation:
+            #   https://googleapis.github.io/google-api-python-client/docs/media.html
+            #   https://developers.google.com/youtube/v3/guides/uploading_a_video
+            import random
             import time
+            import http.client
+            import httplib2
 
-            _RETRYABLE_ERRORS = (
+            # Disable httplib2's automatic retries — we handle retry logic ourselves
+            httplib2.RETRIES = 1
+
+            # Retryable HTTP status codes per official docs
+            # 404 = expired upload session (must restart); 5xx = transient (retry with backoff)
+            _RETRYABLE_STATUS_CODES = (500, 502, 503, 504)
+
+            # Retryable exceptions per official docs (Python 3 equivalents)
+            _RETRYABLE_EXCEPTIONS = (
+                httplib2.HttpLib2Error,
+                IOError,
+                http.client.NotConnected,
+                http.client.IncompleteRead,
+                http.client.ImproperConnectionState,
+                http.client.CannotSendRequest,
+                http.client.CannotSendHeader,
+                http.client.ResponseNotReady,
+                http.client.BadStatusLine,
                 ConnectionError,
                 TimeoutError,
-                socket.error,
-                OSError,  # covers WinError 10053, 10054, etc.
+                OSError,
             )
-            _MAX_RETRIES = 5
-            _RETRY_DELAYS = [5, 10, 20, 30, 60]
+            _MAX_RETRIES = 10  # Official sample uses 10
 
             response = None
             percent_complete = 0
             upload_start = time.time()
+            retry = 0
 
             while response is None:
-                for attempt in range(_MAX_RETRIES):
-                    try:
-                        status, response = request.next_chunk()
-                        if status:
-                            percent_complete = int(status.progress() * 100)
-                            if on_progress:
-                                on_progress({'status': 'uploading', 'pct': percent_complete})
-                        break  # success — exit retry loop
-                    except googleapiclient.errors.HttpError as e:
-                        if e.resp.status in (500, 502, 503, 504):
-                            # Server-side transient error — retry
-                            if attempt < _MAX_RETRIES - 1:
-                                delay = _RETRY_DELAYS[min(attempt, len(_RETRY_DELAYS) - 1)]
-                                logger.warning("[Upload] Server error %d, retry %d/%d in %ds",
-                                               e.resp.status, attempt+1, _MAX_RETRIES, delay)
-                                if on_progress:
-                                    on_progress({'status': 'retrying', 'pct': percent_complete,
-                                                 'message': f"Server error {e.resp.status}, retry {attempt+1}/{_MAX_RETRIES} in {delay}s"})
-                                time.sleep(delay)
-                                continue
-                        logger.error("[Upload] ✗ HTTP error: %s", e)
+                try:
+                    status, response = request.next_chunk()
+                    if status:
+                        percent_complete = int(status.progress() * 100)
                         if on_progress:
-                            on_progress({'status': 'error', 'message': str(e)})
-                        raise RuntimeError(f"Upload failed: {e}")
-                    except _RETRYABLE_ERRORS as e:
-                        if attempt < _MAX_RETRIES - 1:
-                            delay = _RETRY_DELAYS[min(attempt, len(_RETRY_DELAYS) - 1)]
-                            logger.warning("[Upload] Network error: %s, retry %d/%d in %ds",
-                                           e, attempt+1, _MAX_RETRIES, delay)
-                            if on_progress:
-                                on_progress({'status': 'retrying', 'pct': percent_complete,
-                                             'message': f"Network error: {e}, retry {attempt+1}/{_MAX_RETRIES} in {delay}s"})
-                            time.sleep(delay)
-                        else:
-                            logger.error("[Upload] ✗ Network error sau %d lần retry: %s", _MAX_RETRIES, e)
+                            on_progress({'status': 'uploading', 'pct': percent_complete})
+                except googleapiclient.errors.HttpError as e:
+                    if e.resp.status == 404:
+                        # Upload session expired — must restart from scratch
+                        logger.error("[Upload] Upload session expired (HTTP 404) — restart required")
+                        if on_progress:
+                            on_progress({'status': 'error',
+                                         'message': 'Upload session expired, please retry upload'})
+                        raise RuntimeError(
+                            "Upload session expired (HTTP 404). The upload must be restarted."
+                        )
+                    if e.resp.status in _RETRYABLE_STATUS_CODES:
+                        if retry >= _MAX_RETRIES:
+                            logger.error("[Upload] ✗ Max retries (%d) exceeded for HTTP %d",
+                                         _MAX_RETRIES, e.resp.status)
                             if on_progress:
                                 on_progress({'status': 'error', 'message': str(e)})
-                            raise
+                            raise RuntimeError(f"Upload failed after {_MAX_RETRIES} retries: {e}")
+                        retry += 1
+                        # Exponential backoff with jitter: random in [0, 2^retry] seconds
+                        sleep_seconds = random.random() * (2 ** retry)
+                        logger.warning("[Upload] HTTP %d, retry %d/%d in %.1fs",
+                                       e.resp.status, retry, _MAX_RETRIES, sleep_seconds)
+                        if on_progress:
+                            on_progress({'status': 'retrying', 'pct': percent_complete,
+                                         'message': f"Server error {e.resp.status}, "
+                                                    f"retry {retry}/{_MAX_RETRIES} in {sleep_seconds:.1f}s"})
+                        time.sleep(sleep_seconds)
+                        continue
+                    # Non-retryable HTTP error — fail immediately
+                    logger.error("[Upload] ✗ Non-retryable HTTP error %d: %s", e.resp.status, e)
+                    if on_progress:
+                        on_progress({'status': 'error', 'message': str(e)})
+                    raise RuntimeError(f"Upload failed: {e}")
+                except _RETRYABLE_EXCEPTIONS as e:
+                    if retry >= _MAX_RETRIES:
+                        logger.error("[Upload] ✗ Max retries (%d) exceeded: %s", _MAX_RETRIES, e)
+                        if on_progress:
+                            on_progress({'status': 'error', 'message': str(e)})
+                        raise RuntimeError(f"Upload failed after {_MAX_RETRIES} retries: {e}")
+                    retry += 1
+                    sleep_seconds = random.random() * (2 ** retry)
+                    logger.warning("[Upload] Network error: %s, retry %d/%d in %.1fs",
+                                   e, retry, _MAX_RETRIES, sleep_seconds)
+                    if on_progress:
+                        on_progress({'status': 'retrying', 'pct': percent_complete,
+                                     'message': f"Network error, retry {retry}/{_MAX_RETRIES} "
+                                                f"in {sleep_seconds:.1f}s"})
+                    time.sleep(sleep_seconds)
+                    continue
             
             upload_time = time.time() - upload_start
             if on_progress:

@@ -4772,10 +4772,6 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 and bool(_frame_title)
             )
             _logo_path = str(data.get("frame_logo_path") or "").strip()
-            if not _logo_path:
-                _default_logo = Path(__file__).parent.parent / "img" / "logo.png"
-                if _default_logo.exists():
-                    _logo_path = str(_default_logo)
             return write_ass_with_frame(
                 segments=[],
                 out_path=out_path,
@@ -5068,12 +5064,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             and bool(_frame_title.strip())
                         )
 
-                        # Logo path — default to img/logo.png
+                        # Only use a logo explicitly selected/saved by the user.
                         _logo_path = str(data.get("frame_logo_path") or "").strip()
-                        if not _logo_path:
-                            _default_logo = Path(__file__).parent.parent / "img" / "logo.png"
-                            if _default_logo.exists():
-                                _logo_path = str(_default_logo)
 
                         write_ass_with_frame(
                             segments=vi_segs,
@@ -5991,10 +5983,6 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
         # Resolve logo_path for standard thumbnail
         _logo_path = str(data.get("frame_logo_path") or data.get("logo_path") or "").strip()
-        if not _logo_path:
-            _default_logo = Path(__file__).parent.parent / "img" / "logo.png"
-            if _default_logo.exists():
-                _logo_path = str(_default_logo)
 
         # Thumbnail flow disabled by request.
         thumb_ok, thumb_result = False, "thumbnail disabled"
@@ -6233,11 +6221,6 @@ def generate_thumbnail(
             p = Path(__file__).parent.parent / p
         if p.exists():
             resolved_logo = p
-    if not resolved_logo:
-        default_logo = Path(__file__).parent.parent / "img" / "logo.png"
-        if default_logo.exists():
-            resolved_logo = default_logo
-
     logo_img = None
     if resolved_logo:
         try:

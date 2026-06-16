@@ -1,12 +1,16 @@
 """Process Blueprint — /api/process_video, /api/upload_anti_fp_image, /api/make_vertical_video."""
 import asyncio
+import logging
 import tempfile
 import time
 import json as _j
+import os
 from pathlib import Path
 from flask import Blueprint, jsonify, request, Response
 from flask import stream_with_context
 from core_app import load_cfg, CONFIG_FILE, ROOT, get_cookies_with_fallback, _resolve_naming_title
+
+LOGGER = logging.getLogger("process")
 
 bp = Blueprint("process", __name__)
 
@@ -336,6 +340,419 @@ def video_filmstrip():
         return jsonify({"ok": False, "error": "Timeout khi tạo filmstrip (>60s)"}), 500
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/analyze_video_ai", methods=["POST"])
+def analyze_video_ai():
+    """Analyze a local video via sampled frames and return suggested masks/title hints."""
+    import base64
+    import mimetypes
+    import re
+    import shutil
+    import subprocess
+    import urllib.error
+    import urllib.request
+
+    def _clamp(v, lo, hi, default):
+        try:
+            x = float(v)
+        except Exception:
+            return default
+        return max(lo, min(hi, x))
+
+    def _json_from_text(text: str) -> dict:
+        raw = (text or "").strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.I).strip()
+        raw = re.sub(r"\s*```$", "", raw).strip()
+        try:
+            return _j.loads(raw)
+        except Exception:
+            m = re.search(r"\{.*\}", raw, flags=re.S)
+            if not m:
+                raise
+            return _j.loads(m.group(0))
+
+    def _clean_result(result: dict) -> dict:
+        if not isinstance(result, dict):
+            result = {}
+        zones = result.get("suggested_blur_zones") or result.get("blur_zones") or []
+        clean_zones = []
+        for idx, z in enumerate(zones if isinstance(zones, list) else []):
+            if not isinstance(z, dict):
+                continue
+            box = z.get("box_pct") if isinstance(z.get("box_pct"), dict) else {}
+            height = z.get("height_pct", box.get("h", 12))
+            position = z.get("position_pct", (float(box.get("y", 44) or 44) + float(box.get("h", 12) or 12) / 2))
+            width = z.get("width_pct", box.get("w", 85))
+            x = z.get("x_pct", (float(box.get("x", 7.5) or 7.5) + float(box.get("w", 85) or 85) / 2))
+            clean_zones.append({
+                "id": z.get("id") or f"ai-{idx + 1}",
+                "label": str(z.get("label") or z.get("type") or f"AI zone {idx + 1}")[:80],
+                "reason": str(z.get("reason") or "")[:300],
+                "height_pct": _clamp(height, 3, 45, 12),
+                "position_pct": _clamp(position, 0, 100, 50),
+                "width_pct": _clamp(width, 20, 100, 85),
+                "x_pct": _clamp(x, 0, 100, 50),
+                "start_sec": None if z.get("start_sec") in ("", None) else _clamp(z.get("start_sec"), 0, 999999, 0),
+                "end_sec": None if z.get("end_sec") in ("", None) else _clamp(z.get("end_sec"), 0, 999999, 0),
+                "confidence": _clamp(z.get("confidence", 0.7), 0, 1, 0.7),
+                "source": "ai",
+            })
+        result["suggested_blur_zones"] = clean_zones[:8]
+        items = result.get("needs_cover") or []
+        result["needs_cover"] = items[:12] if isinstance(items, list) else []
+        titles = result.get("title_suggestions") or {}
+        result["title_suggestions"] = titles if isinstance(titles, dict) else {}
+        for key in ("summary", "visual_style", "source_language", "analysis_notes"):
+            if key in result and result[key] is not None:
+                result[key] = str(result[key])[:1200]
+        return result
+
+    def _extract_frames(video_path: Path, count: int) -> tuple[list[dict], float]:
+        from core.video_processor import find_ffmpeg
+
+        ffmpeg = find_ffmpeg()
+        if not ffmpeg:
+            raise RuntimeError("FFmpeg khong tim thay")
+
+        try:
+            from utils.ffprobe import probe_video
+            _w, _h, duration = probe_video(video_path)
+        except Exception:
+            duration = 0.0
+        duration = float(duration or 0.0)
+
+        if count <= 0:
+            count = 12
+            if duration > 0:
+                count = max(8, min(40, int(duration / 3) + 1))
+
+        if duration > 0:
+            if count <= 1:
+                timestamps = [max(0.2, min(duration - 0.2, duration * 0.5))]
+            else:
+                timestamps = [
+                    max(0.2, min(duration - 0.2, duration * (idx + 0.5) / count))
+                    for idx in range(count)
+                ]
+        else:
+            timestamps = [1.0 + i * 3.0 for i in range(count)]
+
+        frames: list[dict] = []
+        with tempfile.TemporaryDirectory(prefix="ai_video_read_") as tmpdir:
+            tmp_video = Path(tmpdir) / f"input{video_path.suffix or '.mp4'}"
+            shutil.copy2(str(video_path), str(tmp_video))
+            for idx, ts in enumerate(timestamps):
+                out_jpg = Path(tmpdir) / f"frame_{idx}.jpg"
+                subprocess.run([
+                    ffmpeg, "-ss", f"{ts:.3f}", "-i", str(tmp_video),
+                    "-vframes", "1", "-q:v", "4", "-vf", "scale=640:-1",
+                    str(out_jpg), "-y", "-loglevel", "error",
+                ], capture_output=True, timeout=35)
+                if out_jpg.exists() and out_jpg.stat().st_size > 0:
+                    frames.append({
+                        "timestamp": round(ts, 2),
+                        "b64": base64.b64encode(out_jpg.read_bytes()).decode("ascii"),
+                    })
+        return frames, duration
+
+    def _build_prompt(language: str, target_language: str, duration: float, timestamps: list[float]) -> str:
+        lang_hint = language or "auto"
+        target_hint = target_language or "vi"
+        return f"""
+You are a video editing assistant. Analyze these sampled video frames as a single video.
+The original/source language hint is: {lang_hint}. Output language for summaries and title ideas: {target_hint}.
+Duration: {duration:.2f}s. Frame timestamps: {timestamps}.
+
+Find visible text, subtitles, watermarks, brand logos, platform marks, usernames, QR codes, or UI elements that should be covered before reposting.
+When detecting text, prioritize text in the original/source language ({lang_hint}) and persistent logos/watermarks. Do not mark normal objects or faces as text/logo.
+Return only strict JSON with this shape:
+{{
+  "summary": "short content summary",
+  "visual_style": "scene, aspect, camera, color, notable movement",
+  "source_language": "detected source language",
+  "analysis_notes": "what can/cannot be read confidently",
+  "needs_cover": [
+    {{
+      "type": "subtitle|logo|watermark|text|qr|ui",
+      "label": "what to cover",
+      "reason": "why",
+      "confidence": 0.0,
+      "box_pct": {{"x": 0, "y": 0, "w": 100, "h": 10}},
+      "start_sec": null,
+      "end_sec": null
+    }}
+  ],
+  "suggested_blur_zones": [
+    {{
+      "label": "bottom original subtitle",
+      "reason": "source-language subtitle",
+      "height_pct": 12,
+      "position_pct": 88,
+      "width_pct": 92,
+      "x_pct": 50,
+      "start_sec": null,
+      "end_sec": null,
+      "confidence": 0.8
+    }}
+  ],
+  "title_suggestions": {{
+    "short": "concise title",
+    "youtube": "title under 100 chars",
+    "tiktok": "caption title under 120 chars",
+    "facebook": "friendly post title"
+  }}
+}}
+Coordinates are percentages relative to the visible video frame: x/y top-left, w/h size; suggested zones use center x/y.
+If no text/logo should be covered, return empty arrays.
+""".strip()
+
+    def _call_gemini(api_key: str, model: str, prompt: str, frames: list[dict]) -> dict:
+        parts = [{"text": prompt}]
+        for f in frames:
+            parts.append({"text": f"Frame at {f['timestamp']} seconds"})
+            parts.append({"inlineData": {"mimeType": "image/jpeg", "data": f["b64"]}})
+        payload = {
+            "contents": [{"parts": parts}],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 1800,
+                "responseMimeType": "application/json",
+            },
+        }
+        req = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+            data=_j.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            data = _j.loads(resp.read().decode("utf-8", "replace") or "{}")
+        parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
+        text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text")).strip()
+        if not text:
+            raise RuntimeError("Gemini khong tra ve noi dung phan tich")
+        return _json_from_text(text)
+
+    def _call_openai(api_key: str, model: str, prompt: str, frames: list[dict]) -> dict:
+        content = [{"type": "text", "text": prompt}]
+        for f in frames:
+            content.append({"type": "text", "text": f"Frame at {f['timestamp']} seconds"})
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{f['b64']}", "detail": "low"},
+            })
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": content}],
+            "temperature": 0.2,
+            "max_tokens": 1800,
+            "response_format": {"type": "json_object"},
+        }
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=_j.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            data = _j.loads(resp.read().decode("utf-8", "replace") or "{}")
+        text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        if not text:
+            raise RuntimeError("OpenAI khong tra ve noi dung phan tich")
+        return _json_from_text(text)
+
+    def _call_9router(api_key: str, endpoint: str, model: str, prompt: str, frames: list[dict]) -> dict:
+        content = [{"type": "text", "text": prompt}]
+        for f in frames:
+            content.append({"type": "text", "text": f"Frame at {f['timestamp']} seconds"})
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{f['b64']}", "detail": "low"},
+            })
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": content}],
+            "temperature": 0.2,
+            "max_tokens": 1800,
+            "response_format": {"type": "json_object"},
+        }
+        req = urllib.request.Request(
+            f"{endpoint.rstrip('/')}/chat/completions",
+            data=_j.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            raw_body = resp.read().decode("utf-8", "replace")
+            if not raw_body or not raw_body.strip():
+                raise RuntimeError(f"9Router tra ve phan hoi rong (HTTP {resp.status})")
+            try:
+                data = _j.loads(raw_body)
+            except Exception as json_err:
+                preview = raw_body[:500].replace("\n", " ").strip()
+                LOGGER.error("9Router non-JSON response (HTTP %s): %s", resp.status, preview)
+                raise RuntimeError(f"9Router tra ve phan hoi khong phai JSON (HTTP {resp.status}): {preview}") from json_err
+        text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        if not text:
+            # Check if there's an error message from the API
+            api_error = (data.get("error") or {}).get("message") or data.get("message") or ""
+            if api_error:
+                raise RuntimeError(f"9Router API error: {str(api_error)[:300]}")
+            raise RuntimeError("9Router khong tra ve noi dung phan tich")
+        return _json_from_text(text)
+
+    def _call_gemini_video(api_key: str, model: str, prompt: str, video_path: Path) -> dict:
+        size_mb = video_path.stat().st_size / (1024 * 1024)
+        if size_mb > 90:
+            raise RuntimeError("Video qua lon de gui truc tiep cho Gemini (>90MB), se dung che do quet frame")
+        mime = mimetypes.guess_type(str(video_path))[0] or "video/mp4"
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt + "\nAnalyze the complete uploaded video, not only selected frames."},
+                    {"inlineData": {
+                        "mimeType": mime,
+                        "data": base64.b64encode(video_path.read_bytes()).decode("ascii"),
+                    }},
+                ]
+            }],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 1800,
+                "responseMimeType": "application/json",
+            },
+        }
+        req = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
+            data=_j.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            data = _j.loads(resp.read().decode("utf-8", "replace") or "{}")
+        parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
+        text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text")).strip()
+        if not text:
+            raise RuntimeError("Gemini khong tra ve noi dung phan tich video")
+        return _json_from_text(text)
+
+    data = request.json or {}
+    video_path_str = str(data.get("video_path") or "").strip()
+    if not video_path_str:
+        return jsonify({"ok": False, "error": "Thieu duong dan video"}), 400
+
+    vp = Path(video_path_str).expanduser()
+    if not vp.is_absolute():
+        vp = ROOT / vp
+    if not vp.exists():
+        return jsonify({"ok": False, "error": f"Video khong ton tai: {vp}"}), 404
+
+    cfg = load_cfg()
+    nr_cfg = cfg.get("nine_router") or {}
+    nine_key = (nr_cfg.get("api_key") or os.environ.get("NINE_ROUTER_API_KEY") or os.environ.get("NINER_API_KEY") or "").strip()
+    requested_nine_model = str(data.get("nine_model") or "").strip()
+    language = str(data.get("language") or "").strip()
+    target_language = str(data.get("target_language") or "vi").strip()
+    sample_value = data.get("sample_count")
+    sample_raw = str("5" if sample_value in (None, "") else sample_value).strip().lower()
+    full_video = sample_raw in ("0", "full", "all", "video", "entire")
+
+    try:
+        sample_count = 3 if full_video else int(sample_raw or 5)
+    except Exception:
+        sample_count = 5
+    if not full_video:
+        sample_count = max(2, min(40, sample_count))
+
+    if not nine_key:
+        return jsonify({"ok": False, "code": "missing_api_key", "error": "Chua co API key 9Router de doc video"}), 400
+
+    try:
+        frames, duration = _extract_frames(vp, sample_count)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Khong doc duoc video: {e}"}), 500
+    if not frames:
+        return jsonify({"ok": False, "error": "Khong doc duoc video hoac khong trich duoc frame"}), 500
+
+    prompt = _build_prompt(language, target_language, duration, [f["timestamp"] for f in frames])
+
+    errors: list[str] = []
+    try:
+        endpoint = str(nr_cfg.get("endpoint") or "http://localhost:20128/v1").strip().rstrip("/")
+        model = str(requested_nine_model or nr_cfg.get("vision_model") or nr_cfg.get("default_model") or "duytris").strip()
+        LOGGER.info("analyze_video_ai: trying 9router model=%s endpoint=%s", model, endpoint)
+        result = _call_9router(nine_key, endpoint, model, prompt, frames)
+        return jsonify({
+            "ok": True,
+            "provider": "9router",
+            "model": model,
+            "frame_count": len(frames),
+            "duration": round(duration, 3),
+            "result": _clean_result(result),
+        })
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", "replace")
+            err_json = _j.loads(body)
+            msg = (err_json.get("error") or {}).get("message") or body[:300]
+        except Exception:
+            msg = f"HTTP {e.code}"
+        LOGGER.warning("analyze_video_ai 9router HTTPError: %s", msg)
+        errors.append(f"9Router: {msg}")
+    except Exception as e:
+        LOGGER.warning("analyze_video_ai 9router failed: %s", e)
+        errors.append(f"9Router: {str(e)[:200]}")
+
+    # ── Try 2: Gemini direct (fallback) ──────────────────────────────────
+    gemini_key = (
+        (cfg.get("gemini_video") or {}).get("api_key", "").strip()
+        or os.environ.get("GEMINI_API_KEY", "").strip()
+    )
+    if gemini_key:
+        try:
+            gemini_model = str((cfg.get("gemini_video") or {}).get("llm_model") or "gemini-2.5-flash").strip()
+            LOGGER.info("analyze_video_ai: falling back to Gemini model=%s", gemini_model)
+            result = _call_gemini(gemini_key, gemini_model, prompt, frames)
+            return jsonify({
+                "ok": True,
+                "provider": "gemini",
+                "model": gemini_model,
+                "frame_count": len(frames),
+                "duration": round(duration, 3),
+                "result": _clean_result(result),
+            })
+        except urllib.error.HTTPError as e:
+            LOGGER.warning("analyze_video_ai Gemini HTTPError: %s", e)
+            errors.append(f"Gemini: HTTP {e.code}")
+        except Exception as e:
+            LOGGER.warning("analyze_video_ai Gemini failed: %s", e)
+            errors.append(f"Gemini: {str(e)[:200]}")
+
+    # ── Try 3: OpenAI direct (last resort fallback) ──────────────────────
+    trans_cfg = cfg.get("translation") or {}
+    openai_key = str(trans_cfg.get("openai_key") or "").strip()
+    if openai_key:
+        try:
+            openai_model = "gpt-4o-mini"
+            LOGGER.info("analyze_video_ai: falling back to OpenAI model=%s", openai_model)
+            result = _call_openai(openai_key, openai_model, prompt, frames)
+            return jsonify({
+                "ok": True,
+                "provider": "openai",
+                "model": openai_model,
+                "frame_count": len(frames),
+                "duration": round(duration, 3),
+                "result": _clean_result(result),
+            })
+        except urllib.error.HTTPError as e:
+            LOGGER.warning("analyze_video_ai OpenAI HTTPError: %s", e)
+            errors.append(f"OpenAI: HTTP {e.code}")
+        except Exception as e:
+            LOGGER.warning("analyze_video_ai OpenAI failed: %s", e)
+            errors.append(f"OpenAI: {str(e)[:200]}")
+
+    return jsonify({"ok": False, "error": f"AI khong doc duoc video: {' | '.join(errors)}"}), 502
 
 
 @bp.route("/api/video_frame_from_url", methods=["POST"])
@@ -1635,6 +2052,64 @@ def _ai_generate_thumbnail_image(api_key: str, prompt: str, reference_frame_b64:
         return {"ok": False, "error": f"Gemini API error: {err_msg}"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+    # Parse response — look for image in candidates
+    candidates = data.get("candidates") or []
+    for cand in candidates:
+        parts = (cand.get("content") or {}).get("parts") or []
+        for part in parts:
+            inline = part.get("inlineData") or {}
+            if inline.get("mimeType", "").startswith("image/"):
+                img_b64 = inline.get("data", "")
+                if img_b64:
+                    return {"ok": True, "image_b64": img_b64}
+
+    return {"ok": False, "error": "Gemini không trả về ảnh. Thử lại hoặc đổi prompt."}
+
+
+
+@bp.route("/api/check_gemini_api", methods=["POST"])
+def check_gemini_api():
+    """Preflight check: verify Gemini API key is valid before batch processing."""
+    import os
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    cfg = load_cfg()
+    api_key = (
+        (cfg.get("gemini_video") or {}).get("api_key", "").strip()
+        or os.environ.get("GEMINI_API_KEY", "").strip()
+    )
+    if not api_key:
+        return jsonify({"ok": False, "error": "Chưa cấu hình Gemini API key trong config.yml (gemini_video.api_key)"}), 400
+
+    # Test with a small generateContent call
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": "ping"}]}],
+        "generationConfig": {"maxOutputTokens": 5},
+    }
+    try:
+        body = _json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
+        # If we get here without exception, API is valid
+        if data.get("candidates"):
+            return jsonify({"ok": True, "model": "gemini-2.5-flash"})
+        return jsonify({"ok": False, "error": "API trả về kết quả rỗng"}), 400
+    except urllib.error.HTTPError as e:
+        err_body = ""
+        try:
+            err_body = e.read().decode("utf-8", "replace")
+            err_json = _json.loads(err_body)
+            err_msg = err_json.get("error", {}).get("message", err_body[:200])
+        except Exception:
+            err_msg = err_body[:200] or f"HTTP {e.code}"
+        return jsonify({"ok": False, "error": err_msg}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
     # Parse response — look for image in candidates
     candidates = data.get("candidates") or []

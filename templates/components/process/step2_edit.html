@@ -255,6 +255,23 @@
       .pe2-extra-zone-time{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
       .pe2-pane{ display:none; }
       .pe2-pane.active{ display:block; }
+      .pe2-ai-box{
+        border:1px solid var(--border,#d8d8de); border-radius:8px; background:var(--bg2,#fff);
+        padding:10px; margin-bottom:10px;
+      }
+      .pe2-ai-status{
+        min-height:34px; border:1px solid var(--border,#d8d8de); border-radius:8px;
+        background:var(--bg3,#f7f9ff); padding:8px 10px; font-size:12px; color:var(--text-muted,#6b7280);
+      }
+      .pe2-ai-result{ font-size:12px; line-height:1.45; color:var(--text,#1f2430); }
+      .pe2-ai-result h4{ margin:0 0 6px; font-size:12px; color:var(--text,#1f2430); }
+      .pe2-ai-result ul{ margin:0; padding-left:18px; }
+      .pe2-ai-result li{ margin:3px 0; }
+      .pe2-ai-pill{
+        display:inline-flex; align-items:center; gap:4px; border:1px solid var(--accent2,#9cc3ff);
+        background:var(--accent-light,#eef3ff); color:var(--accent,#1a73e8);
+        border-radius:999px; padding:2px 7px; font-size:11px; font-weight:700; margin:0 4px 4px 0;
+      }
 
       @media (max-width:900px){
         .pe2-editor{ height:auto; }
@@ -290,6 +307,7 @@
           <!-- Tab ngang -->
           <div class="pe2-tabs">
             <button class="pe2-tab active" data-pe2tab="subs"  onclick="pe2Tool('subs')"><span class="ic">💬</span>Phụ đề</button>
+            <button class="pe2-tab"        data-pe2tab="ai"    onclick="pe2Tool('ai')"><span class="ic">🤖</span>AI</button>
             <button class="pe2-tab"        data-pe2tab="blur"  onclick="pe2Tool('blur')"><span class="ic">🛡</span>Vùng che</button>
             <button class="pe2-tab"        data-pe2tab="frame" onclick="pe2Tool('frame')"><span class="ic">🎞</span>Khung</button>
             <button class="pe2-tab"        data-pe2tab="overlay" onclick="pe2Tool('overlay')"><span class="ic">▣</span>Chữ/Khối</button>
@@ -346,6 +364,41 @@
                 </div>
                 <div class="field"><label>Đáy (%)</label><input type="number" id="proc-margin-v" min="0" max="50" step="0.5" value="3" oninput="subPreviewUpdate()"></div>
               </div>
+            </div>
+
+            <!-- ══ PANE: Phân tích AI ══ -->
+            <div class="pe2-pane" data-pe2pane="ai">
+              <div class="pe2-grp">AI đọc video</div>
+              <div class="pe2-ai-box">
+                <div class="grid-2" style="gap:8px;margin-bottom:8px">
+                  <div class="field" id="proc-ai-video-nine-model-row">
+                    <label>Model (9Router)</label>
+                  <select id="proc-ai-video-nine-model" onfocus="loadProcAiVideoModels()">
+                    <option value="">Tự động theo 9Router</option>
+                  </select>
+                  </div>
+                  <div class="field">
+                    <label>Số frame đọc</label>
+                    <select id="proc-ai-video-samples">
+                      <option value="full" selected>Toàn bộ video</option>
+                      <option value="3">3 frame</option>
+                      <option value="5">5 frame</option>
+                      <option value="12">12 frame</option>
+                      <option value="24">24 frame</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="btn-group" style="gap:8px;align-items:center">
+                  <button class="btn btn-primary btn-sm" id="proc-ai-video-btn" onclick="procAnalyzeVideoAI({force:true})">🤖 Phân tích video</button>
+                  <label class="toggle-wrap" title="Khi bật, dùng vùng che AI đề xuất cho video này">
+                    <input type="checkbox" class="toggle-input" id="proc-use-ai-analysis" disabled onchange="procToggleAiAnalysis(this)">
+                    <div class="toggle"></div>
+                    <span class="toggle-label text-sm">Sử dụng phân tích AI</span>
+                  </label>
+                </div>
+              </div>
+              <div id="proc-ai-video-status" class="pe2-ai-status">Chưa phân tích video.</div>
+              <div id="proc-ai-video-result" class="pe2-ai-result" style="margin-top:10px"></div>
             </div>
 
             <!-- ══ PANE: Vùng che ══ -->
@@ -555,7 +608,7 @@
       window.pe2Tool = function(name){
         var root = document.querySelector('[data-proc-step="2"] .pe2-editor');
         if (!root) return;
-        var titles = { subs:'⚙ Phụ đề & Dịch', blur:'🛡 Vùng che', frame:'🎞 Khung video', overlay:'▣ Chữ / Khối' };
+        var titles = { subs:'⚙ Phụ đề & Dịch', ai:'🤖 Phân tích AI', blur:'🛡 Vùng che', frame:'🎞 Khung video', overlay:'▣ Chữ / Khối' };
         root.querySelectorAll('[data-pe2tab]').forEach(function(b){
           b.classList.toggle('active', b.getAttribute('data-pe2tab') === name);
         });

@@ -2094,6 +2094,7 @@ function fillTranscribeVoiceEditor(item) {
     del.disabled = !item?.id;
     del.textContent = isCustom ? 'Xóa giọng' : 'Ẩn khỏi danh sách';
   }
+  syncTranscribeVoiceEditorVoices();
 }
 
 function resetTranscribeVoiceEditor() {
@@ -2271,6 +2272,102 @@ function switchTranscribeVoicePanel(panel) {
   if (target === 'hidden') renderTranscribeHiddenVoices();
 }
 
+function toggleTranscribeVoiceIdMode() {
+  const selectEl = document.getElementById('tr-voice-id-select');
+  const inputEl = document.getElementById('tr-voice-id');
+  const toggleBtn = document.getElementById('tr-voice-id-toggle');
+  if (!selectEl || !inputEl || !toggleBtn) return;
+
+  if (selectEl.style.display === 'none') {
+    selectEl.style.display = '';
+    inputEl.style.display = 'none';
+    toggleBtn.textContent = 'Nhập thủ công';
+    inputEl.value = selectEl.value;
+  } else {
+    selectEl.style.display = 'none';
+    inputEl.style.display = '';
+    toggleBtn.textContent = 'Chọn sẵn';
+  }
+}
+
+function syncTranscribeVoiceEditorVoices() {
+  const engineEl = document.getElementById('tr-voice-engine');
+  const langEl = document.getElementById('tr-voice-lang');
+  const selectEl = document.getElementById('tr-voice-id-select');
+  const inputEl = document.getElementById('tr-voice-id');
+  const toggleBtn = document.getElementById('tr-voice-id-toggle');
+
+  if (!engineEl || !selectEl || !inputEl) return;
+
+  const engine = engineEl.value || 'vieneu';
+  const lang = langEl?.value || 'vi';
+
+  let voices = [];
+  if (TTS_VOICE_PRESETS[engine]) {
+    voices = TTS_VOICE_PRESETS[engine].map(v => ({ value: v.value, label: v.label || v.value }));
+  }
+
+  if (TTS_ENGINE_CATALOG) {
+    const catalogEngine = TTS_ENGINE_CATALOG.find(e => String(e.id || '').toLowerCase() === String(engine).toLowerCase());
+    if (catalogEngine && catalogEngine.voices) {
+      const voicesByLang = catalogEngine.voices || {};
+      let rawList = voicesByLang[lang] || voicesByLang.multi || [];
+      if (!rawList.length && engine === 'edge-tts' && EDGE_TTS_BY_LANG[lang]) {
+        rawList = EDGE_TTS_BY_LANG[lang];
+      }
+      if (!rawList.length && engine === 'gtts' && GTTS_BY_LANG[lang]) {
+        rawList = [[GTTS_BY_LANG[lang], `${lang} (gTTS)`]];
+      }
+      if (!rawList.length) {
+        const fallbackLang = voicesByLang.vi ? 'vi' : Object.keys(voicesByLang)[0];
+        rawList = voicesByLang[fallbackLang] || [];
+      }
+      const catalogVoices = _catalogVoicesToPreset(rawList);
+      catalogVoices.forEach(cv => {
+        if (!voices.some(v => v.value === cv.value)) {
+          voices.push(cv);
+        }
+      });
+    }
+  }
+
+  if (!voices.length) {
+    if (engine === 'edge-tts' && EDGE_TTS_BY_LANG[lang]) {
+      voices = EDGE_TTS_BY_LANG[lang].map(v => ({ value: v.value, label: v.label || v.value }));
+    } else if (engine === 'gtts' && GTTS_BY_LANG[lang]) {
+      voices = [{ value: GTTS_BY_LANG[lang], label: `${lang} (gTTS)` }];
+    }
+  }
+
+  selectEl.innerHTML = '';
+  voices.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.value;
+    opt.textContent = v.label;
+    selectEl.appendChild(opt);
+  });
+
+  const currentVal = inputEl.value;
+  const isMatch = voices.some(v => v.value === currentVal);
+
+  if (isMatch && currentVal) {
+    selectEl.value = currentVal;
+    selectEl.style.display = '';
+    inputEl.style.display = 'none';
+    if (toggleBtn) toggleBtn.textContent = 'Nhập thủ công';
+  } else if (!currentVal && voices.length) {
+    selectEl.selectedIndex = 0;
+    inputEl.value = selectEl.value;
+    selectEl.style.display = '';
+    inputEl.style.display = 'none';
+    if (toggleBtn) toggleBtn.textContent = 'Nhập thủ công';
+  } else {
+    selectEl.style.display = 'none';
+    inputEl.style.display = '';
+    if (toggleBtn) toggleBtn.textContent = 'Chọn sẵn';
+  }
+}
+
 function initTranscribeVoiceManager() {
   document.querySelectorAll('[data-tr-voice-panel]').forEach(btn => {
     btn.addEventListener('click', () => switchTranscribeVoicePanel(btn.dataset.trVoicePanel || 'library'));
@@ -2285,6 +2382,12 @@ function initTranscribeVoiceManager() {
   document.getElementById('tr-voice-search')?.addEventListener('input', renderTranscribeVoiceLibrary);
   ['tr-tts-engine', 'tr-tts-voice'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', renderTranscribeVoiceLibrary);
+  });
+  document.getElementById('tr-voice-engine')?.addEventListener('change', () => {
+    syncTranscribeVoiceEditorVoices();
+  });
+  document.getElementById('tr-voice-lang')?.addEventListener('change', () => {
+    syncTranscribeVoiceEditorVoices();
   });
   resetTranscribeVoiceEditor();
   renderTranscribeVoiceLibrary();

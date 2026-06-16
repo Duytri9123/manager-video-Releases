@@ -29,6 +29,9 @@
           if (typeof subPreviewFetchFrame === 'function') {
             setTimeout(() => subPreviewFetchFrame(), 300);
           }
+          if (document.getElementById('proc-ai-video-auto')?.checked !== false && typeof procMaybeAnalyzeVideoAI === 'function') {
+            setTimeout(() => procMaybeAnalyzeVideoAI(), 700);
+          }
         }
       }
       if (n === 3) {
@@ -1184,6 +1187,7 @@
     _syncColorPicker();
     _ovLoadFromHidden();
     ovRenderLayerList();
+    loadProcAiVideoModels();
   });
 
   function _getPreviewVideoPath() {
@@ -1216,6 +1220,314 @@
     if (v) return { type: 'file', val: v };
     return null;
   }
+
+  window._procVideoAiAnalysis = window._procVideoAiAnalysis || null;
+  window._procVideoAiCache = window._procVideoAiCache || {};
+  window._procUseAiAnalysis = window._procUseAiAnalysis || false;
+  window._procAiAnalyzing = false;
+  window._procAiVideoModelsLoaded = false;
+
+  function _procAiEsc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
+  function _procAiSetStatus(text, kind) {
+    const el = document.getElementById('proc-ai-video-status');
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.borderColor = kind === 'ok' ? 'rgba(34,197,94,.45)' : (kind === 'error' ? 'rgba(239,68,68,.45)' : 'var(--border)');
+    el.style.color = kind === 'ok' ? '#15803d' : (kind === 'error' ? '#b91c1c' : 'var(--text-muted)');
+  }
+
+  function _procAiVideoGroupLabel(prefix) {
+    const map = {
+      cx: 'cx',
+      openai: 'openai',
+      gemini: 'gemini',
+      google: 'google',
+      anthropic: 'anthropic',
+      claude: 'anthropic',
+      kr: 'kr',
+      xai: 'xai',
+      qwen: 'qwen',
+      deepseek: 'deepseek',
+      meta: 'meta',
+      groq: 'groq',
+    };
+    return map[prefix] || prefix || 'others';
+  }
+
+  async function _procAiFetchJson(url, timeoutMs) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs || 5000);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function loadProcAiVideoModels(force) {
+    const sel = document.getElementById('proc-ai-video-nine-model');
+    if (!sel) return;
+    if (window._procAiVideoModelsLoaded && !force) return;
+    const current = sel.value;
+    window._procAiVideoModelsLoaded = true;
+    try {
+      let items = [];
+      const first = await _procAiFetchJson('/api/chatbot/media_models?kind=image-to-text', 5000).catch(() => null);
+      if (first && first.ok && Array.isArray(first.models) && first.models.length) {
+        items = first.models;
+      } else {
+        const fallback = await _procAiFetchJson('/api/chatbot/models', 5000).catch(() => null);
+        if (fallback && fallback.ok && Array.isArray(fallback.models)) items = fallback.models;
+      }
+      if (!items.length) return;
+      sel.querySelectorAll('optgroup[data-nr="1"]').forEach(g => g.remove());
+      const existing = new Set(Array.from(sel.options).map(o => o.value));
+      const visionHints = /(gpt|gemini|claude|sonnet|opus|vision|image|multimodal|cx\/gpt-5\.5|duytris)/i;
+      const groups = {};
+      items
+        .map(m => ({ id: String((m && (m.id || m)) || '').trim(), owned_by: String((m && m.owned_by) || '').trim() }))
+        .filter(m => m.id && !existing.has(m.id))
+        .sort((a, b) => (visionHints.test(b.id) ? 1 : 0) - (visionHints.test(a.id) ? 1 : 0) || a.id.localeCompare(b.id))
+        .forEach(m => {
+          const prefix = m.id.includes('/') ? m.id.split('/')[0] : (m.owned_by || 'others');
+          const label = _procAiVideoGroupLabel(prefix);
+          (groups[label] = groups[label] || []).push(m.id);
+        });
+      Object.keys(groups).sort().forEach(label => {
+        const grp = document.createElement('optgroup');
+        grp.setAttribute('data-nr', '1');
+        grp.label = label;
+        groups[label].forEach(id => {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = id;
+          grp.appendChild(opt);
+          existing.add(id);
+        });
+        sel.appendChild(grp);
+      });
+      if (current && Array.from(sel.options).some(o => o.value === current)) sel.value = current;
+    } catch (_) {
+      window._procAiVideoModelsLoaded = false;
+    }
+  }
+
+  function procAiVideoProviderChanged() {
+    const row = document.getElementById('proc-ai-video-nine-model-row');
+    if (row) row.style.display = '';
+    loadProcAiVideoModels();
+  }
+
+  function _procAiVideoPath() {
+    const source = (typeof _getPreviewVideoPath === 'function') ? _getPreviewVideoPath() : null;
+    if (!source || !source.val) return '';
+    if (source.type === 'url' || /^https?:\/\//i.test(source.val)) return '';
+    return source.val;
+  }
+
+  function _procAiAnalysisText(result) {
+    if (!result) return '';
+    const cover = Array.isArray(result.needs_cover) ? result.needs_cover : [];
+    const zones = Array.isArray(result.suggested_blur_zones) ? result.suggested_blur_zones : [];
+    const titles = result.title_suggestions || {};
+    return [
+      result.summary ? `Tóm tắt video: ${result.summary}` : '',
+      result.visual_style ? `Đặc điểm hình ảnh: ${result.visual_style}` : '',
+      result.source_language ? `Ngôn ngữ gốc phát hiện: ${result.source_language}` : '',
+      cover.length ? `Thành phần cần che: ${cover.map(x => x.label || x.type || '').filter(Boolean).join('; ')}` : '',
+      zones.length ? `Vùng che AI đề xuất: ${zones.map(x => x.label || x.reason || '').filter(Boolean).join('; ')}` : '',
+      titles.youtube ? `Gợi ý tiêu đề YouTube: ${titles.youtube}` : (titles.short ? `Gợi ý tiêu đề: ${titles.short}` : ''),
+      result.analysis_notes ? `Ghi chú AI: ${result.analysis_notes}` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  function procRenderAiAnalysis() {
+    const box = document.getElementById('proc-ai-video-result');
+    if (!box) return;
+    const payload = window._procVideoAiAnalysis;
+    const result = payload?.result;
+    if (!result) {
+      box.innerHTML = '';
+      return;
+    }
+    const cover = Array.isArray(result.needs_cover) ? result.needs_cover : [];
+    const zones = Array.isArray(result.suggested_blur_zones) ? result.suggested_blur_zones : [];
+    const titles = result.title_suggestions || {};
+    const coverHtml = cover.length
+      ? `<ul>${cover.map(item => `<li><b>${_procAiEsc(item.label || item.type || 'Thành phần')}</b>: ${_procAiEsc(item.reason || '')} <span class="pe2-ai-pill">${Math.round((item.confidence || 0) * 100)}%</span></li>`).join('')}</ul>`
+      : '<div class="text-xs text-muted">AI chưa thấy chữ/logo cần che rõ ràng.</div>';
+    const zoneHtml = zones.length
+      ? `<ul>${zones.map(z => `<li><b>${_procAiEsc(z.label || 'Vùng che')}</b>: X ${Math.round(z.x_pct ?? 50)}%, Y ${Math.round(z.position_pct ?? 50)}%, rộng ${Math.round(z.width_pct ?? 80)}%, cao ${Math.round(z.height_pct ?? 12)}%</li>`).join('')}</ul>`
+      : '<div class="text-xs text-muted">Không có vùng che đề xuất.</div>';
+    const titleBits = [titles.short, titles.youtube, titles.tiktok, titles.facebook].filter(Boolean);
+    box.innerHTML = `
+      <div class="pe2-ai-box">
+        <h4>Tổng quan</h4>
+        <div>${_procAiEsc(result.summary || 'Chưa có tóm tắt.')}</div>
+        ${result.visual_style ? `<div class="mt-4 text-xs text-muted">${_procAiEsc(result.visual_style)}</div>` : ''}
+        ${result.source_language ? `<div class="mt-4"><span class="pe2-ai-pill">Ngôn ngữ: ${_procAiEsc(result.source_language)}</span></div>` : ''}
+      </div>
+      <div class="pe2-ai-box">
+        <h4>Thành phần cần che</h4>
+        ${coverHtml}
+      </div>
+      <div class="pe2-ai-box">
+        <h4>Vùng che AI đề xuất</h4>
+        ${zoneHtml}
+      </div>
+      ${titleBits.length ? `<div class="pe2-ai-box"><h4>Gợi ý tiêu đề</h4>${titleBits.map(t => `<span class="pe2-ai-pill">${_procAiEsc(t)}</span>`).join('')}</div>` : ''}
+      ${result.analysis_notes ? `<div class="pe2-ai-box"><h4>Ghi chú</h4><div>${_procAiEsc(result.analysis_notes)}</div></div>` : ''}
+    `;
+  }
+
+  function procRemoveAiZones() {
+    const before = (window._procExtraBlurZones || []).length;
+    window._procExtraBlurZones = (window._procExtraBlurZones || []).filter(z => z.zone !== 'ai' && z.source !== 'ai');
+    if ((window._procExtraBlurZones || []).length !== before) {
+      if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
+      if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    }
+  }
+
+  function procApplyAiAnalysis() {
+    const result = window._procVideoAiAnalysis?.result;
+    if (!result || !window._procUseAiAnalysis) return;
+    const zones = Array.isArray(result.suggested_blur_zones) ? result.suggested_blur_zones : [];
+    procRemoveAiZones();
+    zones.forEach(z => {
+      _blurZoneCounter++;
+      window._procExtraBlurZones.push({
+        id: _blurZoneCounter,
+        height: Math.max(3, Math.min(45, parseFloat(z.height_pct ?? 12) || 12)),
+        position: Math.max(0, Math.min(100, parseFloat(z.position_pct ?? 50) || 50)),
+        width: Math.max(20, Math.min(100, parseFloat(z.width_pct ?? 85) || 85)),
+        x: Math.max(0, Math.min(100, parseFloat(z.x_pct ?? 50) || 50)),
+        start: (z.start_sec === null || z.start_sec === undefined) ? '' : z.start_sec,
+        end: (z.end_sec === null || z.end_sec === undefined) ? '' : z.end_sec,
+        zone: 'ai',
+        source: 'ai',
+        label: z.label || '',
+        reason: z.reason || ''
+      });
+    });
+    if (zones.length) window._procExtraBlurOpenIds = window._procExtraBlurZones.filter(z => z.zone === 'ai').map(z => z.id);
+    if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
+    if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+  }
+
+  function procToggleAiAnalysis(input) {
+    window._procUseAiAnalysis = !!input?.checked;
+    if (window._procUseAiAnalysis) {
+      procApplyAiAnalysis();
+      _procAiSetStatus('Đang sử dụng phân tích AI cho vùng che và gợi ý đăng bài.', 'ok');
+    } else {
+      procRemoveAiZones();
+      _procAiSetStatus('Đã tắt sử dụng phân tích AI. Nội dung phân tích vẫn được giữ để tham khảo.', 'info');
+    }
+  }
+
+  async function procAnalyzeVideoAI(opts) {
+    opts = opts || {};
+    const path = _procAiVideoPath();
+    const btn = document.getElementById('proc-ai-video-btn');
+    const useToggle = document.getElementById('proc-use-ai-analysis');
+    if (!path) {
+      window._procVideoAiAnalysis = null;
+      window._procUseAiAnalysis = false;
+      if (useToggle) { useToggle.checked = false; useToggle.disabled = true; }
+      procRenderAiAnalysis();
+      _procAiSetStatus('Không đọc được video: video chưa tải xong hoặc chưa có file local.', 'error');
+      return null;
+    }
+    if (!opts.force && window._procVideoAiCache[path]) {
+      window._procVideoAiAnalysis = window._procVideoAiCache[path];
+      if (useToggle) { useToggle.disabled = false; useToggle.checked = !!window._procUseAiAnalysis; }
+      procRenderAiAnalysis();
+      if (window._procUseAiAnalysis) procApplyAiAnalysis();
+      return window._procVideoAiAnalysis;
+    }
+    if (window._procAiAnalyzing) return null;
+    window._procAiAnalyzing = true;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ AI đang đọc...'; }
+    _procAiSetStatus('AI đang đọc video và kiểm tra chữ/logo cần che...', 'info');
+    try {
+      const sampleValue = document.getElementById('proc-ai-video-samples')?.value || 'full';
+      const res = await fetch('/api/analyze_video_ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          video_path: path,
+          provider: '9router',
+          nine_model: document.getElementById('proc-ai-video-nine-model')?.value || '',
+          sample_count: sampleValue === 'full' ? 0 : parseInt(sampleValue || '5', 10),
+          language: document.getElementById('proc-lang')?.value || '',
+          target_language: document.getElementById('proc-target-lang')?.value || 'vi'
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || 'AI không đọc được video');
+      window._procVideoAiAnalysis = {
+        video_path: path,
+        provider: data.provider || 'ai',
+        duration: data.duration || 0,
+        frame_count: data.frame_count || 0,
+        result: data.result || {}
+      };
+      window._procVideoAiAnalysis.analysis_text = _procAiAnalysisText(window._procVideoAiAnalysis.result);
+      window._procVideoAiCache[path] = window._procVideoAiAnalysis;
+      window._procUseAiAnalysis = true;
+      if (useToggle) { useToggle.disabled = false; useToggle.checked = true; }
+      procRenderAiAnalysis();
+      procApplyAiAnalysis();
+      _procAiSetStatus(`AI đã phân tích xong (${data.provider || 'AI'}, ${data.frame_count || 0} frame).`, 'ok');
+      if (typeof toast === 'function') toast('AI đã phân tích video và tạo vùng che đề xuất', 'success');
+      return window._procVideoAiAnalysis;
+    } catch (e) {
+      window._procVideoAiAnalysis = null;
+      window._procUseAiAnalysis = false;
+      if (useToggle) { useToggle.checked = false; useToggle.disabled = true; }
+      procRemoveAiZones();
+      procRenderAiAnalysis();
+      _procAiSetStatus((e.message || '').includes('API key') ? 'Chưa có API key 9Router để đọc video.' : ('Không đọc được video: ' + e.message), 'error');
+      if (typeof toast === 'function') toast('AI không đọc được video: ' + e.message, 'warning');
+      return null;
+    } finally {
+      window._procAiAnalyzing = false;
+      if (btn) { btn.disabled = false; btn.textContent = '🤖 Phân tích video'; }
+    }
+  }
+
+  function procMaybeAnalyzeVideoAI() {
+    if (document.getElementById('proc-ai-video-auto')?.checked === false) return;
+    const path = _procAiVideoPath();
+    if (!path) return;
+    if (window._procVideoAiAnalysis?.video_path === path) return;
+    if (window._procVideoAiCache[path]) {
+      window._procVideoAiAnalysis = window._procVideoAiCache[path];
+      const useToggle = document.getElementById('proc-use-ai-analysis');
+      window._procUseAiAnalysis = true;
+      if (useToggle) { useToggle.disabled = false; useToggle.checked = true; }
+      procRenderAiAnalysis();
+      procApplyAiAnalysis();
+      return;
+    }
+    procAnalyzeVideoAI({ force:false });
+  }
+
+  window.procAnalyzeVideoAI = procAnalyzeVideoAI;
+  window.procMaybeAnalyzeVideoAI = procMaybeAnalyzeVideoAI;
+  window.procToggleAiAnalysis = procToggleAiAnalysis;
+  window.procApplyAiAnalysis = procApplyAiAnalysis;
+  window.procRemoveAiZones = procRemoveAiZones;
+  window.loadProcAiVideoModels = loadProcAiVideoModels;
+  window.procAiVideoProviderChanged = procAiVideoProviderChanged;
 
 
   function _renderSubOverlay() {
@@ -1597,6 +1909,10 @@
             const urlEl2 = document.getElementById('proc-url');
             if (pathEl) pathEl.value = pending.val;
             if (urlEl2) urlEl2.value = '';
+            if (document.getElementById('proc-ai-video-auto')?.checked !== false && typeof procAnalyzeVideoAI === 'function') {
+              _step1Log('🤖 AI đang phân tích video trước khi xử lý...', 'info');
+              await procAnalyzeVideoAI({ force:false });
+            }
             procWizGo(3);
             startProcessVideo();
           }
@@ -1625,6 +1941,10 @@
           const urlEl2 = document.getElementById('proc-url');
           if (pathEl) pathEl.value = pending.val;
           if (urlEl2) urlEl2.value = '';
+          if (document.getElementById('proc-ai-video-auto')?.checked !== false && typeof procAnalyzeVideoAI === 'function') {
+            _step1Log('🤖 AI đang phân tích video trước khi xử lý...', 'info');
+            await procAnalyzeVideoAI({ force:false });
+          }
           procWizGo(3);
           startProcessVideo();
         }
@@ -1675,9 +1995,7 @@
       toast('✅ Đã thêm file vào hàng chờ', 'success');
     }
     _renderBatchQueue();
-    
-    // Trigger downloader
-    _runStep1QueueDownload();
+    _step1UpdateDownloadArea();
   }
 
   window.procWizStep2Continue = function(targetStep) {
@@ -1875,13 +2193,15 @@
           };
           img.src = url + '?t=' + Date.now();  // Add timestamp to bypass cache
         } else {
-          document.getElementById('frame-logo-path').value = 'img/logo.png (mặc định)';
+          document.getElementById('frame-logo-path').value = '';
+          document.getElementById('frame-logo-path').dataset.serverPath = '';
           if (typeof toast === 'function') {
             toast('✗ Upload logo thất bại', 'error');
           }
         }
       }).catch(() => {
-        document.getElementById('frame-logo-path').value = 'img/logo.png (mặc định)';
+        document.getElementById('frame-logo-path').value = '';
+        document.getElementById('frame-logo-path').dataset.serverPath = '';
         if (typeof toast === 'function') {
           toast('✗ Lỗi upload logo', 'error');
         }
@@ -1923,13 +2243,16 @@
           _setFrameLogo(img, _isGifSrc(savedUrl) || _isGifSrc(savedPath));
         };
         img.onerror = () => {
-          // If saved path no longer exists, clear localStorage and show default
+          // If saved path no longer exists, clear localStorage and leave logo empty.
           try {
             localStorage.removeItem('proc_frame_logo_path');
             localStorage.removeItem('proc_frame_logo_url');
           } catch (_) {}
-          pathInput.value = 'img/logo.png (mặc định)';
-          pathInput.dataset.serverPath = 'img/logo.png';
+          pathInput.value = '';
+          pathInput.dataset.serverPath = '';
+          window._frameLogoImg = null;
+          window._frameLogoSrc = '';
+          window._frameLogoIsGif = false;
         };
         // Add timestamp to bypass cache
         img.src = savedUrl + '?t=' + Date.now();
@@ -1937,9 +2260,12 @@
       }
     } catch (_) {}
     
-    // No saved logo → show default
-    pathInput.value = 'img/logo.png (mặc định)';
-    pathInput.dataset.serverPath = 'img/logo.png';
+    // No saved logo: keep empty. The pipeline only uses a user-selected logo.
+    pathInput.value = '';
+    pathInput.dataset.serverPath = '';
+    window._frameLogoImg = null;
+    window._frameLogoSrc = '';
+    window._frameLogoIsGif = false;
   }
 
   // Initialize on DOM ready
@@ -2677,6 +3003,9 @@
     { id:'proc-model',          type:'value' },
     { id:'proc-lang',           type:'value' },
     { id:'proc-target-lang',    type:'value' },
+    { id:'proc-ai-video-auto',  type:'checkbox' },
+    { id:'proc-ai-video-samples',  type:'value' },
+    { id:'proc-ai-video-nine-model', type:'value' },
     // Subtitle
     { id:'proc-burn',           type:'checkbox' },
     { id:'proc-translate-subs', type:'checkbox' },

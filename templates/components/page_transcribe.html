@@ -1,4 +1,4 @@
-﻿<!-- PAGE: TRANSCRIBE -->
+<!-- PAGE: TRANSCRIBE -->
 <div id="page-transcribe" class="page">
 
   <style>
@@ -499,9 +499,13 @@
                             <option value="minimax">MiniMax</option>
                           </select>
                         </div>
-                        <div class="field">
+                        <div class="field" id="tr-voice-id-container">
                           <label>Voice ID / tên voice gốc</label>
-                          <input type="text" id="tr-voice-id" placeholder="vd: Ngọc Linh, Kore, Aoede, vi-VN-HoaiMyNeural">
+                          <div style="display: flex; gap: 8px; width: 100%;">
+                            <select id="tr-voice-id-select" style="flex: 1;" onchange="document.getElementById('tr-voice-id').value = this.value"></select>
+                            <input type="text" id="tr-voice-id" style="flex: 1; display: none;" placeholder="vd: Ngọc Linh, Kore, Aoede, vi-VN-HoaiMyNeural">
+                            <button type="button" id="tr-voice-id-toggle" class="btn btn-secondary btn-sm" onclick="toggleTranscribeVoiceIdMode()" style="white-space: nowrap; padding: 4px 8px;">Nhập thủ công</button>
+                          </div>
                         </div>
                         <div class="field">
                           <label>Giới tính</label>

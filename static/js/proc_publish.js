@@ -149,24 +149,51 @@ function _pExtractPlainFromAss(text) {
   return parts.join(' ');
 }
 
+function _pVideoAiAnalysisHint() {
+  const payload = window._procVideoAiAnalysis;
+  if (!window._procUseAiAnalysis || !payload?.result) return '';
+  if (payload.analysis_text) return payload.analysis_text;
+  const r = payload.result || {};
+  const cover = Array.isArray(r.needs_cover) ? r.needs_cover : [];
+  const zones = Array.isArray(r.suggested_blur_zones) ? r.suggested_blur_zones : [];
+  const titles = r.title_suggestions || {};
+  return [
+    r.summary ? `Tóm tắt hình ảnh/video: ${r.summary}` : '',
+    r.visual_style ? `Đặc điểm video: ${r.visual_style}` : '',
+    r.source_language ? `Ngôn ngữ gốc phát hiện: ${r.source_language}` : '',
+    cover.length ? `Thành phần cần che: ${cover.map(x => x.label || x.type || '').filter(Boolean).join('; ')}` : '',
+    zones.length ? `Vùng che đề xuất: ${zones.map(x => x.label || x.reason || '').filter(Boolean).join('; ')}` : '',
+    titles.youtube ? `Gợi ý tiêu đề YouTube: ${titles.youtube}` : (titles.short ? `Gợi ý tiêu đề: ${titles.short}` : ''),
+    r.analysis_notes ? `Ghi chú AI đọc video: ${r.analysis_notes}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 async function pPubAnalyzeFromAss(assContent) {
   // Only run if auto-publish is enabled and ASS content is non-empty
   if (!document.getElementById('p-autopub-enabled')?.checked) return null;
   const plain = _pExtractPlainFromAss(assContent || '');
-  if (!plain) {
-    _appendProcLog?.('⚠ ASS trống — bỏ qua AI phân tích', 'warning');
+  const visualAnalysis = _pVideoAiAnalysisHint();
+  if (!plain && !visualAnalysis) {
+    _appendProcLog?.('⚠ ASS trống và chưa có phân tích video — bỏ qua AI phân tích', 'warning');
     return null;
   }
 
   const provider = document.getElementById('p-pub-ai-provider')?.value || 'deepseek';
   const targetLang = document.getElementById('proc-target-lang')?.value || 'vi';
-  _appendProcLog?.('🤖 AI đang phân tích nội dung ASS để tạo tiêu đề/hashtag...', 'info');
+  _appendProcLog?.(visualAnalysis
+    ? '🤖 AI đang dùng phân tích video + ASS để tạo tiêu đề/hashtag...'
+    : '🤖 AI đang phân tích nội dung ASS để tạo tiêu đề/hashtag...', 'info');
 
   try {
     const res = await fetch('/api/analyze_video_content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: plain.slice(0, 3000), provider, target_language: targetLang })
+      body: JSON.stringify({
+        content: plain.slice(0, 3000),
+        visual_analysis: visualAnalysis.slice(0, 2000),
+        provider,
+        target_language: targetLang
+      })
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || 'AI thất bại');

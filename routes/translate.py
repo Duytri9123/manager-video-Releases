@@ -158,6 +158,7 @@ def api_analyze_video_content():
 
     data = request.json or {}
     content = (data.get("content") or "").strip()
+    visual_analysis = (data.get("visual_analysis") or "").strip()
     provider = (data.get("provider") or "deepseek").strip().lower()
     target_lang = (data.get("target_language") or "vi").strip().lower()
 
@@ -170,7 +171,7 @@ def api_analyze_video_content():
     }
     target_lang_name = _LANG_NAMES_PROMPT.get(target_lang, "tiếng Việt")
 
-    if not content:
+    if not content and not visual_analysis:
         return jsonify({"ok": False, "error": "Nội dung trống"}), 400
 
     cfg = load_cfg()
@@ -194,6 +195,9 @@ NGÔN NGỮ ĐẦU RA: {target_lang_name} — Tất cả title, description, cap
 
 NỘI DUNG VIDEO:
 {content[:2000]}
+
+PHÂN TÍCH HÌNH ẢNH/VIDEO TỪ AI (nếu có):
+{visual_analysis[:1200] if visual_analysis else "Không có"}
 
 QUY TẮC VỀ TAGS/HASHTAGS:
 - Tags phải KHÔNG DẤU (ví dụ: "xuhuong", "haihuoc", "thunghiem", không phải "xu hướng")

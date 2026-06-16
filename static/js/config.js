@@ -634,6 +634,21 @@ async function parseCookie() {
   }
 }
 
+async function importCookieJsonFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const rawEl = document.getElementById('ck-raw');
+    if (rawEl) rawEl.value = raw;
+    await parseCookie();
+  } catch (e) {
+    toast('Loi import JSON: ' + e.message, 'error');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+
 async function saveCookies() {
   const get = id => document.getElementById(id)?.value?.trim() || '';
   const cookies = {

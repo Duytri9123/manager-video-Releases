@@ -35,6 +35,8 @@
     </div>
     <div class="btn-group mt-8">
       <button class="btn btn-primary btn-sm" onclick="parseCookie()">🔍 Phân tích</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-json-file')?.click()">Import JSON</button>
+      <input id="ck-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importCookieJsonFile(this)">
       <button class="btn btn-secondary btn-sm" onclick="autoFetch()">⚡ Tự động lấy</button>
     </div>
   </div>
