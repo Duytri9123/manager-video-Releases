@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """PySide6 desktop launcher for the Flask UI.
 
 The app is still served by Flask locally, but the user sees a real Qt
@@ -163,12 +163,12 @@ def _check_update_and_notify():
     _AUTO_UPDATE_CHECK_DONE = True
 
     try:
-        from utils.auto_updater import check_for_update
+        from utils.auto_updater import check_for_update, CURRENT_VERSION
         update = check_for_update(timeout=5.0)
         if update:
             msg = (
                 f"Da co ban cap nhat moi: v{update.latest_version}\n"
-                f"(Hien tai: v{update.latest_version.split('.')[0]}.{update.latest_version.split('.')[1]}.{update.latest_version.split('.')[2] if len(update.latest_version.split('.')) > 2 else '0'})\n\n"
+                f"(Hien tai: v{CURRENT_VERSION})\n\n"
                 f"{update.message}\n\n"
                 f"Ban co muon tai ve ngay bay gio?"
             )
