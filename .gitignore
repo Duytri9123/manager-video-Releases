@@ -65,3 +65,7 @@ static/dist/
 
 # Temporary uploads (AI/publish file buffer)
 temp_uploads/
+
+# Output directory — only version.json is tracked for auto-update
+output/*.exe
+output/*.zip

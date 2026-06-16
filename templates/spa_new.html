@@ -542,6 +542,11 @@ tr:hover td{background:var(--accent-light)}
       </a> -->
     </div>
     <div style="padding:8px;border-top:1px solid var(--border)">
+      <!-- Version info + Update check -->
+      <div id="sidebar-version" style="padding:6px 8px;margin-bottom:4px;border-radius:var(--radius-sm);background:var(--bg3);text-align:center;font-size:11px;color:var(--text-muted);cursor:pointer;transition:all .15s" onclick="checkForUpdate()" title="Bam de kiem tra cap nhat">
+        <span id="sidebar-version-text">v...</span>
+        <span id="sidebar-update-dot" style="display:none;width:7px;height:7px;border-radius:50%;background:#10b981;margin-left:4px;vertical-align:middle" title="Co ban cap nhat moi!"></span>
+      </div>
       <button onclick="toggleSidebar()" id="sidebar-toggle-btn" style="width:100%;padding:8px;background:none;border:none;color:var(--text-muted);cursor:pointer;border-radius:var(--radius-sm);transition:all .15s;font-size:13px" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background='none'">◀</button>
     </div>
   </nav>

@@ -1010,7 +1010,8 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     frame_blur_mode:      document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay',
     frame_logo_path:      (() => {
       // Logo uploaded via /api/upload_anti_fp_image — path stored in input
-      return document.getElementById('frame-logo-path')?.dataset?.serverPath || '';
+      const p = document.getElementById('frame-logo-path')?.dataset?.serverPath || '';
+      return /(^|[\\/])img[\\/]logo\.png$/i.test(p) ? '' : p;
     })(),
     frame_logo_size_pct:  (() => {
       const v = document.getElementById('frame-logo-size')?.value;
@@ -1020,6 +1021,8 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
     video_overlays:       (typeof window._collectVideoOverlays === 'function') ? window._collectVideoOverlays() : [],
+    ai_video_analysis:    (window._procUseAiAnalysis && window._procVideoAiAnalysis?.result) ? window._procVideoAiAnalysis.result : null,
+    ai_video_analysis_text: (window._procUseAiAnalysis && window._procVideoAiAnalysis?.analysis_text) ? window._procVideoAiAnalysis.analysis_text : '',
     // Thumbnail flow disabled by request.
     thumb_enabled:        false,
     thumb_mode:           'none',
@@ -1216,10 +1219,11 @@ async function _procImportAndAICaption() {
     if (autopubChk && !autopubChk.checked) autopubChk.checked = true;
 
     // Run AI analysis
-    if (assContent && typeof pPubAnalyzeFromAss === 'function') {
+    const hasVideoAi = !!(window._procUseAiAnalysis && window._procVideoAiAnalysis?.result);
+    if ((assContent || hasVideoAi) && typeof pPubAnalyzeFromAss === 'function') {
       await pPubAnalyzeFromAss(assContent);
     } else {
-      _appendProcLog('⚠ Không có ASS để AI phân tích — chuyển sang bước 5 để nhập thủ công', 'warning');
+      _appendProcLog('⚠ Không có ASS hoặc phân tích video để AI phân tích — chuyển sang bước 5 để nhập thủ công', 'warning');
     }
   } catch (e) {
     _appendProcLog('❌ AI caption thất bại: ' + e.message, 'error');
@@ -2637,6 +2641,93 @@ async function publishQueueToTarget(target) {
   }
 }
 
+/* ── Version / Auto-update ──────────────────────────────────────────────── */
+let _versionData = null;
+
+function loadVersionInfo() {
+  fetch('/api/version')
+    .then(r => r.json())
+    .then(data => {
+      _versionData = data;
+      const verEl = document.getElementById('sidebar-version-text');
+      const dotEl = document.getElementById('sidebar-update-dot');
+      if (verEl) {
+        verEl.textContent = 'v' + data.current_version;
+        verEl.style.color = 'var(--text2)';
+      }
+      if (data.update_available) {
+        if (dotEl) dotEl.style.display = 'inline-block';
+        if (verEl) {
+          verEl.style.color = '#10b981';
+          verEl.style.fontWeight = '700';
+        }
+        // Show toast notification
+        toast(
+          'Co ban cap nhat moi: v' + data.latest_version + ' — Bam vao v' + data.current_version + ' o goc trai de tai ve!',
+          'info',
+          10000
+        );
+      }
+    })
+    .catch(() => {
+      const verEl = document.getElementById('sidebar-version-text');
+      if (verEl) verEl.textContent = 'v?';
+    });
+}
+
+function checkForUpdate() {
+  const verEl = document.getElementById('sidebar-version-text');
+  if (verEl) {
+    verEl.textContent = '...';
+    verEl.style.color = 'var(--accent)';
+  }
+
+  fetch('/api/version')
+    .then(r => r.json())
+    .then(data => {
+      _versionData = data;
+      const dotEl = document.getElementById('sidebar-update-dot');
+
+      if (data.update_available) {
+        if (verEl) {
+          verEl.textContent = 'v' + data.current_version;
+          verEl.style.color = '#10b981';
+          verEl.style.fontWeight = '700';
+        }
+        if (dotEl) dotEl.style.display = 'inline-block';
+
+        const msg = data.message || 'Co phien ban moi';
+        const confirmed = confirm(
+          '🆕 Co ban cap nhat moi!\n\n' +
+          'Hien tai: v' + data.current_version + '\n' +
+          'Moi nhat: v' + data.latest_version + '\n\n' +
+          msg + '\n\n' +
+          'Ban co muon tai ve ngay bay gio?'
+        );
+        if (confirmed && data.download_url) {
+          window.open(data.download_url, '_blank');
+        }
+      } else {
+        if (verEl) {
+          verEl.textContent = 'v' + data.current_version;
+          verEl.style.color = 'var(--text2)';
+          verEl.style.fontWeight = '500';
+        }
+        if (dotEl) dotEl.style.display = 'none';
+        toast('Ban dang dung phien ban moi nhat v' + data.current_version, 'success', 3000);
+      }
+    })
+    .catch(err => {
+      if (verEl) {
+        verEl.textContent = 'v?';
+        verEl.style.color = 'var(--error)';
+        verEl.style.fontWeight = '500';
+      }
+      toast('Khong the kiem tra cap nhat: ' + (err.message || 'Loi mang'), 'error', 4000);
+    });
+}
+
+// ── DOM ready ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   applyI18n();
   switchPage('user');
@@ -2644,6 +2735,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') addManualUrl();
   });
   _initUserPageListeners();
+
+  // Load version info on startup
+  loadVersionInfo();
 
   document.getElementById('proc-file')?.addEventListener('change', async function() {
     const file = this.files && this.files[0] ? this.files[0] : null;

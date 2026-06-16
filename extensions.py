@@ -111,6 +111,33 @@ def create_app():
             }), 404
         return err
 
+    # ── Version / Auto-update endpoint ──
+    @app.route("/api/version")
+    def _api_version():
+        try:
+            from utils.auto_updater import CURRENT_VERSION, fetch_update_info
+            info = fetch_update_info(timeout=5.0)
+            if info:
+                return jsonify(info.to_dict())
+            return jsonify({
+                "current_version": CURRENT_VERSION,
+                "latest_version": None,
+                "download_url": None,
+                "message": None,
+                "update_available": False,
+                "error": "Không thể kiểm tra cập nhật (có thể do mạng)",
+            })
+        except Exception as e:
+            from utils.auto_updater import CURRENT_VERSION
+            return jsonify({
+                "current_version": CURRENT_VERSION,
+                "latest_version": None,
+                "download_url": None,
+                "message": None,
+                "update_available": False,
+                "error": str(e),
+            })
+
     # ── Debug endpoint: list currently-registered routes ──
     # Public so you can curl it without authenticating; paths only, no params.
     @app.route("/api/_routes")

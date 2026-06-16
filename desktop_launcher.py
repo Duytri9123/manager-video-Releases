@@ -20,6 +20,9 @@ from pathlib import Path
 APP_TITLE = "DuyTris Downloader"
 HOST = "127.0.0.1"
 
+# Auto-update check (runs in background on startup)
+_AUTO_UPDATE_CHECK_DONE = False
+
 
 def _app_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -152,6 +155,32 @@ def _launch_app_window(url: str) -> int:
     return qt_app.exec()
 
 
+def _check_update_and_notify():
+    """Check for updates in background and show MessageBox if found."""
+    global _AUTO_UPDATE_CHECK_DONE
+    if _AUTO_UPDATE_CHECK_DONE:
+        return
+    _AUTO_UPDATE_CHECK_DONE = True
+
+    try:
+        from utils.auto_updater import check_for_update
+        update = check_for_update(timeout=5.0)
+        if update:
+            msg = (
+                f"Da co ban cap nhat moi: v{update.latest_version}\n"
+                f"(Hien tai: v{update.latest_version.split('.')[0]}.{update.latest_version.split('.')[1]}.{update.latest_version.split('.')[2] if len(update.latest_version.split('.')) > 2 else '0'})\n\n"
+                f"{update.message}\n\n"
+                f"Ban co muon tai ve ngay bay gio?"
+            )
+            # Show MessageBox on main thread
+            result = ctypes.windll.user32.MessageBoxW(0, msg, "Cap nhat moi", 0x04)  # Yes/No
+            if result == 6:  # Yes
+                import webbrowser
+                webbrowser.open(update.download_url)
+    except Exception as e:
+        _log(f"Update check failed: {e}")
+
+
 def main() -> int:
     _prepare_stdio()
     os.chdir(APP_DIR)
@@ -186,6 +215,9 @@ def main() -> int:
 
         if not _wait_until_ready(url):
             raise RuntimeError(f"Server did not start at {url}")
+
+        # Check for updates (background thread, non-blocking)
+        threading.Thread(target=_check_update_and_notify, name="update-check", daemon=True).start()
 
         if os.getenv("DESKTOP_APP_NO_WINDOW") in ("1", "true", "yes"):
             while True:
