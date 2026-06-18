@@ -106,26 +106,64 @@ def _detect_cpu_info() -> dict:
 
     system = platform.system()
     if system == "Windows":
+        # 1. Native registry CPU name detection (extremely fast, no subprocess)
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as key:
+                name, _ = winreg.QueryValueEx(key, "ProcessorNameString")
+                info["name"] = name.strip()
+        except Exception:
+            pass
+
+        # 2. Try wmic for cores/threads (might fail on Windows 11 if disabled)
+        wmic_success = False
         try:
             r = subprocess.run(
                 ["wmic", "cpu", "get", "Name,NumberOfCores,NumberOfLogicalProcessors", "/format:list"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=3
             )
-            for line in r.stdout.strip().splitlines():
-                line = line.strip()
-                if line.startswith("Name="):
-                    info["name"] = line.split("=", 1)[1].strip()
-                elif line.startswith("NumberOfCores="):
-                    val = line.split("=", 1)[1].strip()
-                    if val.isdigit():
-                        info["cores"] = int(val)
-                elif line.startswith("NumberOfLogicalProcessors="):
-                    val = line.split("=", 1)[1].strip()
-                    if val.isdigit():
-                        info["threads"] = int(val)
+            if r.returncode == 0:
+                for line in r.stdout.strip().splitlines():
+                    line = line.strip()
+                    if line.startswith("Name=") and not info["name"]:
+                        info["name"] = line.split("=", 1)[1].strip()
+                    elif line.startswith("NumberOfCores="):
+                        val = line.split("=", 1)[1].strip()
+                        if val.isdigit():
+                            info["cores"] = int(val)
+                            wmic_success = True
+                    elif line.startswith("NumberOfLogicalProcessors="):
+                        val = line.split("=", 1)[1].strip()
+                        if val.isdigit():
+                            info["threads"] = int(val)
+                            wmic_success = True
         except Exception:
-            info["cores"] = os.cpu_count() or 4
-            info["threads"] = info["cores"]
+            pass
+
+        # 3. Fallback to PowerShell if wmic failed
+        if not wmic_success:
+            try:
+                r = subprocess.run(
+                    ["powershell", "-Command", "Get-CimInstance Win32_Processor | Select-Object NumberOfCores, NumberOfLogicalProcessors | ConvertTo-Json"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if r.returncode == 0 and r.stdout.strip():
+                    import json
+                    data = json.loads(r.stdout.strip())
+                    if isinstance(data, list):
+                        data = data[0]
+                    if "NumberOfCores" in data:
+                        info["cores"] = int(data["NumberOfCores"])
+                    if "NumberOfLogicalProcessors" in data:
+                        info["threads"] = int(data["NumberOfLogicalProcessors"])
+                    wmic_success = True
+            except Exception:
+                pass
+
+        if not wmic_success:
+            logical = os.cpu_count() or 4
+            info["threads"] = logical
+            info["cores"] = max(1, logical // 2)
     elif system == "Linux":
         try:
             with open("/proc/cpuinfo", "r") as f:
@@ -219,11 +257,35 @@ def _detect_amd_amf(ffmpeg: Optional[str] = None) -> bool:
 def _detect_ram_gb() -> float:
     """Phát hiện RAM (GB)."""
     system = platform.system()
-    try:
-        if system == "Windows":
+    if system == "Windows":
+        # 1. Try ctypes (native, most robust, no subprocess)
+        try:
+            import ctypes
+            from ctypes import wintypes
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", wintypes.DWORD),
+                    ("dwMemoryLoad", wintypes.DWORD),
+                    ("ullTotalPhys", ctypes.c_uint64),
+                    ("ullAvailPhys", ctypes.c_uint64),
+                    ("ullTotalPageFile", ctypes.c_uint64),
+                    ("ullAvailPageFile", ctypes.c_uint64),
+                    ("ullTotalVirtual", ctypes.c_uint64),
+                    ("ullAvailVirtual", ctypes.c_uint64),
+                    ("ullAvailExtendedVirtual", ctypes.c_uint64),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(stat)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                return round(stat.ullTotalPhys / (1024**3), 1)
+        except Exception:
+            pass
+
+        # 2. Try wmic
+        try:
             r = subprocess.run(
                 ["wmic", "computersystem", "get", "TotalPhysicalMemory", "/format:list"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=3
             )
             for line in r.stdout.strip().splitlines():
                 line = line.strip()
@@ -231,31 +293,92 @@ def _detect_ram_gb() -> float:
                     val = line.split("=", 1)[1].strip()
                     if val.isdigit():
                         return round(int(val) / (1024**3), 1)
-        elif system == "Linux":
+        except Exception:
+            pass
+
+        # 3. Try PowerShell
+        try:
+            r = subprocess.run(
+                ["powershell", "-Command", "(Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum"],
+                capture_output=True, text=True, timeout=5
+            )
+            val = r.stdout.strip()
+            if val.isdigit():
+                return round(int(val) / (1024**3), 1)
+        except Exception:
+            pass
+
+        # 4. Try alternate PowerShell
+        try:
+            r = subprocess.run(
+                ["powershell", "-Command", "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"],
+                capture_output=True, text=True, timeout=5
+            )
+            val = r.stdout.strip()
+            if val.isdigit():
+                return round(int(val) / (1024**3), 1)
+        except Exception:
+            pass
+    elif system == "Linux":
+        try:
             with open("/proc/meminfo", "r") as f:
                 for line in f:
                     if line.startswith("MemTotal:"):
                         kb = int(re.search(r"\d+", line).group())
                         return round(kb / (1024**2), 1)
-        elif system == "Darwin":
+        except Exception:
+            pass
+    elif system == "Darwin":
+        try:
             r = subprocess.run(["sysctl", "-n", "hw.memsize"],
                                capture_output=True, text=True, timeout=5)
             return round(int(r.stdout.strip()) / (1024**3), 1)
-    except Exception:
-        pass
+        except Exception:
+            pass
     return 8.0
 
 
 def _detect_machine_model() -> str:
     """Phát hiện model máy (ThinkPad, etc.)."""
     system = platform.system()
-    try:
-        if system == "Windows":
-            # Try getting both Model and SystemFamily for better detection
+    if system == "Windows":
+        # 1. Try Registry (native, BIOS product/manufacturer)
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\BIOS") as key:
+                try:
+                    model, _ = winreg.QueryValueEx(key, "SystemProductName")
+                except Exception:
+                    model = ""
+                try:
+                    family, _ = winreg.QueryValueEx(key, "SystemFamily")
+                except Exception:
+                    family = ""
+                try:
+                    manufacturer, _ = winreg.QueryValueEx(key, "SystemManufacturer")
+                except Exception:
+                    manufacturer = ""
+                
+                parts = []
+                if manufacturer and manufacturer.strip().lower() not in ("to be filled by o.e.m.", "system manufacturer"):
+                    parts.append(manufacturer.strip())
+                if family and family.strip().lower() not in ("to be filled by o.e.m.", "system family"):
+                    parts.append(family.strip())
+                if model and model.strip().lower() not in ("to be filled by o.e.m.", "system product name"):
+                    parts.append(model.strip())
+                
+                res = " ".join(parts).strip()
+                if res:
+                    return res
+        except Exception:
+            pass
+
+        # 2. Try wmic
+        try:
             model = ""
             r = subprocess.run(
                 ["wmic", "computersystem", "get", "Model", "/format:list"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=3
             )
             for line in r.stdout.strip().splitlines():
                 line = line.strip()
@@ -263,10 +386,9 @@ def _detect_machine_model() -> str:
                     model = line.split("=", 1)[1].strip()
                     break
 
-            # Also check SystemFamily (often has "ThinkPad" explicitly)
             r2 = subprocess.run(
                 ["wmic", "computersystem", "get", "SystemFamily", "/format:list"],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=3
             )
             family = ""
             for line in r2.stdout.strip().splitlines():
@@ -275,16 +397,31 @@ def _detect_machine_model() -> str:
                     family = line.split("=", 1)[1].strip()
                     break
 
-            # Combine: "ThinkPad T14 Gen 3" or use model code
             if family:
                 return f"{family} {model}".strip()
-            return model
-        elif system == "Linux":
+            if model:
+                return model
+        except Exception:
+            pass
+
+        # 3. Try PowerShell
+        try:
+            r = subprocess.run(
+                ["powershell", "-Command", "(Get-CimInstance Win32_ComputerSystem).Model"],
+                capture_output=True, text=True, timeout=5
+            )
+            model = r.stdout.strip()
+            if model:
+                return model
+        except Exception:
+            pass
+    elif system == "Linux":
+        try:
             model_file = Path("/sys/devices/virtual/dmi/id/product_name")
             if model_file.exists():
                 return model_file.read_text().strip()
-    except Exception:
-        pass
+        except Exception:
+            pass
     return ""
 
 

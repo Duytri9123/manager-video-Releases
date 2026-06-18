@@ -39,15 +39,10 @@ from typing import Callable, List, Optional
 
 # ── ffmpeg discovery ─────────────────────────────────────────────────────────
 def find_ffmpeg() -> str:
-    p = shutil.which("ffmpeg")
+    from utils.ffprobe import find_ffmpeg as utils_find_ffmpeg
+    p = utils_find_ffmpeg()
     if p:
         return p
-    # imageio_ffmpeg fallback
-    try:
-        import imageio_ffmpeg  # type: ignore
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception:
-        pass
     raise RuntimeError("Không tìm thấy ffmpeg. Cài ffmpeg và thêm vào PATH, hoặc pip install imageio-ffmpeg.")
 
 

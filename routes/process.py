@@ -907,7 +907,8 @@ def upload_anti_fp_image():
 
     img_type = str(request.form.get("type") or "overlay")
     safe_name = sanitize_filename(upload_file.filename)
-    upload_dir = ROOT / "temp_uploads"
+    from core_app import TEMP_UPLOADS_DIR
+    upload_dir = TEMP_UPLOADS_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     save_path = upload_dir / f"anti-fp-{img_type}-{safe_name}"
@@ -926,7 +927,8 @@ def upload_batch_video():
         return jsonify({"ok": False, "error": "No file provided"}), 400
 
     safe_name = sanitize_filename(upload_file.filename)
-    upload_dir = ROOT / "temp_uploads" / "batch_pub"
+    from core_app import TEMP_UPLOADS_DIR
+    upload_dir = TEMP_UPLOADS_DIR / "batch_pub"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     save_path = upload_dir / safe_name
@@ -1480,7 +1482,8 @@ def video_frame_upload():
 
     try:
         # Save uploaded video to temp
-        upload_dir = ROOT / "temp_uploads"
+        from core_app import TEMP_UPLOADS_DIR
+        upload_dir = TEMP_UPLOADS_DIR
         upload_dir.mkdir(parents=True, exist_ok=True)
         tmp_video = upload_dir / f"_frame_tmp_{video_file.filename}"
         video_file.save(str(tmp_video))
@@ -1532,7 +1535,8 @@ def burn_subtitle_only():
         return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
 
     # Save uploads
-    upload_dir = ROOT / "temp_uploads"
+    from core_app import TEMP_UPLOADS_DIR
+    upload_dir = TEMP_UPLOADS_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
     tmp_video = upload_dir / f"_burn_{video_file.filename}"
     tmp_ass = upload_dir / f"_burn_{ass_file.filename}"
@@ -1700,12 +1704,14 @@ def generate_thumbnail_ai():
     if not video_path_str:
         try:
             mp4_files = []
-            downloaded_dir = ROOT / "Downloaded"
+            from routes.content import get_download_dir
+            downloaded_dir = get_download_dir()
             if downloaded_dir.exists():
                 for p in downloaded_dir.rglob("*.mp4"):
                     if p.is_file():
                         mp4_files.append((p, p.stat().st_mtime))
-            temp_uploads_dir = ROOT / "temp_uploads"
+            from core_app import TEMP_UPLOADS_DIR
+            temp_uploads_dir = TEMP_UPLOADS_DIR
             if temp_uploads_dir.exists():
                 for p in temp_uploads_dir.rglob("*.mp4"):
                     if p.is_file():
@@ -1926,7 +1932,8 @@ def generate_thumbnail_ai():
         out_dir = vp.parent
         output_path = out_dir / f"{vp.stem}_ai_thumbnail.png"
     else:
-        out_dir = ROOT / "temp_uploads"
+        from core_app import TEMP_UPLOADS_DIR
+        out_dir = TEMP_UPLOADS_DIR
         out_dir.mkdir(parents=True, exist_ok=True)
         output_path = out_dir / f"ai_thumbnail_{int(time.time())}.png"
 

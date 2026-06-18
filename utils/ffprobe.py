@@ -13,6 +13,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -22,14 +23,82 @@ def _which(name: str) -> Optional[str]:
     return shutil.which(name) or shutil.which(name + ".exe")
 
 
-def find_ffprobe() -> Optional[str]:
-    """Locate ffprobe binary on PATH. Returns absolute path or None."""
-    return _which("ffprobe")
-
-
 def find_ffmpeg() -> Optional[str]:
-    """Locate ffmpeg binary on PATH. Returns absolute path or None."""
-    return _which("ffmpeg")
+    """Locate ffmpeg binary on PATH or local directories. Returns absolute path or None."""
+    # 1. Search PATH
+    p = _which("ffmpeg")
+    if p:
+        return p
+
+    # 2. Local search paths (frozen launcher folder or root cli folder)
+    search_dirs = []
+    
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        search_dirs.append(exe_dir)
+        search_dirs.append(exe_dir / "cli")
+        
+    file_dir = Path(__file__).resolve().parent
+    # file_dir is toolvideo/utils/
+    # parent is toolvideo/
+    root_dir = file_dir.parent
+    search_dirs.append(root_dir)
+    search_dirs.append(root_dir / "cli")
+    search_dirs.append(file_dir)
+    
+    for d in search_dirs:
+        for name in ("ffmpeg", "ffmpeg.exe"):
+            f = d / name
+            if f.is_file():
+                return str(f)
+
+    # 3. Fallback to imageio-ffmpeg
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+
+    return None
+
+
+def find_ffprobe() -> Optional[str]:
+    """Locate ffprobe binary on PATH or local directories. Returns absolute path or None."""
+    # 1. Search PATH
+    p = _which("ffprobe")
+    if p:
+        return p
+
+    # 2. Local search paths
+    search_dirs = []
+    
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        search_dirs.append(exe_dir)
+        search_dirs.append(exe_dir / "cli")
+        
+    file_dir = Path(__file__).resolve().parent
+    root_dir = file_dir.parent
+    search_dirs.append(root_dir)
+    search_dirs.append(root_dir / "cli")
+    search_dirs.append(file_dir)
+    
+    for d in search_dirs:
+        for name in ("ffprobe", "ffprobe.exe"):
+            f = d / name
+            if f.is_file():
+                return str(f)
+
+    # 3. Fallback: look in the same directory as the discovered ffmpeg binary
+    ffmpeg = find_ffmpeg()
+    if ffmpeg:
+        ffmpeg_path = Path(ffmpeg)
+        for name in ("ffprobe", "ffprobe.exe"):
+            f = ffmpeg_path.parent / name
+            if f.is_file():
+                return str(f)
+
+    return None
 
 
 _DUR_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+)\.(\d+)")

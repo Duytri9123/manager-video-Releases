@@ -128,7 +128,8 @@ def upload_image():
         return jsonify({"ok": False, "error": "Only image files allowed (PNG, JPG, JPEG, WEBP)"}), 400
 
     try:
-        upload_dir = ROOT / "temp_uploads"
+        from core_app import TEMP_UPLOADS_DIR
+        upload_dir = TEMP_UPLOADS_DIR
         upload_dir.mkdir(exist_ok=True)
 
         ext = Path(file.filename).suffix
@@ -142,46 +143,81 @@ def upload_image():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── /api/browse-folder ────────────────────────────────────────────────────────
+@bp.route("/api/browse-folder", methods=["POST"])
+def browse_folder():
+    import subprocess
+
+    ps_script = (
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "$b = New-Object System.Windows.Forms.FolderBrowserDialog; "
+        "$b.Description = 'Chọn thư mục lưu'; "
+        "$b.ShowNewFolderButton = $true; "
+        "$f = New-Object System.Windows.Forms.Form; "
+        "$f.TopMost = $true; $f.Width = 1; $f.Height = 1; "
+        "$f.WindowState = [System.Windows.Forms.FormWindowState]::Minimized; "
+        "$f.Show(); $f.Activate(); "
+        "$r = $b.ShowDialog($f); "
+        "$f.Close(); "
+        "if ($r -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $b.SelectedPath }"
+    )
+
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Sta", "-Command", ps_script],
+            capture_output=True, text=True, timeout=120, encoding="utf-8"
+        )
+        path = result.stdout.strip()
+        return jsonify({"path": path})
+    except Exception as e:
+        return jsonify({"path": "", "error": str(e)})
+
+
+# ── /temp_uploads/<filename> ──────────────────────────────────────────────────
+@bp.route("/temp_uploads/<path:filename>")
+def serve_temp_uploads(filename):
+    from flask import send_from_directory
+    from core_app import TEMP_UPLOADS_DIR
+    return send_from_directory(TEMP_UPLOADS_DIR, filename)
+
+
 # ── /api/browse-file ──────────────────────────────────────────────────────────
 @bp.route("/api/browse-file", methods=["POST"])
 def browse_file():
     import subprocess
-    import sys
-    import json as _json
 
     data = request.get_json(silent=True) or {}
     file_filter = data.get("filter", "all")
-    filetypes_arg = "image" if file_filter == "image" else "all"
 
-    script = """
-import tkinter as tk
-from tkinter import filedialog
-import sys, json
+    if file_filter == "image":
+        filter_str = "Image files (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp|All files (*.*)|*.*"
+    else:
+        filter_str = "All files (*.*)|*.*"
 
-ft = sys.argv[1] if len(sys.argv) > 1 else 'all'
-root = tk.Tk()
-root.withdraw()
-root.lift()
-root.attributes('-topmost', True)
-
-if ft == 'image':
-    filetypes = [('Image files', '*.png *.jpg *.jpeg *.webp'), ('All files', '*.*')]
-else:
-    filetypes = [('All files', '*.*')]
-
-path = filedialog.askopenfilename(filetypes=filetypes)
-root.destroy()
-print(json.dumps({'path': path or ''}))
-"""
+    ps_script = (
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "$b = New-Object System.Windows.Forms.OpenFileDialog; "
+        "$b.Title = 'Chọn file'; "
+        "$b.Multiselect = $false; "
+        f"$b.Filter = '{filter_str}'; "
+        "$f = New-Object System.Windows.Forms.Form; "
+        "$f.TopMost = $true; $f.Width = 1; $f.Height = 1; "
+        "$f.WindowState = [System.Windows.Forms.FormWindowState]::Minimized; "
+        "$f.Show(); $f.Activate(); "
+        "$r = $b.ShowDialog($f); "
+        "$f.Close(); "
+        "if ($r -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $b.FileName }"
+    )
 
     try:
         result = subprocess.run(
-            [sys.executable, "-c", script, filetypes_arg],
-            capture_output=True, text=True, timeout=120,
+            ["powershell", "-NoProfile", "-Sta", "-Command", ps_script],
+            capture_output=True, text=True, timeout=120, encoding="utf-8"
         )
-        out = result.stdout.strip()
-        data_out = _json.loads(out) if out else {"path": ""}
-        return jsonify(data_out)
+        path = result.stdout.strip()
+        return jsonify({"path": path})
     except Exception as e:
         return jsonify({"path": "", "error": str(e)})
 

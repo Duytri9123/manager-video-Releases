@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """PySide6 desktop launcher for the Flask UI.
 
 The app is still served by Flask locally, but the user sees a real Qt
@@ -121,7 +121,9 @@ def _wait_until_ready(url: str, timeout: float = 45.0) -> bool:
 
 def _launch_app_window(url: str) -> int:
     os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
-    os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu")
+    # Enable GPU acceleration for a smooth UI experience. Fall back only if requested.
+    if os.getenv("DISABLE_GPU_UI") == "1":
+        os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu")
 
     from PySide6.QtCore import QUrl
     from PySide6.QtGui import QIcon

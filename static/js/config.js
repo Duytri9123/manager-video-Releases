@@ -725,3 +725,16 @@ async function autoFetchCookie() {
     toast('Lỗi: ' + e.message, 'error');
   }
 }
+
+async function browseSavePath() {
+  try {
+    const res = await fetch('/api/browse-folder', { method: 'POST' });
+    const data = await res.json();
+    if (data && data.path) {
+      document.getElementById('cfg-path').value = data.path;
+      toast('Đã chọn thư mục lưu: ' + data.path, 'success');
+    }
+  } catch (e) {
+    toast('Lỗi chọn thư mục: ' + e.message, 'error');
+  }
+}

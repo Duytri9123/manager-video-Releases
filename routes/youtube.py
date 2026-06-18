@@ -146,7 +146,8 @@ def youtube_upload():
     else:
         video_file = request.files.get("video_file")
         if video_file:
-            temp_dir = Path("temp_uploads")
+            from core_app import TEMP_UPLOADS_DIR
+            temp_dir = TEMP_UPLOADS_DIR
             temp_dir.mkdir(exist_ok=True)
             video_path = str(temp_dir / video_file.filename)
             video_file.save(video_path)

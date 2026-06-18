@@ -107,9 +107,11 @@ _dl_running = False
 _tr_running = False
 
 # ── Shared dirs ──────────────────────────────────────────────────────────────
-VOICES_DIR = ROOT / "voices"
+import tempfile
+app_data_dir = Path(os.environ.get("APPDATA") or tempfile.gettempdir()) / "DuyTrisDownloader"
+VOICES_DIR = app_data_dir / "voices"
 VOICES_DIR.mkdir(parents=True, exist_ok=True)
-TEMP_UPLOADS_DIR = ROOT / "temp_uploads"
+TEMP_UPLOADS_DIR = app_data_dir / "temp_uploads"
 TEMP_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 

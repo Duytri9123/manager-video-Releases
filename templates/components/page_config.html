@@ -167,7 +167,10 @@
             <div class="grid-2">
               <div class="field">
                 <label>Thư mục lưu</label>
-                <input type="text" id="cfg-path" value="./Downloaded/" placeholder="./Downloaded/">
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="cfg-path" value="./Downloaded/" placeholder="./Downloaded/" style="flex: 1;">
+                  <button type="button" class="btn btn-secondary" onclick="browseSavePath()" style="white-space: nowrap; height: 38px;">📁 Chọn</button>
+                </div>
               </div>
               <div class="field">
                 <label>Proxy</label>

@@ -152,18 +152,47 @@ _cli_token_cache: Optional[str] = None
 # ─── Machine ID helpers (mirror node-machine-id used by 9Router) ──────────
 def _read_windows_machine_guid() -> Optional[str]:
     """Return the lowercase MachineGuid from HKLM\\SOFTWARE\\Microsoft\\Cryptography."""
+    # 1. Try winreg (native Win32 API, no subprocess, works on 32-bit / 64-bit redirection)
+    try:
+        import winreg
+        # Try 64-bit registry view first, then default
+        for access in (winreg.KEY_READ | winreg.KEY_WOW64_64KEY, winreg.KEY_READ):
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography", 0, access) as key:
+                    guid, _ = winreg.QueryValueEx(key, "MachineGuid")
+                    if guid:
+                        return guid.strip().lower()
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # 2. Fallback to reg query
     try:
         out = subprocess.check_output(
             ["reg", "query", r"HKLM\SOFTWARE\Microsoft\Cryptography", "/v", "MachineGuid"],
             text=True, stderr=subprocess.DEVNULL, timeout=4,
         )
+        for line in out.splitlines():
+            if "MachineGuid" in line:
+                parts = line.strip().split()
+                if parts:
+                    return parts[-1].strip().lower()
     except Exception:
-        return None
-    for line in out.splitlines():
-        if "MachineGuid" in line:
-            parts = line.strip().split()
-            if parts:
-                return parts[-1].strip().lower()
+        pass
+
+    # 3. Fallback to PowerShell
+    try:
+        out = subprocess.check_output(
+            ["powershell", "-Command", "(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography').MachineGuid"],
+            text=True, stderr=subprocess.DEVNULL, timeout=5,
+        )
+        guid = out.strip()
+        if guid:
+            return guid.lower()
+    except Exception:
+        pass
+
     return None
 
 

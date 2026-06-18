@@ -45,6 +45,7 @@ for package in (
     "playwright",
     "pyngrok",
     "google.genai",
+    "imageio_ffmpeg",
 ):
     datas += collect_data_files(package)
 

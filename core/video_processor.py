@@ -40,18 +40,8 @@ FISH_DEFAULT_MODEL = "s2-pro"  # backbone: "s2-pro" (recommended) or "s1"
 
 # ── ffmpeg helper ─────────────────────────────────────────────────────────────
 def find_ffmpeg() -> Optional[str]:
-    p = shutil.which("ffmpeg")
-    if p:
-        return p
-    local = Path(__file__).parent.parent / "cli" / "ffmpeg.exe"
-    if local.exists():
-        return str(local)
-    try:
-        import imageio_ffmpeg
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except ImportError:
-        pass
-    return None
+    from utils.ffprobe import find_ffmpeg as utils_find_ffmpeg
+    return utils_find_ffmpeg()
 
 
 def run_ffmpeg(args: list, desc: str = "", timeout: int = 600) -> tuple[bool, str]:
