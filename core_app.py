@@ -393,7 +393,7 @@ class SocketProgress:
 
 # ── SPA render helper ─────────────────────────────────────────────────────────
 def _render_spa(active_tab="user"):
-    return render_template("spa_new.html", active=active_tab, jsv=int(time.time()))
+    return render_template("base.html", active=active_tab, jsv=int(time.time()))
 
 
 # ── Whisper preload ───────────────────────────────────────────────────────────
@@ -432,3 +432,12 @@ def _reset_youtube_uploader():
     """Reset singleton so next call re-reads client_secrets.json."""
     global _youtube_uploader
     _youtube_uploader = None
+
+
+@app.route("/page-static/<page>/<path:filename>")
+def serve_page_static(page, filename):
+    import os
+    from flask import send_from_directory
+    directory = os.path.join(ROOT, "templates", "pages", page)
+    return send_from_directory(directory, filename)
+

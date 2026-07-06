@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     # Preload whisper model in background
     try:
-        from routes.process import _preload_whisper_model
+        from templates.pages.process.route import _preload_whisper_model
         threading.Thread(target=_preload_whisper_model, daemon=True).start()
     except Exception:
         pass

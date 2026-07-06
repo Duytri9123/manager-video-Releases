@@ -20,31 +20,31 @@ from core_app import LOGGER, STATE_DIR, app, socketio
 
 # (module_path, blueprint_attr, friendly_name)
 _BLUEPRINTS: List[Tuple[str, str, str]] = [
-    ("routes.pages",      "bp", "pages"),
-    ("routes.queue",      "bp", "queue"),
-    ("routes.user",       "bp", "user"),
-    ("routes.download",   "bp", "download"),
-    ("routes.translate",  "bp", "translate"),
-    ("routes.tts",        "bp", "tts"),
-    ("routes.transcribe", "bp", "transcribe"),
-    ("routes.process",    "bp", "process"),
-    ("routes.youtube",    "bp", "youtube"),
-    ("routes.config",     "bp", "config"),
-    ("routes.content",    "bp", "content"),
-    ("routes.facebook",   "bp", "facebook"),
-    ("routes.accounts",   "bp", "accounts"),
-    ("routes.tiktok",     "bp", "tiktok"),
+    ("templates.pages.pages_route",      "bp", "pages"),
+    ("templates.pages.download.queue",      "bp", "queue"),
+    ("templates.pages.user.route",       "bp", "user"),
+    ("templates.pages.download.route",   "bp", "download"),
+    ("templates.pages.transcribe.translate",  "bp", "translate"),
+    ("templates.pages.transcribe.tts",        "bp", "tts"),
+    ("templates.pages.transcribe.route", "bp", "transcribe"),
+    ("templates.pages.process.route",    "bp", "process"),
+    ("templates.pages.publish.youtube",    "bp", "youtube"),
+    ("templates.pages.config.route",     "bp", "config"),
+    ("templates.pages.content.route",    "bp", "content"),
+    ("templates.pages.publish.facebook",   "bp", "facebook"),
+    ("templates.pages.publish.accounts",   "bp", "accounts"),
+    ("templates.pages.publish.tiktok",     "bp", "tiktok"),
     # New blueprints (proxies/routers/movie/story)
-    ("routes.proxies",    "bp", "proxies"),
-    ("routes.movie",      "bp", "movie"),
-    ("routes.story",      "bp", "story"),
-    ("routes.chatbot",    "bp", "chatbot"),
-    ("routes.videogen",   "bp", "videogen"),
-    ("routes.idea2video", "bp", "idea2video"),
-    ("routes.ai_studio",  "bp", "ai_studio"),
-    ("routes.n8n",        "bp", "n8n"),
-    ("routes.sales",      "bp", "sales"),
-    ("routes.ads",        "bp", "ads"),
+    ("templates.pages.proxies.route",    "bp", "proxies"),
+    ("templates.pages.movie.route",      "bp", "movie"),
+    ("templates.pages.story.route",      "bp", "story"),
+    ("templates.pages.chat.route",    "bp", "chatbot"),
+    ("templates.pages.videogen.route",   "bp", "videogen"),
+    ("templates.pages.idea2video.route", "bp", "idea2video"),
+    ("templates.pages.ai_studio.route",  "bp", "ai_studio"),
+    ("templates.pages.n8n.route",        "bp", "n8n"),
+    ("templates.pages.sales.route",      "bp", "sales"),
+    ("templates.pages.ads.route",        "bp", "ads"),
 ]
 
 _REGISTERED: List[str] = []
@@ -78,7 +78,7 @@ def create_app():
     # SocketIO handlers (only register if download blueprint loaded successfully)
     if "download" in _REGISTERED:
         try:
-            from routes.download import register_socketio_handlers
+            from templates.pages.download.route import register_socketio_handlers
             register_socketio_handlers()
         except Exception as exc:
             LOGGER.error("Failed to register socket.io handlers: %s", exc)

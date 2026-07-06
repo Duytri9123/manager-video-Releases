@@ -1,0 +1,129 @@
+<!-- PAGE: n8n ORCHESTRATION (drag-and-drop flow builder) -->
+<div id="page-n8n" class="page">
+  
+
+  <div id="n8n-builder">
+    <!-- Toolbar -->
+    <div id="n8n-toolbar">
+      <input type="text" id="n8n-wf-name" placeholder="Tên workflow" value="Workflow của tôi">
+      <button class="btn btn-secondary btn-sm" onclick="n8nShowTemplates()" title="Chọn flow mẫu có sẵn">📋 Mẫu</button>
+      <button class="btn btn-primary btn-sm" onclick="n8nFlowSave()">💾 Lưu</button>
+      <button class="btn btn-success btn-sm" id="btn-n8n-run" onclick="n8nFlowRun()">▶️ Chạy</button>
+      <button class="btn btn-secondary btn-sm" onclick="n8nFlowFit()">🎯 Canh giữa</button>
+      <button class="btn btn-secondary btn-sm" onclick="n8nFlowClear()">🗑 Xóa hết</button>
+      <div class="spacer"></div>
+      <span id="n8n-cron-badge" class="badge badge-gray text-xs hidden">⏰ Chưa bật</span>
+      <button class="btn btn-secondary btn-sm" onclick="n8nShowSchedule()" title="Bật/tắt chạy tự động theo lịch">⏰ Lịch</button>
+      <button class="btn btn-secondary btn-sm" onclick="n8nZoom(0.1)">＋</button>
+      <span id="n8n-zoom-label" class="text-xs text-muted" style="width:42px;text-align:center">100%</span>
+      <button class="btn btn-secondary btn-sm" onclick="n8nZoom(-0.1)">－</button>
+      <button class="btn btn-secondary btn-sm" onclick="n8nToggleConn()">⚙️ Kết nối</button>
+    </div>
+
+    <!-- Stage -->
+    <div id="n8n-stage">
+      <!-- Palette -->
+      <div id="n8n-palette">
+        <div class="n8n-pal-group">Trigger</div>
+        <div class="n8n-pal-item" draggable="true" data-type="trigger.manual"><span class="ic">⚡</span>Bắt đầu thủ công</div>
+        <div class="n8n-pal-item" draggable="true" data-type="trigger.schedule"><span class="ic">⏰</span>Lịch (Cron)</div>
+        <div class="n8n-pal-item" draggable="true" data-type="trigger.webhook"><span class="ic">🪝</span>Webhook</div>
+
+        <div class="n8n-pal-group">toolvideo</div>
+        <div class="n8n-pal-item" draggable="true" data-type="tv.user_info"><span class="ic">🔍</span>Thông tin user</div>
+        <div class="n8n-pal-item" draggable="true" data-type="tv.user_videos"><span class="ic">🎞</span>Lấy video user</div>
+        <div class="n8n-pal-item" draggable="true" data-type="tv.pick_videos"><span class="ic">✅</span>Chọn video</div>
+        <div class="n8n-pal-item" draggable="true" data-type="tv.queue_add"><span class="ic">➕</span>Thêm hàng chờ</div>
+        <div class="n8n-pal-item" draggable="true" data-type="tv.process"><span class="ic">🎬</span>Xử lý video</div>
+        <div class="n8n-pal-item" draggable="true" data-type="tv.publish"><span class="ic">📤</span>Đăng video</div>
+
+        <div class="n8n-pal-group">AI / Giọng nói</div>
+        <div class="n8n-pal-item" draggable="true" data-type="ai.chat"><span class="ic">🤖</span>AI Chat (LLM)</div>
+        <div class="n8n-pal-item" draggable="true" data-type="ai.translate"><span class="ic">🌍</span>Dịch (AI)</div>
+        <div class="n8n-pal-item" draggable="true" data-type="ai.tts"><span class="ic">🔊</span>Đọc văn bản (TTS)</div>
+        <div class="n8n-pal-item" draggable="true" data-type="ai.tts_file"><span class="ic">💾</span>TTS → File MP3</div>
+        <div class="n8n-pal-item" draggable="true" data-type="ai.stt"><span class="ic">🎤</span>Giọng nói → Text</div>
+
+        <div class="n8n-pal-group">Logic</div>
+        <div class="n8n-pal-item" draggable="true" data-type="logic.if"><span class="ic">🔀</span>IF (Rẽ nhánh)</div>
+        <div class="n8n-pal-item" draggable="true" data-type="logic.loop"><span class="ic">🔁</span>Lặp (Loop)</div>
+
+        <div class="n8n-pal-group">Hành động</div>
+        <div class="n8n-pal-item" draggable="true" data-type="action.n8n"><span class="ic">🔗</span>Trigger n8n</div>
+        <div class="n8n-pal-item" draggable="true" data-type="action.http"><span class="ic">🌐</span>HTTP Request</div>
+        <div class="n8n-pal-item" draggable="true" data-type="util.notify"><span class="ic">🔔</span>Thông báo</div>
+      </div>
+
+      <!-- Canvas -->
+      <div id="n8n-canvas-wrap">
+        <div id="n8n-empty-hint" class="n8n-empty-hint">Kéo node từ cột trái thả vào đây (hoặc double-click) · nối dây từ chấm phải → chấm trái · phím Delete để xóa</div>
+        <div id="n8n-canvas">
+          <svg id="n8n-wires"></svg>
+          <!-- nodes injected here -->
+        </div>
+      </div>
+
+      <!-- Inspector -->
+      <div id="n8n-inspector">
+        <div class="flex-between mb-8">
+          <span class="section-title" style="margin:0">Thuộc tính node</span>
+          <button class="btn-icon" onclick="n8nCloseInspector()">✕</button>
+        </div>
+        <div id="n8n-inspector-body"></div>
+        <div id="n8n-inspector-output" class="hidden mt-8">
+          <div class="section-title">Output (sau khi chạy)</div>
+          <pre id="n8n-inspector-output-pre" class="log-box" style="white-space:pre-wrap;height:auto;max-height:180px;font-size:11px"></pre>
+        </div>
+        <button class="btn btn-danger btn-sm mt-12" style="width:100%" onclick="n8nDeleteSelected()">🗑 Xóa node</button>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div id="n8n-log"><div class="n8n-log-line text-muted">Nhật ký chạy sẽ hiện ở đây…</div></div>
+  </div>
+
+  <!-- Connection settings (collapsible) -->
+  <div class="card card-collapsible collapsed mt-12" id="n8n-conn-card">
+    <div class="card-header" onclick="this.parentElement.classList.toggle('collapsed')">
+      <span class="card-title">⚙️ Kết nối n8n &amp; Endpoint</span>
+      <div class="card-actions">
+        <span id="n8n-status" class="status-bar"><span class="dot dot-gray"></span><span>Chưa kiểm tra</span></span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="page-layout-2col">
+        <div>
+          <label class="toggle-wrap mb-12">
+            <input type="checkbox" class="toggle-input" id="n8n-enabled">
+            <div class="toggle"></div><span class="toggle-label">Bật tích hợp n8n</span>
+          </label>
+          <div class="field"><label>n8n Base URL</label>
+            <input type="text" id="n8n-base-url" placeholder="http://localhost:5678"></div>
+          <div class="field"><label>n8n API Key <span class="text-xs text-muted">(để liệt kê workflow)</span></label>
+            <div style="display:flex;gap:6px">
+              <input type="password" id="n8n-api-key" placeholder="••••••••" autocomplete="off">
+              <button class="btn btn-secondary btn-sm" onclick="n8nTogglePw()">👁</button>
+            </div>
+            <div id="n8n-api-key-env" class="text-xs text-muted mt-4 hidden">🔒 Dùng key từ env N8N_API_KEY.</div>
+          </div>
+          <div class="field" style="max-width:160px"><label>Timeout (giây)</label>
+            <input type="number" id="n8n-timeout" min="1" max="120" value="30"></div>
+          <div class="btn-group">
+            <button class="btn btn-primary btn-sm" id="btn-n8n-save" onclick="n8nSaveConfig()">💾 Lưu</button>
+            <button class="btn btn-secondary btn-sm" onclick="n8nTest()">🔌 Kiểm tra</button>
+          </div>
+        </div>
+        <div>
+          <div class="field"><label>Public Base URL (cho n8n gọi về)</label>
+            <input type="text" id="n8n-public-base" readonly></div>
+          <div class="text-xs text-muted mb-8" id="n8n-endpoints-note"></div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Method</th><th>Path</th></tr></thead>
+              <tbody id="n8n-endpoints-body"><tr><td colspan="2" class="empty-state">Đang tải...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

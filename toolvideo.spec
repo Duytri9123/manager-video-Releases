@@ -25,6 +25,9 @@ datas = [
 binaries = []
 hiddenimports = []
 
+# Blueprints are imported dynamically in extensions.py.
+hiddenimports += collect_submodules("routes")
+
 python_dll = Path(sys.base_prefix) / f"python{sys.version_info.major}{sys.version_info.minor}.dll"
 if python_dll.exists():
     binaries.append((str(python_dll), "."))
@@ -32,11 +35,9 @@ if python_dll.exists():
 # Rely on PyInstaller auto-detection from desktop_launcher.py imports.
 # Dynamic imports are covered by hiddenimports below.
 for package in (
-    "av",
     "ctranslate2",
     "onnxruntime",
     "tokenizers",
-    "imageio_ffmpeg",
 ):
     binaries += collect_dynamic_libs(package)
 
@@ -45,18 +46,15 @@ for package in (
     "playwright",
     "pyngrok",
     "google.genai",
-    "imageio_ffmpeg",
 ):
     datas += collect_data_files(package)
 
 for distribution in (
-    "av",
     "ctranslate2",
     "faster-whisper",
     "google-api-python-client",
     "google-auth-oauthlib",
     "google-genai",
-    "imageio-ffmpeg",
     "onnxruntime",
     "playwright",
     "pyngrok",
@@ -78,7 +76,6 @@ hiddenimports += [
     "PySide6.QtWebEngineWidgets",
     "PySide6.QtWidgets",
     "aiofiles",
-    "av",
     "ctranslate2",
     "edge_tts",
     "engineio.async_drivers.threading",
@@ -87,7 +84,6 @@ hiddenimports += [
     "googleapiclient.discovery",
     "googleapiclient.discovery_cache",
     "google_auth_oauthlib.flow",
-    "imageio_ffmpeg",
     "onnxruntime",
     "playwright.async_api",
     "pyngrok.ngrok",
@@ -147,7 +143,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -162,7 +158,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="DuyTrisDownloader",
 )

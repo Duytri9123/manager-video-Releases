@@ -1,0 +1,241 @@
+<!-- PAGE: COOKIES -->
+<div id="page-cookies" class="page">
+
+  <!-- Cookie tabs switcher -->
+  <div class="card mb-4" style="padding:8px">
+    <div class="platform-tabs" style="margin:0">
+      <div class="platform-tab active cookie-tab" data-cookie-platform="tiktok" onclick="switchCookieTab('tiktok')">🎵 TikTok / Douyin</div>
+      <div class="platform-tab cookie-tab" data-cookie-platform="youtube" onclick="switchCookieTab('youtube')">📺 YouTube</div>
+      <div class="platform-tab cookie-tab" data-cookie-platform="facebook" onclick="switchCookieTab('facebook')">👥 Facebook</div>
+    </div>
+  </div>
+
+  <!-- TikTok / Douyin Cookie Panel -->
+  <div class="cookie-tab-panel" data-cookie-platform="tiktok">
+    <!-- Mode toggle card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🍪 Chế độ Cookie TikTok / Douyin</span>
+        <div class="card-actions">
+          <span class="badge badge-accent" id="ck-mode-badge" data-i18n="lbl_cookie_default">Mặc định</span>
+        </div>
+      </div>
+      <div class="flex-between mb-8">
+        <div>
+          <div class="text-sm" id="ck-mode-desc" data-i18n="lbl_cookie_default_desc">Sử dụng cookie mặc định từ hệ thống.</div>
+        </div>
+        <label class="toggle-wrap">
+          <input type="checkbox" class="toggle-input" id="ck-mode-toggle" onchange="onCookieModeChange()">
+          <div class="toggle"></div>
+          <span class="toggle-label text-sm">Cookie tùy chỉnh</span>
+        </label>
+      </div>
+      <div id="ck-custom-wrap" style="display:none">
+        <div class="alert-info">Đang dùng cookie tùy chỉnh. Điền các trường bên dưới và nhấn Lưu.</div>
+      </div>
+    </div>
+
+    <!-- Parse card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📋 Phân tích Cookie</span>
+      </div>
+      <div class="field">
+        <label>Dán chuỗi cookie thô vào đây</label>
+        <textarea id="ck-raw" rows="3" placeholder="ttwid=xxx; odin_tt=xxx; passport_csrf_token=xxx; ..."></textarea>
+      </div>
+      <div class="btn-group mt-8">
+        <button class="btn btn-primary btn-sm" onclick="parseCookie()">🔍 Phân tích</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-json-file')?.click()">Import JSON</button>
+        <input id="ck-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importCookieJsonFile(this)">
+        <button class="btn btn-secondary btn-sm" onclick="autoFetch()">⚡ Tự động lấy</button>
+      </div>
+    </div>
+
+    <!-- Fields card -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🔑 Các trường Cookie</span>
+        <div class="card-actions">
+          <div class="status-bar" id="ck-status">
+            <span class="dot dot-gray"></span>
+            <span class="text-xs text-muted">Chưa kiểm tra</span>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="field">
+          <label>ttwid</label>
+          <input type="text" id="ck-ttwid" placeholder="ttwid value...">
+        </div>
+        <div class="field">
+          <label>odin_tt</label>
+          <input type="text" id="ck-odin_tt" placeholder="odin_tt value...">
+        </div>
+        <div class="field">
+          <label>passport_csrf_token</label>
+          <input type="text" id="ck-passport_csrf_token" placeholder="csrf token...">
+        </div>
+        <div class="field">
+          <label>s_v_web_id</label>
+          <input type="text" id="ck-s_v_web_id" placeholder="s_v_web_id value...">
+        </div>
+        <div class="field">
+          <label>__ac_nonce</label>
+          <input type="text" id="ck-__ac_nonce" placeholder="__ac_nonce value...">
+        </div>
+        <div class="field">
+          <label>__ac_signature</label>
+          <input type="text" id="ck-__ac_signature" placeholder="__ac_signature value...">
+        </div>
+        <div class="field">
+          <label>UIFID</label>
+          <input type="text" id="ck-UIFID" placeholder="UIFID value...">
+        </div>
+        <div class="field">
+          <label>bd_ticket_guard_client_web_domain</label>
+          <input type="text" id="ck-bd_ticket_guard_client_web_domain" placeholder="domain value...">
+        </div>
+      </div>
+      <div class="btn-group mt-12">
+        <button class="btn btn-primary" onclick="saveCookies()">💾 Lưu Cookie TikTok</button>
+        <button class="btn btn-secondary" onclick="validateCookie()">✅ Kiểm tra hợp lệ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- YouTube Cookie Panel -->
+  <div class="cookie-tab-panel" data-cookie-platform="youtube" style="display:none">
+    <div class="card shadow-xs">
+      <div class="card-header">
+        <span class="card-title">📺 Cookie YouTube</span>
+      </div>
+      
+      <div class="alert-info mb-4">
+        Cấu hình Cookie YouTube giúp yt-dlp tải các video bị giới hạn độ tuổi, video riêng tư, hoặc bỏ qua bot detection của YouTube.
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Browser Cookie Source -->
+        <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+            📡 Đọc trực tiếp từ trình duyệt (Khuyên dùng)
+          </h4>
+          <div class="field">
+            <label>Trình duyệt nguồn (cookies_from_browser)</label>
+            <select id="ck-yt-browser" class="w-full">
+              <option value="">-- Không sử dụng --</option>
+              <option value="chrome">Google Chrome</option>
+              <option value="firefox">Mozilla Firefox</option>
+              <option value="edge">Microsoft Edge</option>
+              <option value="opera">Opera</option>
+              <option value="safari">Safari</option>
+              <option value="brave">Brave</option>
+              <option value="vivaldi">Vivaldi</option>
+            </select>
+          </div>
+          <p class="text-xs text-muted mt-2">
+            yt-dlp sẽ tự động đọc dữ liệu cookie từ trình duyệt đã chọn. Bạn cần đăng nhập tài khoản YouTube trên trình duyệt này trước.
+          </p>
+        </div>
+
+        <!-- Cookie File Path -->
+        <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 flex flex-col justify-between">
+          <div>
+            <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+              📄 Sử dụng File Cookie (Netscape .txt)
+            </h4>
+            <div class="field">
+              <label>Đường dẫn File Cookie YouTube</label>
+              <input type="text" id="ck-yt-file" placeholder="VD: C:\cookies\youtube-cookies.txt" class="w-full">
+            </div>
+            <p class="text-xs text-muted mt-2">
+              Dành cho VPS/Server hoặc khi không chạy trình duyệt ở môi trường local. Bạn có thể xuất file cookie bằng tiện ích mở rộng như <i>Get cookies.txt LOCALLY</i>.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paste Raw Cookie Content -->
+      <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 mt-6">
+        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+          📋 Dán nội dung Cookie (Netscape .txt hoặc chuỗi Raw)
+        </h4>
+        <div class="field mb-0">
+          <label>Nội dung Cookie (tự động lưu vào hệ thống)</label>
+          <textarea id="ck-yt-content" rows="4" placeholder="Nhấp chọn tất cả (Ctrl+A) trong file .txt của YouTube rồi dán vào đây...&#10;Hoặc dán chuỗi raw: visitor_info1_live=xxx; sid=xxx; ..." class="w-full text-xs font-mono"></textarea>
+        </div>
+        <p class="text-xs text-muted mt-2">
+          Dán toàn bộ nội dung file cookie hoặc chuỗi cookie thô vào đây. Hệ thống sẽ tự động chuyển đổi sang file cookie định dạng chuẩn cho yt-dlp mà không cần tự quản lý đường dẫn file.
+        </p>
+      </div>
+
+      <div class="btn-group mt-12">
+        <button class="btn btn-primary" onclick="savePlatformConfig('youtube')">💾 Lưu cấu hình YouTube</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Facebook Cookie Panel -->
+  <div class="cookie-tab-panel" data-cookie-platform="facebook" style="display:none">
+    <div class="card shadow-xs">
+      <div class="card-header">
+        <span class="card-title">👥 Cookie & Hồ sơ Facebook</span>
+      </div>
+      
+      <div class="alert-info mb-4">
+        Cấu hình cookie và hồ sơ duyệt web của Facebook phục vụ cho việc cào danh sách Reels/Video và tải video chất lượng cao.
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Facebook Profile Folder -->
+        <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+            📂 Thư mục hồ sơ trình duyệt (Playwright Profile)
+          </h4>
+          <div class="field">
+            <label>Đường dẫn thư mục hồ sơ</label>
+            <input type="text" id="ck-fb-profile" placeholder="Mặc định: .facebook_profile" class="w-full">
+          </div>
+          <p class="text-xs text-muted mt-2">
+            Đường dẫn lưu dữ liệu Chrome tự động của Playwright. Khi chạy tải Reels lần đầu, trình duyệt sẽ hiện lên để đăng nhập Facebook 1 lần duy nhất, phiên đăng nhập được lưu tại đây.
+          </p>
+        </div>
+
+        <!-- Facebook Cookie File Path -->
+        <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+            📄 Đường dẫn File Cookie Facebook (Netscape .txt)
+          </h4>
+          <div class="field">
+            <label>Đường dẫn File Cookie Facebook</label>
+            <input type="text" id="ck-fb-file" placeholder="VD: C:\cookies\facebook-cookies.txt" class="w-full">
+          </div>
+          <p class="text-xs text-muted mt-2">
+            Cung cấp file cookie dạng Netscape .txt giúp yt-dlp tải được các video Facebook chế độ HD/Riêng tư.
+          </p>
+        </div>
+      </div>
+
+      <!-- Paste Raw Cookie Content -->
+      <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 mt-6">
+        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+          📋 Dán nội dung Cookie Facebook (Netscape .txt hoặc chuỗi Raw)
+        </h4>
+        <div class="field mb-0">
+          <label>Nội dung Cookie Facebook</label>
+          <textarea id="ck-fb-content" rows="4" placeholder="Dán nội dung file cookie Facebook .txt hoặc chuỗi raw ở đây..." class="w-full text-xs font-mono"></textarea>
+        </div>
+        <p class="text-xs text-muted mt-2">
+          Hỗ trợ dán trực tiếp nội dung file Netscape hoặc chuỗi header thô. Hệ thống sẽ tự động chuyển đổi định dạng và cấu hình cho yt-dlp tải video Facebook chất lượng cao.
+        </p>
+      </div>
+
+      <div class="btn-group mt-12">
+        <button class="btn btn-primary" onclick="savePlatformConfig('facebook')">💾 Lưu cấu hình Facebook</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+

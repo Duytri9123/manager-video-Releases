@@ -117,7 +117,7 @@ def local_tts_engines() -> List[Dict[str, Any]]:
     return [
         {
             "id": "vieneu",
-            "label": "VieNeu TTS (local, tieng Viet)",
+            "label": "VieNeu TTS",
             "default": "Ngọc Linh",
             "backend": "local",
             "voices": {
@@ -126,7 +126,7 @@ def local_tts_engines() -> List[Dict[str, Any]]:
         },
         {
             "id": "edge-tts",
-            "label": "Edge TTS (Microsoft, mien phi)",
+            "label": "Edge TTS",
             "default": "vi-VN-HoaiMyNeural",
             "backend": "local",
             "voices": {
@@ -211,7 +211,7 @@ def local_tts_engines() -> List[Dict[str, Any]]:
         },
         {
             "id": "fpt-ai",
-            "label": "FPT AI TTS (can API key, tieng Viet)",
+            "label": "FPT AI",
             "default": "banmai",
             "backend": "local",
             "voices": {
@@ -228,7 +228,7 @@ def local_tts_engines() -> List[Dict[str, Any]]:
         },
         {
             "id": "elevenlabs",
-            "label": "ElevenLabs TTS (can API key)",
+            "label": "ElevenLabs",
             "default": "21m00Tcm4TlvDq8ikWAM",
             "backend": "local",
             "voices": {
@@ -254,7 +254,7 @@ def local_tts_engines() -> List[Dict[str, Any]]:
         },
         {
             "id": "fish-audio",
-            "label": "Fish Audio TTS (da ngon ngu, can API key)",
+            "label": "Fish Audio",
             "default": "",
             "backend": "local",
             "voices": {
@@ -281,7 +281,7 @@ def local_tts_engines() -> List[Dict[str, Any]]:
         },
         {
             "id": "gtts",
-            "label": "Google gTTS (don gian, du phong)",
+            "label": "Google gTTS",
             "default": "vi",
             "backend": "local",
             "voices": {
@@ -589,7 +589,7 @@ def _shortcut_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
     if gemini_model:
         engines.append({
             "id": "9r:gemini",
-            "label": "Google Gemini TTS (9Router, cam xuc)",
+            "label": "Google Gemini",
             "default": "Kore",
             "defaultModel": gemini_model,
             "backend": "9router",
@@ -607,7 +607,7 @@ def _shortcut_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
         voices.setdefault("multi", _PROVIDER_TTS_VOICES["google-tts"])
         engines.append({
             "id": "9r:google-tts",
-            "label": "Google Cloud TTS (9Router)",
+            "label": "Google Cloud",
             "default": _PROVIDER_TTS_VOICES["google-tts"][0][0],
             "defaultModel": google_model,
             "backend": "9router",
@@ -620,7 +620,7 @@ def _shortcut_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
         edge = _local_engine_by_id("edge-tts") or {}
         engines.append({
             "id": "9r:edge-tts",
-            "label": "Microsoft Edge TTS (9Router)",
+            "label": "Microsoft Edge",
             "default": "vi-VN-HoaiMyNeural",
             "defaultModel": edge_model,
             "backend": "9router",

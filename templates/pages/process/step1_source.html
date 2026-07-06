@@ -1,0 +1,166 @@
+<!-- ═════════════════ STEP 1: Nguồn video ═════════════════ -->
+<section class="proc-step" data-proc-step="1">
+  <div class="proc-step-head">
+    <h2 class="proc-step-title">📥 Nguồn video</h2>
+    <p class="proc-step-sub">Dán link video hoặc chọn file từ máy, rồi thêm vào hàng chờ. Tải video gốc tự động và chuẩn bị preview.</p>
+  </div>
+
+  <div class="proc-step5-grid">
+
+  <!-- COL LEFT: Source input & AI Config -->
+  <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+    <div class="card card-collapsible">
+      <div class="card-header" onclick="toggleCard(this)">
+        <span class="card-title">📥 Nhập dữ liệu</span>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <label>Import file video</label>
+          <div class="flex-center gap-8">
+            <input type="text" id="proc-video" readonly style="flex:1" placeholder="Chọn file video...">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('proc-file').click()">📂 Chọn</button>
+            <input type="file" id="proc-file" accept="video/*" style="display:none">
+          </div>
+          <div class="text-xs text-muted mt-4" id="proc-file-name">--</div>
+        </div>
+        <div class="field">
+          <label>URL video (Douyin tải không logo · TikTok/YouTube/... qua yt-dlp)</label>
+          <input type="text" id="proc-url" placeholder="Douyin · TikTok · YouTube · Instagram · Facebook ...">
+          <div class="text-xs text-muted mt-4">Douyin dùng API gốc (không logo); các nền tảng khác tải bằng yt-dlp.</div>
+        </div>
+        <div class="field">
+          <label>Thư mục xuất (để trống = cùng thư mục video)</label>
+          <input type="text" id="proc-out" placeholder="Để trống = cùng thư mục video">
+        </div>
+
+        <div class="btn-group mt-12">
+          <button class="btn btn-primary" id="btn-proc" onclick="_addCurrentToQueue()">➕ Thêm vào hàng chờ</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Model Config -->
+    <div class="card card-collapsible">
+      <div class="card-header" onclick="toggleCard(this)">
+        <span class="card-title">🤖 Mô hình AI</span>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="field">
+            <label>Ngôn ngữ đầu vào</label>
+            <select id="proc-lang">
+              <option value="zh" selected>Tiếng Trung</option>
+              <option value="en">Tiếng Anh</option>
+              <option value="ja">Tiếng Nhật</option>
+              <option value="ko">Tiếng Hàn</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Ngôn ngữ đầu ra</label>
+            <select id="proc-target-lang" onchange="_onTargetLangChange()">
+              <option value="vi" selected>🇻🇳 Tiếng Việt</option>
+              <option value="en">🇺🇸 English</option>
+              <option value="ja">🇯🇵 日本語</option>
+              <option value="ko">🇰🇷 한국어</option>
+              <option value="th">🇹🇭 ภาษาไทย</option>
+              <option value="id">🇮🇩 Bahasa Indonesia</option>
+              <option value="es">🇪🇸 Español</option>
+              <option value="pt">🇧🇷 Português</option>
+              <option value="fr">🇫🇷 Français</option>
+              <option value="de">🇩🇪 Deutsch</option>
+              <option value="ru">🇷🇺 Русский</option>
+              <option value="ar">🇸🇦 العربية</option>
+              <option value="hi">🇮🇳 हिन्दी</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Dịch phụ đề</label>
+            <select id="proc-trans-provider-model">
+              <option value="9router">🔀 9Router</option>
+              <option value="deepseek" selected>DeepSeek</option>
+              <option value="groq">Groq</option>
+              <option value="openai">OpenAI</option>
+              <option value="google">Google</option>
+              <option value="auto">Auto</option>
+            </select>
+          </div>
+          <div class="field" id="proc-ai-video-nine-model-row">
+            <label>Đọc ảnh/video</label>
+            <select id="proc-ai-video-nine-model" onfocus="loadProcAiVideoModels()">
+              <option value="none">Tắt (Không đọc)</option>
+              <option value="" selected>Tự động theo 9Router</option>
+            </select>
+            <input type="checkbox" id="proc-ai-video-auto" style="display:none" checked>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COL RIGHT: Queue -->
+  <div class="card card-collapsible">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="card-title">📋 Hàng chờ tải &amp; xử lý (<span id="batch-count">0</span>)</span>
+      <div class="card-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-danger btn-sm" onclick="window._batchQueue=[];_renderBatchQueue()">🗑 Xóa tất cả</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <!-- Tùy chọn tự động hóa — áp dụng cho cả hàng chờ -->
+      
+      <div class="proc-auto-options" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+        <div class="pe2-opts">
+          <label class="pe2-optcard" title="Khi bật: tải xong sẽ bỏ qua bước 2 Xem &amp; Chỉnh sửa, tự động chạy tạo SRT/ASS/Giọng lồng tiếng ở bước 3, dừng lại ở bước 3 để check ASS &amp; Thumbnail rồi tiếp tục chạy xử lý ở bước 4.">
+            <input type="checkbox" id="proc-auto-flow">
+            <span class="pe2-optcard-ic">🔁</span>
+            <span class="pe2-optcard-lbl">Tự động hóa quy trình</span>
+            <span class="pe2-optcard-badge">✓</span>
+          </label>
+          <label class="pe2-optcard" title="Tự động bỏ qua bước kiểm tra và chỉnh sửa phụ đề ASS">
+            <input type="checkbox" id="step3-skip-ass" onchange="_onStep3SkipChange()">
+            <span class="pe2-optcard-ic">⏭</span>
+            <span class="pe2-optcard-lbl">Bỏ qua kiểm tra ASS</span>
+            <span class="pe2-optcard-badge">✓</span>
+          </label>
+          {# Thumbnail flow disabled by request. #}
+        </div>
+      </div>
+
+      <div id="batch-queue-list" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
+        <div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>
+      </div>
+
+      <!-- Download trigger + log -->
+      <div id="step1-download-area" style="display:none;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <button class="btn btn-secondary btn-sm" id="btn-step1-download"
+            onclick="window._step1Downloading=false;_runStep1QueueDownload()"
+            style="white-space:nowrap">
+            📥 Tải hàng chờ
+          </button>
+          <div class="check-item" style="margin:0;padding:6px 12px;display:flex;align-items:center;gap:8px" title="Bật để chỉ tải video từ link mà không xử lý tiếp">
+            <label class="toggle-wrap" style="margin:0">
+              <input type="checkbox" class="toggle-input" id="proc-download-only">
+              <div class="toggle"></div>
+            </label>
+            <span style="font-size:12px;color:var(--text2,#1f2430);white-space:nowrap">Chỉ tải video</span>
+          </div>
+          <span class="text-xs text-muted" id="step1-dl-status">Nhấn để bắt đầu tải video gốc từ URL.</span>
+        </div>
+        <!-- Download log box -->
+        <div id="step1-dl-log"
+          style="max-height:160px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;font-family:monospace;color:var(--text);display:none">
+        </div>
+      </div>
+
+      <div class="btn-group mt-12" id="step1-next-btn-wrap" style="display:none">
+        <button class="btn btn-primary w-full justify-center" style="font-weight:700"
+          onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
+          ▶ Xử lý &amp; Xem kết quả (Bước 2) →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /proc-step5-grid -->
+</section><!-- /step 1 -->

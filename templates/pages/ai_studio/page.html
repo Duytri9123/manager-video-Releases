@@ -1,0 +1,314 @@
+<!-- ═══════════════════════════════════════════════════════════════
+     PAGE: AI Studio — Video + Image + Idea→Video (gộp)
+═══════════════════════════════════════════════════════════════ -->
+<div id="page-ai_studio" class="page" data-page="ai_studio">
+
+
+
+<!-- ═══ Mode Tabs ═══ -->
+<div class="mode-tabs">
+  <div class="mode-tab active" data-mode="video" onclick="aiSwitchMode('video')">
+    <span class="tab-icon">🎬</span>
+    <span>Video nhanh</span>
+    <span class="tab-desc">Prompt → 1 clip (5-8s)</span>
+  </div>
+  <div class="mode-tab" data-mode="image" onclick="aiSwitchMode('image')">
+    <span class="tab-icon">🖼️</span>
+    <span>Tạo ảnh</span>
+    <span class="tab-desc">Prompt → ảnh AI (Imagen 3)</span>
+  </div>
+  <div class="mode-tab" data-mode="idea" onclick="aiSwitchMode('idea')">
+    <span class="tab-icon">✨</span>
+    <span>Idea → Video</span>
+    <span class="tab-desc">Ý tưởng → phim hoàn chỉnh</span>
+  </div>
+</div>
+
+<!-- ═══ Config Card ═══ -->
+<div class="card" id="ai-config-card">
+  <div class="card-header" onclick="this.parentElement.classList.toggle('collapsed')" style="cursor:pointer">
+    <span style="font-size:16px">⚙️</span>
+    <span class="card-title">Cấu hình API</span>
+    <span id="ai-key-badge" class="badge badge-gray">Đang tải...</span>
+  </div>
+  <div class="card-body" id="ai-config-body">
+    <div class="alert-info text-sm mb-12">
+      Cần <b>Gemini API Key</b> từ <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">Google AI Studio</a> (miễn phí).
+      Key này dùng chung cho tạo video, ảnh, và LLM.
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="field">
+        <label>🔑 Gemini API Key</label>
+        <input id="ai-api-key" type="password" placeholder="AIzaSy..." autocomplete="off">
+      </div>
+      <div class="field">
+        <label>🎬 Video Backend</label>
+        <select id="ai-video-model">
+          <option value="9router">9Router (cx/gpt-5.5)</option>
+          <option value="veo-2.0-generate-001">Gemini Veo 2</option>
+          <option value="veo-3.0-generate-preview">Gemini Veo 3 Preview</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid-3 mt-8">
+      <div class="field">
+        <label>🖼️ Image Backend</label>
+        <select id="ai-image-model">
+          <optgroup label="⚡ Mặc định" data-static="1">
+            <option value="9router">9Router · Tự động (cx/gpt-5.5-image)</option>
+          </optgroup>
+          <optgroup label="🔷 Gemini / OpenAI (gọi trực tiếp)" data-static="1">
+            <option value="imagen-3.0-generate-002">Gemini Imagen 3</option>
+            <option value="imagen-3.0-fast-generate-001">Gemini Imagen 3 Fast</option>
+            <option value="dall-e-3">OpenAI DALL-E 3</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="field">
+        <label>🧠 LLM (Idea→Video)</label>
+        <select id="ai-llm-model">
+          <option value="9router">9Router (mặc định)</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash ⚡</option>
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro 🧠</option>
+          <option value="deepseek">DeepSeek</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" style="width:100%" onclick="aiSaveConfig()">💾 Lưu cấu hình</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODE 1: Video nhanh
+═══════════════════════════════════════════════════════════════ -->
+<div class="mode-panel active" id="panel-video">
+  <div class="page-layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:16px">🎬</span>
+          <span class="card-title">Tạo video nhanh</span>
+          <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" onclick="aiVSample()">🎭 Prompt mẫu</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label>📝 Mô tả video (prompt) <span class="text-xs text-muted">— tiếng Anh cho kết quả tốt nhất</span></label>
+            <textarea id="ai-v-prompt" rows="5" placeholder="A cinematic shot of a golden retriever running through a field of sunflowers at sunset, slow motion, 4K quality, warm lighting..."></textarea>
+          </div>
+          <div class="grid-3 mt-8">
+            <div class="field">
+              <label>📐 Tỷ lệ</label>
+              <select id="ai-v-aspect">
+                <option value="16:9">16:9 YouTube</option>
+                <option value="9:16">9:16 TikTok</option>
+                <option value="1:1">1:1 Vuông</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>⏱ Thời lượng</label>
+              <select id="ai-v-duration">
+                <option value="5">5 giây</option>
+                <option value="8" selected>8 giây</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>🎯 Số lượng</label>
+              <select id="ai-v-count">
+                <option value="1" selected>1</option>
+                <option value="2">2</option>
+                <option value="4">4</option>
+              </select>
+            </div>
+          </div>
+          <div class="field mt-8">
+            <label>🖼 Ảnh tham chiếu (tùy chọn — Image-to-Video)</label>
+            <div id="ai-v-dropzone" class="ai-drop-zone" onclick="document.getElementById('ai-v-file').click()">
+              📁 Kéo thả ảnh hoặc click để chọn
+            </div>
+            <input id="ai-v-file" type="file" accept="image/*" style="display:none" onchange="aiVOnImage(event)">
+            <div id="ai-v-img-wrap" style="display:none;margin-top:8px;align-items:center;gap:8px">
+              <img id="ai-v-img-preview" style="max-width:160px;max-height:100px;border-radius:6px;border:1px solid var(--border)">
+              <button class="btn btn-secondary btn-sm" onclick="aiVClearImage()">✕ Xoá</button>
+            </div>
+          </div>
+          <div class="btn-group mt-12">
+            <button class="btn btn-primary btn-lg" id="btn-ai-v-gen" onclick="aiVideoGen()">🎬 Tạo Video</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:16px">📊</span>
+          <span class="card-title">Kết quả</span>
+          <span id="ai-v-status" class="badge badge-gray">Sẵn sàng</span>
+        </div>
+        <div class="card-body">
+          <div class="progress-row" id="ai-v-progress" style="display:none">
+            <span class="progress-label">Đang tạo...</span>
+            <div class="progress-bar-wrap"><div id="ai-v-bar" class="progress-bar pb-overall" style="width:0%"></div></div>
+            <span class="progress-pct" id="ai-v-pct">0%</span>
+          </div>
+          <div id="ai-v-log" class="ai-log">Nhập prompt và nhấn Tạo Video để bắt đầu.</div>
+          <div id="ai-v-results" class="result-grid" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODE 2: Tạo ảnh
+═══════════════════════════════════════════════════════════════ -->
+<div class="mode-panel" id="panel-image">
+  <div class="page-layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:16px">🖼️</span>
+          <span class="card-title">Tạo ảnh AI</span>
+          <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" onclick="aiISample()">🎭 Prompt mẫu</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label>📝 Mô tả ảnh (prompt)</label>
+            <textarea id="ai-i-prompt" rows="5" placeholder="A beautiful sunset over the ocean, oil painting style, vibrant colors, dramatic clouds, golden light reflecting on calm water..."></textarea>
+          </div>
+          <div class="grid-3 mt-8">
+            <div class="field">
+              <label>📐 Tỷ lệ</label>
+              <select id="ai-i-aspect">
+                <option value="1:1">1:1 Vuông</option>
+                <option value="16:9">16:9 Ngang</option>
+                <option value="9:16">9:16 Dọc</option>
+                <option value="4:3">4:3</option>
+                <option value="3:4">3:4</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>🎯 Số ảnh</label>
+              <select id="ai-i-count">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="4" selected>4</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>&nbsp;</label>
+              <button class="btn btn-primary" id="btn-ai-i-gen" style="width:100%" onclick="aiImageGen()">🖼️ Tạo ảnh</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:16px">📊</span>
+          <span class="card-title">Kết quả</span>
+          <span id="ai-i-status" class="badge badge-gray">Sẵn sàng</span>
+        </div>
+        <div class="card-body">
+          <div class="progress-row" id="ai-i-progress" style="display:none">
+            <span class="progress-label">Đang tạo ảnh...</span>
+            <div class="progress-bar-wrap"><div id="ai-i-bar" class="progress-bar pb-overall" style="width:50%"></div></div>
+          </div>
+          <div id="ai-i-log" class="ai-log">Nhập prompt và nhấn Tạo ảnh để bắt đầu.</div>
+          <div id="ai-i-results" class="result-grid" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODE 3: Idea → Video
+═══════════════════════════════════════════════════════════════ -->
+<div class="mode-panel" id="panel-idea">
+  <div class="page-layout-2col">
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:16px">✨</span>
+          <span class="card-title">Idea → Video (ViMax Pipeline)</span>
+        </div>
+        <div class="card-body">
+          <div class="alert-info mb-12 text-sm">
+            Nhập ý tưởng → AI tự viết story → kịch bản → storyboard → tạo video từng shot → ghép thành phim hoàn chỉnh.
+          </div>
+          <div class="field">
+            <label>💡 Ý tưởng <span style="color:var(--error)">*</span></label>
+            <textarea id="ai-idea-input" rows="4" placeholder="Ví dụ: Một lập trình viên phát hiện bóng của mình có ý thức riêng và bắt đầu nổi loạn..."></textarea>
+          </div>
+          <div class="grid-2 mt-8">
+            <div class="field">
+              <label>📋 Yêu cầu thêm (tùy chọn)</label>
+              <textarea id="ai-idea-req" rows="2" placeholder="3 cảnh, phong cách anime, có twist ending, dành cho trẻ em..."></textarea>
+            </div>
+            <div class="field">
+              <label>🎨 Phong cách</label>
+              <select id="ai-idea-style">
+                <option value="cinematic, high quality, dramatic lighting">🎬 Điện ảnh</option>
+                <option value="anime style, vibrant colors, detailed">🎌 Anime</option>
+                <option value="realistic, photorealistic, 4K">📷 Thực tế</option>
+                <option value="cartoon, colorful, fun, children animation">🎠 Hoạt hình trẻ em</option>
+                <option value="dark fantasy, moody, atmospheric">🌑 Dark Fantasy</option>
+                <option value="sci-fi, futuristic, neon lights">🚀 Sci-Fi</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-group mt-12">
+            <button class="btn btn-primary btn-lg" id="btn-ai-idea" onclick="aiIdeaStart()">✨ Tạo Video từ ý tưởng</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:16px">📊</span>
+          <span class="card-title">Tiến trình</span>
+          <span id="ai-idea-status" class="badge badge-gray">Sẵn sàng</span>
+        </div>
+        <div class="card-body">
+          <div class="progress-row" id="ai-idea-progress" style="display:none">
+            <span class="progress-label" id="ai-idea-msg">Đang xử lý...</span>
+            <div class="progress-bar-wrap"><div id="ai-idea-bar" class="progress-bar pb-overall" style="width:0%"></div></div>
+            <span class="progress-pct" id="ai-idea-pct">0%</span>
+          </div>
+
+          <!-- Pipeline steps -->
+          <div class="step-list" id="ai-idea-steps">
+            <div class="step-item" data-step="story"><span class="step-icon">📝</span><span class="step-label">1. Phát triển câu chuyện</span><span class="badge badge-gray" style="font-size:10px">Chờ</span></div>
+            <div class="step-item" data-step="script"><span class="step-icon">🎭</span><span class="step-label">2. Viết kịch bản</span><span class="badge badge-gray" style="font-size:10px">Chờ</span></div>
+            <div class="step-item" data-step="chars"><span class="step-icon">👥</span><span class="step-label">3. Trích xuất nhân vật</span><span class="badge badge-gray" style="font-size:10px">Chờ</span></div>
+            <div class="step-item" data-step="board"><span class="step-icon">🎞️</span><span class="step-label">4. Thiết kế storyboard</span><span class="badge badge-gray" style="font-size:10px">Chờ</span></div>
+            <div class="step-item" data-step="gen"><span class="step-icon">🎬</span><span class="step-label">5. Tạo video từng shot</span><span class="badge badge-gray" style="font-size:10px">Chờ</span></div>
+            <div class="step-item" data-step="concat"><span class="step-icon">🔗</span><span class="step-label">6. Ghép video cuối</span><span class="badge badge-gray" style="font-size:10px">Chờ</span></div>
+          </div>
+
+          <div id="ai-idea-log" class="ai-log" style="margin-top:10px">Nhập ý tưởng và nhấn Tạo Video để bắt đầu.</div>
+
+          <!-- Result -->
+          <div id="ai-idea-result" style="display:none;margin-top:12px">
+            <video id="ai-idea-video" controls style="width:100%;border-radius:8px;max-height:300px;background:#000"></video>
+            <div class="btn-group mt-8">
+              <button class="btn btn-success" onclick="aiIdeaDownload()">⬇️ Tải video</button>
+              <button class="btn btn-secondary" onclick="aiIdeaReset()">🔄 Tạo mới</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="vi" class="">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>DuyTris Downloader</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="/static/css/custom.css?v={{ jsv }}" />
+    <link rel="stylesheet" href="/static/css/components.css?v={{ jsv }}" />
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-['Inter',system-ui,sans-serif] text-[13px] leading-relaxed h-screen overflow-hidden flex flex-col">
+
+    <!-- Loading overlay -->
+    <div id="global-loading">
+      <div class="w-9 h-9 border-3 border-slate-200 dark:border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+      <div id="gl-text" class="text-slate-500 dark:text-slate-400 text-[13px] font-medium">Đang xử lý...</div>
+      <div id="gl-time" class="text-slate-400 dark:text-slate-500 text-[11px]"></div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toasts"></div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+     API Check Modal
+    ═══════════════════════════════════════════════════════════════ -->
+    {% include 'layout/_modals_global.html' %}
+
+    <div id="app" class="flex h-screen overflow-hidden">
+
+      <!-- ══════════ SIDEBAR (desktop) ══════════ -->
+      {% include 'layout/_sidebar.html' %}
+
+      <!-- ══════════ MAIN ══════════ -->
+      <div id="main" class="flex-1 flex flex-col overflow-hidden min-w-0">
+
+        <!-- Topbar -->
+        {% include 'layout/_topbar.html' %}
+
+        <!-- Content -->
+        <div id="content" class="flex-1 overflow-y-auto overflow-x-hidden p-[18px] min-h-0">
+          {% include 'pages/user/page.html' %}
+          {% include 'pages/n8n/page.html' %}
+          {% include 'pages/process/page.html' %}
+          {% include 'pages/sales/page.html' %}
+          {% include 'pages/ads/page.html' %}
+          {% include 'pages/transcribe/page.html' %}
+          {% include 'pages/subtitle/page.html' %}
+          {% include 'pages/publish/page.html' %}
+          {% include 'pages/content/page.html' %}
+          {% include 'pages/history/page.html' %}
+          {% include 'pages/movie/page.html' %}
+          {% include 'pages/story/page.html' %}
+          {% include 'pages/videogen/page.html' %}
+          {% include 'pages/ai_studio/page.html' %}
+          {% include 'pages/chat/page.html' %}
+          {% include 'pages/proxies/page.html' %}
+          {% include 'pages/config/page.html' %}
+          {% include 'pages/download/page.html' %}
+          {% include 'pages/cookies/page.html' %}
+          {% include 'pages/idea2video/page.html' %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile bottom nav -->
+    {% include 'layout/_mobile_nav.html' %}
+
+    <script
+      src="https://cdn.socket.io/4.7.5/socket.io.min.js"
+      onerror="window._socketIOFailed = true"
+    ></script>
+    <script>
+      if (window._socketIOFailed || typeof io === "undefined") {
+        window.io = function () {
+          return { on: () => {}, emit: () => {}, connected: false };
+        };
+      }
+    </script>
+
+    <!-- Core JS (navigation, theme, socket, i18n, utils, api, toast) -->
+    <script src="/static/js/core.js?v={{ jsv }}"></script>
+
+    <!-- Page-specific JS -->
+    <script src="/page-static/user/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/download/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/process/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/config/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/content/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/publish/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/publish/batch.js?v={{ jsv }}"></script>
+    <script src="/page-static/publish/accounts.js?v={{ jsv }}"></script>
+    <script src="/page-static/publish/proc_publish.js?v={{ jsv }}"></script>
+    <script src="/page-static/chat/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/chat/widget.js?v={{ jsv }}" defer></script>
+    <script src="/page-static/proxies/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/movie/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/story/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/videogen/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/ai_studio/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/n8n/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/sales/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/ads/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/transcribe/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/cookies/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/history/script.js?v={{ jsv }}"></script>
+    <script src="/page-static/idea2video/script.js?v={{ jsv }}"></script>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        switchPage("{{ active }}");
+        if (typeof applyI18n === "function") applyI18n();
+      });
+    </script>
+  </body>
+</html>

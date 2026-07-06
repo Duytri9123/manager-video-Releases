@@ -1148,6 +1148,7 @@ class BaseDownloader(ABC):
                     elevenlabs_api_key=elevenlabs_api_key,
                     elevenlabs_voice_id=elevenlabs_voice_id,
                     target_lang=target_lang,
+                    vieneu_ref_audio=str(vp_cfg.get("vieneu_ref_audio") or "").strip(),
                 )
                 if ok:
                     logger.info("video_process: voice converted → %s", voice_out.name)

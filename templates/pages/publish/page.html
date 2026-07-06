@@ -1,0 +1,528 @@
+<!-- PAGE: PUBLISH VIDEO -->
+<div id="page-publish" class="page">
+
+  <!-- ════════════════ Shell: left nav + right panes ════════════════ -->
+  <div class="publish-shell">
+    <nav class="publish-nav">
+      <div class="publish-tab active" onclick="pubSwitchMainTab(this,'pub-sec-multi')">
+        <span class="tab-ico">📤</span><span class="tab-label">Đa nền tảng</span>
+      </div>
+      <div class="publish-tab" onclick="pubSwitchMainTab(this,'pub-sec-batch')">
+        <span class="tab-ico">📦</span><span class="tab-label">Hàng loạt</span>
+      </div>
+    </nav>
+
+    <div class="publish-panes">
+
+      <!-- ════════════════ TAB 1: Multi-Platform ════════════════ -->
+      <div id="pub-sec-multi" class="publish-pane active">
+
+        <div class="publish-section-intro">
+          <span class="ico">📤</span>
+          <span>Chọn file video, dùng AI phân tích tạo nội dung, rồi đăng lên YouTube / TikTok / Facebook.</span>
+        </div>
+
+        <div class="page-layout-2col">
+          
+          <!-- LEFT COLUMN: MEDIA & AI CONTENT -->
+          <div class="col-left">
+            <div class="card premium-card">
+              <div class="card-header">
+                <span class="card-title">📁 Chọn tệp tin &amp; AI</span>
+              </div>
+              
+              <div class="card-body">
+                <!-- File selection group -->
+                <div class="content-group">
+                  <div class="section-title">📁 Chọn tệp tin</div>
+                  
+                  <div class="field">
+                    <label>🎬 File video <span class="text-red">*</span></label>
+                    <div class="input-with-button">
+                      <input type="text" id="pub-video-path" placeholder="Chọn file video hoặc nhập đường dẫn...">
+                      <button class="btn btn-secondary" onclick="document.getElementById('pub-video-file').click()">📂 Duyệt</button>
+                      <input type="file" id="pub-video-file" accept="video/*" style="display:none" onchange="_pubSetVideoFile(this)">
+                    </div>
+                  </div>
+
+                  <div class="field">
+                    <label>📝 File phụ đề (.srt / .ass)</label>
+                    <div class="input-with-button">
+                      <input type="text" id="pub-sub-path" placeholder="Chọn file phụ đề (tùy chọn)..." readonly>
+                      <button class="btn btn-secondary" onclick="document.getElementById('pub-sub-file').click()">📂 Duyệt</button>
+                      <input type="file" id="pub-sub-file" accept=".srt,.ass" style="display:none" onchange="_pubSetSubFile(this)">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AI content generation -->
+                <div class="ai-generation-box">
+                  <div class="ai-header">
+                    <div class="ai-title">🤖 AI Phân tích &amp; Sáng tạo</div>
+                    <div class="ai-controls">
+                      <select id="pub-ai-provider" class="pub-select-sm">
+                        <option value="9router">🔀 9Router</option>
+                        <option value="deepseek" selected>DeepSeek</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="groq">Groq</option>
+                      </select>
+                      <select id="pub-target-lang" class="pub-select-sm" title="Ngôn ngữ nội dung đăng">
+                        <option value="vi" selected>🇻🇳 Tiếng Việt</option>
+                        <option value="en">🇺🇸 English</option>
+                        <option value="zh">🇨🇳 中文</option>
+                        <option value="ja">🇯🇵 日本語</option>
+                        <option value="ko">🇰🇷 한국어</option>
+                        <option value="th">🇹🇭 ไทย</option>
+                        <option value="id">🇮🇩 Indonesia</option>
+                        <option value="es">🇪🇸 Español</option>
+                        <option value="pt">🇵🇹 Português</option>
+                        <option value="fr">🇫🇷 Français</option>
+                        <option value="de">🇩🇪 Deutsch</option>
+                        <option value="ru">🇷🇺 Русский</option>
+                        <option value="ar">🇸🇦 العربية</option>
+                        <option value="hi">🇮🇳 हिन्दी</option>
+                      </select>
+                      <button class="btn btn-secondary btn-sm" onclick="_pubLoadSubContent()">📥 Nhập từ phụ đề</button>
+                    </div>
+                  </div>
+                  
+                  <div class="field">
+                    <textarea id="pub-content-input" rows="4" placeholder="Dán nội dung video hoặc phụ đề vào đây để AI phân tích tiêu đề, mô tả và hashtag..."></textarea>
+                  </div>
+                  
+                  <button class="btn btn-primary w-full" id="btn-pub-analyze" onclick="pubAnalyzeContent()">
+                    ✨ Xử lý &amp; Tạo nội dung bằng AI
+                  </button>
+                  <div id="pub-analyze-status" class="status-msg"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: PLATFORM CONFIGURATION -->
+          <div class="col-right">
+            <div class="card premium-card">
+              <div class="platform-tabs-header">
+                <div class="platform-tab active" id="pub-tab-yt" onclick="pubSwitchTab('youtube')">
+                  <span class="yt-color">▶</span><span>YouTube</span>
+                  <div class="tab-toggle" id="pub-toggle-yt" onclick="event.stopPropagation();pubTogglePlatform('youtube')">✓</div>
+                </div>
+                <div class="platform-tab" id="pub-tab-tt" onclick="pubSwitchTab('tiktok')">
+                  <span class="tt-color">🎵</span><span>TikTok</span>
+                  <div class="tab-toggle" id="pub-toggle-tt" onclick="event.stopPropagation();pubTogglePlatform('tiktok')">✓</div>
+                </div>
+                <div class="platform-tab" id="pub-tab-fb" onclick="pubSwitchTab('facebook')">
+                  <span class="fb-color">📘</span><span>Facebook</span>
+                  <div class="tab-toggle" id="pub-toggle-fb" onclick="event.stopPropagation();pubTogglePlatform('facebook')">✓</div>
+                </div>
+              </div>
+
+              <div class="platform-content">
+                <!-- YouTube Panel -->
+                <div id="pub-panel-youtube" class="platform-panel active">
+                  <!-- Account Selector -->
+                  <div class="field" style="margin-bottom:8px">
+                    <label style="font-size:11px;color:var(--text-muted)">📺 Tài khoản YouTube</label>
+                    <select id="yt-account-select" class="pub-select-sm" onchange="onAccountSelectChange('youtube', this)" style="width:100%">
+                      <option value="">Chưa có tài khoản</option>
+                    </select>
+                  </div>
+
+                  <!-- YouTube Auth Status Bar -->
+                  <div id="yt-auth-bar" class="yt-auth-bar">
+
+                    <!-- Chưa đăng nhập -->
+                    <div id="yt-auth-disconnected" class="yt-status-row">
+                      <div class="yt-status-icon">▶</div>
+                      <div class="yt-status-text">
+                        <div class="yt-status-label">YouTube</div>
+                        <div class="yt-status-sub" style="color:var(--text-muted)">Chưa kết nối</div>
+                      </div>
+                      <button class="btn btn-sm btn-yt" id="btn-yt-auth" onclick="youtubeLogin()">
+                        🔑 Đăng nhập
+                      </button>
+                    </div>
+
+                    <!-- Đã đăng nhập -->
+                    <div id="yt-auth-connected" class="yt-status-row" style="display:none">
+                      <div id="yt-ch-avatar-wrap" class="yt-ch-avatar">
+                        <img id="yt-ch-avatar-img" src="" alt="" onerror="this.style.display='none';document.getElementById('yt-ch-avatar-ph').style.display='flex'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">
+                        <div id="yt-ch-avatar-ph" class="yt-ch-avatar-ph">▶</div>
+                      </div>
+                      <div class="yt-status-text" style="flex:1;min-width:0">
+                        <div class="yt-ch-name" id="yt-ch-name">--</div>
+                        <div class="yt-ch-stats">
+                          <span>👥 <span id="yt-ch-subs">--</span></span>
+                          <span>🎬 <span id="yt-ch-videos">--</span> video</span>
+                        </div>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                        <span class="badge badge-green" style="white-space:nowrap">✓ Đã kết nối</span>
+                        <button class="btn btn-sm btn-danger" id="btn-yt-logout" onclick="youtubeLogout()">Đăng xuất</button>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div class="field">
+                    <label>Tiêu đề YouTube</label>
+                    <input type="text" id="yt-title" placeholder="Nhập tiêu đề video...">
+                  </div>
+
+                  <div class="field">
+                    <label>Mô tả video</label>
+                    <textarea id="yt-desc" rows="4" placeholder="Nhập mô tả video..."></textarea>
+                  </div>
+
+                  <div class="field">
+                    <label>Tags (cách nhau bằng dấu phẩy)</label>
+                    <input type="text" id="yt-tags" placeholder="tag1, tag2, tag3...">
+                  </div>
+
+                  <div class="settings-grid">
+                    <div class="field">
+                      <label>Chế độ hiển thị</label>
+                      <select id="yt-privacy" onchange="toggleYtScheduleDisplay()">
+                        <option value="private" selected>🔒 Riêng tư</option>
+                        <option value="unlisted">🔗 Không công khai</option>
+                        <option value="public">🌐 Công khai</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>&nbsp;</label>
+                      <label class="check-item w-full" style="height: 38px; margin: 0;">
+                        <input type="checkbox" id="yt-is-short"><span>📱 YouTube Shorts</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- YouTube Schedule Section -->
+                  <div id="yt-schedule-wrap" class="schedule-box">
+                    <label class="check-item mb-8">
+                      <input type="checkbox" id="yt-use-schedule" onchange="toggleYtScheduleFields()">
+                      <span>📅 Đặt lịch đăng video</span>
+                    </label>
+                    <div id="yt-schedule-fields" class="settings-grid" style="display:none; margin-top: 10px;">
+                      <div class="field">
+                        <label>Ngày đăng</label>
+                        <input type="date" id="yt-sched-date">
+                      </div>
+                      <div class="field">
+                        <label>Giờ đăng</label>
+                        <input type="time" id="yt-sched-time">
+                      </div>
+                    </div>
+                    <div class="text-xs text-muted mt-4">
+                      * Lưu ý: YouTube yêu cầu video phải ở chế độ <b>Riêng tư</b> khi đặt lịch.
+                    </div>
+                  </div>
+
+                  <button class="btn btn-lg btn-yt w-full mt-12" id="btn-yt-upload" onclick="pubUploadYouTube()">
+                    🚀 Bắt đầu Đăng lên YouTube
+                  </button>
+                  
+                  <div class="log-box mt-12" id="yt-upload-log" style="height:120px;display:none"></div>
+                </div>
+
+                <!-- TikTok Panel -->
+                <div id="pub-panel-tiktok" class="platform-panel">
+                  <div class="platform-header-row">
+                    <div class="platform-name"><span class="tt-color">🎵</span> TikTok</div>
+                    <div class="badge badge-accent">Đăng qua trình duyệt</div>
+                  </div>
+
+                  <div class="field">
+                    <label>Nội dung</label>
+                    <textarea id="tt-title" rows="3" placeholder="Nhập nội dung video..."></textarea>
+                  </div>
+
+                  <div class="field">
+                    <label>Hashtags</label>
+                    <input type="text" id="tt-tags" placeholder="#douyin #vietsub #viral">
+                  </div>
+
+                  <div class="field">
+                    <label>Quyền riêng tư</label>
+                    <select id="tt-privacy">
+                      <option value="PUBLIC_TO_EVERYONE" selected>🌐 Công khai</option>
+                      <option value="FRIENDS">👥 Bạn bè</option>
+                      <option value="SELF_ONLY">🔒 Chỉ mình tôi</option>
+                    </select>
+                  </div>
+
+                  <!-- Lịch đăng (tuỳ chọn) -->
+                  <div class="field" style="margin-top:8px">
+                    <label class="check-item" style="margin:0">
+                      <input type="checkbox" id="pub-tt-use-schedule" onchange="pubTtToggleSchedule()">
+                      <span>📅 Đặt lịch đăng (trên TikTok Studio)</span>
+                    </label>
+                  </div>
+                  <div id="pub-tt-schedule-fields" style="display:none;margin-top:6px">
+                    <input type="datetime-local" id="pub-tt-schedule-dt" style="width:100%">
+                    <div class="text-xs text-muted mt-4">
+                      TikTok yêu cầu lịch ít nhất 15 phút và nhiều nhất 10 ngày kể từ bây giờ (giờ máy của bạn).
+                    </div>
+                  </div>
+
+                  <button class="btn btn-lg btn-tt w-full mt-8" onclick="pubOpenTikTok()">
+                    🎵 Mở TikTok Studio &amp; tự điền nội dung
+                  </button>
+                  <div class="text-xs text-muted mt-4">
+                    💡 Mở trình duyệt đã đăng nhập, gắn sẵn file và caption. Bạn chỉ việc kiểm tra rồi nhấn Post.
+                  </div>
+                </div>
+
+                <!-- Facebook Panel -->
+                <div id="pub-panel-facebook" class="platform-panel">
+
+                  <!-- Account Selector -->
+                  <div class="field" style="margin-bottom:8px">
+                    <label style="font-size:11px;color:var(--text-muted)">📘 Tài khoản Facebook</label>
+                    <select id="fb-account-select" class="pub-select-sm" onchange="onAccountSelectChange('facebook', this)" style="width:100%">
+                      <option value="">Chưa có tài khoản</option>
+                    </select>
+                  </div>
+
+                  <!-- Chưa kết nối -->
+                  <div id="pub-fb-disconnected">
+                    <div class="platform-header-row">
+                      <div class="platform-name"><span class="fb-color">📘</span> Facebook</div>
+                      <span class="badge badge-gray">Chưa kết nối</span>
+                    </div>
+                    <div class="alert-info mb-12" style="font-size:12px">
+                      Nhập <b>User Access Token</b> từ
+                      <a href="https://developers.facebook.com/tools/explorer/" target="_blank" style="color:var(--accent)">Graph API Explorer</a>
+                      để kết nối và đăng video lên Pages.
+                      <br><span style="color:var(--text-muted)">💡 Cấu hình App ID + Secret trong config.yml để token tự động gia hạn.</span>
+                    </div>
+                    <div class="field">
+                      <label>User Access Token</label>
+                      <div style="display:flex;gap:8px">
+                        <input type="password" id="pub-fb-token-input"
+                          placeholder="EAAxxxxxxx..."
+                          style="flex:1;font-family:monospace;font-size:11px">
+                        <button class="btn btn-sm btn-secondary" onclick="pubFbToggleToken()">👁</button>
+                      </div>
+                    </div>
+                    <button class="btn btn-primary w-full mt-8" id="btn-pub-fb-connect" onclick="pubFbConnect()">
+                      🔗 Kết nối Facebook
+                    </button>
+                  </div>
+
+                  <!-- Đã kết nối -->
+                  <div id="pub-fb-connected" style="display:none">
+                    <div class="platform-header-row">
+                      <div class="platform-name"><span class="fb-color">📘</span> Facebook</div>
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <span class="badge badge-green">✓ <span id="pub-fb-user-name">--</span></span>
+                        <button class="btn btn-sm btn-danger" onclick="pubFbDisconnect()">Ngắt</button>
+                      </div>
+                    </div>
+
+                    <!-- Token expiry info -->
+                    <div id="pub-fb-token-info" style="font-size:11px;margin-bottom:8px;padding:6px 8px;border-radius:6px;background:var(--bg-secondary)">
+                      <span id="pub-fb-token-status">⏳ Đang kiểm tra token...</span>
+                      <button id="btn-pub-fb-refresh" class="btn btn-sm btn-secondary" onclick="pubFbRefreshToken()" style="float:right;padding:2px 8px;font-size:11px">
+                        🔄 Gia hạn
+                      </button>
+                    </div>
+
+                    <!-- Chọn Page -->
+                    <div class="field">
+                      <label>📄 Đăng lên Page</label>
+                      <select id="pub-fb-page-select" onchange="pubFbOnPageChange()">
+                        <option value="">-- Chọn Page --</option>
+                      </select>
+                    </div>
+
+                    <!-- Nội dung -->
+                    <div class="field">
+                      <label>Tiêu đề video</label>
+                      <input type="text" id="fb-title" placeholder="Tiêu đề...">
+                    </div>
+
+                    <div class="field">
+                      <label>Hashtags</label>
+                      <input type="text" id="fb-tags" placeholder="#viral #trending #video">
+                    </div>
+
+                    <!-- Định dạng + Lịch đăng -->
+                    <div class="settings-grid" style="margin-top:8px">
+                      <div class="field">
+                        <label>Định dạng</label>
+                        <select id="pub-fb-post-type">
+                          <option value="auto" selected>Tự động (9:16 → Reel)</option>
+                          <option value="reel">🎬 Reel (yêu cầu 9:16, 540x960+)</option>
+                          <option value="video">📹 Video thường</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label>&nbsp;</label>
+                        <label class="check-item" style="height:38px;margin:0">
+                          <input type="checkbox" id="pub-fb-use-schedule" onchange="pubFbToggleSchedule()">
+                          <span>📅 Đặt lịch đăng</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="text-xs text-muted mt-4">
+                      💡 Bài đăng trên Page luôn công khai. Reel yêu cầu MP4, 9:16, tối thiểu 540x960, 3-90 giây.
+                    </div>
+                    <div id="pub-fb-schedule-fields" style="display:none;margin-top:8px">
+                      <input type="datetime-local" id="pub-fb-schedule-dt" style="width:100%">
+                      <div class="text-xs text-muted mt-4">Để trống = đăng ngay lập tức</div>
+                    </div>
+
+                    <button class="btn btn-lg btn-fb w-full mt-12" id="btn-pub-fb-upload" onclick="pubUploadFacebook()">
+                      🚀 Đăng Video lên Facebook
+                    </button>
+
+                    <div class="log-box mt-12" id="fb-upload-log" style="height:120px;display:none"></div>
+                  </div>
+
+                </div>
+              </div>
+
+              <div class="log-box mt-12" id="pub-log" style="height:120px;display:none"></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- end pub-sec-multi -->
+
+      <!-- ════════════════ TAB 2: Batch Publish ════════════════ -->
+      <div id="pub-sec-batch" class="publish-pane">
+
+        <div class="publish-section-intro">
+          <span class="ico">📦</span>
+          <span>Import nhiều cặp file (1 video + 1 file ASS). AI sẽ đọc nội dung ASS để tự động tạo tiêu đề, mô tả, hashtag cho từng video rồi đăng lên các nền tảng đã bật.</span>
+        </div>
+
+        <!-- Platform status indicators for batch -->
+        <div class="platform-status-row" id="batch-platform-status">
+          <div class="platform-status-chip enabled" id="batch-plat-yt">
+            <span style="color:#ff0000">▶</span> YouTube <span class="dot dot-green"></span>
+          </div>
+          <div class="platform-status-chip enabled" id="batch-plat-tt">
+            <span>🎵</span> TikTok <span class="dot dot-green"></span>
+          </div>
+          <div class="platform-status-chip enabled" id="batch-plat-fb">
+            <span style="color:#1877f2">📘</span> Facebook <span class="dot dot-green"></span>
+          </div>
+          <span class="text-xs text-muted" style="display:flex;align-items:center">← Bật/tắt ở tab Đa nền tảng</span>
+        </div>
+
+        <div class="batch-cards">
+
+          <!-- Import files -->
+          <div class="card premium-card">
+            <div class="card-header">
+              <span class="card-title">📂 Chọn files</span>
+            </div>
+            <div class="field">
+              <label>Chọn nhiều file hoặc thư mục chứa video + ASS</label>
+              <div class="input-with-button">
+                <input type="text" id="batch-pub-info" placeholder="Chưa chọn file..." readonly style="flex:1">
+                <button class="btn btn-secondary" onclick="document.getElementById('batch-pub-files').click()">📂 Chọn files</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('batch-pub-folder').click()">📁 Chọn thư mục</button>
+                <input type="file" id="batch-pub-files" multiple accept="video/*,.ass,.srt" style="display:none" onchange="_batchPubImportFiles(this)">
+                <input type="file" id="batch-pub-folder" webkitdirectory style="display:none" onchange="_batchPubImportFolder(this)">
+              </div>
+              <div class="text-xs text-muted mt-4">Chọn tất cả video + ASS cùng lúc, hoặc chọn thư mục. Hệ thống tự ghép cặp theo tên file (video.mp4 ↔ video.ass)</div>
+            </div>
+          </div>
+
+          <!-- Config -->
+          <div class="card premium-card">
+            <div class="card-header">
+              <span class="card-title">⚙️ Cài đặt AI &amp; Lịch</span>
+            </div>
+            <div class="field">
+              <label>🤖 AI Provider (phân tích nội dung ASS)</label>
+              <select id="batch-pub-ai-provider" style="width:100%">
+                <option value="9router">🔀 9Router</option>
+                <option value="deepseek" selected>DeepSeek</option>
+                <option value="openai">OpenAI</option>
+                <option value="groq">Groq</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>🌐 Ngôn ngữ nội dung đăng</label>
+              <select id="batch-pub-target-lang" style="width:100%">
+                <option value="vi" selected>🇻🇳 Tiếng Việt</option>
+                <option value="en">🇺🇸 English</option>
+                <option value="zh">🇨🇳 中文</option>
+                <option value="ja">🇯🇵 日本語</option>
+                <option value="ko">🇰🇷 한국어</option>
+                <option value="th">🇹🇭 ไทย</option>
+                <option value="id">🇮🇩 Indonesia</option>
+                <option value="es">🇪🇸 Español</option>
+                <option value="pt">🇵🇹 Português</option>
+                <option value="fr">🇫🇷 Français</option>
+                <option value="de">🇩🇪 Deutsch</option>
+                <option value="ru">🇷🇺 Русский</option>
+                <option value="ar">🇸🇦 العربية</option>
+                <option value="hi">🇮🇳 हिन्दी</option>
+              </select>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="field">
+                <label>📅 Khoảng cách giờ</label>
+                <input type="number" id="batch-pub-interval" value="0" min="0" step="0.5" placeholder="0 = đăng ngay">
+                <div class="text-xs text-muted mt-4">0 = đăng ngay, >0 = cách N giờ/video</div>
+              </div>
+              <div class="field">
+                <label>Bắt đầu lúc</label>
+                <input type="datetime-local" id="batch-pub-start">
+              </div>
+            </div>
+          </div>
+
+          <!-- Queue list -->
+          <div class="card premium-card span-2">
+            <div class="card-header">
+              <span class="card-title">📋 Danh sách video (<span id="batch-pub-count">0</span> cặp)</span>
+              <div class="card-actions">
+                <button class="btn btn-danger btn-sm" onclick="_batchPubClear()">🗑 Xóa tất cả</button>
+              </div>
+            </div>
+            <div id="batch-pub-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+              <div class="empty-state text-xs" style="padding:20px;text-align:center;color:var(--text-muted)">Chưa có cặp video nào.</div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="card premium-card span-2">
+            <div class="card-header">
+              <span class="card-title">🚀 Thực thi</span>
+            </div>
+            <div class="btn-group" style="display:flex;gap:10px">
+              <button class="btn btn-primary" id="btn-batch-pub-analyze" onclick="_batchPubAnalyzeAll()" style="flex:1;justify-content:center">
+                🤖 AI Phân tích tất cả
+              </button>
+              <button class="btn btn-primary" id="btn-batch-pub-start" onclick="_batchPubStartAll()" style="flex:1;justify-content:center;background:#28a745">
+                🚀 Đăng tất cả
+              </button>
+            </div>
+          </div>
+
+          <!-- Log -->
+          <div class="card premium-card span-2">
+            <div class="card-header">
+              <span class="card-title">📜 Nhật ký</span>
+              <div class="card-actions">
+                <button class="btn btn-secondary btn-xs" onclick="const b=document.getElementById('batch-pub-log');if(b){b.innerHTML='';b.style.display='none'}">🗑 Xóa</button>
+              </div>
+            </div>
+            <div class="log-box" id="batch-pub-log" style="height:200px;display:block;margin-top:0">
+              <div class="text-xs text-muted" style="padding:10px">Sẵn sàng. Nhấn "AI Phân tích" hoặc "Đăng tất cả" để bắt đầu.</div>
+            </div>
+          </div>
+
+        </div><!-- /batch-cards -->
+
+      </div><!-- end pub-sec-batch -->
+
+    </div><!-- /publish-panes -->
+  </div><!-- /publish-shell -->
+
+</div>

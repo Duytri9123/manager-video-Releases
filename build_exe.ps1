@@ -1,3 +1,7 @@
+param(
+    [switch]$SkipPortableZip
+)
+
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -34,70 +38,84 @@ if (-not (Test-Path $Exe)) {
 Write-Host "       EXE: $Exe"
 
 # ── Copy FFmpeg binaries (required at runtime) ──
-$FfmpegSrc = "C:\ffmpeg\bin"
+# Always use slim/essential FFmpeg for bundling (NOT system full builds ~185 MB each)
 $FfmpegDest = $AppDir
+$LocalCli = Join-Path $ProjectRoot "cli"
+$FfmpegSrc = $null
 
-# If C:\ffmpeg\bin is not found, check if we have a local cli/ folder with ffmpeg
-if (-not (Test-Path $FfmpegSrc)) {
-    $LocalFfmpeg = Join-Path $ProjectRoot "cli"
-    if (Test-Path $LocalFfmpeg) {
-        $FfmpegSrc = $LocalFfmpeg
-    }
+# 1. Prefer local cli/ folder (cached essential build from previous download)
+if ((Test-Path (Join-Path $LocalCli "ffmpeg.exe")) -and (Test-Path (Join-Path $LocalCli "ffprobe.exe"))) {
+    $FfmpegSrc = $LocalCli
+    Write-Host "[3/4] Using FFmpeg essential build from cli/ folder"
 }
 
-# If still not found, download it automatically!
-if (-not (Test-Path $FfmpegSrc) -or -not (Test-Path (Join-Path $FfmpegSrc "ffmpeg.exe"))) {
-    Write-Host "FFmpeg not found in C:\ffmpeg\bin or local cli/ folder."
-    Write-Host "Downloading FFmpeg automatically..."
-    $TempFfmpegDir = Join-Path $env:TEMP "ffmpeg-download"
+# 2. Download essential build if not found locally
+if (-not $FfmpegSrc) {
+    Write-Host "[3/4] Downloading FFmpeg essential build (slim, ~40 MB vs 185 MB full)..."
+    $TempFfmpegDir = Join-Path $env:TEMP "ffmpeg-essential"
     if (Test-Path $TempFfmpegDir) { Remove-Item -LiteralPath $TempFfmpegDir -Recurse -Force -ErrorAction SilentlyContinue }
     New-Item -ItemType Directory -Path $TempFfmpegDir -Force | Out-Null
     
-    # URL for a stable static ffmpeg build for Windows
-    $FfmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+    # Gyan.dev essential build: only commonly-used codecs (h264, aac, mp3, vpx)
+    $FfmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
     $ZipFile = Join-Path $TempFfmpegDir "ffmpeg.zip"
     
     try {
-        Invoke-WebRequest -Uri $FfmpegUrl -OutFile $ZipFile -TimeoutSec 180
+        Invoke-WebRequest -Uri $FfmpegUrl -OutFile $ZipFile -TimeoutSec 300
         Expand-Archive -Path $ZipFile -DestinationPath $TempFfmpegDir -Force
         $ExtractedExe = Get-ChildItem -Path $TempFfmpegDir -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
-        if ($ExtractedExe) {
-            $BinDir = $ExtractedExe.Directory.FullName
-            $FfmpegSrc = $BinDir
-            # Save a copy to the local project root's cli/ folder for future builds & local runs
-            $LocalCli = Join-Path $ProjectRoot "cli"
-            if (-not (Test-Path $LocalCli)) { New-Item -ItemType Directory -Path $LocalCli -Force | Out-Null }
-            @("ffmpeg.exe", "ffprobe.exe") | ForEach-Object {
-                $src = Join-Path $BinDir $_
-                if (Test-Path $src) {
-                    Copy-Item -LiteralPath $src -Destination $LocalCli -Force
-                }
+        if (-not $ExtractedExe) {
+            throw "ffmpeg.exe not found in downloaded archive"
+        }
+        $FfmpegSrc = $ExtractedExe.Directory.FullName
+        # Cache in cli/ for future builds
+        if (-not (Test-Path $LocalCli)) { New-Item -ItemType Directory -Path $LocalCli -Force | Out-Null }
+        @("ffmpeg.exe", "ffprobe.exe") | ForEach-Object {
+            $src = Join-Path $FfmpegSrc $_
+            if (Test-Path $src) {
+                Copy-Item -LiteralPath $src -Destination $LocalCli -Force
             }
         }
+        Write-Host "       Cached to cli/ for future builds"
     } catch {
-        Write-Host "WARNING: Failed to download FFmpeg automatically: $_"
+        throw "Failed to download FFmpeg essential build: $_"
     }
 }
 
-if (Test-Path $FfmpegSrc) {
-    Write-Host "[3/4] Copying FFmpeg binaries..."
-    @("ffmpeg.exe", "ffprobe.exe", "ffplay.exe") | ForEach-Object {
-        $src = Join-Path $FfmpegSrc $_
-        if (Test-Path $src) {
-            Copy-Item -LiteralPath $src -Destination $FfmpegDest -Force
-            Write-Host "       $_"
-        }
+# Only copy ffmpeg.exe + ffprobe.exe (ffplay.exe is never used by the app)
+Write-Host "       Copying ffmpeg.exe, ffprobe.exe..."
+@("ffmpeg.exe", "ffprobe.exe") | ForEach-Object {
+    $src = Join-Path $FfmpegSrc $_
+    if (-not (Test-Path $src)) {
+        throw "Missing $_ in source: $FfmpegSrc"
     }
+    Copy-Item -LiteralPath $src -Destination $FfmpegDest -Force
+    $sz = [math]::Round((Get-Item $src).Length / 1MB, 1)
+    Write-Host "       $_ ($sz MB)"
 }
 
 # ── Create portable ZIP ──
-$ZipName = "DuyTrisDownloader_Portable.zip"
-$ZipPath = Join-Path $DistDir $ZipName
-Write-Host "[4/4] Creating portable ZIP..."
-if (Test-Path $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
-Compress-Archive -Path (Join-Path $AppDir "*") -DestinationPath $ZipPath -CompressionLevel Optimal
-$ZipSize = [math]::Round((Get-Item $ZipPath).Length / 1MB, 1)
-Write-Host "       ZIP: $ZipPath ($ZipSize MB)"
+$ZipPath = $null
+$ZipSize = $null
+if (-not $SkipPortableZip) {
+    $ZipName = "DuyTrisDownloader_Portable.zip"
+    $ZipPath = Join-Path $DistDir $ZipName
+    Write-Host "[4/4] Creating portable ZIP..."
+    if (Test-Path $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
+    if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
+        # Windows tar creates the central directory reliably for this large bundle.
+        & tar.exe -a -cf $ZipPath -C $DistDir "DuyTrisDownloader"
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar.exe failed to create portable ZIP (exit code $LASTEXITCODE)."
+        }
+    } else {
+        Compress-Archive -Path (Join-Path $AppDir "*") -DestinationPath $ZipPath -CompressionLevel Optimal
+    }
+    $ZipSize = [math]::Round((Get-Item $ZipPath).Length / 1MB, 1)
+    Write-Host "       ZIP: $ZipPath ($ZipSize MB)"
+} else {
+    Write-Host "[4/4] Skipping portable ZIP."
+}
 
 # ── Summary ──
 $AppSize = [math]::Round((Get-ChildItem -LiteralPath $AppDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 1)
@@ -105,8 +123,8 @@ Write-Host ""
 Write-Host "========================================"
 Write-Host "  BUILD SUCCESSFUL!"
 Write-Host "  App dir : $AppDir ($AppSize MB)"
-Write-Host "  Portable: $ZipPath ($ZipSize MB)"
+if ($ZipPath) { Write-Host "  Portable: $ZipPath ($ZipSize MB)" }
 Write-Host ""
 Write-Host "  To create SETUP.EXE, run:"
-Write-Host "  .\installer\Build-Installer.ps1 -PortableZip '$ZipPath'"
+Write-Host "  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\installer\Build-Installer.ps1"
 Write-Host "========================================"

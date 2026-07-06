@@ -93,6 +93,20 @@ video_process:
   font_size: 18
   blur_height: 15
 
+ytdlp:
+  # Cookie cho tải/tìm video đa nền tảng (YouTube, TikTok, Instagram, Facebook...).
+  # Cách 1 (khuyên dùng): yt-dlp tự đọc cookie từ trình duyệt đã đăng nhập.
+  #   chrome | edge | firefox | brave | opera | vivaldi (để trống = tắt)
+  cookies_from_browser: ''
+  browser_profile: ''
+  # Cách 2: file cookie Netscape (.txt) export bằng extension "Get cookies.txt".
+  cookie_files:
+    all: ''
+    youtube: ''
+    tiktok: ''
+    instagram: ''
+    facebook: ''
+
 upload:
   auto_upload: false
   platform: tiktok

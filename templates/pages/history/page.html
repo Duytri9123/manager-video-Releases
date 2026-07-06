@@ -1,0 +1,612 @@
+<!-- PAGE: HISTORY -->
+<div id="page-history" class="page">
+
+  <!-- File Browser Card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📁 File đã tải</span>
+      <div class="card-actions">
+        <button class="btn btn-secondary btn-sm" onclick="loadFiles()">🔄 Làm mới</button>
+      </div>
+    </div>
+
+    <!-- Breadcrumb -->
+    <div id="files-breadcrumb" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:var(--text2)">
+      <span onclick="loadFiles('')" style="cursor:pointer;color:var(--accent);font-weight:600">📂 Downloaded</span>
+    </div>
+
+    <!-- File list -->
+    <div id="files-list">
+      <div class="empty-state">Đang tải...</div>
+    </div>
+  </div>
+
+  <!-- Download History Card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🗃 Lịch sử tải xuống</span>
+      <div class="card-actions">
+        <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Làm mới</button>
+        <button class="btn btn-danger btn-sm" onclick="clearHistory()">🗑 Xóa</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>URL</th>
+            <th>Loại</th>
+            <th>Tổng</th>
+            <th>✓</th>
+          </tr>
+        </thead>
+        <tbody id="history-body">
+          <tr><td colspan="5" class="empty-state">Chưa có lịch sử.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ PUBLISH QUICK MODAL ═══════════════ -->
+<div id="pub-quick-modal" style="display:none;position:fixed;inset:0;z-index:12000;background:rgba(15,23,42,.65);align-items:center;justify-content:center;padding:16px">
+  <div style="width:min(560px,96vw);background:var(--surface,#fff);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.35);overflow:hidden;display:flex;flex-direction:column">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)">
+      <span style="font-size:18px">📤</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:700;color:var(--text)">Đăng video nhanh</div>
+        <div id="pqm-filename" style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+      </div>
+      <button onclick="closePubQuickModal()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-muted);line-height:1">✕</button>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;max-height:75vh">
+
+      <!-- Platform tabs -->
+      <div style="display:flex;gap:6px;border-bottom:1px solid var(--border);padding-bottom:10px">
+        <button id="pqm-tab-yt"  class="btn btn-sm" style="flex:1" onclick="pqmSwitchTab('yt')">▶ YouTube</button>
+        <button id="pqm-tab-fb"  class="btn btn-sm" style="flex:1" onclick="pqmSwitchTab('fb')">📘 Facebook</button>
+      </div>
+
+      <!-- YouTube panel -->
+      <div id="pqm-panel-yt">
+        <div style="margin-bottom:8px">
+          <label style="font-size:12px;font-weight:600;color:var(--text)">Tiêu đề</label>
+          <input type="text" id="pqm-yt-title" placeholder="Tiêu đề video..." style="width:100%;margin-top:4px">
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:12px;font-weight:600;color:var(--text)">Mô tả</label>
+          <textarea id="pqm-yt-desc" rows="3" placeholder="Mô tả..." style="width:100%;margin-top:4px;resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:var(--text)">Tags</label>
+            <input type="text" id="pqm-yt-tags" placeholder="tag1, tag2..." style="width:100%;margin-top:4px">
+          </div>
+          <div style="flex:1">
+            <label style="font-size:12px;font-weight:600;color:var(--text)">Hiển thị</label>
+            <select id="pqm-yt-privacy" style="width:100%;margin-top:4px">
+              <option value="private" selected>🔒 Riêng tư</option>
+              <option value="unlisted">🔗 Không công khai</option>
+              <option value="public">🌐 Công khai</option>
+            </select>
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-bottom:4px">
+          <input type="checkbox" id="pqm-yt-short"> <span>📱 Đăng dạng Shorts</span>
+        </label>
+      </div>
+
+      <!-- Facebook panel -->
+      <div id="pqm-panel-fb" style="display:none">
+        <div id="pqm-fb-noauth" style="padding:12px;background:var(--bg-secondary,#f5f5f5);border-radius:8px;font-size:12px;color:var(--text-muted);text-align:center">
+          ⚠️ Chưa kết nối Facebook. Vào trang <b>Đăng video</b> để kết nối trước.
+        </div>
+        <div id="pqm-fb-auth" style="display:none">
+          <div style="margin-bottom:8px">
+            <label style="font-size:12px;font-weight:600;color:var(--text)">Page</label>
+            <select id="pqm-fb-page" style="width:100%;margin-top:4px"></select>
+          </div>
+          <div style="margin-bottom:8px">
+            <label style="font-size:12px;font-weight:600;color:var(--text)">Tiêu đề</label>
+            <input type="text" id="pqm-fb-title" placeholder="Tiêu đề video..." style="width:100%;margin-top:4px">
+          </div>
+          <div style="margin-bottom:8px">
+            <label style="font-size:12px;font-weight:600;color:var(--text)">Định dạng</label>
+            <select id="pqm-fb-type" style="width:100%;margin-top:4px">
+              <option value="auto" selected>Tự động (9:16 → Reel)</option>
+              <option value="reel">🎬 Reel</option>
+              <option value="video">📹 Video thường</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div id="pqm-log" style="display:none;background:var(--bg-secondary,#f8f8f8);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;font-family:monospace;max-height:140px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;color:var(--text)"></div>
+
+    </div>
+
+    <!-- Footer -->
+    <div style="display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);background:var(--bg-secondary,#fafafa)">
+      <button id="pqm-btn-upload" class="btn btn-primary" style="flex:1" onclick="pqmDoUpload()">🚀 Đăng ngay</button>
+      <button id="pqm-btn-queue"  class="btn btn-secondary" style="flex:1" onclick="pqmAddToPublishQueue()">📋 Thêm vào hàng chờ</button>
+      <button class="btn btn-secondary" onclick="closePubQuickModal()">Hủy</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════
+   FILE BROWSER
+══════════════════════════════════════════════ */
+let _currentFilePath = '';
+
+async function loadFiles(dir) {
+  if (dir === undefined) dir = _currentFilePath;
+  _currentFilePath = dir || '';
+
+  const list  = document.getElementById('files-list');
+  const crumb = document.getElementById('files-breadcrumb');
+  if (list) list.innerHTML = '<div class="empty-state" style="padding:16px">Đang tải...</div>';
+
+  try {
+    const res  = await fetch('/api/files?dir=' + encodeURIComponent(_currentFilePath));
+    const data = await res.json();
+    if (data.error) { list.innerHTML = '<div class="empty-state text-red">' + data.error + '</div>'; return; }
+
+    /* ── Breadcrumb ── */
+    if (crumb) {
+      const parts = _currentFilePath ? _currentFilePath.split('/') : [];
+      let html = '<span onclick="loadFiles(\'\')" style="cursor:pointer;color:var(--accent);font-weight:600">📂 Downloaded</span>';
+      let acc  = '';
+      parts.filter(Boolean).forEach(p => {
+        acc += (acc ? '/' : '') + p;
+        const path = acc;
+        html += '<span style="color:var(--text-muted)"> / </span>';
+        html += `<span onclick="loadFiles('${path}')" style="cursor:pointer;color:var(--accent)">${p}</span>`;
+      });
+      crumb.innerHTML = html;
+    }
+
+    if (!data.items || !data.items.length) {
+      list.innerHTML = '<div class="empty-state">Thư mục trống</div>';
+      return;
+    }
+
+    const rows = data.items.map(item => _buildFileRow(item)).join('');
+
+    const backBtn = data.parent !== null && _currentFilePath
+      ? `<div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+           <span onclick="loadFiles('${data.parent === '.' ? '' : (data.parent || '')}')"
+                 style="cursor:pointer;color:var(--accent);font-size:13px">⬆ Lên thư mục cha</span>
+         </div>` : '';
+
+    list.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">${backBtn}${rows}</div>`;
+
+  } catch(e) {
+    if (list) list.innerHTML = '<div class="empty-state text-red">Lỗi: ' + e.message + '</div>';
+  }
+}
+
+/* ── Build one file row ── */
+function _buildFileRow(item) {
+  const icon      = item.is_dir ? '📁' : _fileIcon(item.ext);
+  const safePath  = item.path.replace(/'/g, "\\'");
+  const safeAbs   = (item.abs_path || '').replace(/'/g, "\\'");
+  const safeName  = escHtml(item.name).replace(/'/g, "\\'");
+  const previewable = !item.is_dir && _canPreview(item.ext);
+  const isVideo   = (item.file_type === 'video');
+  const isAudio   = (item.file_type === 'audio');
+
+  /* Name cell */
+  const nameHtml = item.is_dir
+    ? `<span onclick="loadFiles('${item.path}')" style="cursor:pointer;color:var(--accent);font-weight:600">${icon} ${escHtml(item.name)}</span>`
+    : previewable
+      ? `<span onclick="previewFile('${safePath}','${safeName}','${item.ext}')" style="cursor:pointer;color:var(--accent)" title="Xem trước">${icon} ${escHtml(item.name)}</span>`
+      : `<span>${icon} ${escHtml(item.name)}</span>`;
+
+  /* Info badges */
+  let badges = '';
+  if (!item.is_dir) {
+    const typeColor = { video:'#e53e3e', audio:'#805ad5', image:'#2b6cb0', subtitle:'#2f855a', document:'#744210', other:'#718096' };
+    const typeLabel = { video:'Video', audio:'Audio', image:'Ảnh', subtitle:'Phụ đề', document:'Tài liệu', other:'Khác' };
+    const tc = typeColor[item.file_type] || '#718096';
+    const tl = typeLabel[item.file_type] || item.file_type;
+    badges += `<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${tc}22;color:${tc};font-weight:600;white-space:nowrap">${tl}</span>`;
+    if (item.ext) badges += `<span style="font-size:10px;padding:1px 5px;border-radius:6px;background:var(--bg3,#f0f0f0);color:var(--text-muted);font-family:monospace">${item.ext}</span>`;
+  } else {
+    if (item.child_count !== null && item.child_count !== undefined)
+      badges += `<span style="font-size:11px;color:var(--text-muted)">${item.child_count} mục</span>`;
+  }
+
+  /* Action buttons */
+  let actions = '';
+  if (!item.is_dir) {
+    if (previewable)
+      actions += `<button class="btn btn-secondary btn-sm" onclick="previewFile('${safePath}','${safeName}','${item.ext}')">👁 Xem</button>`;
+    if (isVideo || isAudio) {
+      actions += `<button class="btn btn-sm" style="background:#6366f1;color:#fff;border:none" onclick="sendToPublishFromHistory('${safeAbs}')">📤 Đăng</button>`;
+      actions += `<button class="btn btn-sm" style="background:#0ea5e9;color:#fff;border:none" onclick="addToProcessQueue('${safeAbs}','${safeName}')">+ Hàng chờ</button>`;
+    }
+    actions += `<button class="btn btn-primary btn-sm" onclick="openInFolder('${safePath}')" title="Mở thư mục">📂</button>`;
+    actions += `<button class="btn btn-danger btn-sm" onclick="deleteFile('${safePath}','${safeName}')">🗑</button>`;
+  }
+
+  /* Size + mtime info */
+  const meta = [
+    !item.is_dir ? `<span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${item.size_str}</span>` : '',
+    `<span style="font-size:11px;color:var(--text-muted);white-space:nowrap" title="${item.mtime_full || ''}">${item.mtime}</span>`,
+  ].filter(Boolean).join('');
+
+  return `<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+    <div style="flex:1;min-width:0;font-size:13px;color:var(--text);word-break:break-word">${nameHtml}</div>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap">
+      ${badges}${meta}${actions}
+    </div>
+  </div>`;
+}
+
+/* ── Icons & preview helpers ── */
+function _fileIcon(ext) {
+  if (['.mp4','.mov','.avi','.mkv','.webm','.m4v','.flv','.ts'].includes(ext)) return '🎬';
+  if (['.mp3','.m4a','.wav','.aac','.ogg','.opus','.flac'].includes(ext)) return '🎵';
+  if (['.srt','.ass','.vtt','.ssa'].includes(ext)) return '💬';
+  if (['.jpg','.jpeg','.png','.webp','.gif','.bmp','.svg'].includes(ext)) return '🖼';
+  if (ext === '.json') return '📋';
+  if (['.txt','.md','.log','.csv'].includes(ext)) return '📄';
+  if (['.zip','.rar','.7z','.tar','.gz'].includes(ext)) return '🗜';
+  return '📄';
+}
+
+const _PREVIEW_VIDEO = ['.mp4','.webm','.mov','.m4v','.ogv'];
+const _PREVIEW_AUDIO = ['.mp3','.m4a','.wav','.aac','.ogg','.opus','.flac'];
+const _PREVIEW_IMAGE = ['.jpg','.jpeg','.png','.webp','.gif','.bmp','.svg'];
+const _PREVIEW_TEXT  = ['.srt','.ass','.vtt','.txt','.log','.json','.md','.csv'];
+
+function _canPreview(ext) {
+  ext = (ext || '').toLowerCase();
+  return _PREVIEW_VIDEO.includes(ext) || _PREVIEW_AUDIO.includes(ext)
+      || _PREVIEW_IMAGE.includes(ext) || _PREVIEW_TEXT.includes(ext);
+}
+
+/* ── Preview Modal ── */
+async function previewFile(path, name, ext) {
+  ext = (ext || '').toLowerCase();
+  const url = '/api/files/preview?path=' + encodeURIComponent(path);
+  let bodyHtml = '';
+  if (_PREVIEW_VIDEO.includes(ext))
+    bodyHtml = `<video src="${url}" controls autoplay style="max-width:100%;max-height:70vh;border-radius:8px;background:#000"></video>`;
+  else if (_PREVIEW_AUDIO.includes(ext))
+    bodyHtml = `<audio src="${url}" controls autoplay style="width:100%"></audio>`;
+  else if (_PREVIEW_IMAGE.includes(ext))
+    bodyHtml = `<img src="${url}" alt="${name}" style="max-width:100%;max-height:70vh;border-radius:8px;object-fit:contain">`;
+  else if (_PREVIEW_TEXT.includes(ext))
+    bodyHtml = `<pre id="preview-text" style="max-height:70vh;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;background:var(--bg3,#f5f5f5);padding:12px;border-radius:8px;margin:0">Đang tải…</pre>`;
+  else
+    bodyHtml = `<div class="empty-state">Không hỗ trợ xem trước định dạng này.</div>`;
+
+  _openPreviewModal(name, bodyHtml, path);
+
+  if (_PREVIEW_TEXT.includes(ext)) {
+    try {
+      const res = await fetch(url);
+      let txt = await res.text();
+      if (ext === '.json') { try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch(_){} }
+      const pre = document.getElementById('preview-text');
+      if (pre) pre.textContent = txt || '(trống)';
+    } catch(e) {
+      const pre = document.getElementById('preview-text');
+      if (pre) pre.textContent = 'Lỗi: ' + e.message;
+    }
+  }
+}
+
+function _openPreviewModal(name, bodyHtml, path) {
+  closePreviewModal();
+  const safePath = String(path || '').replace(/'/g, "\\'");
+  const overlay  = document.createElement('div');
+  overlay.id = 'file-preview-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:11000;background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.onclick = e => { if (e.target === overlay) closePreviewModal(); };
+  overlay.innerHTML = `
+    <div style="width:min(900px,96vw);max-height:92vh;display:flex;flex-direction:column;background:var(--surface,#fff);border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.3);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <span style="flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--text);word-break:break-word">${escHtml(name)}</span>
+        <button class="btn btn-primary btn-sm" onclick="openInFolder('${safePath}')">📂 Mở thư mục</button>
+        <button class="btn btn-secondary btn-sm" onclick="closePreviewModal()">✕</button>
+      </div>
+      <div style="padding:16px;overflow:auto;display:flex;align-items:center;justify-content:center">${bodyHtml}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.addEventListener('keydown', _previewEscHandler);
+}
+function _previewEscHandler(e) { if (e.key === 'Escape') closePreviewModal(); }
+function closePreviewModal() {
+  const m = document.getElementById('file-preview-modal');
+  if (m) { m.querySelectorAll('video,audio').forEach(el => { try { el.pause(); } catch(_){} }); m.remove(); }
+  document.removeEventListener('keydown', _previewEscHandler);
+}
+
+/* ── File actions ── */
+async function openInFolder(path) {
+  try {
+    const res  = await fetch('/api/files/open', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path}) });
+    const data = await res.json();
+    if (data.ok) toast('Đã mở thư mục chứa file', 'success');
+    else toast('Lỗi: ' + (data.error || 'không mở được'), 'error');
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function deleteFile(path, name) {
+  if (!confirm('Xóa file: ' + name + '?')) return;
+  try {
+    const res  = await fetch('/api/files/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path}) });
+    const data = await res.json();
+    if (data.ok) { toast('Đã xóa: ' + name, 'success'); loadFiles(); }
+    else toast('Lỗi: ' + data.error, 'error');
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+/* ══════════════════════════════════════════════
+   PUBLISH QUICK MODAL
+══════════════════════════════════════════════ */
+let _pqmAbsPath = '';
+let _pqmTab = 'yt';
+
+function openPubQuickModal(absPath, name, ext) {
+  _pqmAbsPath = absPath;
+  const modal = document.getElementById('pub-quick-modal');
+  document.getElementById('pqm-filename').textContent = name || absPath;
+  // pre-fill title from filename (strip ext)
+  const stem = (name || '').replace(/\.[^.]+$/, '');
+  const ytTitle = document.getElementById('pqm-yt-title');
+  const fbTitle = document.getElementById('pqm-fb-title');
+  if (ytTitle && !ytTitle.value) ytTitle.value = stem;
+  if (fbTitle && !fbTitle.value) fbTitle.value = stem;
+  // reset log
+  const log = document.getElementById('pqm-log');
+  if (log) { log.style.display = 'none'; log.textContent = ''; }
+  // reset buttons
+  const btnUp = document.getElementById('pqm-btn-upload');
+  const btnQ  = document.getElementById('pqm-btn-queue');
+  if (btnUp) { btnUp.disabled = false; btnUp.textContent = '🚀 Đăng ngay'; }
+  if (btnQ)  { btnQ.disabled  = false; btnQ.textContent  = '📋 Thêm vào hàng chờ'; }
+  // check fb auth
+  _pqmCheckFbAuth();
+  pqmSwitchTab('yt');
+  modal.style.display = 'flex';
+  document.addEventListener('keydown', _pqmEscHandler);
+}
+
+function closePubQuickModal() {
+  const modal = document.getElementById('pub-quick-modal');
+  if (modal) modal.style.display = 'none';
+  document.removeEventListener('keydown', _pqmEscHandler);
+}
+function _pqmEscHandler(e) { if (e.key === 'Escape') closePubQuickModal(); }
+
+function pqmSwitchTab(tab) {
+  _pqmTab = tab;
+  ['yt','fb'].forEach(t => {
+    const btn   = document.getElementById('pqm-tab-' + t);
+    const panel = document.getElementById('pqm-panel-' + t);
+    if (!btn || !panel) return;
+    const active = (t === tab);
+    btn.style.background   = active ? 'var(--accent,#6366f1)' : '';
+    btn.style.color        = active ? '#fff' : '';
+    btn.style.borderColor  = active ? 'var(--accent,#6366f1)' : '';
+    panel.style.display    = active ? '' : 'none';
+  });
+}
+
+async function _pqmCheckFbAuth() {
+  try {
+    const res  = await fetch('/api/facebook/status');
+    const data = await res.json();
+    const noAuth = document.getElementById('pqm-fb-noauth');
+    const auth   = document.getElementById('pqm-fb-auth');
+    if (data.ok && data.connected) {
+      if (noAuth) noAuth.style.display = 'none';
+      if (auth)   auth.style.display   = '';
+      // populate pages
+      const sel = document.getElementById('pqm-fb-page');
+      if (sel && data.pages && data.pages.length) {
+        sel.innerHTML = data.pages.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+      }
+    } else {
+      if (noAuth) noAuth.style.display = '';
+      if (auth)   auth.style.display   = 'none';
+    }
+  } catch(_) {}
+}
+
+function _pqmLog(msg, level) {
+  const log = document.getElementById('pqm-log');
+  if (!log) return;
+  log.style.display = '';
+  const color = level === 'error' ? '#f56565' : level === 'success' ? '#48bb78' : level === 'warn' ? '#ed8936' : 'inherit';
+  log.innerHTML += `<span style="color:${color}">${escHtml(msg)}</span>\n`;
+  log.scrollTop = log.scrollHeight;
+}
+
+async function pqmDoUpload() {
+  if (!_pqmAbsPath) { toast('Không có file được chọn', 'error'); return; }
+  const btnUp = document.getElementById('pqm-btn-upload');
+  const btnQ  = document.getElementById('pqm-btn-queue');
+  if (btnUp) { btnUp.disabled = true; btnUp.textContent = '⏳ Đang đăng...'; }
+  if (btnQ)  btnQ.disabled = true;
+
+  const log = document.getElementById('pqm-log');
+  if (log) { log.style.display = ''; log.textContent = ''; }
+
+  if (_pqmTab === 'yt') {
+    await _pqmUploadYouTube();
+  } else {
+    await _pqmUploadFacebook();
+  }
+
+  if (btnUp) { btnUp.disabled = false; btnUp.textContent = '🚀 Đăng ngay'; }
+  if (btnQ)  btnQ.disabled = false;
+}
+
+async function _pqmUploadYouTube() {
+  const title       = (document.getElementById('pqm-yt-title')?.value || '').trim();
+  const desc        = (document.getElementById('pqm-yt-desc')?.value  || '').trim();
+  const tagsRaw     = (document.getElementById('pqm-yt-tags')?.value  || '').trim();
+  const privacy     = document.getElementById('pqm-yt-privacy')?.value || 'private';
+  const isShort     = document.getElementById('pqm-yt-short')?.checked || false;
+  const tags        = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+  if (!title) { toast('Vui lòng nhập tiêu đề', 'error'); return; }
+
+  _pqmLog('[YouTube] Bắt đầu upload: ' + title);
+  try {
+    const res = await fetch('/api/youtube_upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_path: _pqmAbsPath, title, description: desc, tags, privacy_status: privacy, is_short: isShort }),
+    });
+
+    if (!res.body) { _pqmLog('Không nhận được stream response', 'error'); return; }
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const j = JSON.parse(line);
+          if (j.log)   _pqmLog(j.log, j.level);
+          if (j.ok === true)  { _pqmLog('✅ Upload thành công! ' + (j.url || ''), 'success'); toast('Upload YouTube thành công!', 'success'); }
+          if (j.ok === false) { _pqmLog('❌ Lỗi: ' + (j.error || 'unknown'), 'error');        toast('Upload thất bại: ' + (j.error || ''), 'error'); }
+        } catch(_) {}
+      }
+    }
+  } catch(e) { _pqmLog('Lỗi kết nối: ' + e.message, 'error'); toast('Lỗi: ' + e.message, 'error'); }
+}
+
+async function _pqmUploadFacebook() {
+  const pageId  = document.getElementById('pqm-fb-page')?.value || '';
+  const title   = (document.getElementById('pqm-fb-title')?.value || '').trim();
+  const fbType  = document.getElementById('pqm-fb-type')?.value  || 'auto';
+  if (!pageId) { toast('Chọn Page để đăng', 'error'); return; }
+
+  _pqmLog('[Facebook] Đang upload...');
+  try {
+    const endpoint = (fbType === 'reel') ? '/api/facebook/post_reel' : '/api/facebook/post_video';
+    const res  = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_path: _pqmAbsPath, page_id: pageId, title, post_type: fbType }),
+    });
+    const data = await res.json();
+    if (data.ok) { _pqmLog('✅ Đăng Facebook thành công!', 'success'); toast('Đăng Facebook thành công!', 'success'); }
+    else         { _pqmLog('❌ Lỗi: ' + (data.error || 'unknown'), 'error'); toast('Lỗi: ' + (data.error || ''), 'error'); }
+  } catch(e) { _pqmLog('Lỗi: ' + e.message, 'error'); toast('Lỗi: ' + e.message, 'error'); }
+}
+
+/* ══════════════════════════════════════════════
+   THÊM VÀO HÀNG CHỜ BATCH PUBLISH
+══════════════════════════════════════════════ */
+
+/* Thêm nhanh từ modal */
+function pqmAddToPublishQueue() {
+  const stem = (document.getElementById('pqm-filename')?.textContent || '').replace(/\.[^.]+$/, '');
+  addToPublishQueue(_pqmAbsPath, stem);
+  closePubQuickModal();
+}
+
+/* Thêm từ nút "+ Hàng chờ" trực tiếp trong file row */
+function addToPublishQueue(absPath, name) {
+  if (!absPath) return;
+  // Lưu vào localStorage để trang Publish đọc khi mở
+  try {
+    const queue = JSON.parse(localStorage.getItem('_pub_queue') || '[]');
+    const exists = queue.some(i => i.abs_path === absPath);
+    if (!exists) {
+      queue.push({ abs_path: absPath, name: name || absPath, added: Date.now() });
+      localStorage.setItem('_pub_queue', JSON.stringify(queue));
+    }
+    toast('Đã thêm "' + (name || absPath) + '" vào hàng chờ đăng', 'success');
+    // Nếu đang ở trang publish thì reload danh sách
+    if (typeof _pubQueueRefresh === 'function') _pubQueueRefresh();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+/* Thêm từ nút "+ Xử lý" trực tiếp trong file row */
+function addToProcessQueue(absPath, name) {
+  if (!absPath) return;
+  // Lưu vào localStorage để trang Process đọc khi mở
+  try {
+    const queue = JSON.parse(localStorage.getItem('_proc_batch_queue') || '[]');
+    const exists = queue.some(i => i.val === absPath);
+    if (!exists) {
+      queue.push({
+        id: 'bt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        type: 'file',
+        val: absPath,
+        status: 'pending',
+        desc: name || absPath,
+        added: Date.now()
+      });
+      localStorage.setItem('_proc_batch_queue', JSON.stringify(queue));
+    }
+    toast('Đã thêm "' + (name || absPath) + '" vào hàng chờ xử lý', 'success');
+    // Nếu đang ở trang process thì reload danh sách
+    if (typeof _procQueueRefresh === 'function') _procQueueRefresh();
+  } catch(e) { toast('Lỗi: ' + e.message, 'error'); }
+}
+
+/* Chuyển video sang trang Đăng video (phần phân phối) và tự động nạp thông tin */
+async function sendToPublishFromHistory(absPath) {
+  if (!absPath) return;
+  switchPage('publish');
+  const pathInput = document.getElementById('pub-video-path');
+  const subInput = document.getElementById('pub-sub-path');
+  if (pathInput) {
+    pathInput.value = absPath;
+    window._pubVideoFile = null;
+    window._pubUploadedVideoPath = absPath; // Set path directly
+
+    if (subInput) subInput.value = ''; // clear subtitle input first
+
+    // Auto detect matching subtitles if function is available
+    if (typeof autoDetectSubtitles === 'function') {
+      await autoDetectSubtitles(absPath);
+    }
+
+    // Clear previous AI results and text fields
+    ['yt-title', 'yt-desc', 'yt-tags', 'tt-title', 'tt-tags', 'fb-title', 'fb-tags', 'pub-content-input'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+
+    // Reset status messages
+    const statusMsg = document.getElementById('pub-analyze-status');
+    if (statusMsg) statusMsg.textContent = '';
+
+    toast('✅ Đã nạp video vào trang Đăng tải', 'success');
+  }
+}
+
+/* ══════════════════════════════════════════════
+   HISTORY TABLE
+   ══════════════════════════════════════════════ */
+const _origLoadHistory = typeof loadHistory === 'function' ? loadHistory : null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  // loadFiles sẽ được gọi khi switchPage('history')
+});
+</script>

@@ -1,0 +1,26 @@
+<!-- ══════════ TOPBAR ══════════ -->
+<div class="h-14 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center px-[18px] gap-3 flex-shrink-0 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+  <!-- Mobile hamburger -->
+  <button id="topbar-menu-btn" onclick="toggleMobileMenu()"
+    class="hidden bg-transparent border-0 cursor-pointer p-1 text-slate-500 dark:text-slate-400 text-xl">
+    ☰
+  </button>
+
+  <!-- Page title -->
+  <span id="topbar-title" class="text-[15px] font-bold flex-1 text-slate-900 dark:text-slate-100">
+    Tìm người dùng
+  </span>
+
+  <!-- Dark mode toggle -->
+  <button onclick="toggleTheme()" id="btn-theme"
+    class="p-1.5 px-3 rounded-full text-[13px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-[1.5px] border-slate-200 dark:border-slate-600 cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 hover:text-blue-500 dark:hover:text-blue-400 transition-all"
+    title="Chuyển đổi giao diện sáng/tối">
+    <span id="theme-icon">🌙</span>
+  </button>
+
+  <!-- Language toggle -->
+  <button onclick="toggleLang()" id="btn-lang"
+    class="p-1 px-3 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-900/30 text-blue-500 dark:text-blue-400 border-[1.5px] border-blue-200 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all">
+    EN
+  </button>
+</div>

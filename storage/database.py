@@ -1,3 +1,4 @@
+from pathlib import Path
 import asyncio
 import aiosqlite
 from typing import Dict, Any, Optional
@@ -6,7 +7,11 @@ from datetime import datetime
 
 class Database:
     def __init__(self, db_path: str = 'dy_downloader.db'):
-        self.db_path = db_path
+        p = Path(db_path)
+        if not p.is_absolute():
+            root = Path(__file__).parent.parent
+            p = root / p
+        self.db_path = str(p.resolve())
         self._initialized = False
         self._conn: Optional[aiosqlite.Connection] = None
         self._conn_lock = asyncio.Lock()

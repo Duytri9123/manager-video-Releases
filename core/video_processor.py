@@ -1775,6 +1775,7 @@ def burn_subtitles(
     frame_target_w: int = 1080,
     log_callback=None,
     blur_y_pct: Optional[float] = None,
+    blur_x_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
     video_overlays: Optional[list] = None,
     target_aspect: str = "auto",
@@ -1821,6 +1822,7 @@ def burn_subtitles(
                          frame_target_w=frame_target_w,
                          log_callback=log_callback,
                          blur_y_pct=blur_y_pct,
+                         blur_x_pct=blur_x_pct,
                          blur_extra_zones=blur_extra_zones,
                          video_overlays=video_overlays,
                          target_aspect=target_aspect,
@@ -1832,6 +1834,7 @@ def burn_subtitles(
                      font_size, font_color, outline_color, outline_width,
                      margin_v, subtitle_position,
                      blur_y_pct=blur_y_pct,
+                     blur_x_pct=blur_x_pct,
                      blur_extra_zones=blur_extra_zones,
                      video_overlays=video_overlays)
 
@@ -1863,6 +1866,7 @@ def _burn_ass(
     frame_target_w: int = 1080,
     log_callback=None,
     blur_y_pct: Optional[float] = None,
+    blur_x_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
     video_overlays: Optional[list] = None,
     target_aspect: str = "auto",
@@ -2049,7 +2053,8 @@ def _burn_ass(
                     y_start = max(0.0, 1.0 - h_pct - lift_pct)
                 else:
                     y_start = 0.0
-            active_zones.append((h_pct, w_pct, y_start, 0.5, None, None))
+            x_center = 0.5 if blur_x_pct is None else _clamp_float(blur_x_pct, 0.0, 1.0)
+            active_zones.append((h_pct, w_pct, y_start, x_center, None, None))
             
         if blur_extra_zones:
             for ez in blur_extra_zones:
@@ -2380,6 +2385,7 @@ def _burn_srt(
     margin_v: int = 30,
     subtitle_position: str = "bottom",
     blur_y_pct: Optional[float] = None,
+    blur_x_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
     video_overlays: Optional[list] = None,
 ) -> tuple[bool, str]:
@@ -2480,7 +2486,8 @@ def _burn_srt(
                         y_start = max(0.0, 1.0 - h_pct - lift_pct)
                     else:
                         y_start = 0.0
-                active_zones.append((h_pct, w_pct, y_start, 0.5, None, None))
+                x_center = 0.5 if blur_x_pct is None else _clamp_float(blur_x_pct, 0.0, 1.0)
+                active_zones.append((h_pct, w_pct, y_start, x_center, None, None))
                 
             if blur_extra_zones:
                 for ez in blur_extra_zones:
@@ -3149,10 +3156,11 @@ class MultiProviderTTS:
         elevenlabs_api_key: str = "",
         elevenlabs_voice_id: str = "",
         elevenlabs_model: str = "eleven_multilingual_v2",
-        fpt_fallback_elevenlabs: bool = True,
+        fpt_fallback_elevenlabs: bool = False,
         fish_api_key: str = "",
         fish_model: str = "",
         fish_reference_id: str = "",
+        vieneu_ref_audio: str = "",
     ):
         self.voice = voice
         self.engine = engine
@@ -3175,6 +3183,7 @@ class MultiProviderTTS:
         )
         self.fish_model = (fish_model or "").strip() or FISH_DEFAULT_MODEL
         self.fish_reference_id = (fish_reference_id or "").strip()
+        self.vieneu_ref_audio = (vieneu_ref_audio or "").strip()
         # Tự động fallback FPT → ElevenLabs khi FPT hết token/quota
         self.fpt_fallback_elevenlabs = fpt_fallback_elevenlabs and bool(self.elevenlabs_api_key)
 
@@ -3240,6 +3249,7 @@ class MultiProviderTTS:
                     self.voice,
                     out_path,
                     style=self.tts_emotion,
+                    ref_audio=self.vieneu_ref_audio,
                 )
                 if ok:
                     return True
@@ -4320,6 +4330,7 @@ async def convert_voice(
     tts_rate: str = "+0%",
     tts_pitch: str = "+0Hz",
     tts_emotion: str = "default",
+    vieneu_ref_audio: str = "",
 ) -> tuple[bool, str]:
     """
     Replace original audio with TTS voice.
@@ -4390,6 +4401,7 @@ async def convert_voice(
             elevenlabs_api_key=el_key,
             elevenlabs_voice_id=el_voice,
             fpt_fallback_elevenlabs=bool(el_key),
+            vieneu_ref_audio=vieneu_ref_audio,
         )
 
         # Generate TTS for each segment
@@ -5123,7 +5135,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     )
                     # Wait for frontend to confirm (or auto-continue if skip_review)
                     import threading as _thr
-                    from routes.process import _proc_review_event, _proc_pause_event
+                    from templates.pages.process.route import _proc_review_event, _proc_pause_event
                     _proc_review_event.clear()
                     # Wait up to 10 minutes for user review
                     _proc_review_event.wait(timeout=600)
@@ -5159,7 +5171,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     # Mode: 'ai' | 'import' | 'frame' | 'none'
     # User có thể override config qua modal "Chọn thumbnail" sau khi review ASS.
     try:
-        from routes.process import get_proc_thumb_override
+        from templates.pages.process.route import get_proc_thumb_override
         _thumb_user_cfg = get_proc_thumb_override()
     except Exception:
         _thumb_user_cfg = {}
@@ -5266,6 +5278,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if _blur_y_raw is not None and str(_blur_y_raw).strip() != "" and str(_blur_y_raw).lower() != "null":
         try:
             _blur_y_pct = float(_blur_y_raw)
+        except Exception:
+            pass
+
+    _blur_x_raw = data.get("blur_x_pct")
+    _blur_x_pct = None
+    if _blur_x_raw is not None and str(_blur_x_raw).strip() != "" and str(_blur_x_raw).lower() != "null":
+        try:
+            _blur_x_pct = float(_blur_x_raw)
         except Exception:
             pass
 
@@ -5447,9 +5467,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 fpt_fallback_elevenlabs=_as_bool(
                     data.get(
                         "fpt_fallback_elevenlabs",
-                        (cfg_raw.get("video_process") or {}).get("fpt_fallback_elevenlabs", True),
+                        (cfg_raw.get("video_process") or {}).get("fpt_fallback_elevenlabs", False),
                     ),
-                    True,
+                    False,
                 ),
                 fish_api_key=(
                     str(data.get("fish_api_key") or "").strip()
@@ -5465,6 +5485,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 fish_reference_id=str(
                     data.get("fish_reference_id")
                     or (cfg_raw.get("video_process") or {}).get("fish_reference_id")
+                    or ""
+                ),
+                vieneu_ref_audio=str(
+                    data.get("vieneu_ref_audio")
+                    or (cfg_raw.get("video_process") or {}).get("vieneu_ref_audio")
                     or ""
                 ),
             )
@@ -5575,6 +5600,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             frame_enabled=False,
             log_callback=_burn_log_cb,
             blur_y_pct=_blur_y_pct,
+            blur_x_pct=_blur_x_pct,
             blur_extra_zones=_blur_extra_zones,
             video_overlays=_video_overlays,
             target_aspect=_target_aspect,
@@ -5713,7 +5739,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
             # ── Retry loop khi AI thumbnail fail (chỉ áp dụng cho mode='ai') ──
             if (not thumb_result or not Path(thumb_result).exists()) and _thumb_mode == "ai":
-                from routes.process import wait_thumb_retry_action
+                from templates.pages.process.route import wait_thumb_retry_action
                 _max_retries = 3
                 for _attempt in range(1, _max_retries + 1):
                     yield send(
@@ -5834,7 +5860,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     }
                     for i in missing_indices
                 ]
-                from routes.process import prepare_tts_retry_wait, wait_tts_retry_action
+                from templates.pages.process.route import prepare_tts_retry_wait, wait_tts_retry_action
                 prepare_tts_retry_wait()
                 yield send(
                     tts_incomplete=True,

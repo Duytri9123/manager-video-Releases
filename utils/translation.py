@@ -265,33 +265,238 @@ def _llm_translate(
     return all_results
 
 
+def load_api_keys_status() -> Dict:
+    import json
+    from pathlib import Path
+    root_dir = Path(__file__).parent.parent
+    status_file = root_dir / ".state" / "api_keys_status.json"
+    if status_file.exists():
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def is_9router_working(nr_cfg: Dict) -> bool:
+    import urllib.request
+    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
+    api_key = (nr_cfg.get("api_key") or "").strip()
+    if not api_key:
+        return False
+    try:
+        req = urllib.request.Request(
+            f"{endpoint}/models",
+            headers={"Authorization": f"Bearer {api_key}"}
+        )
+        with urllib.request.urlopen(req, timeout=0.5) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def parse_provider_and_model(preferred: str) -> Tuple[str, str]:
+    if not preferred or preferred == "auto":
+        return "auto", ""
+    if "/" in preferred:
+        parts = preferred.split("/", 1)
+        prov = parts[0].lower()
+        model = parts[1]
+        return prov, model
+    return preferred.lower(), ""
+
+
+def is_chat_model(model_id: str) -> bool:
+    mid = model_id.lower()
+    # Patterns for TTS
+    if "tts" in mid or "fastpitch" in mid or "tacotron2" in mid or "speech" in mid:
+        return False
+    # Patterns for STT
+    if "whisper" in mid or "stt" in mid:
+        return False
+    # Patterns for Embeddings
+    if "embedding" in mid or "embed" in mid:
+        return False
+    # Patterns for Image Generation
+    if "flux" in mid or "dall-e" in mid or "stable-diffusion" in mid or "generator" in mid or (mid.endswith("-image") and "image-to-text" not in mid):
+        return False
+    return True
+
+
+def get_9router_models(nr_cfg: Dict) -> List[Dict]:
+    if not nr_cfg:
+        return []
+    endpoint = nr_cfg.get("endpoint") or "http://localhost:20128/v1"
+    api_key = nr_cfg.get("api_key") or ""
+    headers = {"Accept": "application/json"}
+    if api_key.strip():
+        headers["Authorization"] = f"Bearer {api_key}"
+    
+    url = f"{endpoint.rstrip('/')}/models"
+    try:
+        import urllib.request
+        import json
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            if resp.status == 200:
+                body = json.loads(resp.read())
+                models = []
+                for it in body.get("data") or []:
+                    mid = it.get("id")
+                    if mid:
+                        if is_chat_model(mid):
+                            models.append({
+                                "id": f"9router/{mid}",
+                                "name": mid,
+                                "provider": "9router",
+                                "owned_by": it.get("owned_by", "")
+                            })
+                return models
+    except Exception:
+        pass
+    return []
+
+
+def get_translation_models(trans_cfg: Dict, full_cfg: Dict | None = None) -> List[Dict]:
+    models = []
+    
+    # 1. Google Translate
+    models.append({
+        "id": "google",
+        "name": "Google Translate",
+        "provider": "google"
+    })
+    
+    # 2. HuggingFace
+    status = load_api_keys_status()
+    def is_provider_ok(name: str) -> bool:
+        if name in status and not status[name].get("ok", True):
+            return False
+        return True
+
+    if (trans_cfg or {}).get("hf_token") and is_provider_ok("huggingface"):
+        models.append({
+            "id": "huggingface",
+            "name": "HuggingFace Qwen-2.5",
+            "provider": "huggingface"
+        })
+        
+    # 3. OpenAI
+    if (trans_cfg or {}).get("openai_key") and is_provider_ok("openai"):
+        models.append({
+            "id": "openai/gpt-4o-mini",
+            "name": "OpenAI: gpt-4o-mini",
+            "provider": "openai"
+        })
+        models.append({
+            "id": "openai/gpt-4o",
+            "name": "OpenAI: gpt-4o",
+            "provider": "openai"
+        })
+        
+    # 4. DeepSeek
+    if (trans_cfg or {}).get("deepseek_key") and is_provider_ok("deepseek"):
+        models.append({
+            "id": "deepseek/deepseek-chat",
+            "name": "DeepSeek: deepseek-chat",
+            "provider": "deepseek"
+        })
+
+    # 5. Groq
+    if (trans_cfg or {}).get("groq_key") and is_provider_ok("groq"):
+        groq_model = (trans_cfg or {}).get("groq_model", "llama-3.1-8b-instant")
+        models.append({
+            "id": f"groq/{groq_model}",
+            "name": f"Groq: {groq_model}",
+            "provider": "groq"
+        })
+
+    # 5b. Gemini
+    gemini_key = ((full_cfg or {}).get("gemini_video") or {}).get("api_key") or ""
+    if gemini_key and is_provider_ok("gemini"):
+        models.append({
+            "id": "gemini/gemini-2.0-flash",
+            "name": "Gemini: gemini-2.0-flash",
+            "provider": "gemini"
+        })
+        models.append({
+            "id": "gemini/gemini-2.5-flash",
+            "name": "Gemini: gemini-2.5-flash",
+            "provider": "gemini"
+        })
+
+    # 6. 9Router
+    nr = ((full_cfg or {}).get("nine_router") or {}) if isinstance(full_cfg, dict) else {}
+    if (nr.get("api_key") or "").strip() and is_9router_working(nr):
+        nr_models = get_9router_models(nr)
+        models.extend(nr_models)
+        
+    return models
+
+
 def get_translation_providers(trans_cfg: Dict, full_cfg: Dict | None = None) -> List[str]:
     providers = []
-    if (trans_cfg or {}).get("deepseek_key"):
-        providers.append("deepseek")
-    if (trans_cfg or {}).get("groq_key"):
-        providers.append("groq")
-    if (trans_cfg or {}).get("openai_key"):
-        providers.append("openai")
-    if (trans_cfg or {}).get("hf_token"):
-        providers.append("huggingface")
-    # 9Router is available when the chat tab has cached an API key. We pass
-    # `full_cfg` for callers that have it; for legacy callers we fall back
-    # to checking the trans_cfg-style key on full_cfg later.
+    status = load_api_keys_status()
+
+    def is_provider_ok(name: str) -> bool:
+        if name in status and not status[name].get("ok", True):
+            return False
+        return True
+
+    # 9Router check FIRST (Try 9Router before direct keys)
     nr = ((full_cfg or {}).get("nine_router") or {}) if isinstance(full_cfg, dict) else {}
     if (nr.get("api_key") or "").strip():
-        providers.append("9router")
+        if is_9router_working(nr):
+            providers.append("9router")
+
+    if (trans_cfg or {}).get("deepseek_key") and is_provider_ok("deepseek"):
+        providers.append("deepseek")
+    if (trans_cfg or {}).get("openai_key") and is_provider_ok("openai"):
+        providers.append("openai")
+    if (trans_cfg or {}).get("groq_key") and is_provider_ok("groq"):
+        providers.append("groq")
+
+    gemini_key = ((full_cfg or {}).get("gemini_video") or {}).get("api_key") or ""
+    if gemini_key and is_provider_ok("gemini"):
+        providers.append("gemini")
+
+    if (trans_cfg or {}).get("hf_token") and is_provider_ok("huggingface"):
+        providers.append("huggingface")
+
     providers.append("google")
     return providers
 
 
 def build_provider_order(trans_cfg: Dict, preferred_provider: str = "auto", full_cfg: Dict | None = None) -> List[str]:
     available = get_translation_providers(trans_cfg, full_cfg=full_cfg)
-    preferred = _normalize_provider_name(preferred_provider)
+    prov_req, _ = parse_provider_and_model(preferred_provider)
+    preferred = _normalize_provider_name(prov_req)
     if preferred != "auto" and preferred in available:
-        ordered = [preferred] + [p for p in available if p != preferred]
-        return ordered
+        # Nếu người dùng chọn một provider cụ thể, chỉ dùng provider đó, không tự động fallback
+        return [preferred]
     return available
+
+
+def mark_provider_failed(provider_name: str, error_message: str):
+    try:
+        import json
+        from pathlib import Path
+        root_dir = Path(__file__).parent.parent
+        status_file = root_dir / ".state" / "api_keys_status.json"
+        status_data = {}
+        if status_file.exists():
+            try:
+                with open(status_file, "r", encoding="utf-8") as f:
+                    status_data = json.load(f)
+            except Exception:
+                pass
+        status_data[provider_name] = {"ok": False, "error": error_message}
+        status_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(status_file, "w", encoding="utf-8") as f:
+            json.dump(status_data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 
 def translate_texts(
@@ -324,9 +529,26 @@ def translate_texts(
     nine_endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/") if isinstance(nr, dict) else "http://localhost:20128/v1"
     nine_model = (nr.get("default_model") or "duytris").strip() if isinstance(nr, dict) else "duytris"
 
+    try:
+        from core.config import load_cfg
+        full_cfg_live = load_cfg()
+    except Exception:
+        full_cfg_live = {}
+    gemini_key = ""
+    if isinstance(full_cfg_live, dict):
+        gemini_key = (full_cfg_live.get("gemini_video") or {}).get("api_key", "") or ""
+
+    # Parse preferred provider/model
+    prov_req, model_req = parse_provider_and_model(preferred_provider)
+    if prov_req == "9router" and model_req:
+        nine_model = model_req
+
     # Synthesize a fake_full_cfg so build_provider_order can see 9Router
-    # availability via its existing API.
-    full_cfg_fake = {"nine_router": nr if isinstance(nr, dict) else {}}
+    # and Gemini availability via its existing API.
+    full_cfg_fake = {
+        "nine_router": nr if isinstance(nr, dict) else {},
+        "gemini_video": {"api_key": gemini_key}
+    }
     provider_order = build_provider_order(cfg, preferred_provider, full_cfg=full_cfg_fake)
 
     def _rebuild(translated_active: List[str]) -> List[str]:
@@ -342,24 +564,51 @@ def translate_texts(
     for provider in provider_order:
         try:
             if provider == "9router" and nine_key:
-                result = _llm_translate(
-                    source_texts,
-                    f"{nine_endpoint}/chat/completions",
-                    nine_key,
-                    nine_model,
-                    context=context,
-                    target_lang=target_lang,
-                )
-                if any(result):
-                    return _rebuild(result), "9router"
+                candidates = [nine_model]
+                try:
+                    nr_models = get_9router_models(nr)
+                    available_ids = {m["id"].replace("9router/", "") for m in nr_models}
+                    fast_priorities = [
+                        "gemini-2.5-flash",
+                        "gemini-1.5-flash",
+                        "gemini-3-flash",
+                        "gpt-4o-mini",
+                        "llama-3.1-8b-instant",
+                    ]
+                    for fm in fast_priorities:
+                        if fm in available_ids and fm not in candidates:
+                            candidates.append(fm)
+                except Exception:
+                    pass
+
+                last_nr_err = None
+                success = False
+                for model_cand in candidates:
+                    try:
+                        result = _llm_translate(
+                            source_texts,
+                            f"{nine_endpoint}/chat/completions",
+                            nine_key,
+                            model_cand,
+                            context=context,
+                            target_lang=target_lang,
+                        )
+                        if any(result):
+                            return _rebuild(result), "9router"
+                    except Exception as e:
+                        last_nr_err = e
+                        continue
+                if last_nr_err:
+                    raise last_nr_err
                 _errors.append("9router: empty result")
 
             elif provider == "deepseek" and deepseek_key:
+                ds_model = model_req if prov_req == "deepseek" and model_req else "deepseek-chat"
                 result = _llm_translate(
                     source_texts,
                     "https://api.deepseek.com/v1/chat/completions",
                     deepseek_key,
-                    "deepseek-chat",
+                    ds_model,
                     context=context,
                     target_lang=target_lang,
                 )
@@ -368,11 +617,12 @@ def translate_texts(
                 _errors.append("deepseek: empty result")
 
             elif provider == "openai" and openai_key:
+                oa_model = model_req if prov_req == "openai" and model_req else "gpt-4o-mini"
                 result = _llm_translate(
                     source_texts,
                     "https://api.openai.com/v1/chat/completions",
                     openai_key,
-                    "gpt-4o-mini",
+                    oa_model,
                     context=context,
                     target_lang=target_lang,
                 )
@@ -381,17 +631,32 @@ def translate_texts(
                 _errors.append("openai: empty result")
 
             elif provider == "groq" and groq_key:
+                g_model = model_req if prov_req == "groq" and model_req else groq_model
                 result = _llm_translate(
                     source_texts,
                     "https://api.groq.com/openai/v1/chat/completions",
                     groq_key,
-                    groq_model,
+                    g_model,
                     context=context,
                     target_lang=target_lang,
                 )
                 if any(result):
                     return _rebuild(result), "groq"
                 _errors.append("groq: empty result")
+
+            elif provider == "gemini" and gemini_key:
+                gem_model = model_req if prov_req == "gemini" and model_req else "gemini-2.5-flash"
+                result = _llm_translate(
+                    source_texts,
+                    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                    gemini_key,
+                    gem_model,
+                    context=context,
+                    target_lang=target_lang,
+                )
+                if any(result):
+                    return _rebuild(result), "gemini"
+                _errors.append("gemini: empty result")
 
             elif provider == "huggingface" and hf_token:
                 hf_endpoints = [
@@ -430,6 +695,7 @@ def translate_texts(
                         headers={
                             "User-Agent": "Mozilla/5.0",
                             "Accept-Language": "vi",
+                            "Connection": "close"
                         },
                     )
                     with urllib.request.urlopen(req, timeout=6) as response:
@@ -443,6 +709,9 @@ def translate_texts(
                     return _rebuild(translated), "google"
         except Exception as e:
             _errors.append(f"{provider}: {e}")
+            err_str = str(e).lower()
+            if "402" in err_str or "429" in err_str or "quota" in err_str or "exceeded" in err_str or "balance" in err_str or "401" in err_str or "403" in err_str or "unauthorized" in err_str or "key" in err_str:
+                mark_provider_failed(provider, str(e))
             continue
 
     # All providers failed — raise with details so caller can log it

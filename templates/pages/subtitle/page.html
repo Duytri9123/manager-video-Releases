@@ -1,0 +1,468 @@
+<div id="page-subtitle" class="page">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="align-items:start;gap:14px">
+
+    <!-- LEFT: Input + Settings -->
+    <div>
+      <!-- Video Input -->
+      <div class="card card-collapsible card-has-body">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span>🎬 Video & Phụ đề</span>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label>Import file video</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="sub-video-path" style="flex:1" readonly placeholder="Chọn file video bên phải...">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('sub-video-file').click()">📂 Chọn</button>
+              <input type="file" id="sub-video-file" accept="video/*" style="display:none" onchange="_subPageSelectVideo(this)">
+            </div>
+          </div>
+          <div class="field mt-8">
+            <label>Import file phụ đề (.ass / .srt)</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="sub-ass-path" style="flex:1" readonly placeholder="Chọn file phụ đề bên phải...">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('sub-ass-file').click()">📂 Chọn</button>
+              <input type="file" id="sub-ass-file" accept=".ass,.srt" style="display:none" onchange="_subPageSelectAss(this)">
+            </div>
+          </div>
+          <div class="field mt-8">
+            <label>Thư mục xuất</label>
+            <input type="text" id="sub-out-dir" placeholder="Để trống = cùng thư mục video" value="">
+          </div>
+        </div>
+      </div>
+
+      <!-- Subtitle Settings -->
+      <div class="card card-collapsible card-has-body mt-12">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span>✏️ Cài đặt phụ đề</span>
+        </div>
+        <div class="card-body">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="sub-pg-font-size" min="1" max="20" step="0.5" value="5" oninput="_subPgPreviewUpdate()"></div>
+            <div class="field">
+              <label>Màu chữ</label>
+              <select id="sub-pg-font-color" onchange="_subPgPreviewUpdate()" style="flex:1">
+                <option value="white">Trắng</option>
+                <option value="yellow" selected>Vàng</option>
+                <option value="cyan">Cyan</option>
+              </select>
+            </div>
+            <div class="field"><label>Khoảng cách đáy (%)</label><input type="number" id="sub-pg-margin-v" min="0" max="50" step="0.5" value="7" oninput="_subPgPreviewUpdate()"></div>
+            <div class="field">
+              <label>Vị trí phụ đề</label>
+              <select id="sub-pg-sub-pos" onchange="_subPgPreviewUpdate()">
+                <option value="bottom" selected>Dưới</option>
+                <option value="top">Trên</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-8">
+            <label class="check-item"><input type="checkbox" id="sub-pg-blur" checked> Che phụ đề gốc</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Frame Settings -->
+      <div class="card card-collapsible card-has-body mt-12">
+        <div class="card-header" onclick="toggleCard(this)">
+          <span>🎞 Khung video</span>
+        </div>
+        <div class="card-body">
+          <div class="flex-between mb-8">
+            <span style="font-size:12px;color:var(--text2)">Bật khung video</span>
+            <label class="toggle-wrap">
+              <input type="checkbox" class="toggle-input" id="sub-pg-frame-enabled" onchange="_subPgFrameToggle()">
+              <div class="toggle"></div>
+              <span class="toggle-label text-sm">Bật</span>
+            </label>
+          </div>
+          <div id="sub-pg-frame-controls" style="display:none">
+            <div class="field">
+              <label>📝 Tiêu đề phía trên</label>
+              <input type="text" id="sub-pg-frame-title" placeholder="Nhập tiêu đề..." oninput="_subPgPreviewUpdate()">
+            </div>
+            <div class="grid-2 mt-8">
+              <div class="field">
+                <label>Cỡ chữ tiêu đề (%)</label>
+                <input type="number" id="sub-pg-frame-title-size" value="5" min="1" max="15" step="0.5" oninput="_subPgPreviewUpdate()">
+              </div>
+              <div class="field">
+                <label>Màu tiêu đề</label>
+                <input type="color" id="sub-pg-frame-title-color" value="#000000" oninput="_subPgPreviewUpdate()">
+              </div>
+              <div class="field">
+                <label>Độ rộng mờ 2 bên (%)</label>
+                <input type="number" id="sub-pg-frame-blur-w" value="15" min="0" max="40" step="1" oninput="_subPgPreviewUpdate()">
+              </div>
+              <div class="field">
+                <label>Độ mờ (0-100)</label>
+                <input type="number" id="sub-pg-frame-blur-opacity" value="60" min="0" max="100" step="5" oninput="_subPgPreviewUpdate()">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div class="mt-12">
+        <button class="btn btn-primary" id="btn-sub-pg-run" onclick="_subPgRun()" style="width:100%">
+          🚀 Xử lý phụ đề & khung
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Preview + Progress -->
+    <div>
+      <!-- Preview -->
+      <div class="card card-has-body">
+        <div class="card-body" style="padding:12px">
+          <div class="sub-preview-header">
+            <span style="font-size:12px;font-weight:700;color:var(--text2)">🖼 Preview</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:11px;color:var(--text-muted);margin:0">Thời điểm (giây)</label>
+              <input type="number" id="sub-pg-preview-ts" min="0" step="1" value="5"
+                style="width:70px;padding:4px 6px;font-size:12px">
+              <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px"
+                onclick="_subPgFetchFrame()">📷 Lấy frame</button>
+            </div>
+          </div>
+
+          <div id="sub-pg-preview-wrap" style="position:relative;width:100%;background:#111;border-radius:6px;overflow:hidden;min-height:120px;display:flex;align-items:center;justify-content:center;margin-top:8px">
+            <img id="sub-pg-preview-img" src="" alt="" style="width:100%;display:none;vertical-align:bottom">
+            <div id="sub-pg-placeholder" style="color:#555;font-size:12px;padding:30px;text-align:center">
+              Chọn video và bấm 📷 Lấy frame để xem preview
+            </div>
+            <div id="sub-pg-preview-text" style="position:absolute;left:0;right:0;pointer-events:none;padding:0 12px;text-align:center;display:none"></div>
+            <canvas id="sub-pg-frame-canvas" style="display:none;width:100%;border-radius:6px"></canvas>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+            <label style="font-size:11px;color:var(--text-muted);margin:0;flex-shrink:0">Nội dung mẫu</label>
+            <input type="text" id="sub-pg-sample-text" value="Đây là phụ đề tiếng Việt mẫu"
+              style="flex:1;font-size:12px;padding:4px 8px" oninput="_subPgPreviewUpdate()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="card card-has-body mt-12">
+        <div class="card-body">
+          <div class="flex-between mb-4">
+            <span style="font-size:12px;font-weight:600;color:var(--text2)">📊 Tiến trình</span>
+            <span id="sub-pg-progress-pct" style="font-size:11px;color:var(--text-muted)">0%</span>
+          </div>
+          <div class="progress-bar"><div id="sub-pg-progress-bar" class="progress-fill" style="width:0%"></div></div>
+          <span id="sub-pg-progress-lbl" style="font-size:11px;color:var(--text-muted)">—</span>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="card card-has-body mt-12">
+        <div class="card-body">
+          <div class="flex-between mb-4">
+            <span style="font-size:12px;font-weight:600;color:var(--text2)">📝 Nhật ký</span>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sub-pg-log').innerHTML=''">Xóa</button>
+          </div>
+          <div id="sub-pg-log" class="log-box" style="max-height:200px;overflow-y:auto;font-size:11px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ── Subtitle Page Logic ──
+  window._subPgVideoFile = null;
+  window._subPgAssFile = null;
+
+  function _subPageSelectVideo(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    window._subPgVideoFile = file;
+    document.getElementById('sub-video-path').value = file.name;
+    // Auto fetch frame
+    setTimeout(() => _subPgFetchFrame(), 200);
+  }
+
+  function _subPageSelectAss(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    window._subPgAssFile = file;
+    document.getElementById('sub-ass-path').value = file.name;
+  }
+
+  async function _subPgFetchFrame() {
+    const file = window._subPgVideoFile;
+    if (!file) { toast('Chưa chọn file video', 'warning'); return; }
+
+    const ts = parseFloat(document.getElementById('sub-pg-preview-ts')?.value || 5);
+    const img = document.getElementById('sub-pg-preview-img');
+    const ph = document.getElementById('sub-pg-placeholder');
+
+    if (ph) ph.textContent = 'Đang tải frame...';
+
+    try {
+      const form = new FormData();
+      form.append('video_file', file);
+      form.append('timestamp', ts);
+
+      const res = await fetch('/api/video_frame_upload', { method: 'POST', body: form });
+      const data = await res.json();
+
+      if (data.ok && data.image) {
+        if (img) {
+          img.onload = () => {
+            const frameOn = document.getElementById('sub-pg-frame-enabled')?.checked;
+            const cv = document.getElementById('sub-pg-frame-canvas');
+            if (frameOn) {
+              img.style.display = 'block';
+              img.style.position = 'absolute';
+              img.style.opacity = '0';
+              if (cv) cv.style.display = 'block';
+              _subPgPreviewUpdate();
+            } else {
+              img.style.display = 'block';
+              img.style.position = '';
+              img.style.opacity = '';
+              if (cv) cv.style.display = 'none';
+              _subPgRenderOverlay();
+            }
+          };
+          img.src = data.image;
+          img.style.display = 'block';
+        }
+        if (ph) ph.style.display = 'none';
+      } else {
+        if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'Không lấy được frame'; }
+      }
+    } catch (e) {
+      if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
+    }
+  }
+
+  function _subPgFrameToggle() {
+    const enabled = document.getElementById('sub-pg-frame-enabled')?.checked;
+    const controls = document.getElementById('sub-pg-frame-controls');
+    if (controls) controls.style.display = enabled ? 'block' : 'none';
+    _subPgPreviewUpdate();
+  }
+
+  function _subPgRenderOverlay() {
+    const img = document.getElementById('sub-pg-preview-img');
+    const overlay = document.getElementById('sub-pg-preview-text');
+    if (!img || !overlay || img.style.display === 'none') return;
+
+    const sample = document.getElementById('sub-pg-sample-text')?.value || 'Phụ đề mẫu';
+    const fontPct = parseFloat(document.getElementById('sub-pg-font-size')?.value || 5);
+    const marginPct = parseFloat(document.getElementById('sub-pg-margin-v')?.value || 7);
+    const pos = document.getElementById('sub-pg-sub-pos')?.value || 'bottom';
+    const colorMap = { white:'#ffffff', yellow:'#ffff00', cyan:'#00ffff' };
+    const color = colorMap[document.getElementById('sub-pg-font-color')?.value] || '#ffff00';
+
+    const dispH = img.offsetHeight || 300;
+    const scaledFont = Math.max(6, Math.round(dispH * fontPct / 100));
+    const scaledMargin = Math.max(2, Math.round(dispH * marginPct / 100));
+
+    overlay.style.display = 'block';
+    overlay.style.fontSize = scaledFont + 'px';
+    overlay.style.color = color;
+    overlay.style.textShadow = '1px 1px 2px #000,-1px -1px 2px #000,1px -1px 2px #000,-1px 1px 2px #000,0 2px 4px rgba(0,0,0,0.8)';
+    overlay.style.fontWeight = '700';
+    overlay.style.fontFamily = 'Arial, sans-serif';
+    overlay.style.lineHeight = '1.3';
+    if (pos === 'top') { overlay.style.top = scaledMargin + 'px'; overlay.style.bottom = 'auto'; }
+    else { overlay.style.bottom = scaledMargin + 'px'; overlay.style.top = 'auto'; }
+    overlay.textContent = sample;
+  }
+
+  function _subPgPreviewUpdate() {
+    const frameOn = document.getElementById('sub-pg-frame-enabled')?.checked;
+    const img = document.getElementById('sub-pg-preview-img');
+    const canvas = document.getElementById('sub-pg-frame-canvas');
+    const overlay = document.getElementById('sub-pg-preview-text');
+
+    if (!img || !img.complete || !img.naturalWidth) return;
+
+    if (frameOn) {
+      if (overlay) overlay.style.display = 'none';
+      img.style.position = 'absolute';
+      img.style.opacity = '0';
+      if (canvas) canvas.style.display = 'block';
+      _subPgDrawFrame(img);
+    } else {
+      if (canvas) canvas.style.display = 'none';
+      img.style.position = '';
+      img.style.opacity = '';
+      img.style.display = 'block';
+      _subPgRenderOverlay();
+    }
+  }
+
+  function _subPgDrawFrame(srcImg) {
+    const canvas = document.getElementById('sub-pg-frame-canvas');
+    if (!canvas) return;
+
+    const title = document.getElementById('sub-pg-frame-title')?.value || '';
+    const titleSizePct = parseFloat(document.getElementById('sub-pg-frame-title-size')?.value || 5);
+    const titleColor = document.getElementById('sub-pg-frame-title-color')?.value || '#000000';
+    const blurWPct = parseFloat(document.getElementById('sub-pg-frame-blur-w')?.value || 15) / 100;
+    const blurOpacity = parseFloat(document.getElementById('sub-pg-frame-blur-opacity')?.value || 60) / 100;
+
+    const wrap = document.getElementById('sub-pg-preview-wrap');
+    const wrapW = wrap?.offsetWidth || 640;
+    const srcNW = srcImg.naturalWidth || 640;
+    const srcNH = srcImg.naturalHeight || 360;
+
+    const titleFontPx = Math.max(10, Math.round(wrapW * titleSizePct / 100));
+    const titleBarH = Math.round(titleFontPx * 2.4);
+    const sideW = Math.round(wrapW * blurWPct);
+
+    const vidW = wrapW;
+    const vidH = Math.round(wrapW * srcNH / srcNW);
+    const cW = wrapW;
+    const cH = titleBarH + vidH;
+
+    canvas.width = cW;
+    canvas.height = cH;
+    canvas.style.width = cW + 'px';
+    canvas.style.height = cH + 'px';
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, cW, cH);
+
+    // Draw video
+    ctx.drawImage(srcImg, 0, titleBarH, vidW, vidH);
+
+    // Side blur
+    if (sideW > 0 && blurOpacity > 0) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, titleBarH, sideW, vidH); ctx.clip();
+      ctx.filter = 'blur(12px)';
+      ctx.drawImage(srcImg, -8, titleBarH, vidW + 16, vidH);
+      ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+      ctx.fillRect(0, titleBarH, sideW, vidH);
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(cW - sideW, titleBarH, sideW, vidH); ctx.clip();
+      ctx.filter = 'blur(12px)';
+      ctx.drawImage(srcImg, -8, titleBarH, vidW + 16, vidH);
+      ctx.restore();
+      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+      ctx.fillRect(cW - sideW, titleBarH, sideW, vidH);
+    }
+
+    // Title bar
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cW, titleBarH);
+    if (title) {
+      ctx.font = `bold ${titleFontPx}px Arial, sans-serif`;
+      ctx.fillStyle = titleColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(title, cW / 2, titleBarH / 2);
+    }
+
+    // Subtitle on canvas
+    const sample = document.getElementById('sub-pg-sample-text')?.value || '';
+    if (sample) {
+      const fontPct = parseFloat(document.getElementById('sub-pg-font-size')?.value || 5);
+      const marginPct = parseFloat(document.getElementById('sub-pg-margin-v')?.value || 7);
+      const pos = document.getElementById('sub-pg-sub-pos')?.value || 'bottom';
+      const colorMap = { white:'#ffffff', yellow:'#ffff00', cyan:'#00ffff' };
+      const color = colorMap[document.getElementById('sub-pg-font-color')?.value] || '#ffff00';
+
+      const scaledFont = Math.max(6, Math.round(vidH * fontPct / 100));
+      const scaledMargin = Math.max(2, Math.round(vidH * marginPct / 100));
+
+      ctx.font = `bold ${scaledFont}px Arial, sans-serif`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = pos === 'top' ? 'top' : 'bottom';
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1;
+
+      const textX = cW / 2;
+      const textY = pos === 'top' ? titleBarH + scaledMargin : cH - scaledMargin;
+      ctx.fillText(sample, textX, textY);
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    }
+  }
+
+  async function _subPgRun() {
+    const videoFile = window._subPgVideoFile;
+    const assFile = window._subPgAssFile;
+    if (!videoFile) { toast('Chưa chọn file video', 'warning'); return; }
+    if (!assFile) { toast('Chưa chọn file phụ đề', 'warning'); return; }
+
+    const btn = document.getElementById('btn-sub-pg-run');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang xử lý...'; }
+
+    const logBox = document.getElementById('sub-pg-log');
+    if (logBox) logBox.innerHTML = '';
+
+    const form = new FormData();
+    form.append('video_file', videoFile);
+    form.append('ass_file', assFile);
+    form.append('out_dir', document.getElementById('sub-out-dir')?.value || '');
+    form.append('font_size', document.getElementById('sub-pg-font-size')?.value || '5');
+    form.append('font_color', document.getElementById('sub-pg-font-color')?.value || 'yellow');
+    form.append('margin_v', document.getElementById('sub-pg-margin-v')?.value || '7');
+    form.append('subtitle_position', document.getElementById('sub-pg-sub-pos')?.value || 'bottom');
+    form.append('blur_original', document.getElementById('sub-pg-blur')?.checked ? '1' : '0');
+    form.append('frame_enabled', document.getElementById('sub-pg-frame-enabled')?.checked ? '1' : '0');
+    form.append('frame_title', document.getElementById('sub-pg-frame-title')?.value || '');
+    form.append('frame_title_size_pct', document.getElementById('sub-pg-frame-title-size')?.value || '5');
+    form.append('frame_title_color', document.getElementById('sub-pg-frame-title-color')?.value || '#000000');
+    form.append('frame_blur_w_pct', document.getElementById('sub-pg-frame-blur-w')?.value || '15');
+    form.append('frame_blur_opacity', String((parseFloat(document.getElementById('sub-pg-frame-blur-opacity')?.value || '60')) / 100));
+
+    try {
+      const res = await fetch('/api/burn_subtitle_only', { method: 'POST', body: form });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      function read() {
+        reader.read().then(({ done, value }) => {
+          if (done) {
+            if (btn) { btn.disabled = false; btn.textContent = '🚀 Xử lý phụ đề & khung'; }
+            return;
+          }
+          const text = decoder.decode(value, { stream: true });
+          text.split('\n').filter(l => l.trim()).forEach(line => {
+            try {
+              const d = JSON.parse(line);
+              if (d.log) _subPgLog(d.log, d.level || 'info');
+              if (d.overall !== undefined) {
+                const bar = document.getElementById('sub-pg-progress-bar');
+                const pct = document.getElementById('sub-pg-progress-pct');
+                const lbl = document.getElementById('sub-pg-progress-lbl');
+                if (bar) bar.style.width = d.overall + '%';
+                if (pct) pct.textContent = d.overall + '%';
+                if (lbl) lbl.textContent = d.overall_lbl || '';
+              }
+            } catch {}
+          });
+          read();
+        });
+      }
+      read();
+    } catch (e) {
+      _subPgLog('Lỗi: ' + e.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '🚀 Xử lý phụ đề & khung'; }
+    }
+  }
+
+  function _subPgLog(msg, level) {
+    const box = document.getElementById('sub-pg-log');
+    if (!box) return;
+    const div = document.createElement('div');
+    div.className = 'log-line log-' + (level || 'info');
+    const ts = new Date().toTimeString().slice(0, 8);
+    div.textContent = `[${ts}] ${msg}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+</script>
+</div>

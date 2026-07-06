@@ -1,0 +1,129 @@
+<!-- PAGE: USER SEARCH -->
+<div id="page-user" class="page">
+
+  <!-- Search card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🔍 Tìm người dùng &amp; video</span>
+      <div class="card-actions">
+        <span id="platform-badge" class="platform-badge pf-unknown"><span>🌐</span><span>Nền tảng</span></span>
+      </div>
+    </div>
+    <div class="field">
+      <label>URL người dùng / kênh</label>
+      <input type="text" id="user-url" placeholder="Douyin · TikTok · YouTube · Instagram · Facebook ...">
+      <div class="user-url-hint text-xs text-muted mt-4">
+        Hỗ trợ: Douyin, TikTok, YouTube, Instagram, Facebook, Bilibili... Dán URL trang cá nhân/kênh hoặc 1 video.
+      </div>
+    </div>
+    <div class="provider-bar">
+      <span id="current-provider-badge" class="status-bar">
+        <span class="dot dot-yellow"></span><span>Loading...</span>
+      </span>
+      <label style="margin:0;white-space:nowrap">Dịch bằng</label>
+      <select id="provider-select" style="width:auto">
+        <option value="auto">Auto (Server)</option>
+        <option value="9router">🔀 9Router (local gateway)</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="openai">OpenAI</option>
+        <option value="huggingface">HuggingFace</option>
+        <option value="google">Google</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="retranslateAll()">🔄 Dịch lại</button>
+    </div>
+    <div id="provider-warning-msg" class="hidden" style="display: none; color: #ff4d4f; font-size: 13px; margin-top: -5px; margin-bottom: 10px; font-weight: 500;">
+      Bạn cần kết nối 9Router hoặc nhập API key để sử dụng các modal khác
+    </div>
+    <div class="btn-group mt-8">
+      <button class="btn btn-primary" id="btn-search" onclick="searchUser()">🔍 Tìm kiếm</button>
+      <label class="toggle-wrap" style="margin-left:auto">
+        <input type="checkbox" class="toggle-input" id="toggle-vi" checked>
+        <div class="toggle"></div>
+        <span class="toggle-label text-sm">Tiếng Việt</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="user-loading" class="hidden" style="text-align:center;padding:40px;color:var(--text-muted)">
+    <div style="width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px"></div>
+    <div>Đang tải dữ liệu người dùng...</div>
+  </div>
+
+  <!-- User result -->
+  <div id="user-result" class="hidden">
+    <div class="user-card">
+      <div id="u-avatar"><div class="user-avatar-ph">👤</div></div>
+      <div class="user-info">
+        <div class="user-name" id="u-name">--</div>
+        <div class="user-name-vi" id="u-name-vi"></div>
+        <div class="user-sig" id="u-sig"></div>
+        <div class="user-sig" id="u-sig-vi" style="color:var(--accent2);margin-top:2px"></div>
+        <div class="user-stats">
+          <div class="user-stat"><div class="user-stat-val" id="u-posts">0</div><div class="user-stat-lbl">Bài đăng</div></div>
+          <div class="user-stat"><div class="user-stat-val" id="u-followers">0</div><div class="user-stat-lbl">Theo dõi</div></div>
+          <div class="user-stat"><div class="user-stat-val" id="u-following">0</div><div class="user-stat-lbl">Đang theo dõi</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Videos section -->
+  <div id="user-videos-section" class="hidden">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🎬 Video (<span id="video-count">0</span>)</span>
+        <div class="card-actions">
+          <span class="text-xs text-muted" id="load-status"></span>
+          <button class="btn btn-secondary btn-sm hidden" id="btn-load-all" onclick="loadAllVideos()">Tải tất cả</button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="grid-4 mb-12" style="gap:10px">
+        <div class="field" style="margin:0">
+          <label>Loại</label>
+          <select id="filter-type">
+            <option value="all">Tất cả</option>
+            <option value="video">Video</option>
+            <option value="gallery">Ảnh</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label>Sắp xếp</label>
+          <select id="filter-sort">
+            <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất</option>
+            <option value="most_play">Xem nhiều</option>
+            <option value="most_like">Thích nhiều</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0;grid-column:span 2">
+          <label>Tìm tiêu đề</label>
+          <input type="text" id="filter-search" placeholder="Tìm tiêu đề...">
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex-center gap-8 mb-12" style="flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="selectAll()">☑ Chọn tất cả</button>
+        <button class="btn btn-secondary btn-sm" onclick="selectNone()">☐ Bỏ chọn</button>
+        <span class="text-sm text-muted"><span id="sel-count">0</span> đã chọn</span>
+        <button class="btn btn-primary btn-sm hidden" id="btn-dl-selected" onclick="addSelectedToProcessQueue()">🎬 Thêm vào hàng chờ xử lý</button>
+      </div>
+
+      <!-- Video grid -->
+      <div id="video-grid" class="video-grid"></div>
+
+      <!-- Pagination -->
+      <div class="pagination">
+        <button class="btn btn-secondary btn-sm" id="btn-prev" onclick="goPrev()" disabled>◀ Trước</button>
+        <span class="page-info" id="page-info">Trang 1 / 1</span>
+        <input type="number" id="page-jump" min="1" value="1" class="page-jump-input">
+        <button class="btn btn-secondary btn-sm" onclick="goToPage()">Đi</button>
+        <button class="btn btn-secondary btn-sm" id="btn-next" onclick="goNext()">Tiếp ▶</button>
+      </div>
+    </div>
+  </div>
+
+</div>

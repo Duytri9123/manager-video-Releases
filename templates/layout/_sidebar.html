@@ -1,0 +1,105 @@
+<!-- ══════════ SIDEBAR (desktop) ══════════ -->
+<nav id="sidebar"
+  class="w-56 min-w-[224px] bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col transition-all duration-200 z-[100] flex-shrink-0 shadow-[2px_0_8px_rgba(0,0,0,0.04)]">
+
+  <!-- Logo -->
+  <div class="flex items-center gap-2.5 px-3.5 pt-4 pb-3.5 border-b border-slate-200 dark:border-slate-700">
+    <div
+      class="w-[38px] h-[38px] rounded-[10px] bg-gradient-to-br from-blue-500 to-sky-400 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-[0_2px_8px_rgba(59,130,246,0.3)]">
+      DT
+    </div>
+    <span id="sidebar-logo-text"
+      class="font-bold text-[15px] whitespace-nowrap overflow-hidden text-slate-900 dark:text-slate-100">DuyTris</span>
+  </div>
+
+  <!-- Navigation -->
+  <div class="flex-1 px-2 py-2.5 overflow-y-auto">
+    <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2">Nội dung
+    </div>
+
+    <a class="nav-item" data-page="user" onclick="switchPage('user')">
+      <span class="nav-icon">🔍</span><span class="nav-label" data-i18n="nav_user">Tìm người dùng</span>
+    </a>
+    <a class="nav-item" data-page="process" onclick="switchPage('process')">
+      <span class="nav-icon">🎬</span><span class="nav-label" data-i18n="nav_process">Xử lý Video</span>
+    </a>
+    <a class="nav-item" data-page="transcribe" onclick="switchPage('transcribe')">
+      <span class="nav-icon">🎙</span><span class="nav-label" data-i18n="nav_transcribe">Phiên âm</span>
+    </a>
+
+    <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mt-4 mb-2">Phân
+      phối</div>
+
+    <a class="nav-item" data-page="publish" onclick="switchPage('publish')">
+      <span class="nav-icon">📤</span><span class="nav-label">Đăng video</span>
+    </a>
+    <a class="nav-item" data-page="content" onclick="switchPage('content')">
+      <span class="nav-icon">📋</span><span class="nav-label">Quản lý bài đăng</span>
+    </a>
+
+    <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mt-4 mb-2">Công
+      cụ</div>
+
+    <a class="nav-item" data-page="chat" onclick="switchPage('chat')">
+      <span class="nav-icon">🤖</span><span class="nav-label">Chat Bot · 9Router</span>
+    </a>
+
+    <!-- Commented-out pages — kept for future enable
+    <a class="nav-item" data-page="n8n" onclick="switchPage('n8n')">
+      <span class="nav-icon">🔗</span><span class="nav-label">Điều phối n8n</span>
+    </a>
+    <a class="nav-item" data-page="sales" onclick="switchPage('sales')">
+      <span class="nav-icon">🛍</span><span class="nav-label">Video bán hàng</span>
+    </a>
+    <a class="nav-item" data-page="ads" onclick="switchPage('ads')">
+      <span class="nav-icon">📣</span><span class="nav-label">Video quảng cáo</span>
+    </a>
+    <a class="nav-item" data-page="subtitle" onclick="switchPage('subtitle')">
+      <span class="nav-icon">🖼</span><span class="nav-label">Phụ đề & Khung</span>
+    </a>
+    <a class="nav-item" data-page="story" onclick="switchPage('story')">
+      <span class="nav-icon">📖</span><span class="nav-label">Truyện → Video</span>
+    </a>
+    <a class="nav-item" data-page="ai_studio" onclick="switchPage('ai_studio')">
+      <span class="nav-icon">🧪</span><span class="nav-label">AI Studio</span>
+    </a>
+    <a class="nav-item" data-page="movie" onclick="switchPage('movie')">
+      <span class="nav-icon">🎬</span><span class="nav-label">Review phim</span>
+    </a>
+    <a class="nav-item" data-page="proxies" onclick="switchPage('proxies')">
+      <span class="nav-icon">🌐</span><span class="nav-label">Proxy & Router</span>
+    </a>
+
+    -->
+    <a class="nav-item" data-page="history" onclick="switchPage('history')">
+      <span class="nav-icon">🗃</span><span class="nav-label">Lịch sử</span>
+    </a>
+    <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mt-4 mb-2">Hệ
+      thống</div>
+
+    <a class="nav-item" data-page="config" onclick="switchPage('config')">
+      <span class="nav-icon">⚙️</span><span class="nav-label" data-i18n="nav_config">Cấu hình</span>
+    </a>
+    <!-- <a class="nav-item" data-page="cookies" onclick="switchPage('cookies')">
+      <span class="nav-icon">🍪</span><span class="nav-label">Cookies</span>
+    </a> -->
+  </div>
+
+  <!-- Footer -->
+  <div class="p-2 border-t border-slate-200 dark:border-slate-700">
+    <!-- Version -->
+    <div id="sidebar-version"
+      class="px-2 py-1.5 mb-1 rounded-md bg-slate-50 dark:bg-slate-700 text-center text-[11px] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-all"
+      onclick="checkForUpdate()" title="Bấm để kiểm tra cập nhật">
+      <span id="sidebar-version-text">v...</span>
+      <span id="sidebar-update-dot"
+        class="hidden w-[7px] h-[7px] rounded-full bg-emerald-500 ml-1 align-middle inline-block"
+        title="Có bản cập nhật mới!"></span>
+    </div>
+    <!-- Collapse toggle -->
+    <button onclick="toggleSidebar()" id="sidebar-toggle-btn"
+      class="w-full p-2 bg-transparent border-0 text-slate-400 dark:text-slate-500 cursor-pointer rounded-md hover:bg-blue-50 dark:hover:bg-slate-700 transition-all text-[13px]">
+      ◀
+    </button>
+  </div>
+</nav>

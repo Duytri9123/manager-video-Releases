@@ -1,0 +1,203 @@
+<!-- ═══════════════════════════════════════════════════════════════
+     API Check Modal (shown when API key is missing or expired)
+═══════════════════════════════════════════════════════════════ -->
+<div id="api-check-modal"
+  class="hidden fixed inset-0 z-[10001] bg-black/50 dark:bg-black/60 items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-800 rounded-xl max-w-[480px] w-full shadow-2xl p-6 animate-[fadeUp_0.2s_ease]">
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/30 dark:to-amber-800/30 flex items-center justify-center text-xl flex-shrink-0">
+        ⚠️
+      </div>
+      <div class="flex-1">
+        <div class="font-bold text-[15px] text-slate-900 dark:text-slate-100">
+          API key lỗi hoặc hết hạn
+        </div>
+        <div class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+          Provider: <b id="api-check-modal-provider">—</b>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error message -->
+    <div id="api-check-modal-error"
+      class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3.5 py-2.5 text-xs text-red-600 dark:text-red-400 mb-3.5 leading-relaxed">
+    </div>
+
+    <!-- Key input -->
+    <div class="mb-2.5">
+      <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-1.5">
+        Nhập API key mới:
+      </label>
+      <div class="flex gap-2">
+        <input type="password" id="api-check-modal-key"
+          placeholder="Dán API key mới vào đây..."
+          class="flex-1 font-mono text-xs"
+          onkeydown="if(event.key==='Enter')apiCheckModalTest()" />
+        <button id="btn-api-check-test" class="btn btn-secondary" onclick="apiCheckModalTest()">
+          🧪 Test
+        </button>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div id="api-check-modal-status" class="api-check-status text-xs min-h-[18px] mb-3.5 font-semibold"></div>
+
+    <!-- Actions -->
+    <div class="flex gap-2 justify-end flex-wrap">
+      <button class="btn btn-secondary" onclick="apiCheckModalCancel()">
+        ✕ Hủy bỏ
+      </button>
+      <button class="btn btn-primary" id="btn-api-check-ok" onclick="apiCheckModalOk()" disabled>
+        ✅ Tiếp tục
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Facebook Token Refresh Modal
+═══════════════════════════════════════════════════════════════ -->
+<div id="fb-token-modal"
+  class="hidden fixed inset-0 z-[10000] bg-black/45 dark:bg-black/60 items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-800 rounded-xl max-w-[520px] w-full shadow-2xl p-6">
+    <div class="flex items-center gap-2.5 mb-3">
+      <div class="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg">
+        🔑
+      </div>
+      <div class="flex-1">
+        <div class="font-bold text-[15px] text-slate-900 dark:text-slate-100">
+          Token Facebook cần cập nhật
+        </div>
+        <div class="text-[11px] text-slate-400 dark:text-slate-500">
+          Token hiện tại thiếu quyền hoặc hết hạn. Paste User Access Token mới đủ 3 scope bên dưới.
+        </div>
+      </div>
+    </div>
+
+    <div id="fb-token-modal-error"
+      class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md px-3 py-2 text-xs text-red-600 dark:text-red-400 mb-3">
+    </div>
+
+    <div class="alert-info text-[11px] mb-3 px-3 py-2">
+      Lấy User Access Token từ
+      <a href="https://developers.facebook.com/tools/explorer/" target="_blank" class="text-blue-500 dark:text-blue-400 font-medium">Graph API Explorer</a>
+      — cần permissions: <b>pages_manage_posts</b>, <b>pages_read_engagement</b>, <b>pages_show_list</b>.
+      <br /><br />
+      <b>Lưu ý quan trọng:</b>
+      <ul class="mt-1 ml-4 p-0 list-disc">
+        <li>Phải dùng <b>USER TOKEN</b> (không phải PAGE TOKEN), code sẽ tự đổi sang Page Token khi đăng.</li>
+        <li>Bạn phải là <b>admin</b> của Page (không phải editor).</li>
+        <li>App của bạn phải được cấp <b>Advanced Access</b> cho 3 permission trên (nếu Live).</li>
+      </ul>
+    </div>
+
+    <div id="fb-token-modal-warnings"
+      class="hidden bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400 mb-3">
+    </div>
+    <div id="fb-token-modal-diag"
+      class="hidden bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md px-3 py-2 text-[11px] text-slate-900 dark:text-slate-100 mb-3">
+    </div>
+
+    <div class="flex gap-1.5 mb-2.5">
+      <input type="password" id="fb-token-modal-input"
+        placeholder="EAAxxxxxxx..."
+        class="flex-1 font-mono text-[11px]" />
+      <button class="btn btn-secondary btn-sm" onclick="fbTokenModalTogglePw()">👁</button>
+    </div>
+
+    <div class="flex gap-2 justify-between items-center flex-wrap">
+      <button class="btn btn-secondary btn-sm" onclick="fbTokenModalDiagnose()">
+        🔍 Chẩn đoán
+      </button>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn btn-secondary" onclick="fbTokenModalSkip()">⏭ Bỏ qua video này</button>
+        <button class="btn btn-secondary" onclick="fbTokenModalCancel()">Hủy</button>
+        <button class="btn btn-primary" id="btn-fb-token-modal-save" onclick="fbTokenModalSave()">
+          🔄 Lưu &amp; Thử lại
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Ytdlp Cookie Configuration Modal
+     (shown when video download fails due to sign-in or bot check)
+═══════════════════════════════════════════════════════════════ -->
+<div id="ytdlp-cookie-modal"
+  class="hidden fixed inset-0 z-[10000] bg-black/45 dark:bg-black/60 items-center justify-center p-4">
+  <div class="bg-white dark:bg-slate-800 rounded-xl max-w-[500px] w-full shadow-2xl p-6">
+    <!-- Header -->
+    <div class="flex items-center gap-2.5 mb-3">
+      <div class="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg">
+        🍪
+      </div>
+      <div class="flex-1">
+        <div class="font-bold text-[15px] text-slate-900 dark:text-slate-100">
+          Yêu cầu xác thực tải video (<span id="ytdlp-cookie-modal-platform-title">Đa nền tảng</span>)
+        </div>
+        <div class="text-[11px] text-slate-400 dark:text-slate-500">
+          Lỗi xác nhận không phải robot hoặc yêu cầu đăng nhập khi tải từ <span id="ytdlp-cookie-modal-platform-sub">nền tảng</span>.
+        </div>
+      </div>
+    </div>
+
+    <!-- Friendly Error Message -->
+    <div id="ytdlp-cookie-modal-friendly"
+      class="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/40 rounded-lg p-3 text-xs text-red-700 dark:text-red-400 mb-3 leading-relaxed">
+    </div>
+
+    <!-- Tech details (Collapsible) -->
+    <details class="mb-3 text-[10.5px]">
+      <summary class="cursor-pointer text-slate-400 hover:text-slate-500 font-semibold select-none outline-none">
+        📄 Xem chi tiết lỗi kỹ thuật (Tech Log)
+      </summary>
+      <div id="ytdlp-cookie-modal-error"
+        class="mt-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md p-2 max-h-[100px] overflow-y-auto font-mono text-[10px] text-slate-500 whitespace-pre-wrap leading-normal">
+      </div>
+    </details>
+
+    <!-- Instructions / Browser selector -->
+    <div class="mb-4">
+      <label class="text-xs font-semibold text-slate-500 dark:text-slate-400 block mb-2">
+        Chọn trình duyệt đã đăng nhập tài khoản để tự động lấy cookie &amp; tải lại:
+      </label>
+      <div class="grid grid-cols-2 gap-2" id="ytdlp-cookie-modal-browser-grid">
+        <button data-browser="chrome" class="btn btn-secondary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('chrome')">
+          🌐 Google Chrome
+        </button>
+        <button data-browser="edge" class="btn btn-secondary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('edge')">
+          🌐 Microsoft Edge
+        </button>
+        <button data-browser="firefox" class="btn btn-secondary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('firefox')">
+          🦊 Mozilla Firefox
+        </button>
+        <button data-browser="brave" class="btn btn-secondary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('brave')">
+          🦁 Brave Browser
+        </button>
+        <button data-browser="" class="btn btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5 col-span-2" onclick="ytdlpCookieModalSaveBrowser('')">
+          📄 Dùng file cookie Netscape (.txt) thủ công
+        </button>
+      </div>
+    </div>
+
+    <!-- Important note -->
+    <div class="alert-info text-[11.5px] mb-4 px-3.5 py-2.5 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-lg">
+      <b>💡 Gợi ý giải quyết lỗi khóa tệp tin:</b>
+      <ul class="mt-1 ml-4 p-0 list-disc leading-relaxed text-slate-600 dark:text-slate-400">
+        <li>Nếu chọn trình duyệt: Vui lòng <b>đóng trình duyệt đó</b> khi chạy tool để tránh bị lỗi khóa tệp dữ liệu.</li>
+        <li>Hoặc xuất file cookie Netscape <b><code class="text-xs font-mono" id="ytdlp-cookie-modal-cookie-file-name">cookies.txt</code></b> và lưu vào thư mục gốc của tool (không bao giờ bị lỗi khóa file).</li>
+      </ul>
+    </div>
+
+    <!-- Status indicator -->
+    <div id="ytdlp-cookie-modal-status" class="text-xs min-h-[16px] mb-3 text-slate-500 font-semibold"></div>
+
+    <!-- Actions -->
+    <div class="flex gap-2 justify-end flex-wrap">
+      <button class="btn btn-secondary" onclick="ytdlpCookieModalSkip()">⏭ Bỏ qua video</button>
+      <button class="btn btn-secondary" onclick="ytdlpCookieModalCancel()">Hủy</button>
+    </div>
+  </div>
+</div>

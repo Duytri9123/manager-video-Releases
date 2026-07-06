@@ -112,8 +112,9 @@ def _wait_until_ready(url: str, timeout: float = 45.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(f"{url}/api/_routes", timeout=2) as resp:
-                return resp.status == 200
+            with urllib.request.urlopen(f"{url}/", timeout=2) as resp:
+                if resp.status == 200:
+                    return True
         except Exception:
             time.sleep(0.5)
     return False
