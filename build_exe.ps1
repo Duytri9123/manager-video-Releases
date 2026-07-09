@@ -19,8 +19,20 @@ Write-Host "[1/4] Cleaning previous build..."
 if (Test-Path $DistDir) { Remove-Item -LiteralPath $DistDir -Recurse -Force -ErrorAction SilentlyContinue }
 if (Test-Path $BuildDir) { Remove-Item -LiteralPath $BuildDir -Recurse -Force -ErrorAction SilentlyContinue }
 
+# ── PyArmor obfuscation ──
+Write-Host "[2/5] Running PyArmor obfuscation..."
+$PyArmorScript = Join-Path $ProjectRoot "cli" "obfuscate_modules.py"
+if (Test-Path $PyArmorScript) {
+    & $Python $PyArmorScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "       PyArmor fallback OK (non-fatal)"
+    }
+} else {
+    Write-Host "       PyArmor script not found, skipping"
+}
+
 # ── PyInstaller build ──
-Write-Host "[2/4] Running PyInstaller..."
+Write-Host "[3/5] Running PyInstaller..."
 & $Python -m PyInstaller `
     --log-level WARN `
     --noconfirm `
@@ -46,12 +58,12 @@ $FfmpegSrc = $null
 # 1. Prefer local cli/ folder (cached essential build from previous download)
 if ((Test-Path (Join-Path $LocalCli "ffmpeg.exe")) -and (Test-Path (Join-Path $LocalCli "ffprobe.exe"))) {
     $FfmpegSrc = $LocalCli
-    Write-Host "[3/4] Using FFmpeg essential build from cli/ folder"
+    Write-Host "[4/5] Using FFmpeg essential build from cli/ folder"
 }
 
 # 2. Download essential build if not found locally
 if (-not $FfmpegSrc) {
-    Write-Host "[3/4] Downloading FFmpeg essential build (slim, ~40 MB vs 185 MB full)..."
+    Write-Host "[4/5] Downloading FFmpeg essential build (slim, ~40 MB vs 185 MB full)..."
     $TempFfmpegDir = Join-Path $env:TEMP "ffmpeg-essential"
     if (Test-Path $TempFfmpegDir) { Remove-Item -LiteralPath $TempFfmpegDir -Recurse -Force -ErrorAction SilentlyContinue }
     New-Item -ItemType Directory -Path $TempFfmpegDir -Force | Out-Null
@@ -100,7 +112,7 @@ $ZipSize = $null
 if (-not $SkipPortableZip) {
     $ZipName = "DuyTrisDownloader_Portable.zip"
     $ZipPath = Join-Path $DistDir $ZipName
-    Write-Host "[4/4] Creating portable ZIP..."
+    Write-Host "[5/5] Creating portable ZIP..."
     if (Test-Path $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
     if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
         # Windows tar creates the central directory reliably for this large bundle.

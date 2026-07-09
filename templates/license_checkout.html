@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thanh toán - DuyTris</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter','sans-serif'] } } } }</script>
+    <style>
+        body { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 40%, #f0fdf4 100%); min-height: 100vh; }
+        .card { background: #fff; border-radius: 24px; box-shadow: 0 20px 60px -10px rgba(0,0,0,0.10), 0 4px 20px -4px rgba(0,0,0,0.06); }
+        .left-panel { background: linear-gradient(160deg, #0ea5e9 0%, #10b981 100%); border-radius: 20px; }
+        .qr-wrap { background: white; border-radius: 16px; padding: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.10); }
+        @keyframes spin-border { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+        @keyframes check-pop { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+        .check-pop { animation: check-pop 0.5s ease-out forwards; }
+        @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+    </style>
+</head>
+<body class="font-sans antialiased flex items-center justify-center p-6 min-h-screen">
+
+    <div class="card w-full max-w-4xl overflow-hidden">
+        <div class="flex flex-col md:flex-row md:h-[500px]">
+
+            <!-- ═══ LEFT PANEL ═══ -->
+            <div class="left-panel m-5 p-7 flex flex-col justify-between text-white md:w-72 shrink-0">
+                <div class="space-y-6">
+                    <!-- App header -->
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="font-bold text-sm">DuyTris</p>
+                            <p class="text-xs text-white/70">Thanh toán bảo mật</p>
+                        </div>
+                    </div>
+
+                    <!-- Order info -->
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-xs text-white/60 uppercase tracking-wider font-semibold">Mã đơn hàng</p>
+                            <p class="font-mono text-sm font-bold mt-1 bg-white/10 px-3 py-2 rounded-xl">#{{ order_code }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-white/60 uppercase tracking-wider font-semibold">Số tiền thanh toán</p>
+                            <p class="text-3xl font-black mt-1">{{ '{:,.0f}'.format(amount) }}<span class="text-lg font-medium text-white/70 ml-1">đ</span></p>
+                        </div>
+                    </div>
+
+                    <!-- Payment status -->
+                    <div id="status-indicator" class="flex items-center space-x-2.5 bg-white/10 rounded-2xl px-4 py-3">
+                        <div class="flex space-x-1">
+                            <span class="w-2 h-2 bg-white rounded-full pulse-dot" style="animation-delay:0s"></span>
+                            <span class="w-2 h-2 bg-white rounded-full pulse-dot" style="animation-delay:0.3s"></span>
+                            <span class="w-2 h-2 bg-white rounded-full pulse-dot" style="animation-delay:0.6s"></span>
+                        </div>
+                        <span id="status-text" class="text-sm font-semibold">Chờ thanh toán...</span>
+                    </div>
+
+                    <!-- Steps -->
+                    <div class="space-y-3">
+                        <p class="text-xs font-bold text-white/60 uppercase tracking-wider">Hướng dẫn</p>
+                        <div class="space-y-2">
+                            <div class="flex items-start space-x-2.5">
+                                <span class="w-5 h-5 bg-white/20 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                                <span class="text-xs text-white/80">Mở App ngân hàng, chọn QR Pay</span>
+                            </div>
+                            <div class="flex items-start space-x-2.5">
+                                <span class="w-5 h-5 bg-white/20 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                                <span class="text-xs text-white/80">Quét mã QR bên phải</span>
+                            </div>
+                            <div class="flex items-start space-x-2.5">
+                                <span class="w-5 h-5 bg-white/20 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                                <span class="text-xs text-white/80">Xác nhận thanh toán — phần mềm tự mở khóa</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <a href="/license/activate" class="text-xs text-white/50 hover:text-white/80 transition-colors mt-6 block">← Quay lại kích hoạt bằng Key</a>
+            </div>
+
+            <!-- ═══ RIGHT PANEL ═══ -->
+            <div class="flex-1 p-7 flex flex-col items-center justify-center space-y-6">
+
+                <!-- QR area -->
+                <div id="qr-area" class="flex flex-col items-center space-y-4">
+                    {% if qr_url %}
+                    <div class="qr-wrap">
+                        <img src="{{ qr_url }}" alt="VietQR Code" class="w-52 h-52 object-contain">
+                    </div>
+                    <div class="text-center space-y-1">
+                        <p class="text-sm font-bold text-gray-800">
+                            {% if bank_name %}{{ bank_name }}{% endif %}
+                            {% if bank_account %} · {{ bank_account }}{% endif %}
+                        </p>
+                        {% if bank_holder %}
+                        <p class="text-xs text-gray-500 uppercase font-semibold">{{ bank_holder }}</p>
+                        {% endif %}
+                        <p class="text-xs text-gray-400 mt-2">Nội dung CK: <span class="font-mono font-bold text-gray-600">{{ order_code }}</span></p>
+                    </div>
+                    {% else %}
+                    <!-- No bank configured -->
+                    <div class="w-52 h-52 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center space-y-3">
+                        <svg class="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                        </svg>
+                        <p class="text-xs text-gray-400 text-center px-6">Chưa cấu hình tài khoản ngân hàng trong phần Cài đặt</p>
+                    </div>
+                    {% endif %}
+
+                    <!-- Amount reminder -->
+                    <div class="flex items-center space-x-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5">
+                        <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <p class="text-xs text-amber-700 font-semibold">Chuyển đúng <span class="font-black">{{ '{:,.0f}'.format(amount) }}đ</span> để hệ thống tự xác nhận</p>
+                    </div>
+                </div>
+
+                <!-- Success overlay (hidden) -->
+                <div id="success-area" class="hidden flex-col items-center space-y-4 text-center">
+                    <div class="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center border-4 border-emerald-200">
+                        <svg class="w-10 h-10 text-emerald-500 check-pop" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-xl font-black text-gray-800">Thanh toán thành công!</p>
+                        <p class="text-sm text-gray-500 mt-1">Phần mềm đang tự động mở khóa...</p>
+                    </div>
+                    <div class="flex space-x-1.5">
+                        <span class="w-2 h-2 bg-emerald-400 rounded-full pulse-dot"></span>
+                        <span class="w-2 h-2 bg-emerald-400 rounded-full pulse-dot" style="animation-delay:0.3s"></span>
+                        <span class="w-2 h-2 bg-emerald-400 rounded-full pulse-dot" style="animation-delay:0.6s"></span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Poll every 3s to detect payment
+        const poller = setInterval(() => {
+            fetch('/api/license/check_status')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.active) {
+                        clearInterval(poller);
+
+                        // Update left panel indicator
+                        const si = document.getElementById('status-indicator');
+                        si.className = 'flex items-center space-x-2.5 bg-white/20 rounded-2xl px-4 py-3';
+                        si.innerHTML = `
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            <span class="text-sm font-bold">Đã xác nhận!</span>`;
+
+                        // Swap right panel
+                        document.getElementById('qr-area').classList.add('hidden');
+                        const sa = document.getElementById('success-area');
+                        sa.classList.remove('hidden');
+                        sa.classList.add('flex');
+
+                        setTimeout(() => window.location.href = '/', 2500);
+                    }
+                })
+                .catch(() => {});
+        }, 3000);
+    </script>
+</body>
+</html>

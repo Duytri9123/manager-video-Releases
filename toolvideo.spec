@@ -11,6 +11,10 @@ from PyInstaller.utils.hooks import (
 
 
 project_root = Path(SPECPATH)
+obf_src = project_root / "obf_src"
+if obf_src.exists():
+    # Use PyArmor-obfuscated sources for security modules
+    datas += collect_data_files(str(obf_src))
 
 datas = [
     (str(project_root / "templates"), "templates"),

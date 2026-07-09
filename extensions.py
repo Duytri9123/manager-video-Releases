@@ -75,6 +75,15 @@ def create_app():
     for mod_path, attr, name in _BLUEPRINTS:
         _register_safe(mod_path, attr, name)
 
+    # Initialize licensing gateway + guard thread
+    try:
+        from utils.licensing_routes import init_licensing_app
+        init_licensing_app(app)
+        LOGGER.info("Licensing guard system initialized successfully.")
+    except Exception as exc:
+        LOGGER.error("Failed to initialize licensing system: %s", exc)
+        traceback.print_exc()
+
     # SocketIO handlers (only register if download blueprint loaded successfully)
     if "download" in _REGISTERED:
         try:

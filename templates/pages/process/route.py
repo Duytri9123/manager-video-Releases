@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from flask import Blueprint, jsonify, request, Response
 from flask import stream_with_context
-from core_app import load_cfg, CONFIG_FILE, ROOT, get_cookies_with_fallback, _resolve_naming_title
+from core_app import load_cfg, CONFIG_FILE, ROOT, get_cookies_with_fallback, _resolve_naming_title, require_valid_license
 
 LOGGER = logging.getLogger("process")
 
@@ -906,6 +906,7 @@ def _fetch_thumbnail_from_url(url: str) -> dict | None:
     return None
 
 
+@require_valid_license
 @bp.route("/api/upload_anti_fp_image", methods=["POST"])
 def upload_anti_fp_image():
     """Upload an overlay / logo image for anti-fingerprint processing."""
@@ -927,6 +928,7 @@ def upload_anti_fp_image():
     return jsonify({"ok": True, "path": str(save_path)})
 
 
+@require_valid_license
 @bp.route("/api/upload_batch_video", methods=["POST"])
 def upload_batch_video():
     """Upload a video file for batch publishing. Returns server path."""
@@ -952,6 +954,7 @@ def upload_batch_video():
     return jsonify({"ok": True, "path": str(save_path)})
 
 
+@require_valid_license
 @bp.route("/api/upload_process_video", methods=["POST"])
 def upload_process_video():
     """Upload a video file. Each video gets its own subfolder under
@@ -1092,6 +1095,7 @@ def detect_subtitles():
     })
 
 
+@require_valid_license
 @bp.route("/api/process_video", methods=["POST"])
 def process_video():
     data = {}
@@ -1309,6 +1313,7 @@ def process_video():
     return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
 
 
+@require_valid_license
 @bp.route("/api/download_original_video", methods=["POST"])
 def download_original_video():
     """Download video from URL and save it to the output folder."""
@@ -1538,6 +1543,7 @@ def download_original_video():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@require_valid_license
 @bp.route("/api/make_vertical_video", methods=["POST"])
 def make_vertical_video_route():
     """Convert landscape video to 9:16 vertical with blurred gradient layers."""
@@ -1654,6 +1660,7 @@ def video_frame_upload():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@require_valid_license
 @bp.route("/api/burn_subtitle_only", methods=["POST"])
 def burn_subtitle_only():
     """Burn subtitle + optional frame into video (upload-based, streaming progress)."""
@@ -1751,6 +1758,7 @@ def burn_subtitle_only():
     return Response(stream_with_context(generate()), mimetype="text/plain")
 
 
+@require_valid_license
 @bp.route("/api/generate_thumbnail", methods=["POST"])
 def generate_thumbnail_route():
     """Generate a thumbnail image from a video frame with title bar and content box."""
@@ -1813,6 +1821,7 @@ def generate_thumbnail_route():
     return jsonify({"ok": False, "error": result}), 500
 
 
+@require_valid_license
 @bp.route("/api/generate_thumbnail_ai", methods=["POST"])
 def generate_thumbnail_ai():
     """Generate thumbnail using AI (Gemini).

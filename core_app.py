@@ -9,6 +9,7 @@ Security-hardened:
 """
 import asyncio
 import collections
+import functools
 import io
 import json
 import logging
@@ -21,8 +22,19 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, redirect, render_template, request, send_file
 from flask_socketio import SocketIO, emit
+
+try:
+    from utils.license_guard import is_license_active, LicenseGuard
+except Exception:
+    # Fallback — allow if module not yet ready
+    def is_license_active():
+        return True, {}
+    class LicenseGuard:
+        @staticmethod
+        def is_allowed():
+            return True
 
 try:
     from pyngrok import ngrok
@@ -441,3 +453,19 @@ def serve_page_static(page, filename):
     directory = os.path.join(ROOT, "templates", "pages", page)
     return send_from_directory(directory, filename)
 
+
+# ═══════════════════════════════════════════════════════════════
+# License-required decorator (multi-point check #3)
+# ═══════════════════════════════════════════════════════════════
+
+def require_valid_license(f):
+    """Decorator: redirect to activation if license is not active.
+
+    Apply to critical routes (download, process, transcribe, etc.)
+    """
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not LicenseGuard.is_allowed():
+            return redirect("/license/activate")
+        return f(*args, **kwargs)
+    return decorated_function

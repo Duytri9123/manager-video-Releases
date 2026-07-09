@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kích hoạt Bản quyền - DuyTris</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']}}}}</script>
+    <style>
+        *{-webkit-font-smoothing:antialiased;box-sizing:border-box;}
+        body{background:linear-gradient(135deg,#f0f9ff 0%,#e0f2fe 50%,#f0fdf4 100%);min-height:100vh;}
+
+        /* Card container */
+        .card{background:#fff;border-radius:32px;box-shadow:0 32px 80px -12px rgba(0,0,0,.08),0 16px 40px -24px rgba(0,0,0,.04);border:1px solid rgba(226,232,240,0.8);}
+
+        /* Key input */
+        .key-input{background:#f8fafc;border:2px solid #e2e8f0;border-radius:16px;font-family:'Courier New',monospace;font-weight:700;letter-spacing:.05em;transition:all .2s;}
+        .key-input:focus{border-color:#0ea5e9;box-shadow:0 0 0 4px rgba(14,165,233,.12);background:#fff;outline:none;}
+
+        /* Activate button */
+        .btn-activate{background:linear-gradient(135deg,#0ea5e9,#0284c7);border-radius:16px;transition:all .25s;box-shadow:0 4px 18px rgba(14,165,233,.24);}
+        .btn-activate:hover{box-shadow:0 8px 28px rgba(14,165,233,.35);transform:translateY(-2px);}
+        .btn-activate:active{transform:scale(.98);box-shadow:none;}
+        .btn-activate:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+
+        /* Support links styling */
+        .support-card{transition:all .2s;border:1px solid #f1f5f9;background:#f8fafc;}
+        .support-card:hover{border-color:#e2e8f0;background:#f1f5f9;transform:translateY(-1px);}
+
+        /* Status colors */
+        .status-expired,.status-banned{background:#fff1f2;border:1.5px solid #fecdd3;color:#e11d48;}
+        .status-disabled{background:#fffbeb;border:1.5px solid #fde68a;color:#b45309;}
+        .status-default{background:#f0f9ff;border:1.5px solid #bae6fd;color:#0369a1;}
+        .status-success{background:#f0fdf4;border:1.5px solid #bbf7d0;color:#16a34a;}
+
+        /* ─── Package cards ─── */
+        .pkg{border-radius:24px;cursor:pointer;position:relative;overflow:hidden;
+             transition:all .3s cubic-bezier(.34,1.56,.64,1);
+             min-height:180px;display:flex;flex-direction:column;padding:24px;border:2px solid transparent;}
+        .pkg:active{transform:scale(.97)!important;}
+
+        /* Glow overlay */
+        .pkg::before{content:'';position:absolute;inset:0;border-radius:22px;opacity:0;transition:opacity .3s;pointer-events:none;}
+
+        /* pkg-1  Sky blue */
+        .pkg-1{background:linear-gradient(145deg,#f0f9ff,#e0f2fe);border-color:#bae6fd;}
+        .pkg-1:hover{transform:translateY(-8px);box-shadow:0 24px 48px -8px rgba(14,165,233,.25);border-color:#0ea5e9;}
+        .pkg-1::before{background:radial-gradient(circle at 80% 80%,rgba(56,189,248,.15),transparent 65%);}
+        .pkg-1:hover::before{opacity:1;}
+        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+        .pkg-1:hover .pkg-icon{animation:float 1.6s ease-in-out infinite;}
+
+        /* pkg-2  Violet */
+        .pkg-2{background:linear-gradient(145deg,#faf5ff,#ede9fe);border-color:#c4b5fd;}
+        .pkg-2:hover{transform:translateY(-8px);box-shadow:0 24px 48px -8px rgba(139,92,246,.25);border-color:#8b5cf6;}
+        .pkg-2::before{background:radial-gradient(circle at 20% 20%,rgba(167,139,250,.15),transparent 65%);}
+        .pkg-2:hover::before{opacity:1;}
+        @keyframes wobble{0%,100%{transform:rotate(0deg)}25%{transform:rotate(10deg)}75%{transform:rotate(-6deg)}}
+        .pkg-2:hover .pkg-icon{animation:wobble .7s ease-out;}
+
+        /* pkg-3  Amber */
+        .pkg-3{background:linear-gradient(145deg,#fff7ed,#ffedd5);border-color:#fed7aa;}
+        .pkg-3:hover{transform:translateY(-8px);box-shadow:0 24px 48px -8px rgba(249,115,22,.25);border-color:#f97316;}
+        .pkg-3::before{background:radial-gradient(circle at 50% 0%,rgba(251,191,36,.15),transparent 65%);}
+        .pkg-3:hover::before{opacity:1;}
+        @keyframes burn{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+        .pkg-3:hover .pkg-icon{animation:burn .6s ease-in-out infinite;}
+
+        /* pkg-4  Emerald */
+        .pkg-4{background:linear-gradient(145deg,#ecfdf5,#d1fae5);border-color:#a7f3d0;}
+        .pkg-4:hover{transform:translateY(-10px) scale(1.02);box-shadow:0 28px 56px -8px rgba(16,185,129,.30);border-color:#10b981;}
+        .pkg-4::before{background:radial-gradient(circle at 50% 50%,rgba(52,211,153,.15),transparent 65%);}
+        .pkg-4:hover::before{opacity:1;}
+        @keyframes sparkle{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+        .pkg-4:hover .pkg-icon{animation:sparkle 1s ease-in-out infinite;}
+
+        /* Sale badge */
+        .sale-badge{background:linear-gradient(135deg,#ef4444,#f97316);color:#fff;font-size:10px;font-weight:900;
+                    padding:3px 9px;border-radius:99px;white-space:nowrap;line-height:1.2;}
+
+        @keyframes bounceIn{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.03)}100%{transform:scale(1);opacity:1}}
+        .bounce-in{animation:bounceIn .35s ease-out;}
+    </style>
+</head>
+<body class="font-sans flex items-center justify-center p-6 min-h-screen">
+
+<div class="card w-full max-w-6xl overflow-hidden">
+  <div class="flex flex-col lg:flex-row lg:h-[600px]">
+
+    <!-- ════ LEFT COLUMN: ACTIVATION & SUPPORT ════ -->
+    <div class="w-full lg:w-[360px] lg:shrink-0 p-8 lg:p-10 border-b lg:border-b-0 lg:border-r border-slate-100 flex flex-col justify-between">
+      <div class="space-y-8">
+        <!-- App logo -->
+        <div class="flex items-center space-x-3">
+          <div class="w-11 h-11 bg-sky-500 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-md shadow-sky-200">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <p class="font-black text-slate-800 text-base leading-tight tracking-tight">DuyTris Video Tools</p>
+            <p class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Kích hoạt bản quyền</p>
+          </div>
+        </div>
+
+        <!-- Status Alert inside left column -->
+        <div id="status-badge" class="flex items-start gap-3 px-4 py-3.5 rounded-2xl text-xs font-semibold
+            {% if status_code == 'expired' or status_code == 'banned' %}status-expired
+            {% elif status_code == 'disabled' %}status-disabled
+            {% else %}status-default{% endif %}">
+          <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+              {% if status_code in ['expired','banned'] %}d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+              {% else %}d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"{% endif %}/>
+          </svg>
+          <div class="min-w-0">
+            <p class="font-bold leading-normal">{{ status_message }}</p>
+          </div>
+        </div>
+
+        <!-- Key activation form -->
+        <div class="space-y-3">
+          <label class="block text-[10px] font-extrabold text-slate-450 uppercase tracking-widest">Nhập mã kích hoạt của bạn</label>
+          <form id="activate-form" class="space-y-3">
+            <input type="text" id="license-key-input" value="{{ license_key }}"
+              placeholder="MÃ KÍCH HOẠT (LICENSE KEY)"
+              class="key-input px-4 py-4 text-sm text-center text-slate-700 uppercase placeholder:normal-case placeholder:text-slate-400 placeholder:tracking-normal">
+            <button type="submit" id="activate-btn"
+              class="btn-activate py-4 text-sm font-bold text-white tracking-wide">
+              Kích hoạt bản quyền
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Support / Contact section at the bottom of left column -->
+      <div class="mt-8 pt-6 border-t border-slate-100 space-y-4">
+        <div>
+          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hỗ trợ khách hàng</p>
+          {% if contact.note %}
+          <p class="text-xs text-slate-500 mt-1 leading-relaxed">{{ contact.note }}</p>
+          {% endif %}
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          {% if contact.phone %}
+          <a href="tel:{{ contact.phone }}" class="support-card flex items-center space-x-2.5 p-3 rounded-xl">
+            <span class="text-lg">📞</span>
+            <div class="min-w-0">
+              <p class="text-[9px] font-bold text-slate-400 uppercase leading-none">Hotline</p>
+              <p class="text-xs font-bold text-slate-700 mt-0.5 truncate">{{ contact.phone }}</p>
+            </div>
+          </a>
+          {% endif %}
+
+          {% if contact.zalo %}
+          <a href="https://zalo.me/{{ contact.zalo }}" target="_blank" class="support-card flex items-center space-x-2.5 p-3 rounded-xl">
+            <span class="text-lg">💬</span>
+            <div class="min-w-0">
+              <p class="text-[9px] font-bold text-slate-400 uppercase leading-none">Zalo hỗ trợ</p>
+              <p class="text-xs font-bold text-slate-700 mt-0.5 truncate">{{ contact.zalo }}</p>
+            </div>
+          </a>
+          {% endif %}
+
+          {% if contact.facebook %}
+          <a href="{{ contact.facebook }}" target="_blank" class="support-card flex items-center space-x-2.5 p-3 rounded-xl col-span-2">
+            <span class="text-lg">👥</span>
+            <div class="min-w-0">
+              <p class="text-[9px] font-bold text-slate-400 uppercase leading-none">Facebook Page</p>
+              <p class="text-xs font-bold text-slate-700 mt-0.5 truncate">Liên hệ qua Fanpage</p>
+            </div>
+          </a>
+          {% endif %}
+        </div>
+
+        <p class="text-[10px] text-slate-350 font-medium">v2.0 · DuyTris · Bản quyền bảo lưu</p>
+      </div>
+    </div>
+
+    <!-- ════ RIGHT COLUMN: PRICING PACKAGES (SPACIOUS & BEAUTIFUL) ════ -->
+    <div class="flex-1 p-8 lg:p-10 bg-slate-50/50 flex flex-col justify-between min-w-0">
+      <div class="space-y-6 flex-1 flex flex-col justify-between">
+        <div>
+          <h2 class="text-xl font-extrabold text-slate-800 tracking-tight">Lựa chọn gói bản quyền tối ưu</h2>
+          <p class="text-xs text-slate-400 mt-1">Mua gói để gia hạn bản quyền và tự động kích hoạt ngay lập tức.</p>
+        </div>
+
+        {% if packages %}
+        <!-- Package cards – Grid 2x2 for massive spaces -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-auto">
+          {% for pkg in packages %}
+          {% set idx = loop.index %}
+          {% set icons = ['🗓️','📆','🔥','♾️'] %}
+          <div class="pkg pkg-{{ idx }}" onclick="buyLicense('{{ pkg.key }}')">
+            <!-- Icon and Sale Badge -->
+            <div class="flex items-start justify-between mb-4">
+              <span class="pkg-icon text-3xl leading-none">{{ icons[idx-1] }}</span>
+              {% if pkg.price_original and pkg.price_original > pkg.price %}
+              <span class="sale-badge">-{{ ((1 - pkg.price / pkg.price_original) * 100)|int }}% OFF</span>
+              {% endif %}
+            </div>
+
+            <!-- Package Name -->
+            <p class="text-[11px] font-extrabold uppercase tracking-widest
+                {% if idx == 1 %}text-sky-500{% elif idx == 2 %}text-violet-500{% elif idx == 3 %}text-amber-500{% else %}text-emerald-600{% endif %}">
+              {{ pkg.label }}
+            </p>
+
+            <!-- Duration -->
+            <p class="text-2xl font-black text-slate-800 leading-tight mt-1">
+              {% if pkg.days == 0 %}
+                Trọn đời (Vĩnh viễn)
+              {% elif pkg.days < 30 %}
+                {{ pkg.days }} ngày
+              {% elif pkg.days < 365 %}
+                {{ pkg.days // 30 }} tháng
+              {% elif pkg.days == 365 %}
+                1 năm
+              {% else %}
+                {{ (pkg.days / 365)|round(1) }} năm
+              {% endif %}
+            </p>
+
+            <!-- Price Info -->
+            <div class="mt-auto pt-4 flex items-baseline gap-2">
+              <span class="text-xl font-black
+                  {% if idx == 1 %}text-sky-600{% elif idx == 2 %}text-violet-600{% elif idx == 3 %}text-amber-600{% else %}text-emerald-700{% endif %}">
+                {{ '{:,.0f}'.format(pkg.price) }}đ
+              </span>
+              {% if pkg.price_original %}
+              <span class="text-xs text-slate-400 line-through font-medium">{{ '{:,.0f}'.format(pkg.price_original) }}đ</span>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="flex flex-col items-center justify-center py-12 text-slate-400">
+          <span class="text-4xl">⚠️</span>
+          <p class="text-sm font-semibold mt-2">Chưa cấu hình gói dịch vụ nào trên Admin.</p>
+        </div>
+        {% endif %}
+
+        <div class="text-[10px] text-slate-400 flex items-center justify-between border-t border-slate-100 pt-4 mt-4">
+          <span>Giao dịch an toàn qua cổng thanh toán VietQR</span>
+          <span>Bảo mật 100%</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  document.getElementById('activate-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const key = document.getElementById('license-key-input').value.trim();
+    if (!key) { alert('Vui lòng nhập mã kích hoạt!'); return; }
+    const btn = document.getElementById('activate-btn');
+    btn.disabled = true; btn.textContent = 'Đang kiểm tra...';
+    fetch('/api/license/activate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({license_key: key})
+    }).then(r => r.json()).then(d => {
+      if (d.success) {
+        showStatus('success', 'Kích hoạt thành công! Đang mở phần mềm...');
+        setTimeout(() => window.location.href = '/', 1800);
+      } else {
+        btn.disabled = false; btn.textContent = 'Kích hoạt bản quyền';
+        alert('❌ ' + d.message);
+      }
+    }).catch(() => {
+      btn.disabled = false; btn.textContent = 'Kích hoạt bản quyền';
+      alert('Không thể kết nối đến máy chủ.');
+    });
+  });
+
+  function buyLicense(pkgKey) {
+    fetch('/api/license/buy', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({package_key: pkgKey})
+    }).then(r => r.json()).then(d => {
+      if (d.success && d.checkout_url) window.location.href = d.checkout_url;
+      else alert('❌ ' + (d.message || 'Không thể tạo đơn hàng.'));
+    }).catch(() => alert('Không kết nối được đến máy chủ.'));
+  }
+
+  function showStatus(type, msg) {
+    const b = document.getElementById('status-badge');
+    b.className = 'status-' + type + ' flex items-start gap-2.5 px-4 py-3.5 rounded-2xl text-xs font-semibold bounce-in';
+    b.innerHTML = `<svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><p class="font-bold leading-normal">${msg}</p>`;
+  }
+
+  // Poll for license status
+  const statusCode = "{{ status_code }}";
+  if (statusCode !== 'active') {
+    const poller = setInterval(() => {
+      fetch('/api/license/check_status').then(r => r.json()).then(d => {
+        if (d.active) {
+          clearInterval(poller);
+          showStatus('success', 'Bản quyền đã được kích hoạt! Đang mở phần mềm...');
+          setTimeout(() => window.location.href = '/', 2000);
+        }
+      }).catch(() => {});
+    }, 3000);
+  }
+</script>
+</body>
+</html>
