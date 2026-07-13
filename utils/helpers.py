@@ -27,6 +27,8 @@ def format_duration(seconds: int) -> str:
 def ensure_playwright_chromium(logger_func=None):
     """
     Checks if playwright chromium is available. If not, attempts to download it.
+    If downloading fails, checks if a local system browser (Chrome/Edge/Brave) is available.
+    Only raises RuntimeError if neither is available.
     """
     try:
         import playwright
@@ -41,12 +43,28 @@ def ensure_playwright_chromium(logger_func=None):
         if logger_func:
             logger_func("Playwright: Checking/Installing Chromium browser...")
         proc = subprocess.run([str(driver_executable), str(driver_cli), "install", "chromium"], env=get_driver_env(), capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise RuntimeError(f"Playwright installation failed: {proc.stderr}")
-        if logger_func:
-            logger_func("Playwright Chromium is ready.")
+        if proc.returncode == 0:
+            if logger_func:
+                logger_func("Playwright Chromium is ready.")
+            return
+        
+        # Check local browser fallback if install command failed (e.g. node.exe fails to run on client machine)
+        local_browser = find_local_browser()
+        if local_browser:
+            if logger_func:
+                logger_func(f"Playwright installation failed, but found local system browser: {local_browser}. Falling back.")
+            return
+        else:
+            raise RuntimeError(f"Playwright installation failed and no local browser found. Error: {proc.stderr}")
     except Exception as e:
-        raise RuntimeError(f"Failed to install Playwright Chromium: {e}")
+        # Check local browser fallback if exception occurred
+        local_browser = find_local_browser()
+        if local_browser:
+            if logger_func:
+                logger_func(f"Playwright installation encountered error, but found local system browser: {local_browser}. Falling back.")
+            return
+        else:
+            raise RuntimeError(f"Failed to install Playwright Chromium and no local browser found: {e}")
 
 
 def find_local_browser():

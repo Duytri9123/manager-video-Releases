@@ -1,7 +1,7 @@
 {
-  "version": "2.0.0",
-  "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/download/v2.0.0/DuyTrisDownloader_Setup.exe",
-  "message": "Cập nhật bảo mật: thêm HMAC authentication, chống crack, tối ưu hiệu năng.",
-  "release_date": "2026-07-09",
+  "version": "2.0.1",
+  "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/download/v2.0.1/DuyTrisDownloader_Setup.exe",
+  "message": "Sửa lỗi không kích hoạt được bản quyền trên máy khách (lỗi 403 Cloudflare WAF).",
+  "release_date": "2026-07-13",
   "minimum_version": "1.5.0"
 }
