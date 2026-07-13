@@ -129,6 +129,12 @@ def cookie_opts_for(platform: str, cfg: Optional[Dict[str, Any]] = None) -> Dict
     yt = (cfg or {}).get("ytdlp") or {}
     opts: Dict[str, Any] = {}
 
+    if platform in ("youtube", "facebook"):
+        mode = str(yt.get(f"{platform}_cookie_mode") or "default").strip().lower()
+        if mode != "custom":
+            return opts
+
+
     # 0) Kiểm tra nội dung cookie thô lưu trực tiếp trong config
     contents = yt.get("cookie_contents") or {}
     content = str(contents.get(platform) or "").strip()
@@ -482,8 +488,10 @@ def fetch_facebook_reels(
     """
     try:
         from playwright.sync_api import sync_playwright
-    except Exception:
-        return {"error": "Playwright chưa được cài. Chạy: pip install playwright && playwright install chromium"}
+        from utils.helpers import ensure_playwright_chromium
+        ensure_playwright_chromium()
+    except Exception as exc:
+        return {"error": f"Playwright không khả dụng hoặc lỗi tải Chromium: {exc}"}
 
     reels: Dict[str, Dict[str, str]] = {}
     nickname = ""
@@ -495,8 +503,11 @@ def fetch_facebook_reels(
 
     try:
         with sync_playwright() as p:
-            ctx = p.chromium.launch_persistent_context(
-                user_data_dir,
+            from utils.helpers import launch_playwright_browser_sync
+            ctx = launch_playwright_browser_sync(
+                p.chromium,
+                is_persistent=True,
+                user_data_dir=user_data_dir,
                 headless=headless,
                 args=launch_args,
                 user_agent=ua,
@@ -777,8 +788,10 @@ def stream_facebook_reels(
     """Bản streaming của fetch_facebook_reels: vừa cuộn vừa phát reel mới."""
     try:
         from playwright.sync_api import sync_playwright
-    except Exception:
-        yield {"kind": "error", "message": "Playwright chưa được cài. Chạy: pip install playwright && playwright install chromium"}
+        from utils.helpers import ensure_playwright_chromium
+        ensure_playwright_chromium()
+    except Exception as exc:
+        yield {"kind": "error", "message": f"Playwright không khả dụng hoặc lỗi tải Chromium: {exc}"}
         return
 
     ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -800,8 +813,11 @@ def stream_facebook_reels(
 
     try:
         with sync_playwright() as p:
-            ctx = p.chromium.launch_persistent_context(
-                user_data_dir,
+            from utils.helpers import launch_playwright_browser_sync
+            ctx = launch_playwright_browser_sync(
+                p.chromium,
+                is_persistent=True,
+                user_data_dir=user_data_dir,
                 headless=headless,
                 args=launch_args,
                 user_agent=ua,

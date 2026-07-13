@@ -1,5 +1,7 @@
 {
   "version": "2.0.0",
-  "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/latest/download/DuyTrisDownloader_Setup.exe",
-  "message": "Phien ban dau tien. Cap nhat tu dong da san sang!"
+  "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/download/v2.0.0/DuyTrisDownloader_Setup.exe",
+  "message": "Cập nhật bảo mật: thêm HMAC authentication, chống crack, tối ưu hiệu năng.",
+  "release_date": "2026-07-09",
+  "minimum_version": "1.5.0"
 }

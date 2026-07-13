@@ -90,6 +90,66 @@ const TTS_DEFAULT_VOICE = {
   gtts: 'vi|com.vn',
 };
 
+/* ── Managed Voices Helpers for Process Page ── */
+const TRANSCRIBE_CUSTOM_VOICE_KEY = 'toolvideo.transcribe.customVoices.v1';
+
+function _trVoiceGenderFromLabel(label) {
+  const raw = String(label || '').toLowerCase();
+  if (raw.includes('nữ') || raw.includes('female') || raw.includes('woman') || raw.includes('girl')) return 'female';
+  if (raw.includes('nam') || raw.includes('male') || raw.includes('man') || raw.includes('boy')) return 'male';
+  return 'other';
+}
+
+function _trNormalizeVoiceItem(raw, idx = 0) {
+  const engine = String(raw?.engine || 'vieneu').trim();
+  const voice = String(raw?.voice || raw?.value || '').trim();
+  const label = String(raw?.label || raw?.name || voice || 'Giọng mới').trim();
+  const lang = String(raw?.lang || 'vi').trim();
+  return {
+    id: String(raw?.id || `custom_${Date.now()}_${idx}`).trim(),
+    label,
+    engine,
+    voice,
+    lang,
+    gender: String(raw?.gender || _trVoiceGenderFromLabel(`${label} ${raw?.description || ''}`)).trim(),
+    favorite: !!raw?.favorite,
+    emotion: String(raw?.emotion || 'default').trim(),
+    rate: String(raw?.rate || '+0%').trim(),
+    pitch: String(raw?.pitch || '+0Hz').trim(),
+    text: String(raw?.text || '').trim(),
+    persona: String(raw?.persona || raw?.description || '').trim(),
+    ref_audio: String(raw?.ref_audio || '').trim(),
+    source: String(raw?.source || 'Tự thêm').trim(),
+    readonly: !!raw?.readonly,
+    custom: !!raw?.custom,
+  };
+}
+
+function _getTranscribeCustomVoices() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(TRANSCRIBE_CUSTOM_VOICE_KEY) || '[]');
+    if (!Array.isArray(rows)) return [];
+    return rows.map((item, idx) => _trNormalizeVoiceItem({ ...item, custom: true }, idx)).filter(v => v.voice);
+  } catch (_) {
+    return [];
+  }
+}
+
+function _mergeManagedVoicePreset(engine, preset, lang = '') {
+  const rows = Array.isArray(preset) ? [...preset] : [];
+  const custom = _getTranscribeCustomVoices().filter(item => {
+    if (String(item.engine || '').toLowerCase() !== String(engine || '').toLowerCase()) return false;
+    if (!lang || !item.lang || item.lang === 'multi') return true;
+    return item.lang === lang;
+  });
+  custom.forEach(item => {
+    if (!rows.some(row => row.value === item.voice)) {
+      rows.push({ value: item.voice, label: `${item.label} (${item.source || 'Tự thêm'})` });
+    }
+  });
+  return rows;
+}
+
 /* ── Edge TTS voices per target language ── */
 let TTS_ENGINE_CATALOG = null;
 let TTS_ENGINE_CATALOG_PROMISE = null;
@@ -546,12 +606,13 @@ function _handle9RouterEngine(engineSelectId, voiceSelectId) {
   const engineEl = document.getElementById(engineSelectId);
   if (!engineEl) return false;
   const key = _9rKey(engineSelectId);
-  const cat = _find9rEngine(engineEl.value);
-  const is9r = !!cat;
+  const cat = (TTS_ENGINE_CATALOG || []).find(e => e.id === '9router');
+  const is9r = engineEl.value === '9router';
 
   const voiceEl = voiceSelectId ? document.getElementById(voiceSelectId) : null;
   const voiceField = voiceEl && voiceEl.closest('.field');
   const wrap = _ensure9rComponent(engineSelectId, voiceSelectId);
+
 
   if (!is9r) {
     if (wrap) wrap.style.display = 'none';
@@ -768,12 +829,12 @@ function switchPage(name) {
       if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
         _refreshTtsEngineSelects();
         _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
-        renderTranscribeVoiceLibrary();
+        if (typeof renderTranscribeVoiceLibrary === 'function') renderTranscribeVoiceLibrary();
       } else {
         _loadTtsEngineCatalog().then(() => {
           _refreshTtsEngineSelects();
           _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
-          renderTranscribeVoiceLibrary();
+          if (typeof renderTranscribeVoiceLibrary === 'function') renderTranscribeVoiceLibrary();
         });
       }
     });
@@ -792,6 +853,95 @@ function switchPage(name) {
 window._procMode = localStorage.getItem('proc_mode') || 'ai';
 window._procSelectedFile = null;
 window._procUploadPromise = null;
+window._procUploadedPath = null;
+
+/**
+ * Pre-upload video file ngay khi chọn, hiển thị progress bar.
+ * Khi processing bắt đầu, file đã có sẵn trên server → bỏ qua upload.
+ */
+function _onProcFileSelected(input) {
+  const files = input.files;
+  if (!files || files.length === 0) return;
+
+  const nameEl = document.getElementById('proc-file-name');
+  const pathEl = document.getElementById('proc-video');
+  const progressWrap = document.getElementById('proc-file-progress');
+  const progressBar = document.getElementById('proc-file-progress-bar');
+  const progressText = document.getElementById('proc-file-progress-text');
+
+  if (progressWrap) progressWrap.style.display = 'block';
+
+  window._procUploadPromise = (async () => {
+    let successCount = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (nameEl) nameEl.textContent = `📁 [${i+1}/${files.length}] Đang tải lên: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
+      if (pathEl) pathEl.value = `⏳ [${i+1}/${files.length}] Đang tải lên: ${file.name}`;
+      if (progressBar) progressBar.style.width = '0%';
+      if (progressText) progressText.textContent = '0%';
+
+      const form = new FormData();
+      form.append('file', file);
+
+      const xhr = new XMLHttpRequest();
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round(e.loaded / e.total * 100);
+          if (progressBar) progressBar.style.width = pct + '%';
+          if (progressText) progressText.textContent = `${pct}% (${(e.loaded / 1024 / 1024).toFixed(1)} / ${(e.total / 1024 / 1024).toFixed(1)} MB)`;
+        }
+      };
+
+      const uploadSingle = () => new Promise((resolve, reject) => {
+        xhr.onload = () => {
+          try {
+            const d = JSON.parse(xhr.responseText);
+            if (d.ok && d.path) {
+              resolve(d.path);
+            } else {
+              reject(new Error(d.error || 'Upload failed'));
+            }
+          } catch (e) {
+            reject(e);
+          }
+        };
+        xhr.onerror = () => reject(new Error('Lỗi kết nối khi upload'));
+        xhr.open('POST', '/api/upload_process_video', true);
+        xhr.send(form);
+      });
+
+      try {
+        const uploadedPath = await uploadSingle();
+        successCount++;
+        // Automatically add this file to the queue!
+        if (window._batchQueue && typeof buildNewTask === 'function') {
+          window._batchQueue.push(buildNewTask('file', uploadedPath));
+          if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
+          if (typeof _step1UpdateDownloadArea === 'function') _step1UpdateDownloadArea();
+        }
+      } catch (err) {
+        if (nameEl) nameEl.textContent = `❌ Lỗi tải lên ${file.name}: ${err.message}`;
+        if (typeof toast === 'function') toast(`❌ Lỗi tải lên ${file.name}: ${err.message}`, 'danger');
+      }
+    }
+
+    // Done all uploads
+    if (pathEl) pathEl.value = '';
+    if (nameEl) nameEl.textContent = `✅ Đã tải lên thành công ${successCount}/${files.length} file video`;
+    if (progressBar) progressBar.style.width = '100%';
+    if (progressText) progressText.textContent = '✅ Hoàn thành';
+    if (typeof toast === 'function') toast(`✅ Đã tải lên và thêm vào hàng chờ ${successCount} file video`, 'success');
+    setTimeout(() => { if (progressWrap) progressWrap.style.display = 'none'; }, 2000);
+    
+    // Clear input value so same files can be re-selected if needed
+    input.value = '';
+    
+    // Clear the active file upload state
+    window._procSelectedFile = null;
+    window._procUploadedPath = null;
+    window._procUploadPromise = null;
+  })();
+}
 
 function setProcessMode(mode) {
   window._procMode = mode === 'model' ? 'model' : 'ai';
@@ -960,7 +1110,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     target_language:  document.getElementById('proc-target-lang')?.value || 'vi',
     transcribe_provider: _getProcessProvider('transcribe'),
     translate_provider:  _getProcessProvider('translate'),
-    burn_subs:        document.getElementById('proc-burn')?.checked ?? true,
+    burn_subs:        (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn')?.checked ?? true),
     blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
     blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
     blur_width_pct:   parseFloat(document.getElementById('proc-blur-width')?.value || '80') / 100,
@@ -981,14 +1131,18 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
       start_sec: (z.start === '' || z.start === undefined || z.start === null) ? null : Number(z.start),
       end_sec:   (z.end   === '' || z.end   === undefined || z.end   === null) ? null : Number(z.end),
     })),
-    translate_subs:   document.getElementById('proc-translate-subs')?.checked ?? true,
-    burn_vi_subs:     document.getElementById('proc-burn-vi')?.checked ?? true,
-    voice_convert:    document.getElementById('proc-voice')?.checked ?? false,
+    translate_subs:   (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-translate-subs')?.checked ?? true),
+    burn_vi_subs:     (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn-vi')?.checked ?? true),
+    voice_convert:    (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-voice')?.checked ?? false),
     ..._resolveTtsEngineVoice('proc'),
     tts_pitch:        _sanitizeVoiceParam(document.getElementById('proc-tts-pitch')?.value || '+0Hz'),
     tts_rate:         _sanitizeVoiceParam(document.getElementById('proc-tts-rate')?.value || '+0%'),
     tts_emotion:      document.getElementById('proc-tts-emotion')?.value || 'default',
     keep_bg_music:    document.getElementById('proc-keep-bg')?.checked ?? false,
+    ext_audio_enabled: document.getElementById('proc-ext-audio-enabled')?.checked ?? false,
+    vol_orig:          parseFloat(document.getElementById('proc-vol-orig')?.value || '100') / 100,
+    ext_audios:        window._procExtAudios || [],
+
     font_size:        (() => {
       // UI value is % of video height. Convert to px for FFmpeg (reference: 720px height).
       const pct = parseFloat(document.getElementById('proc-font-size')?.value || '4.5');
@@ -1006,6 +1160,8 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
       const pct = parseFloat(document.getElementById('proc-margin-v')?.value || '3');
       return Math.max(0, Math.round(720 * pct / 100));
     })(),
+    outline_width:    parseInt(document.getElementById('proc-outline-width')?.value || '2', 10),
+    font_bold:        document.getElementById('proc-font-bold')?.checked ?? true,
     tts_speed:        parseFloat(document.getElementById('proc-tts-speed')?.value || '1.0'),
     auto_speed:       document.getElementById('proc-auto-speed')?.checked ?? true,
     process_mode:     window._procMode || 'ai',
@@ -1205,6 +1361,15 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     }
   });
 
+  // Nếu file đã được pre-upload qua _onProcFileSelected → dùng path đã upload
+  if (selectedFile && window._procUploadedPath) {
+    baseFields.video_path = window._procUploadedPath;
+    window._procUploadedPath = null;
+    window._procSelectedFile = null;
+    doRequest(JSON.stringify(baseFields), false);
+    return;
+  }
+
   if (selectedFile) {
     const form = new FormData();
     form.append('video_file', selectedFile);
@@ -1394,4 +1559,5 @@ function _extractPreviewTextFromAss(content, maxLines = 2) {
   }
   return texts.join(' ');
 }
+
 

@@ -557,32 +557,66 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
                 ],
             )
         except Exception as exc:
-            # Retry once after cleanup
-            _log(sid, f"⚠ Lần mở đầu thất bại: {exc}. Thử lại...", "warning")
-            _cleanup_profile_locks(session_profile)
-            await asyncio.sleep(2)
-            try:
-                context = await pw.chromium.launch_persistent_context(
-                    user_data_dir=str(session_profile),
-                    headless=False,
-                    viewport={"width": 1440, "height": 900},
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-dev-shm-usage",
-                        "--no-sandbox",
-                    ],
-                )
-            except Exception as exc2:
-                _set_status(sid, "error",
-                            error=f"Không mở được trình duyệt: {exc2}",
-                            done=True)
-                _cleanup_session_profile(session_profile)
-                if gate_held:
-                    try:
-                        _TT_LOGIN_GATE.release()
-                    except Exception:
-                        pass
-                return
+            exc_str = str(exc).lower()
+            if "executable doesn't exist" in exc_str or "install" in exc_str:
+                _log(sid, "📥 Không tìm thấy trình duyệt Chromium của Playwright. Đang tự động tải và cài đặt (khoảng 150MB)...", "info")
+                try:
+                    from playwright._impl._driver import compute_driver_executable, get_driver_env
+                    import subprocess
+                    driver_executable, driver_cli = compute_driver_executable()
+                    proc = subprocess.run([str(driver_executable), str(driver_cli), "install", "chromium"], env=get_driver_env(), capture_output=True, text=True)
+                    if proc.returncode == 0:
+                        _log(sid, "✅ Đã tải và cài đặt trình duyệt Chromium thành công. Thử mở lại...", "info")
+                        context = await pw.chromium.launch_persistent_context(
+                            user_data_dir=str(session_profile),
+                            headless=False,
+                            viewport={"width": 1440, "height": 900},
+                            args=[
+                                "--disable-blink-features=AutomationControlled",
+                                "--disable-dev-shm-usage",
+                                "--no-sandbox",
+                            ],
+                        )
+                    else:
+                        raise RuntimeError(f"Playwright driver returned exit code {proc.returncode}: {proc.stderr}")
+                except Exception as install_exc:
+                    _set_status(sid, "error",
+                                error=f"Lỗi tải trình duyệt tự động: {install_exc}. Bạn có thể cài đặt thủ công.",
+                                done=True)
+                    _cleanup_session_profile(session_profile)
+                    if gate_held:
+                        try:
+                            _TT_LOGIN_GATE.release()
+                        except Exception:
+                            pass
+                    return
+            else:
+                # Retry once after cleanup
+                _log(sid, f"⚠ Lần mở đầu thất bại: {exc}. Thử lại...", "warning")
+                _cleanup_profile_locks(session_profile)
+                await asyncio.sleep(2)
+                try:
+                    context = await pw.chromium.launch_persistent_context(
+                        user_data_dir=str(session_profile),
+                        headless=False,
+                        viewport={"width": 1440, "height": 900},
+                        args=[
+                            "--disable-blink-features=AutomationControlled",
+                            "--disable-dev-shm-usage",
+                            "--no-sandbox",
+                        ],
+                    )
+                except Exception as exc2:
+                    _set_status(sid, "error",
+                                error=f"Không mở được trình duyệt: {exc2}",
+                                done=True)
+                    _cleanup_session_profile(session_profile)
+                    if gate_held:
+                        try:
+                            _TT_LOGIN_GATE.release()
+                        except Exception:
+                            pass
+                    return
 
         # Store context on session so /prepare_close can shut it down.
         with _sessions_lock:

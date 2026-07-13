@@ -99,7 +99,7 @@ def _port_is_free(port: int) -> bool:
 
 
 def _choose_port() -> int:
-    preferred = int(os.getenv("FLASK_PORT", "5000"))
+    preferred = int(os.getenv("FLASK_PORT", "9123"))
     for port in range(preferred, preferred + 20):
         if _port_is_free(port):
             return port
@@ -110,52 +110,67 @@ def _choose_port() -> int:
 
 def _wait_until_ready(url: str, timeout: float = 45.0) -> bool:
     deadline = time.time() + timeout
+    # Try static file first for a fast check that bypasses license gate
+    check_url = f"{url}/static/css/custom.css"
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(f"{url}/", timeout=2) as resp:
+            with urllib.request.urlopen(check_url, timeout=2) as resp:
                 if resp.status == 200:
                     return True
         except Exception:
+            # Fallback to root path but allow redirect status codes (302) or any response
+            try:
+                class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self, req, fp, code, msg, headers, newurl):
+                        return None
+                opener = urllib.request.build_opener(NoRedirectHandler)
+                with opener.open(f"{url}/", timeout=2) as resp:
+                    if resp.status in (200, 301, 302, 303, 307, 308):
+                        return True
+            except Exception:
+                pass
             time.sleep(0.5)
     return False
 
 
-def _launch_app_window(url: str) -> int:
-    os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
-    # Enable GPU acceleration for a smooth UI experience. Fall back only if requested.
-    if os.getenv("DISABLE_GPU_UI") == "1":
-        os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu")
-
-    from PySide6.QtCore import QUrl
-    from PySide6.QtGui import QIcon
-    from PySide6.QtWidgets import QApplication, QMainWindow
-    from PySide6.QtWebEngineCore import QWebEngineProfile
-    from PySide6.QtWebEngineWidgets import QWebEngineView
-
-    qt_app = QApplication(sys.argv[:1])
-    qt_app.setApplicationName(APP_TITLE)
-    qt_app.setOrganizationName("DuyTris")
-
-    profile = QWebEngineProfile.defaultProfile()
-    profile.setCachePath(str(STATE_DIR / "qt_cache"))
-    profile.setPersistentStoragePath(str(STATE_DIR / "qt_storage"))
-
-    window = QMainWindow()
-    window.setWindowTitle(APP_TITLE)
-    window.resize(1280, 820)
-
-    icon_path = APP_DIR / "img" / "logo.png"
-    if icon_path.exists():
-        icon = QIcon(str(icon_path))
-        qt_app.setWindowIcon(icon)
-        window.setWindowIcon(icon)
-
-    web = QWebEngineView(window)
-    web.setUrl(QUrl(url))
-    window.setCentralWidget(web)
-    window.show()
-
-    return qt_app.exec()
+LOADING_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0fdf4 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #0284c7;
+    margin: 0;
+    overflow: hidden;
+  }
+  .spinner {
+    border: 4px solid rgba(2, 132, 199, 0.1);
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border-left-color: #0ea5e9;
+    animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  h2 { margin-top: 24px; font-weight: 800; font-size: 24px; color: #0f172a; letter-spacing: -0.02em; }
+  p { font-size: 13px; color: #64748b; margin-top: 8px; font-weight: 550; }
+</style>
+</head>
+<body>
+  <div class="spinner"></div>
+  <h2>DuyTris Downloader</h2>
+  <p>Đang khởi động hệ thống, vui lòng chờ trong giây lát...</p>
+</body>
+</html>
+"""
 
 
 def _check_update_and_notify():
@@ -196,43 +211,162 @@ def main() -> int:
     url = f"http://{HOST}:{port}"
     _log(f"Starting desktop app at {url}")
 
-    try:
-        from extensions import create_app
-        from core_app import socketio
+    if os.name == "nt":
+        import ctypes
+        try:
+            # Set AppUserModelID to show the taskbar icon correctly on Windows
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("duytris.downloader.desktop.v2")
+        except Exception:
+            pass
 
-        app = create_app()
-        _patch_subprocess_no_console()
+    os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
+    # Enable GPU acceleration for a smooth UI experience
+    if os.getenv("DISABLE_GPU_UI") == "1":
+        os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu")
 
-        def _run_server() -> None:
-            socketio.run(
-                app,
-                host=HOST,
-                port=port,
-                debug=False,
-                allow_unsafe_werkzeug=True,
-                use_reloader=False,
-            )
+    # Import PySide6 immediately to open splash window
+    from PySide6.QtCore import QUrl, QTimer
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+    from PySide6.QtWebEngineCore import QWebEngineProfile
+    from PySide6.QtWebEngineWidgets import QWebEngineView
 
-        thread = threading.Thread(target=_run_server, name="flask-server", daemon=True)
-        thread.start()
+    qt_app = QApplication(sys.argv[:1])
+    qt_app.setApplicationName(APP_TITLE)
+    qt_app.setOrganizationName("DuyTris")
 
-        if not _wait_until_ready(url):
-            raise RuntimeError(f"Server did not start at {url}")
+    profile = QWebEngineProfile.defaultProfile()
+    profile.setCachePath(str(STATE_DIR / "qt_cache"))
+    profile.setPersistentStoragePath(str(STATE_DIR / "qt_storage"))
 
-        # Check for updates (background thread, non-blocking)
-        threading.Thread(target=_check_update_and_notify, name="update-check", daemon=True).start()
+    window = QMainWindow()
+    window.setWindowTitle(APP_TITLE)
+    window.resize(1280, 820)
 
-        if os.getenv("DESKTOP_APP_NO_WINDOW") in ("1", "true", "yes"):
-            while True:
-                time.sleep(3600)
+    icon_path = APP_DIR / "img" / "logo.png"
+    if icon_path.exists():
+        icon = QIcon(str(icon_path))
+        qt_app.setWindowIcon(icon)
+        window.setWindowIcon(icon)
 
-        return _launch_app_window(url)
-    except Exception as exc:
-        details = traceback.format_exc()
-        _log(details)
-        _message_box(f"Khong khoi dong duoc ung dung:\n{exc}\n\nLog: {LOG_FILE}")
-        return 1
+    # Main layout setup
+    central_widget = QWidget(window)
+    layout = QVBoxLayout(central_widget)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(0)
+
+    # Top Navigation Bar (hidden by default)
+    nav_bar = QWidget()
+    nav_bar.setStyleSheet("background-color: #ffffff; border-bottom: 1px solid #e2e8f0; padding: 4px;")
+    nav_bar_layout = QHBoxLayout(nav_bar)
+    nav_bar_layout.setContentsMargins(12, 4, 12, 4)
+
+    back_btn = QPushButton("◀ Quay lại ứng dụng")
+    back_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #0284c7;
+            color: #ffffff;
+            border: none;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+        QPushButton:hover {
+            background-color: #0369a1;
+        }
+        QPushButton:pressed {
+            background-color: #075985;
+        }
+    """)
+
+    info_label = QLabel("Đang mở trang thanh toán bảo mật bên thứ ba...")
+    info_label.setStyleSheet("color: #64748b; font-size: 13px; font-weight: 550;")
+
+    nav_bar_layout.addWidget(back_btn)
+    nav_bar_layout.addSpacing(12)
+    nav_bar_layout.addWidget(info_label)
+    nav_bar_layout.addStretch()
+
+    nav_bar.hide()
+
+    web = QWebEngineView(window)
+    # Load splash screen immediately!
+    web.setHtml(LOADING_HTML)
+
+    layout.addWidget(nav_bar)
+    layout.addWidget(web)
+
+    window.setCentralWidget(central_widget)
+    window.show()
+
+    # Connect signals
+    def on_url_changed(qurl):
+        current_url = qurl.toString()
+        if current_url.startswith(url) or current_url.startswith("data:") or not current_url:
+            nav_bar.hide()
+        else:
+            nav_bar.show()
+
+    web.urlChanged.connect(on_url_changed)
+    back_btn.clicked.connect(lambda: web.setUrl(QUrl(url)))
+
+    # Start backend server in a background thread
+    status = {"ready": False, "error": None}
+
+    def start_backend() -> None:
+        try:
+            from extensions import create_app
+            from core_app import socketio
+
+            app = create_app()
+            _patch_subprocess_no_console()
+
+            def _run_server() -> None:
+                socketio.run(
+                    app,
+                    host=HOST,
+                    port=port,
+                    debug=False,
+                    allow_unsafe_werkzeug=True,
+                    use_reloader=False,
+                )
+
+            thread = threading.Thread(target=_run_server, name="flask-server", daemon=True)
+            thread.start()
+
+            if _wait_until_ready(url):
+                status["ready"] = True
+            else:
+                status["error"] = "Thoi gian khoi dong server Flask bi qua han."
+        except Exception as exc:
+            status["error"] = traceback.format_exc()
+
+    # Launch server import and startup thread
+    threading.Thread(target=start_backend, name="backend-initializer", daemon=True).start()
+
+    # Setup timer to check server status in GUI main thread
+    def check_status() -> None:
+        if status["ready"]:
+            timer.stop()
+            web.setUrl(QUrl(url))
+            # Run update check in background after loading app
+            threading.Thread(target=_check_update_and_notify, name="update-check", daemon=True).start()
+        elif status["error"] is not None:
+            timer.stop()
+            _log(status["error"])
+            _message_box(f"Khong khoi dong duoc ung dung:\n{status['error']}")
+            qt_app.quit()
+
+    timer = QTimer()
+    timer.timeout.connect(check_status)
+    timer.start(100) # Check every 100ms
+
+    return qt_app.exec()
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+

@@ -501,9 +501,11 @@ class DouyinAPIClient:
     ) -> List[str]:
         try:
             from playwright.async_api import async_playwright
+            from utils.helpers import ensure_playwright_chromium
+            ensure_playwright_chromium()
         except Exception as exc:
             logger.warning(
-                "Playwright not available, browser fallback disabled: %s", exc
+                "Playwright not available or error installing browser: %s", exc
             )
             return []
 
@@ -530,7 +532,10 @@ class DouyinAPIClient:
         )
 
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(
+            from utils.helpers import launch_playwright_browser_async
+            browser = await launch_playwright_browser_async(
+                playwright.chromium,
+                is_persistent=False,
                 headless=headless,
                 args=[
                     "--disable-blink-features=AutomationControlled",

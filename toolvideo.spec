@@ -11,10 +11,6 @@ from PyInstaller.utils.hooks import (
 
 
 project_root = Path(SPECPATH)
-obf_src = project_root / "obf_src"
-if obf_src.exists():
-    # Use PyArmor-obfuscated sources for security modules
-    datas += collect_data_files(str(obf_src))
 
 datas = [
     (str(project_root / "templates"), "templates"),
@@ -24,10 +20,30 @@ datas = [
     (str(project_root / "config.yml"), "."),
     (str(project_root / "config.example.yml"), "."),
     (str(project_root / "client_secrets.example.json"), "."),
+    (str(project_root / "output"), "output"),
 ]
 
 binaries = []
 hiddenimports = []
+
+# Add PyArmor-obfuscated security modules if present
+obf_src = project_root / "obf_src"
+if obf_src.exists() and obf_src.is_dir():
+    for pyfile in obf_src.glob("*.py"):
+        datas.append((str(pyfile), "."))
+    # PyArmor runtime is a C extension (.pyd) — MUST be in binaries, not datas
+    rt_dir = obf_src / "pyarmor_runtime_000000"
+    if rt_dir.exists():
+        rt_pyd = rt_dir / "pyarmor_runtime.pyd"
+        if rt_pyd.exists():
+            binaries.append((str(rt_pyd), "pyarmor_runtime_000000"))
+        datas.append((str(rt_dir / "__init__.py"), "pyarmor_runtime_000000"))
+
+# Force-include utils/*.py (PyInstaller auto-import may miss them)
+utils_dir = project_root / "utils"
+for pyfile in utils_dir.glob("*.py"):
+    if pyfile.name != "__init__.py":
+        datas.append((str(pyfile), "utils"))
 
 # Blueprints are imported dynamically in extensions.py.
 hiddenimports += collect_submodules("routes")
@@ -42,6 +58,7 @@ for package in (
     "ctranslate2",
     "onnxruntime",
     "tokenizers",
+    "curl_cffi",
 ):
     binaries += collect_dynamic_libs(package)
 
@@ -50,6 +67,7 @@ for package in (
     "playwright",
     "pyngrok",
     "google.genai",
+    "curl_cffi",
 ):
     datas += collect_data_files(package)
 
@@ -70,6 +88,7 @@ for distribution in (
         pass
 
 hiddenimports += [
+    "curl_cffi",
     "PySide6.QtCore",
     "PySide6.QtGui",
     "PySide6.QtNetwork",
@@ -95,6 +114,13 @@ hiddenimports += [
     "socks",
     "tokenizers",
     "unicodedata",
+    # Explicitly import utils modules that PyInstaller may miss
+    "utils.security",
+    "utils.auto_updater",
+    "utils.license_guard",
+    "utils.licensing_client",
+    "utils.licensing_routes",
+    "utils.security_core",
 ]
 
 a = Analysis(
@@ -155,6 +181,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     contents_directory=".",
+    icon=str(project_root / "img" / "logo.ico"),
 )
 
 coll = COLLECT(

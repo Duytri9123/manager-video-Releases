@@ -1,0 +1,9 @@
+OUTSIDE PAGE WRAPPER: c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:2: PAGE: AI Studio — Video + Image + Idea→Video (gộp)
+OUTSIDE PAGE WRAPPER: c:/MyTool/toolvideo/templates\pages\idea2video\page.html:2: PAGE: Idea → Video  (ViMax pipeline)
+NO WRAPPER FOUND IN PAGE: c:/MyTool/toolvideo/templates\pages\process\scripts.html
+NO WRAPPER FOUND IN PAGE: c:/MyTool/toolvideo/templates\pages\process\step1_source.html
+NO WRAPPER FOUND IN PAGE: c:/MyTool/toolvideo/templates\pages\process\step2_edit.html
+NO WRAPPER FOUND IN PAGE: c:/MyTool/toolvideo/templates\pages\process\step4_publish.html
+NO WRAPPER FOUND IN PAGE: c:/MyTool/toolvideo/templates\pages\process\step5_run.html
+NO WRAPPER FOUND IN PAGE: c:/MyTool/toolvideo/templates\pages\process\wizard_footer.html
+OUTSIDE PAGE WRAPPER: c:/MyTool/toolvideo/templates\pages\story\page.html:2: Truyện → Video — MangaDex search + AI narration + render

@@ -91,8 +91,8 @@ def _guard_loop() -> None:
     time.sleep(5)
 
     while True:
-        # Random interval between 180 and 480 seconds (3-8 min)
-        interval = random.randint(180, 480)
+        # Random interval around 1 hour (50 to 70 minutes / 3000 to 4200 seconds)
+        interval = random.randint(3000, 4200)
 
         try:
             is_ok, data = force_check()

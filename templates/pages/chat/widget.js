@@ -9,6 +9,21 @@
   if (window._chatWidgetInited) return;
   window._chatWidgetInited = true;
 
+  window.copyToClipboard = function(btn) {
+    const code = btn.nextElementSibling.querySelector('code')?.innerText || btn.nextElementSibling.innerText;
+    navigator.clipboard.writeText(code).then(() => {
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `<svg style="width:14px;height:14px;color:#10b981" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`;
+      btn.style.background = 'rgba(16,185,129,0.1)';
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.style.background = '';
+      }, 1500);
+    }).catch(err => {
+      console.error('Failed to copy: ', err);
+    });
+  };
+
   const LS_KEY      = 'chatWidget.v1';            // legacy single-session (migrated)
   const LS_SESSIONS = 'chatWidget.sessions.v2';   // [{id, title, messages, ts}]
   const LS_ACTIVE   = 'chatWidget.activeId';
@@ -458,9 +473,7 @@
           <button id="cw-new" title="Cuộc mới">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
-          <button id="cw-min" title="Thu nhỏ">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>
-          </button>
+
           <button id="cw-close" title="Đóng">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
@@ -811,22 +824,56 @@
     return card;
   }
 
-  // Some Kiro-routed models (sonnet via Kiro proxy) leak pseudo-tool tags
-  // like <web_search>...</web_search>, <invoke>...</invoke>, <tool_use>...
-  // because they think they have tools they don't. Strip these so the user
-  // sees a clean answer instead of XML soup.
   function _stripFakeToolTags(text){
     if (!text) return text;
     let t = text;
-    // Block-level pseudo tools.
     t = t.replace(/<\s*(web_search|web-search|websearch|search|tool_use|tool-use|invoke|function_calls|antml:function_calls)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
-    // Self-closing variants.
     t = t.replace(/<\s*(web_search|tool_use|invoke|function_calls|antml:function_calls)\b[^>]*\/?\s*>/gi, '');
-    // Stray opening/closing tags left over.
     t = t.replace(/<\s*\/?\s*(query|max_results|parameter|antml:parameter)\s*>/gi, '');
-    // Collapse empty lines created by the strip.
     t = t.replace(/\n{3,}/g, '\n\n').trim();
     return t;
+  }
+
+  function parseMarkdownToHtml(text) {
+    if (!text) return '';
+    let html = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    html = html.replace(/```([\s\S]*?)```/g, (match, codePart) => {
+      const lines = codePart.split('\n');
+      let lang = '';
+      let code = codePart;
+      if (lines.length > 1 && lines[0].trim().match(/^[a-zA-Z0-9_-]+$/)) {
+        lang = lines[0].trim().toLowerCase();
+        code = lines.slice(1).join('\n');
+      }
+      const isPoemOrText = (lang === 'poem' || lang === 'text' || lang === 'poetry' || lang === 'tho');
+      const fontFamily = isPoemOrText ? 'system-ui, -apple-system, sans-serif' : 'Courier New, Courier, monospace';
+      const fontSize = isPoemOrText ? '14px' : '12px';
+      const lineSpacing = isPoemOrText ? '1.6' : '1.4';
+      const fontStyle = isPoemOrText ? 'italic' : 'normal';
+      const padding = isPoemOrText ? '10px 12px' : '8px 10px';
+      const borderStyle = isPoemOrText ? '1px dashed var(--accent, #3b82f6)' : '1px solid var(--border, #e2e8f0)';
+      const background = isPoemOrText ? 'rgba(59,130,246,0.03)' : 'var(--bg3, #f8fafc)';
+      
+      return `<div class="cw-code-container" style="position:relative;margin:10px 0;background:${background};border:${borderStyle};border-radius:8px;padding:${padding};padding-right:38px">`
+        + `<button onclick="window.copyToClipboard(this)" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.05);border:none;border-radius:4px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted, #64748b);transition:all 0.2s" title="Copy" onmouseover="this.style.background='rgba(0,0,0,0.1)'" onmouseout="this.style.background='rgba(0,0,0,0.05)'">`
+          + `<svg style="width:14px;height:14px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`
+        + `</button>`
+        + `<pre style="margin:0;font-family:${fontFamily};font-size:${fontSize};line-height:${lineSpacing};font-style:${fontStyle};white-space:pre-wrap;word-break:break-word"><code class="lang-${lang}">${code.trim()}</code></pre>`
+      + `</div>`;
+    });
+    html = html.replace(/`([^`\n]+)`/g, '<code style="background:#f1f5f9;border:1px solid #e2e8f0;padding:2px 5px;border-radius:4px;font-family:monospace;font-size:12px">$1</code>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    html = html.replace(/^(#{1,6})\s+(.+)$/gm, (match, hashes, content) => {
+      const level = hashes.length;
+      const sizeClass = level === 1 ? 'text-lg font-bold mt-3 mb-1 block' : 'text-base font-bold mt-2 mb-1 block';
+      return `<span class="${sizeClass}">${content}</span>`;
+    });
+    html = html.replace(/^\s*[-*+]\s+(.+)$/gm, '<li style="margin-left:15px;list-style-type:disc">$1</li>');
+    return html;
   }
 
   function enrichBubble(bub, rawText){
@@ -893,7 +940,11 @@
 
     for (const part of out){
       if (part.kind === 'text'){
-        if (part.text) bub.appendChild(document.createTextNode(part.text));
+        if (part.text) {
+          const span = document.createElement('span');
+          span.innerHTML = parseMarkdownToHtml(part.text);
+          bub.appendChild(span);
+        }
         continue;
       }
       if (part.kind === 'mdimg'){
@@ -964,6 +1015,27 @@
     return { row, bub: row.querySelector('.cw-bubble'), tag: row.querySelector('.cw-tag') };
   }
 
+  function formatChatError(rawError) {
+    let msg = '';
+    if (typeof rawError === 'string') {
+      msg = rawError;
+    } else if (rawError && typeof rawError === 'object') {
+      msg = rawError.body || rawError.message || rawError.error || JSON.stringify(rawError);
+    } else {
+      msg = String(rawError || 'Lỗi không xác định');
+    }
+    const lower = msg.toLowerCase();
+    if (lower.includes('9router offline') || lower.includes('unreachable') || lower.includes('failed to connect') || lower.includes('502')) {
+      return `9Router chưa sẵn sàng hoặc không hoạt động.
+
+💡 Hướng dẫn xử lý:
+1. Đảm bảo ứng dụng 9Router đã được khởi chạy trên máy tính (chạy ở cổng mặc định 20128). Nếu chưa có, bạn có thể tải tại: https://9router.com
+2. Đảm bảo bạn đã thêm/bật ít nhất một nhà cung cấp AI (như Gemini, OpenAI, DeepSeek, hoặc Groq) và có cấu hình khóa API (API Key) hoạt động trên giao diện quản lý của 9Router.
+3. Nếu bạn muốn chạy không qua 9Router: Hãy cấu hình API Key trực tiếp (ví dụ: Gemini Key, OpenAI Key) trong mục Cài đặt của công cụ này để hệ thống tự động chuyển đổi dự phòng (Fallback).`;
+    }
+    return msg;
+  }
+
   // ── Backend status / models ───────────────────────────────────────────
   async function refreshStatus(){
     setStatus('đang kiểm tra…', '');
@@ -986,8 +1058,8 @@
     return true;
   }
 
-  async function loadModels(){
-    if (state.loadedModels) return;
+  async function loadModels(force = false){
+    if (state.loadedModels && !force) return;
     const { ok, data } = await api('GET','/api/chatbot/models');
     if (!ok || data?.ok === false) return;
     state.models = data.models || [];
@@ -1074,19 +1146,28 @@
     if (!resp.body){
       const text = await resp.text();
       let assembled = '';
+      let errorParsed = false;
       for (const ev of text.split(/\r?\n\r?\n/)){
         for (const line of ev.split(/\r?\n/)){
           if (!line.startsWith('data:')) continue;
           const d = line.slice(5).trim();
           if (!d || d === '[DONE]') continue;
-          try { const j = JSON.parse(d);
+          try {
+            const j = JSON.parse(d);
+            if (j && j.error) {
+              assembled = '❌ ' + formatChatError(j.error);
+              errorParsed = true;
+              break;
+            }
             const c = (j.choices||[])[0]?.delta?.content;
             if (typeof c === 'string') assembled += c;
           } catch(_){}
         }
+        if (errorParsed) break;
       }
       holder.bub.textContent = assembled || '⚠ Không có nội dung';
-      return { ok: !!assembled, content: assembled };
+      if (errorParsed) holder.bub.classList.add('err');
+      return { ok: !!assembled && !errorParsed, content: assembled };
     }
 
     const reader = resp.body.getReader();
@@ -1114,7 +1195,7 @@
         if (evName === 'error'){
           errored = true;
           let m = d; try { m = JSON.parse(d); } catch(_){}
-          holder.bub.textContent = '❌ ' + (typeof m === 'string' ? m : JSON.stringify(m));
+          holder.bub.textContent = '❌ ' + formatChatError(m);
           holder.bub.classList.add('err');
           continue;
         }
@@ -1140,17 +1221,37 @@
               holder.tag.appendChild(note);
             }
           } catch(_){}
+        }
+        if (evName === 'ack') {
+          try {
+            const info = JSON.parse(d);
+            if (info && info.message) {
+              holder.bub.innerHTML = `<span class="chat-ack-placeholder" style="color:var(--text-muted, #64748b);font-style:italic">${info.message}</span>`;
+            }
+          } catch (_) {}
           continue;
         }
         if (!d || d === '[DONE]') continue;
         let cd; try { cd = JSON.parse(d); } catch(_){ continue; }
+        if (cd && cd.error) {
+          errored = true;
+          holder.bub.textContent = '❌ ' + formatChatError(cd.error);
+          holder.bub.classList.add('err');
+          break;
+        }
         if (cd.model) actualModel = cd.model;
         const choice = (cd.choices||[])[0] || {};
         const delta = choice.delta || {};
         if (typeof delta.content === 'string'){
+          if (assembled === '') {
+            holder.bub.innerHTML = '';
+          }
           assembled += delta.content;
           holder.bub.textContent = assembled;
         } else if (typeof choice.message?.content === 'string'){
+          if (assembled === '') {
+            holder.bub.innerHTML = '';
+          }
           assembled = choice.message.content;
           holder.bub.textContent = assembled;
         }
@@ -1213,7 +1314,7 @@
   async function sendNonStream(payload, holder){
     const { ok, data } = await api('POST','/api/chatbot/chat', payload);
     if (!ok || data?.ok === false){
-      holder.bub.textContent = '❌ ' + (data?.message || data?.error || 'Lỗi');
+      holder.bub.textContent = '❌ ' + formatChatError(data);
       holder.bub.classList.add('err');
       return { ok:false, content:'' };
     }
@@ -2525,13 +2626,13 @@
       // /api/chatbot/tts and /api/tts_to_mp3, so we inform the model that
       // such a tool exists at the user's fingertips.
       const SYSTEM_HINT = (
-        'Bạn là trợ lý trong ứng dụng làm video. Ứng dụng có sẵn tính năng '
-        + 'Text-to-Speech (TTS) trong khung chat: người dùng chỉ cần gõ '
-        + '"đọc giúp tôi", "đọc nó", "tạo giọng nói" hoặc bấm icon ⚙️ '
-        + 'trên header để đổi giọng mặc định. Nếu người dùng yêu cầu phát '
-        + 'âm thanh, ĐỪNG nói "không thể tạo audio" — thay vào đó hãy hướng '
-        + 'dẫn ngắn gọn họ gõ "đọc giúp tôi" để widget tự đọc, hoặc trả lời '
-        + 'nội dung họ cần và đề xuất họ gõ "đọc nó giúp tôi" sau đó.'
+        'Bạn là trợ lý ảo AI thân thiện, chuyên nghiệp trong ứng dụng làm video. '
+        + 'Hãy trả lời đầy đủ, chi tiết, lịch sự và tự nhiên. '
+        + 'Khi sáng tác thơ, viết kịch bản, lời thoại hoặc cung cấp nội dung mẫu mà người dùng cần sao chép, hãy LUÔN đặt phần nội dung đó bên trong cặp dấu block code với ngôn ngữ là "poem" (ví dụ: ```poem\\n[nội dung thơ]\\n```) hoặc "text" để hệ thống tạo khung thơ tuyệt đẹp và hiển thị nút "Copy" cho người dùng. '
+        + 'Lưu ý: Ứng dụng có sẵn tính năng Text-to-Speech (TTS) tích hợp — người dùng có thể gõ '
+        + '"đọc giúp tôi", "đọc nó", "tạo giọng nói" hoặc click icon ⚙️ trên đầu khung chat để đổi giọng đọc. '
+        + 'Chỉ khi nào người dùng hỏi về giọng nói, âm thanh hoặc yêu cầu phát âm thanh/audio, bạn mới hướng dẫn họ sử dụng tính năng này. '
+        + 'Đối với lời chào hoặc câu hỏi thông thường, hãy trả lời tự nhiên, chu đáo và thân thiện, không cần lặp lại hướng dẫn TTS.'
       );
       const sysMsg = { role: 'system', content: SYSTEM_HINT };
       const turns = state.history.map(({ role, content }) => ({ role, content }));
@@ -3642,8 +3743,8 @@
     repositionPanelNearFab();
     requestAnimationFrame(repositionPanelNearFab);
     setTimeout(() => $('cw-input')?.focus(), 60);
-    if (!state.loadedModels) loadModels();
-    if (state.statusOk == null) refreshStatus();
+    loadModels(true);
+    refreshStatus();
   }
   function close(){
     $('cw-panel').classList.remove('show');
@@ -3664,7 +3765,7 @@
       if ($('cw-panel').classList.contains('show')) close(); else open();
     });
     $('cw-close').addEventListener('click', close);
-    $('cw-min').addEventListener('click', () => $('cw-panel').classList.toggle('minimized'));
+    $('cw-min')?.addEventListener('click', () => $('cw-panel').classList.toggle('minimized'));
     $('cw-new').addEventListener('click', () => newSession());
     $('cw-history').addEventListener('click', toggleDrawer);
     $('cw-tts-cfg').addEventListener('click', openTtsSettingsModal);

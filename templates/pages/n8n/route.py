@@ -333,10 +333,10 @@ def n8n_endpoints():
     try:
         import core_app
         host = os.getenv("FLASK_HOST", "127.0.0.1")
-        port = int(os.getenv("FLASK_PORT", "5000"))
+        port = int(os.getenv("FLASK_PORT", "9123"))
         base = core_app._public_base_url(host if host != "0.0.0.0" else "127.0.0.1", port)
     except Exception:
-        base = "http://127.0.0.1:5000"
+        base = "http://127.0.0.1:9123"
 
     endpoints = [
         {"method": "GET",  "path": "/api/_routes",

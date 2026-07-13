@@ -6,6 +6,21 @@
  * Streaming uses SSE passthrough so the API key never reaches the browser.
  * ───────────────────────────────────────────────────────────────────────── */
 (function () {
+  window.copyToClipboard = window.copyToClipboard || function(btn) {
+    const code = btn.nextElementSibling.querySelector('code')?.innerText || btn.nextElementSibling.innerText;
+    navigator.clipboard.writeText(code).then(() => {
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = `<svg style="width:14px;height:14px;color:#10b981" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`;
+      btn.style.background = 'rgba(16,185,129,0.1)';
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.style.background = '';
+      }, 1500);
+    }).catch(err => {
+      console.error('Failed to copy: ', err);
+    });
+  };
+
   const state = {
     loadedConfig: false,
     loadedModels: false,
@@ -83,6 +98,8 @@
       if (sp) sp.value = data.system_prompt || '';
       if (t)  t.value  = String(data.temperature ?? 0.7);
       if (mt) mt.value = String(data.max_tokens ?? 4096);
+      const keyEl = document.getElementById('chat-api-key');
+      if (keyEl) keyEl.value = data.api_key || '';
       if (hint) {
         if (data.has_key) {
           hint.innerHTML = '✓ Đã có key đã lưu: <code>' + (data.masked_key || '***') + '</code> — để trống ô input để giữ nguyên.';
@@ -99,9 +116,10 @@
     }
   }
 
-  async function chatRefreshStatus() {
+  async function chatRefreshStatus(force = false) {
     _setBadge('Đang kiểm tra…', 'gray');
-    const { data } = await _get('/api/chatbot/status');
+    const url = force ? '/api/chatbot/status?force=1' : '/api/chatbot/status';
+    const { data } = await _get(url);
     state.status = data;
     const banner = document.getElementById('chat-cfg-banner');
     const autoBtn = document.getElementById('chat-btn-auto');
@@ -180,6 +198,19 @@
     if (data.has_cli_token) line += ' · CLI token sẵn sàng (auto-setup OK)';
     else line += ' · không có CLI token (cần dán key tay)';
     if (banner) banner.textContent = line;
+
+    const valEl = document.getElementById('chat-api-key-validity');
+    if (valEl) {
+      if (!data.has_key) {
+        valEl.innerHTML = '<span style="color: #64748b;">⚪ Chưa cấu hình API Key</span>';
+      } else if (data.key_valid === true) {
+        valEl.innerHTML = '<span style="color: #10b981;">🟢 Key hợp lệ · Đang hoạt động (Còn hạn)</span>';
+      } else if (data.key_valid === false) {
+        valEl.innerHTML = `<span style="color: #ef4444;">🔴 Key lỗi/Hết hạn: ${data.key_error || 'Không hợp lệ'}</span>`;
+      } else {
+        valEl.innerHTML = '<span style="color: #888;">⏳ Đang kiểm tra key...</span>';
+      }
+    }
 
     if (data.has_key)         _setBadge('Sẵn sàng', 'green');
     else if (data.has_cli_token) _setBadge('Cần auto-setup', 'yellow');
@@ -360,6 +391,45 @@
     const el = document.getElementById('chat-api-key');
     if (!el) return;
     el.type = (el.type === 'password') ? 'text' : 'password';
+  }
+
+  async function chatTestApiKey() {
+    const apiKey = document.getElementById('chat-api-key')?.value?.trim();
+    if (!apiKey) {
+      _toast('Vui lòng nhập API Key', 'warning');
+      return;
+    }
+    
+    const valEl = document.getElementById('chat-api-key-validity');
+    if (valEl) valEl.innerHTML = '<span style="color: #888;">⏳ Đang kiểm tra key...</span>';
+    
+    // Save key first
+    const { ok: saveOk } = await _post('/api/chatbot/config', { api_key: apiKey });
+    if (!saveOk) {
+      _toast('Không thể lưu key để kiểm tra', 'error');
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/test_api_key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: '9router', key: apiKey })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        _toast('🟢 API Key hợp lệ và hoạt động tốt!', 'success');
+        if (valEl) valEl.innerHTML = '<span style="color: #10b981;">🟢 Key hợp lệ · Đang hoạt động (Còn hạn)</span>';
+        // Reload status to update UI
+        await chatRefreshStatus(true);
+        chatLoadModels();
+      } else {
+        _toast('🔴 API Key không hợp lệ: ' + (data.error || 'Vui lòng kiểm tra lại'), 'error');
+        if (valEl) valEl.innerHTML = `<span style="color: #ef4444;">🔴 Key lỗi/Hết hạn: ${data.error || 'Không hợp lệ'}</span>`;
+      }
+    } catch (e) {
+      _toast('Lỗi kết nối kiểm tra: ' + e.message, 'error');
+    }
   }
 
   // ── Routing config ────────────────────────────────────────────────────
@@ -582,6 +652,61 @@
   }
 
   // ── Chat UI ───────────────────────────────────────────────────────────
+  function parseMarkdownToHtml(text) {
+    if (!text) return '';
+    let html = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    html = html.replace(/```([\s\S]*?)```/g, (match, codePart) => {
+      const lines = codePart.split('\n');
+      let lang = '';
+      let code = codePart;
+      if (lines.length > 1 && lines[0].trim().match(/^[a-zA-Z0-9_-]+$/)) {
+        lang = lines[0].trim().toLowerCase();
+        code = lines.slice(1).join('\n');
+      }
+      const isPoemOrText = (lang === 'poem' || lang === 'text' || lang === 'poetry' || lang === 'tho');
+      const fontFamily = isPoemOrText ? 'system-ui, -apple-system, sans-serif' : 'Courier New, Courier, monospace';
+      const fontSize = isPoemOrText ? '14px' : '12px';
+      const lineSpacing = isPoemOrText ? '1.6' : '1.4';
+      const fontStyle = isPoemOrText ? 'italic' : 'normal';
+      const padding = isPoemOrText ? '10px 12px' : '8px 10px';
+      const borderStyle = isPoemOrText ? '1px dashed var(--accent, #3b82f6)' : '1px solid var(--border, #e2e8f0)';
+      const background = isPoemOrText ? 'rgba(59,130,246,0.03)' : 'var(--bg3, #f8fafc)';
+      
+      return `<div class="cw-code-container" style="position:relative;margin:10px 0;background:${background};border:${borderStyle};border-radius:8px;padding:${padding};padding-right:38px">`
+        + `<button onclick="window.copyToClipboard(this)" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.05);border:none;border-radius:4px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted, #64748b);transition:all 0.2s" title="Copy" onmouseover="this.style.background='rgba(0,0,0,0.1)'" onmouseout="this.style.background='rgba(0,0,0,0.05)'">`
+          + `<svg style="width:14px;height:14px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`
+        + `</button>`
+        + `<pre style="margin:0;font-family:${fontFamily};font-size:${fontSize};line-height:${lineSpacing};font-style:${fontStyle};white-space:pre-wrap;word-break:break-word"><code class="lang-${lang}">${code.trim()}</code></pre>`
+      + `</div>`;
+    });
+    html = html.replace(/`([^`\n]+)`/g, '<code style="background:var(--bg3, #f1f5f9);border:1px solid var(--border);padding:2px 5px;border-radius:4px;font-family:monospace;font-size:12px">$1</code>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    html = html.replace(/^(#{1,6})\s+(.+)$/gm, (match, hashes, content) => {
+      const level = hashes.length;
+      const sizeClass = level === 1 ? 'text-lg font-bold mt-3 mb-1 block' : 'text-base font-bold mt-2 mb-1 block';
+      return `<span class="${sizeClass}">${content}</span>`;
+    });
+    html = html.replace(/^\s*[-*+]\s+(.+)$/gm, '<li style="margin-left:15px;list-style-type:disc">$1</li>');
+    html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;max-height:360px;border-radius:8px;margin-top:6px;display:block">');
+    html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:underline">$1</a>');
+    html = html.replace(/(?<!["=>])(https?:\/\/[^\s<>")\]]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:underline">$1</a>');
+    return html;
+  }
+
+  function enrichBubble(bub, rawText) {
+    if (!bub || typeof rawText !== 'string') return;
+    let t = rawText;
+    t = t.replace(/<\s*(web_search|web-search|websearch|search|tool_use|tool-use|invoke|function_calls|antml:function_calls)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
+    t = t.replace(/<\s*(web_search|tool_use|invoke|function_calls|antml:function_calls)\b[^>]*\/?\s*>/gi, '');
+    t = t.replace(/<\s*\/?\s*(query|max_results|parameter|antml:parameter)\s*>/gi, '');
+    t = t.replace(/\n{3,}/g, '\n\n').trim();
+    bub.innerHTML = parseMarkdownToHtml(t);
+  }
+
   function _appendBubble(role, text, modelLabel) {
     const wrap = document.getElementById('chat-messages');
     if (!wrap) return null;
@@ -613,13 +738,39 @@
         ? 'background:var(--accent);color:#fff;border-color:var(--accent)'
         : 'background:var(--bg2);color:var(--text)'
     ].join(';');
-    bubble.textContent = text || '';
+    
+    if (text) {
+      enrichBubble(bubble, text);
+    } else {
+      bubble.textContent = '';
+    }
 
     row.appendChild(meta);
     row.appendChild(bubble);
     wrap.appendChild(row);
     wrap.scrollTop = wrap.scrollHeight;
     return { row, bubble, meta };
+  }
+
+  function formatChatError(rawError) {
+    let msg = '';
+    if (typeof rawError === 'string') {
+      msg = rawError;
+    } else if (rawError && typeof rawError === 'object') {
+      msg = rawError.body || rawError.message || rawError.error || JSON.stringify(rawError);
+    } else {
+      msg = String(rawError || 'Lỗi không xác định');
+    }
+    const lower = msg.toLowerCase();
+    if (lower.includes('9router offline') || lower.includes('unreachable') || lower.includes('failed to connect') || lower.includes('502')) {
+      return `9Router chưa sẵn sàng hoặc không hoạt động.
+
+💡 Hướng dẫn xử lý:
+1. Đảm bảo ứng dụng 9Router đã được khởi chạy trên máy tính (chạy ở cổng mặc định 20128). Nếu chưa có, bạn có thể tải tại: https://9router.com
+2. Đảm bảo bạn đã thêm/bật ít nhất một nhà cung cấp AI (như Gemini, OpenAI, DeepSeek, hoặc Groq) và có cấu hình khóa API (API Key) hoạt động trên giao diện quản lý của 9Router.
+3. Nếu bạn muốn chạy không qua 9Router: Hãy cấu hình API Key trực tiếp (ví dụ: Gemini Key, OpenAI Key) trong mục Cài đặt của công cụ này để hệ thống tự động chuyển đổi dự phòng (Fallback).`;
+    }
+    return msg;
   }
 
   // Streaming via SSE passthrough ----------------------------------------
@@ -661,6 +812,7 @@
       const text = await resp.text();
       const events = text.split(/\r?\n\r?\n/);
       let assembledFb = '';
+      let errorParsed = false;
       for (const ev of events) {
         const lines = ev.split(/\r?\n/);
         for (const line of lines) {
@@ -669,13 +821,24 @@
           if (!dataStr || dataStr === '[DONE]') continue;
           try {
             const j = JSON.parse(dataStr);
+            if (j && j.error) {
+              assembledFb = '❌ ' + formatChatError(j.error);
+              errorParsed = true;
+              break;
+            }
             const c = (j.choices || [])[0]?.delta?.content;
             if (typeof c === 'string') assembledFb += c;
           } catch (_) {}
         }
+        if (errorParsed) break;
       }
       placeholder.bubble.textContent = assembledFb || '⚠ Không có nội dung';
-      return { ok: !!assembledFb, content: assembledFb };
+      if (errorParsed) {
+        placeholder.bubble.style.background = 'var(--error-bg)';
+        placeholder.bubble.style.color = 'var(--error)';
+        placeholder.bubble.style.borderColor = 'rgba(192,57,43,.3)';
+      }
+      return { ok: !!assembledFb && !errorParsed, content: assembledFb };
     }
 
     const reader = resp.body.getReader();
@@ -733,7 +896,7 @@
           errored = true;
           let msg = dataStr;
           try { msg = JSON.parse(dataStr); } catch (_) { /* keep raw */ }
-          placeholder.bubble.textContent = '❌ ' + (typeof msg === 'string' ? msg : JSON.stringify(msg));
+          placeholder.bubble.textContent = '❌ ' + formatChatError(msg);
           placeholder.bubble.style.background = 'var(--error-bg)';
           placeholder.bubble.style.color = 'var(--error)';
           placeholder.bubble.style.borderColor = 'rgba(192,57,43,.3)';
@@ -757,18 +920,40 @@
           }
           continue;
         }
+        if (eventName === 'ack') {
+          try {
+            const info = JSON.parse(dataStr);
+            if (info && info.message) {
+              placeholder.bubble.innerHTML = `<span class="chat-ack-placeholder" style="color:var(--text-muted, #64748b);font-style:italic">${info.message}</span>`;
+            }
+          } catch (_) {}
+          continue;
+        }
         if (!dataStr || dataStr === '[DONE]') continue;
 
         let chunkData;
         try { chunkData = JSON.parse(dataStr); } catch (_) { continue; }
+        if (chunkData && chunkData.error) {
+          errored = true;
+          placeholder.bubble.textContent = '❌ ' + formatChatError(chunkData.error);
+          placeholder.bubble.style.background = 'var(--error-bg)';
+          placeholder.bubble.style.color = 'var(--error)';
+          placeholder.bubble.style.borderColor = 'rgba(192,57,43,.3)';
+          break;
+        }
         if (chunkData.model) actualModel = chunkData.model;
         const choice = (chunkData.choices || [])[0] || {};
         const delta = choice.delta || {};
         if (typeof delta.content === 'string') {
+          if (assembled === '') {
+            placeholder.bubble.innerHTML = '';
+          }
           assembled += delta.content;
           placeholder.bubble.textContent = assembled;
         } else if (typeof choice.message?.content === 'string') {
-          // Some upstreams send the whole message in one shot.
+          if (assembled === '') {
+            placeholder.bubble.innerHTML = '';
+          }
           assembled = choice.message.content;
           placeholder.bubble.textContent = assembled;
         }
@@ -825,6 +1010,9 @@
       span.textContent = ' · ' + getEmoji(actualModel) + actualModel;
       placeholder.meta.appendChild(span);
     }
+    if (assembled && !errored) {
+      enrichBubble(placeholder.bubble, assembled);
+    }
     return { ok: true, content: assembled };
   }
 
@@ -832,16 +1020,18 @@
     const placeholder = _appendBubble('assistant', '⏳ Đang nghĩ…', modelLabel);
     const { data, ok } = await _post('/api/chatbot/chat', payload);
     if (!ok || data?.ok === false) {
-      const errStr = (typeof data?.message === 'string') ? data.message
-                   : (typeof data?.error   === 'string') ? data.error
-                   : JSON.stringify(data?.error || 'Lỗi không xác định');
-      placeholder.bubble.textContent = '❌ ' + errStr;
+      placeholder.bubble.textContent = '❌ ' + formatChatError(data);
       placeholder.bubble.style.background = 'var(--error-bg)';
       placeholder.bubble.style.color = 'var(--error)';
       placeholder.bubble.style.borderColor = 'rgba(192,57,43,.3)';
       return { ok: false, content: '' };
     }
-    placeholder.bubble.textContent = data.content || '(không có nội dung)';
+    const content = data.content || '';
+    if (content) {
+      enrichBubble(placeholder.bubble, content);
+    } else {
+      placeholder.bubble.textContent = '(không có nội dung)';
+    }
     if (data.routing && placeholder.meta) {
       const tier = data.routing.tier;
       const tierColor = ({ fast: 'var(--success)', balanced: 'var(--accent)', power: 'var(--warning)' })[tier] || 'var(--text-muted)';
@@ -1006,9 +1196,9 @@
 
   async function chatInit() {
     _bindKeyboard();
-    if (!state.loadedConfig) await chatLoadConfig();
+    await chatLoadConfig();
     await chatRefreshStatus();
-    if (!state.loadedModels) await chatLoadModels();
+    await chatLoadModels();
     await chatLoadRouting();
   }
 
@@ -1366,6 +1556,7 @@
   window.chatTestConn     = chatTestConn;
   window.chatClearKey     = chatClearKey;
   window.chatTogglePw     = chatTogglePw;
+  window.chatTestApiKey   = chatTestApiKey;
   window.chatRefreshStatus = chatRefreshStatus;
   window.chatStart9Router = chatStart9Router;
   window.chatMitmToggle   = chatMitmToggle;

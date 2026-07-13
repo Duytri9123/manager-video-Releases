@@ -39,6 +39,19 @@
         _step3RefreshStartCard();
         // Refresh queue panel when entering step 3
         _step3RenderQueue();
+
+        // Sync checkboxes from Step 1 to Step 3
+        const autoFlow1 = document.getElementById('proc-auto-flow');
+        const autoFlow3 = document.getElementById('step3-auto-flow');
+        if (autoFlow1 && autoFlow3) autoFlow3.checked = autoFlow1.checked;
+
+        const skipAss1 = document.getElementById('step3-skip-ass');
+        const skipAss3 = document.getElementById('step3-skip-ass-step3');
+        if (skipAss1 && skipAss3) skipAss3.checked = skipAss1.checked;
+
+        const skipTrans1 = document.getElementById('proc-skip-transcription');
+        const skipTrans3 = document.getElementById('step3-skip-transcription-step3');
+        if (skipTrans1 && skipTrans3) skipTrans3.checked = skipTrans1.checked;
       }
     }
 
@@ -88,6 +101,76 @@
   <script>
   window._batchQueue = window._batchQueue || [];
 
+  // Listen for Step 1 download log updates from backend
+  if (typeof socket !== 'undefined' && socket) {
+    socket.on('step1_log', function(d) {
+      if (typeof _step1Log === 'function') {
+        _step1Log(d.msg, d.level || 'info');
+      }
+    });
+  }
+
+  function buildNewTask(type, val) {
+    return {
+      id: 'bt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      type: type,
+      val: val,
+      status: 'pending',
+      desc: val.split(/[\\/]/).pop(),
+      added: Date.now(),
+      auto_flow: document.getElementById('proc-auto-flow')?.checked ?? true,
+      skip_ass: document.getElementById('step3-skip-ass')?.checked ?? false,
+      skip_trans: document.getElementById('proc-skip-transcription')?.checked ?? false,
+    };
+  }
+
+  function getTaskConfigLabel(t) {
+    const parts = [];
+    if (t.auto_flow) parts.push('1');
+    if (t.skip_ass) parts.push('2');
+    if (t.skip_trans) parts.push('3');
+    return parts.length > 0 ? parts.join(',') : 'None';
+  }
+
+  window._toggleItemCfgDropdown = function(taskId, event) {
+    event.stopPropagation();
+    const panel = document.getElementById(`cfg-drop-${taskId}`);
+    if (!panel) return;
+    const isVisible = panel.style.display === 'block';
+    // close all
+    document.querySelectorAll('.cfg-dropdown-panel').forEach(p => p.style.display = 'none');
+    if (!isVisible) {
+      // Position fixed relative to the button
+      const btn = event.currentTarget || event.target.closest('button[data-cfg-btn]');
+      if (btn) {
+        const rect = btn.getBoundingClientRect();
+        panel.style.position = 'fixed';
+        panel.style.top = (rect.bottom + 4) + 'px';
+        panel.style.left = Math.max(8, rect.right - 200) + 'px';
+        panel.style.zIndex = '99999';
+      }
+      panel.style.display = 'block';
+    }
+  };
+
+  window._updateTaskConfig = function(taskId, key, value) {
+    const t = window._batchQueue.find(x => x.id === taskId);
+    if (t) {
+      t[key] = value;
+      _renderBatchQueue();
+      _step3RenderQueue();
+      if (typeof window._procQueueSaveToLocalStorage === 'function') window._procQueueSaveToLocalStorage();
+    }
+  };
+
+  window.addEventListener('click', function(e) {
+    if (!e.target.closest('.cfg-dropdown-panel') && !e.target.closest('button[data-cfg-btn]')) {
+      document.querySelectorAll('.cfg-dropdown-panel').forEach(panel => {
+        panel.style.display = 'none';
+      });
+    }
+  });
+
   window._procQueueRefresh = function() {
     try {
       const localQueue = JSON.parse(localStorage.getItem('_proc_batch_queue') || '[]');
@@ -103,7 +186,10 @@
             val: localItem.val,
             status: localItem.status || 'pending',
             desc: localItem.desc || localItem.val,
-            added: localItem.added || Date.now()
+            added: localItem.added || Date.now(),
+            auto_flow: localItem.auto_flow !== undefined ? localItem.auto_flow : (document.getElementById('proc-auto-flow')?.checked ?? true),
+            skip_ass: localItem.skip_ass !== undefined ? localItem.skip_ass : (document.getElementById('step3-skip-ass')?.checked ?? false),
+            skip_trans: localItem.skip_trans !== undefined ? localItem.skip_trans : (document.getElementById('proc-skip-transcription')?.checked ?? false)
           });
         }
       });
@@ -127,7 +213,10 @@
         val: item.val,
         status: item.status,
         desc: item.desc || item.val,
-        added: item.added || Date.now()
+        added: item.added || Date.now(),
+        auto_flow: item.auto_flow,
+        skip_ass: item.skip_ass,
+        skip_trans: item.skip_trans
       }));
       localStorage.setItem('_proc_batch_queue', JSON.stringify(listToSave));
     } catch (e) {
@@ -167,7 +256,7 @@
     const pathEl = document.getElementById('proc-video');
     const val = (type === 'url') ? urlEl?.value.trim() : pathEl?.value.trim();
     if (!val) { toast('Vui lòng nhập URL hoặc chọn file', 'warning'); return; }
-    window._batchQueue.push({ id: 'bt-'+Date.now(), type, val, status: 'pending' });
+    window._batchQueue.push(buildNewTask(type, val));
     if (type === 'url' && urlEl) urlEl.value = '';
     _renderBatchQueue();
     toast('Đã thêm vào hàng chờ', 'success');
@@ -225,11 +314,39 @@
       
       const disableDel = (t.status === 'processing' || t.status === 'downloading') ? 'disabled' : '';
       const label = statusLabel[t.status] || t.status;
+
+      // Inline config button
+      const labelCfg = getTaskConfigLabel(t);
+      const isReadyOrPending = t.status === 'ready' || t.status === 'pending';
+      const cfgBtnHtml = isReadyOrPending ? `
+        <div style="position:relative;display:inline-block">
+          <button data-cfg-btn class="btn btn-outline btn-xs" onclick="window._toggleItemCfgDropdown('${t.id}', event)" style="font-size:10px;padding:2px 6px;height:24px;line-height:20px;border-color:var(--border);border-radius:4px;display:flex;align-items:center;gap:3px;white-space:nowrap">
+            ⚙️ ${labelCfg}
+          </button>
+          <div id="cfg-drop-${t.id}" class="cfg-dropdown-panel" style="display:none;position:fixed;z-index:99999;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);width:200px;text-align:left">
+            <div style="font-weight:600;font-size:10px;margin-bottom:6px;color:var(--text-muted)">Cấu hình video này:</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px;cursor:pointer;color:var(--text);user-select:none">
+              <input type="checkbox" ${t.auto_flow ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'auto_flow', this.checked)">
+              <span>1. Tự động hóa</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px;cursor:pointer;color:var(--text);user-select:none">
+              <input type="checkbox" ${t.skip_ass ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'skip_ass', this.checked)">
+              <span>2. Bỏ qua check ASS</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--text);user-select:none">
+              <input type="checkbox" ${t.skip_trans ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'skip_trans', this.checked)">
+              <span>3. Bỏ qua tạo phụ đề</span>
+            </label>
+          </div>
+        </div>
+      ` : '';
+
       return `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
         <span style="color:var(--text-muted)">${t.type==='url'?'🔗':'📄'}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
         <span class="badge ${badgeClass}">${label}</span>
+        ${cfgBtnHtml}
         <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px" ${disableDel}>✕</button>
       </div>`;
     }).join('');
@@ -318,6 +435,29 @@
     window._procSkipThumbSession  = false;
   };
 
+  window._onSkipTranscriptionChange = function() {
+    const skip = document.getElementById('proc-skip-transcription')?.checked ?? false;
+    
+    const cbBurn = document.getElementById('proc-burn');
+    const cbBurnVi = document.getElementById('proc-burn-vi');
+    const cbVoice = document.getElementById('proc-voice');
+    const cbTrans = document.getElementById('proc-translate-subs');
+    
+    if (skip) {
+      if (cbBurn) cbBurn.checked = false;
+      if (cbBurnVi) cbBurnVi.checked = false;
+      if (cbVoice) cbVoice.checked = false;
+      if (cbTrans) cbTrans.checked = false;
+    } else {
+      if (cbBurn) cbBurn.checked = true;
+      if (cbBurnVi) cbBurnVi.checked = true;
+      if (cbTrans) cbTrans.checked = true;
+    }
+    
+    if (window._renderSubOverlay) window._renderSubOverlay();
+    if (window.subPreviewUpdate) window.subPreviewUpdate();
+  };
+
   /** Render the step-3 queue status panel */
   function _step3RenderQueue() {
     const list    = document.getElementById('step3-queue-list');
@@ -342,12 +482,40 @@
       ready: 'badge-accent', processing: 'badge-yellow',
       done: 'badge-green', error: 'badge-red',
     };
-    list.innerHTML = q.map(t => `
+    list.innerHTML = q.map(t => {
+      const labelCfg = getTaskConfigLabel(t);
+      const isReadyOrPending = t.status === 'ready' || t.status === 'pending';
+      const cfgBtnHtml = isReadyOrPending ? `
+        <div style="position:relative;display:inline-block">
+          <button data-cfg-btn class="btn btn-outline btn-xs" onclick="window._toggleItemCfgDropdown('${t.id}', event)" style="font-size:10px;padding:2px 6px;height:24px;line-height:20px;border-color:var(--border);border-radius:4px;display:flex;align-items:center;gap:3px;white-space:nowrap">
+            ⚙️ ${labelCfg}
+          </button>
+          <div id="cfg-drop-${t.id}" class="cfg-dropdown-panel" style="display:none;position:fixed;z-index:99999;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);width:200px;text-align:left">
+            <div style="font-weight:600;font-size:10px;margin-bottom:6px;color:var(--text-muted)">Cấu hình video này:</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px;cursor:pointer;color:var(--text);user-select:none">
+              <input type="checkbox" ${t.auto_flow ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'auto_flow', this.checked)">
+              <span>1. Tự động hóa</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px;cursor:pointer;color:var(--text);user-select:none">
+              <input type="checkbox" ${t.skip_ass ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'skip_ass', this.checked)">
+              <span>2. Bỏ qua check ASS</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--text);user-select:none">
+              <input type="checkbox" ${t.skip_trans ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'skip_trans', this.checked)">
+              <span>3. Bỏ qua tạo phụ đề</span>
+            </label>
+          </div>
+        </div>
+      ` : '';
+
+      return `
       <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
         <span style="color:var(--text-muted)">${t.type === 'url' ? '🔗' : '📄'}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
         <span class="badge ${badgeClass[t.status] || 'badge-gray'}">${statusLabel[t.status] || t.status}</span>
-      </div>`).join('');
+        ${cfgBtnHtml}
+      </div>`;
+    }).join('');
     const done    = q.filter(t => t.status === 'done').length;
     const total   = q.length;
     const pending = q.filter(t => t.status === 'ready' || t.status === 'pending').length;
@@ -414,6 +582,23 @@
     _renderBatchQueue();
 
     toast(`Bắt đầu xử lý: ${next.desc || next.val}`, 'info');
+
+    // Apply task custom configuration to inputs
+    const globalAuto = document.getElementById('proc-auto-flow');
+    const globalSkipAss = document.getElementById('step3-skip-ass');
+    const globalSkipTrans = document.getElementById('proc-skip-transcription');
+
+    if (next.auto_flow !== undefined && globalAuto) {
+      globalAuto.checked = next.auto_flow;
+    }
+    if (next.skip_ass !== undefined) {
+      if (globalSkipAss) globalSkipAss.checked = next.skip_ass;
+      window._procSkipReviewSession = next.skip_ass;
+    }
+    if (next.skip_trans !== undefined) {
+      if (globalSkipTrans) globalSkipTrans.checked = next.skip_trans;
+      if (window._onSkipTranscriptionChange) window._onSkipTranscriptionChange();
+    }
 
     if (next.type === 'url') {
       const urlEl = document.getElementById('proc-url');
@@ -755,6 +940,7 @@
     } else {
       _renderSubOverlay();
     }
+    if (window.pe2RenderRanges) window.pe2RenderRanges();
   }
 
   // ── Color picker sync ──
@@ -824,6 +1010,14 @@
         start_sec: '', end_sec: ''
       };
     }
+    if (type === 'image') {
+      return {
+        id: _ovNewId(), type: 'image', enabled: true, open: true,
+        path: '', name: 'Chưa chọn ảnh',
+        x_pct: 0.50, y_pct: 0.50, width_pct: 0.20, height_pct: 0.20,
+        opacity: 1.0, start_sec: '', end_sec: ''
+      };
+    }
     return {
       id: _ovNewId(), type: 'rect', enabled: true, open: true,
       x_pct: 0.50, y_pct: 0.38, width_pct: 1.00, height_pct: 0.07,
@@ -833,7 +1027,7 @@
   }
   function _ovNormalizeLayer(raw) {
     raw = raw || {};
-    const type = raw.type === 'text' ? 'text' : 'rect';
+    const type = raw.type === 'text' ? 'text' : (raw.type === 'image' ? 'image' : 'rect');
     const base = _ovDefault(type);
     base.id = raw.id || _ovNewId();
     base.enabled = raw.enabled !== false;
@@ -850,6 +1044,12 @@
       base.color = _ovHexValue(raw.color, base.color);
       base.box_color = _ovHexValue(raw.box_color, base.box_color);
       base.box_opacity = _ovClamp(raw.box_opacity ?? base.box_opacity, 0, 1);
+    } else if (type === 'image') {
+      base.path = String(raw.path ?? base.path);
+      base.name = String(raw.name ?? base.name);
+      base.width_pct = _ovClamp(raw.width_pct ?? base.width_pct, 0.01, 1);
+      base.height_pct = _ovClamp(raw.height_pct ?? base.height_pct, 0.01, 1);
+      base.opacity = _ovClamp(raw.opacity ?? base.opacity, 0, 1);
     } else {
       base.width_pct = _ovClamp(raw.width_pct ?? base.width_pct, 0.01, 1);
       base.height_pct = _ovClamp(raw.height_pct ?? base.height_pct, 0.01, 1);
@@ -862,6 +1062,7 @@
   function _ovFind(id) {
     return (window._videoOverlays || []).find(x => String(x.id) === String(id));
   }
+
   function _ovSyncHidden() {
     const hidden = document.getElementById('ov-layers-json');
     if (hidden) hidden.value = JSON.stringify(window._videoOverlays || []);
@@ -892,6 +1093,9 @@
   function _ovSummary(ov) {
     if (ov.type === 'text') {
       return (ov.text || 'Text').slice(0, 32);
+    }
+    if (ov.type === 'image') {
+      return '🖼️ ' + (ov.name || 'Ảnh');
     }
     return 'Khối ' + _ovRoundPct(ov.width_pct) + '% × ' + _ovRoundPct(ov.height_pct) + '%';
   }
@@ -945,6 +1149,23 @@
         </div>
         <div class="field"><label>Nền text ${Math.round((ov.box_opacity || 0) * 100)}%</label><input type="range" min="0" max="100" step="5" value="${Math.round((ov.box_opacity || 0) * 100)}" style="width:100%" oninput="ovUpdateLayer('${id}','box_opacity',this.value/100,true)" onchange="ovRenderLayerList()"></div>`;
     }
+    if (ov.type === 'image') {
+      const filename = ov.name || 'Ảnh';
+      return `
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;color:var(--text-muted,#8a8a93);margin-bottom:4px;display:block">Tệp hình ảnh</label>
+          <div style="display:flex;gap:4px;height:38px">
+            <input type="text" value="${_ovEsc(filename)}" readonly style="flex:1;font-size:11px;height:38px;box-sizing:border-box;padding:0 10px;border:1px solid var(--border,#dcdce2);border-radius:4px;background:var(--bg3,#f3f4f6)">
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 10px;height:38px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:4px" onclick="document.getElementById('ov-change-image-file').dataset.ovId = '${id}'; document.getElementById('ov-change-image-file').click()">📂 Đổi</button>
+          </div>
+        </div>
+        ${common}
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:8px">
+          <div class="field"><label>Rộng %</label><input type="number" value="${_ovRoundPct(ov.width_pct)}" min="1" max="100" step="1" oninput="ovUpdateLayer('${id}','width_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+          <div class="field"><label>Cao %</label><input type="number" value="${_ovRoundPct(ov.height_pct)}" min="1" max="100" step="1" oninput="ovUpdateLayer('${id}','height_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+        </div>
+        <div class="field"><label>Độ đậm ${Math.round((ov.opacity || 0) * 100)}%</label><input type="range" min="0" max="100" step="5" value="${Math.round((ov.opacity || 0) * 100)}" style="width:100%" oninput="ovUpdateLayer('${id}','opacity',this.value/100,true)" onchange="ovRenderLayerList()"></div>`;
+    }
     return `
       ${common}
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:8px">
@@ -961,6 +1182,7 @@
       </div>
       <div class="field"><label>Độ đậm ${Math.round((ov.opacity || 0) * 100)}%</label><input type="range" min="0" max="100" step="5" value="${Math.round((ov.opacity || 0) * 100)}" style="width:100%" oninput="ovUpdateLayer('${id}','opacity',this.value/100,true)" onchange="ovRenderLayerList()"></div>`;
   }
+
   function ovRenderLayerList() {
     const list = document.getElementById('ov-layer-list');
     if (!list) return;
@@ -985,10 +1207,9 @@
               <span class="ov-layer-meta">${_ovEsc(_ovTimeLabel(ov))} · X ${_ovRoundPct(ov.x_pct)}% · Y ${_ovRoundPct(ov.y_pct)}%</span>
             </span>
             <span class="ov-layer-actions" onclick="event.stopPropagation()">
-              <label class="pe2-switch" title="${ov.enabled ? 'Ẩn' : 'Hiện'}"
-                onclick="event.stopPropagation(); const cb = this.querySelector('input'); cb.checked = !cb.checked; ovUpdateLayer('${_ovEsc(ov.id)}','enabled',cb.checked); event.preventDefault();">
-                <input type="checkbox" ${ov.enabled ? 'checked' : ''} style="pointer-events: none;">
-                <span class="pe2-slider" style="pointer-events: none;"></span>
+              <label class="pe2-switch" title="${ov.enabled ? 'Ẩn' : 'Hiện'}" onclick="event.stopPropagation();">
+                <input type="checkbox" ${ov.enabled ? 'checked' : ''} onchange="ovUpdateLayer('${_ovEsc(ov.id)}','enabled',this.checked)">
+                <span class="pe2-slider"></span>
               </label>
               <button type="button" style="border:none;background:transparent;padding:4px 6px;cursor:pointer;font-size:16px;color:#ef4444;line-height:1;vertical-align:middle;display:inline-flex;align-items:center" 
                 onclick="ovRemoveLayer('${_ovEsc(ov.id)}')" 
@@ -1083,6 +1304,121 @@
     if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
     if (window.pe2RenderRanges) window.pe2RenderRanges();
   }
+  function _ovResolveUrl(serverPath) {
+    if (!serverPath) return '';
+    const pathParts = serverPath.split(/[\\/]/);
+    const filename = pathParts[pathParts.length - 1];
+    return '/temp_uploads/' + filename;
+  }
+
+  function _uploadFileWithProgress(file, type, onProgress, onLoad, onError) {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload_anti_fp_image', true);
+    
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        if (typeof onProgress === 'function') onProgress(pct);
+      }
+    };
+    
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (typeof onLoad === 'function') onLoad(data);
+        } catch (err) {
+          if (typeof onError === 'function') onError(err);
+        }
+      } else {
+        if (typeof onError === 'function') onError(new Error('Upload failed with status ' + xhr.status));
+      }
+    };
+    
+    xhr.onerror = function(err) {
+      if (typeof onError === 'function') onError(err);
+    };
+    
+    const form = new FormData();
+    form.append('file', file);
+    form.append('type', type);
+    xhr.send(form);
+  }
+
+  function ovAddImage(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    input.value = '';
+
+    if (typeof toast === 'function') toast('⏳ Đang tải hình ảnh lên...', 'info');
+    
+    _uploadFileWithProgress(file, 'logo',
+      function(pct) {
+        if (typeof toast === 'function') {
+          toast('⏳ Đang tải hình ảnh: ' + pct + '%', 'info', { id: 'ov-add-img-upload', duration: 1500 });
+        }
+      },
+      function(d) {
+        if (d.ok && d.path) {
+          if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
+          window._videoOverlays.forEach(x => { x.open = false; });
+          
+          const ov = _ovDefault('image');
+          ov.path = d.path;
+          ov.name = file.name;
+          
+          window._videoOverlays.push(ov);
+          ovSelectLayer(ov.id, true);
+          
+          if (typeof toast === 'function') toast('✓ Đã tải lên hình ảnh: ' + file.name, 'success');
+        } else {
+          if (typeof toast === 'function') toast('✗ Tải lên hình ảnh thất bại: ' + (d.error || ''), 'error');
+        }
+      },
+      function(err) {
+        if (typeof toast === 'function') toast('✗ Lỗi kết nối khi tải hình ảnh', 'error');
+      }
+    );
+  }
+
+  function ovChangeImage(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const id = input.dataset.ovId;
+    input.value = '';
+    if (!id) return;
+
+    const ov = _ovFind(id);
+    if (!ov) return;
+
+    if (typeof toast === 'function') toast('⏳ Đang tải hình ảnh mới...', 'info');
+
+    _uploadFileWithProgress(file, 'logo',
+      function(pct) {
+        if (typeof toast === 'function') {
+          toast('⏳ Đang tải hình ảnh: ' + pct + '%', 'info', { id: 'ov-change-img-upload', duration: 1500 });
+        }
+      },
+      function(d) {
+        if (d.ok && d.path) {
+          if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
+          
+          ov.path = d.path;
+          ov.name = file.name;
+          
+          ovRenderLayerList();
+          if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+          if (typeof toast === 'function') toast('✓ Đã đổi hình ảnh: ' + file.name, 'success');
+        } else {
+          if (typeof toast === 'function') toast('✗ Tải lên hình ảnh thất bại: ' + (d.error || ''), 'error');
+        }
+      },
+      function(err) {
+        if (typeof toast === 'function') toast('✗ Lỗi kết nối khi đổi hình ảnh', 'error');
+      }
+    );
+  }
+
   window.ovRenderLayerList = ovRenderLayerList;
   window.ovSelectLayer = ovSelectLayer;
   window.ovToggleLayer = ovToggleLayer;
@@ -1090,6 +1426,10 @@
   window.ovAddRect = ovAddRect;
   window.ovRemoveLayer = ovRemoveLayer;
   window.ovUpdateLayer = ovUpdateLayer;
+  window.ovAddImage = ovAddImage;
+  window.ovChangeImage = ovChangeImage;
+  window._ovResolveUrl = _ovResolveUrl;
+
   function _collectVideoOverlays() {
     return (window._videoOverlays || []).map(_ovNormalizeLayer).filter(ov => {
       if (!ov.enabled) return false;
@@ -1111,6 +1451,12 @@
         out.color = ov.color;
         out.box_color = ov.box_color;
         out.box_opacity = ov.box_opacity;
+      } else if (ov.type === 'image') {
+        out.path = ov.path;
+        out.name = ov.name;
+        out.width_pct = ov.width_pct;
+        out.height_pct = ov.height_pct;
+        out.opacity = ov.opacity;
       } else {
         out.width_pct = ov.width_pct;
         out.height_pct = ov.height_pct;
@@ -1122,6 +1468,7 @@
     });
   }
   window._collectVideoOverlays = _collectVideoOverlays;
+
   function _drawOverlayText(ctx, ov, x, y, w, h) {
     const text = String(ov.text || '').trim();
     if (!text) return null;
@@ -1222,16 +1569,33 @@
     wrap.querySelectorAll('.video-overlay-el').forEach(el => el.remove());
     (window._videoOverlays || []).filter(ov => ov.enabled !== false && _ovVisibleAtPreviewTime(ov)).forEach(ov => {
       if (ov.type === 'text' && !String(ov.text || '').trim()) return;
+      
       const el = document.createElement('div');
       el.className = 'video-overlay-el type-' + ov.type;
       el.dataset.ovId = ov.id;
       el.style.position = 'absolute';
       el.style.pointerEvents = 'auto';
       el.style.cursor = 'move';
-      el.style.zIndex = '3';
-      if (ov.type === 'rect') {
+      const isSelected = window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id);
+      el.style.zIndex = isSelected ? '10' : '3';
+
+      if (ov.type === 'image') {
+        const w = dispW * Math.max(0.01, Math.min(1, ov.width_pct || 0.20));
+        const h = dispH * Math.max(0.01, Math.min(1, ov.height_pct || 0.20));
+        el.style.left = (imgOffX + dispW * (ov.x_pct ?? 0.5) - w / 2) + 'px';
+        el.style.top = (imgOffY + dispH * (ov.y_pct ?? 0.5) - h / 2) + 'px';
+        el.style.width = w + 'px';
+        el.style.height = h + 'px';
+        el.style.opacity = ov.opacity ?? 1.0;
+        
+        el.style.backgroundImage = `url("${_ovResolveUrl(ov.path)}")`;
+        el.style.backgroundSize = 'contain';
+        el.style.backgroundPosition = 'center';
+        el.style.backgroundRepeat = 'no-repeat';
+      } else if (ov.type === 'rect') {
         const w = dispW * Math.max(0.01, Math.min(1, ov.width_pct || 0.8));
         const h = dispH * Math.max(0.01, Math.min(1, ov.height_pct || 0.12));
+
         el.style.left = (imgOffX + dispW * (ov.x_pct ?? 0.5) - w / 2) + 'px';
         el.style.top = (imgOffY + dispH * (ov.y_pct ?? 0.5) - h / 2) + 'px';
         el.style.width = w + 'px';
@@ -1381,7 +1745,19 @@
     if (!sel) return;
     if (window._procAiVideoModelsLoaded && !force) return;
     const current = sel.value;
-    window._procAiVideoModelsLoaded = true;
+
+    // Fetch default model name from config to display in "Tự động theo 9Router" option
+    _procAiFetchJson('/api/chatbot/config', 3000).then(cfg => {
+      const autoOpt = Array.from(sel.options).find(o => o.value === "");
+      if (autoOpt) {
+        if (cfg && cfg.ok && cfg.has_key && cfg.default_model) {
+          autoOpt.textContent = `Tự động theo 9Router (${cfg.default_model})`;
+        } else {
+          autoOpt.textContent = `Tự động theo 9Router`;
+        }
+      }
+    }).catch(() => null);
+
     try {
       let items = [];
       const first = await _procAiFetchJson('/api/chatbot/media_models?kind=image-to-text', 5000).catch(() => null);
@@ -1392,6 +1768,7 @@
         if (fallback && fallback.ok && Array.isArray(fallback.models)) items = fallback.models;
       }
       if (!items.length) return;
+      window._procAiVideoModelsLoaded = true;
       sel.querySelectorAll('optgroup[data-nr="1"]').forEach(g => g.remove());
       const existing = new Set(Array.from(sel.options).map(o => o.value));
       const visionHints = /(gpt|gemini|claude|sonnet|opus|vision|image|multimodal|cx\/gpt-5\.5|duytris)/i;
@@ -1641,7 +2018,15 @@
   window.procAiVideoProviderChanged = procAiVideoProviderChanged;
 
 
+  let _renderSubOverlayRaf = null;
   function _renderSubOverlay() {
+    if (_renderSubOverlayRaf) cancelAnimationFrame(_renderSubOverlayRaf);
+    _renderSubOverlayRaf = requestAnimationFrame(() => {
+      _renderSubOverlayActual();
+    });
+  }
+
+  function _renderSubOverlayActual() {
     const wrap    = document.getElementById('sub-preview-wrap');
     const overlay = document.getElementById('sub-preview-text');
     const blurEl  = document.getElementById('sub-preview-blur');
@@ -1712,18 +2097,17 @@
     const subHeightPx = Math.round(videoH * fontPct / 100) + 4;
     const marginVPx   = Math.round(videoH * marginPct / 100);
 
-    let blurTopPct; // position from top as fraction (0-1)
+    let blurCenterY = 0.5;
     if (blurYOverride !== '' && blurYOverride !== undefined) {
-      // Manual override: Y% = position of center of blur zone from top
-      blurTopPct = Math.max(0, Math.min(1, parseFloat(blurYOverride) / 100 - blurH / 2));
+      blurCenterY = parseFloat(blurYOverride) / 100;
     } else {
       // Auto: center around subtitle position
       if (pos === 'bottom') {
         const subY = videoH - marginVPx - Math.round(subHeightPx / 2);
-        blurTopPct = Math.max(0, (subY - Math.round(videoH * blurH / 2)) / videoH);
+        blurCenterY = subY / videoH;
       } else {
         const subY = marginVPx + Math.round(subHeightPx / 2);
-        blurTopPct = Math.max(0, (subY - Math.round(videoH * blurH / 2)) / videoH);
+        blurCenterY = subY / videoH;
       }
     }
 
@@ -1732,10 +2116,16 @@
       blurCenterX = parseFloat(blurXOverride) / 100;
     }
 
-    const bH    = Math.round(dispH * blurH);
-    const bW    = Math.round(dispW * blurW);
-    const bLeft = Math.round(dispW * Math.max(0, Math.min(1 - blurW, blurCenterX - blurW / 2)));
-    const bTop  = Math.round(dispH * blurTopPct);
+    // Tự động co dãn khi kéo sát/vượt mép biên để tránh bị chặn, kẹt hoặc lỗi toạ độ
+    const leftPct = Math.max(0, blurCenterX - blurW / 2);
+    const rightPct = Math.min(1, blurCenterX + blurW / 2);
+    const bLeft = Math.round(dispW * leftPct);
+    const bW = Math.round(dispW * Math.max(0.01, rightPct - leftPct));
+
+    const topPct = Math.max(0, blurCenterY - blurH / 2);
+    const bottomPct = Math.min(1, blurCenterY + blurH / 2);
+    const bTop = Math.round(dispH * topPct);
+    const bH = Math.round(dispH * Math.max(0.01, bottomPct - topPct));
 
     // Canvas-based pixel blur (matches real FFmpeg blur effect)
     const canvas = document.getElementById('sub-preview-blur-canvas');
@@ -1748,7 +2138,8 @@
       el.style.bottom = 'auto';
     };
 
-    if (blurOn && canvas && img.complete && img.naturalWidth > 0) {
+    const isMainBlurSelected = window._pe2Sel && window._pe2Sel.type === 'blur';
+    if (blurOn && canvas && img.complete && img.naturalWidth > 0 && typeof composedFrameCanvas === 'undefined') {
       canvas.width  = bW;
       canvas.height = bH;
       canvas.style.display = 'block';
@@ -1778,6 +2169,7 @@
         blurEl.style.background = hasCanvas ? 'transparent' : 'rgba(0,0,0,0.55)';
         blurEl.style.border = 'none';
         blurEl.style.boxShadow = 'none';
+        blurEl.style.zIndex = isMainBlurSelected ? '10' : '4';
         if (!blurEl.querySelector('.pe2-handle')) {
           ['nw','n','ne','e','se','s','sw','w'].forEach(function(edge){
             const hd = document.createElement('div');
@@ -1791,6 +2183,7 @@
       blurEl.style.display = 'block';
       _posBlur(blurEl);
       blurEl.style.background = 'rgba(0,0,0,0.55)';
+      blurEl.style.zIndex = isMainBlurSelected ? '10' : '4';
       if (canvas) canvas.style.display = 'none';
     } else {
       if (blurEl) blurEl.style.display = 'none';
@@ -1802,12 +2195,21 @@
     overlay.style.fontSize   = scaledFont + 'px';
     overlay.style.color      = cssColor;
     // Outline via text-shadow (matches FFmpeg outline rendering)
-    overlay.style.textShadow = [
-      '1px 1px 2px #000', '-1px -1px 2px #000',
-      '1px -1px 2px #000', '-1px 1px 2px #000',
-      '0 2px 4px rgba(0,0,0,0.8)'
-    ].join(',');
-    overlay.style.fontWeight  = '700';
+    const outlineW = parseInt(document.getElementById('proc-outline-width')?.value || 2);
+    const boldOn = document.getElementById('proc-font-bold')?.checked ?? true;
+    const shadowSteps = [];
+    if (outlineW > 0) {
+      for (let dx = -outlineW; dx <= outlineW; dx++) {
+        for (let dy = -outlineW; dy <= outlineW; dy++) {
+          if (dx !== 0 || dy !== 0) {
+            shadowSteps.push(`${dx}px ${dy}px 0px #000`);
+          }
+        }
+      }
+    }
+    shadowSteps.push('0 2px 4px rgba(0,0,0,0.8)');
+    overlay.style.textShadow = shadowSteps.join(',');
+    overlay.style.fontWeight  = boldOn ? '700' : '400';
     overlay.style.fontFamily  = 'Arial, sans-serif';
     overlay.style.lineHeight  = '1.3';
     overlay.style.wordBreak   = 'break-word';
@@ -1845,7 +2247,10 @@
         const div = document.createElement('div');
         div.className = 'extra-blur-zone';
         div.dataset.zoneId = zone.id;
-          div.style.cssText = `position:absolute;left:${imgOffX + ezLeft}px;top:${imgOffY + ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);z-index:4;`;
+        
+        const isExtraSelected = window._pe2Sel && window._pe2Sel.type === 'extra' && String(window._pe2Sel.id) === String(zone.id);
+        const zIndex = isExtraSelected ? 10 : 4;
+        div.style.cssText = `position:absolute;left:${imgOffX + ezLeft}px;top:${imgOffY + ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);z-index:${zIndex};border:1px dashed rgba(255,255,255,0.35);`;
         ['nw','n','ne','e','se','s','sw','w'].forEach(function(edge){
           const hd = document.createElement('div');
           hd.className = 'pe2-handle ' + edge;
@@ -2026,7 +2431,17 @@
             out_dir: document.getElementById('proc-out')?.value?.trim() || ''
           })
         });
-        const data = await res.json();
+        let data;
+        try {
+          data = await res.json();
+        } catch (jsonErr) {
+          let txt = '';
+          try { txt = await res.text(); } catch(_) {}
+          throw new Error(txt.slice(0, 150) || 'Lỗi HTTP ' + res.status);
+        }
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Tải thất bại');
+        }
         if (data.ok) {
           pending.status = 'ready';
           pending.val = data.path; // update to local path
@@ -2041,6 +2456,21 @@
           // Auto-flow: skip Step 2, jump directly to Step 3
           if (document.getElementById('proc-auto-flow')?.checked && !_step1DownloadOnlyEnabled()) {
             _step1Log('🔁 Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
+            
+            // Apply task custom configuration to inputs
+            const globalAuto = document.getElementById('proc-auto-flow');
+            const globalSkipAss = document.getElementById('step3-skip-ass');
+            const globalSkipTrans = document.getElementById('proc-skip-transcription');
+            if (pending.auto_flow !== undefined && globalAuto) globalAuto.checked = pending.auto_flow;
+            if (pending.skip_ass !== undefined) {
+              if (globalSkipAss) globalSkipAss.checked = pending.skip_ass;
+              window._procSkipReviewSession = pending.skip_ass;
+            }
+            if (pending.skip_trans !== undefined) {
+              if (globalSkipTrans) globalSkipTrans.checked = pending.skip_trans;
+              if (window._onSkipTranscriptionChange) window._onSkipTranscriptionChange();
+            }
+
             window._step3Started = true;
             window._step3Confirmed = false;
             window._procCurrentTaskId = pending.id;
@@ -2087,6 +2517,21 @@
         // Auto-flow
         if (document.getElementById('proc-auto-flow')?.checked && !_step1DownloadOnlyEnabled()) {
           _step1Log('🔁 Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
+
+          // Apply task custom configuration to inputs
+          const globalAuto = document.getElementById('proc-auto-flow');
+          const globalSkipAss = document.getElementById('step3-skip-ass');
+          const globalSkipTrans = document.getElementById('proc-skip-transcription');
+          if (pending.auto_flow !== undefined && globalAuto) globalAuto.checked = pending.auto_flow;
+          if (pending.skip_ass !== undefined) {
+            if (globalSkipAss) globalSkipAss.checked = pending.skip_ass;
+            window._procSkipReviewSession = pending.skip_ass;
+          }
+          if (pending.skip_trans !== undefined) {
+            if (globalSkipTrans) globalSkipTrans.checked = pending.skip_trans;
+            if (window._onSkipTranscriptionChange) window._onSkipTranscriptionChange();
+          }
+
           window._step3Started = true;
           window._step3Confirmed = false;
           window._procCurrentTaskId = pending.id;
@@ -2144,11 +2589,14 @@
     if (!url && !path) { toast('Vui lòng nhập URL hoặc chọn file video', 'warning'); return; }
 
     if (url) {
-      window._batchQueue.push({ id: 'bt-' + Date.now(), type: 'url', val: url, status: 'pending' });
+      window._batchQueue.push(buildNewTask('url', url));
       urlEl.value = '';
       toast('✅ Đã thêm URL vào hàng chờ', 'success');
     } else {
-      window._batchQueue.push({ id: 'bt-' + Date.now(), type: 'file', val: path, status: 'pending' });
+      window._batchQueue.push(buildNewTask('file', path));
+      if (pathEl) pathEl.value = '';
+      const nameEl = document.getElementById('proc-file-name');
+      if (nameEl) nameEl.textContent = '--';
       toast('✅ Đã thêm file vào hàng chờ', 'success');
     }
     _renderBatchQueue();
@@ -2225,6 +2673,17 @@
     if (burnChk) burnChk.addEventListener('change', () => _renderSubOverlay());
     const burnViChk = document.getElementById('proc-burn-vi');
     if (burnViChk) burnViChk.addEventListener('change', () => _renderSubOverlay());
+
+    // Sync "Bỏ qua tạo phụ đề" checkbox with Step 2 / Step 3 checkboxes
+    const voiceChk = document.getElementById('proc-voice');
+    const syncSkipTrans = () => {
+      const skipCb = document.getElementById('proc-skip-transcription');
+      if (skipCb) {
+        skipCb.checked = (!burnChk || !burnChk.checked) && (!voiceChk || !voiceChk.checked);
+      }
+    };
+    if (burnChk) burnChk.addEventListener('change', syncSkipTrans);
+    if (voiceChk) voiceChk.addEventListener('change', syncSkipTrans);
   });
 
   /* ════════════════════════════════════════════════════════
@@ -2257,6 +2716,226 @@
     }
     window._frameAnimRAF = requestAnimationFrame(_frameAnimLoop);
   }
+
+  // Initialize window._procExtAudios
+  window._procExtAudios = [];
+
+  function _getAudioDuration(file) {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      audio.src = URL.createObjectURL(file);
+      audio.addEventListener('loadedmetadata', () => {
+        const d = audio.duration;
+        URL.revokeObjectURL(audio.src);
+        resolve(d);
+      });
+      audio.addEventListener('error', () => {
+        resolve(0);
+      });
+    });
+  }
+
+  async function procAddExtAudio(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    // Reset input
+    input.value = '';
+
+    const dur = await _getAudioDuration(file);
+    if (!dur || dur <= 0) {
+      if (typeof toast === 'function') toast('✗ Không thể đọc được thời lượng của file âm thanh này', 'error');
+      return;
+    }
+
+    const videoDur = parseFloat(window._pe2Duration || 0) || 0;
+    let defaultVidEnd = 'cuối';
+    if (videoDur > 0 && dur < videoDur) {
+      defaultVidEnd = dur.toFixed(2);
+    }
+
+    const tempId = 'aud-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 5);
+    const newTrack = {
+      id: tempId,
+      name: '⏳ Đang tải (0%): ' + file.name,
+      path: '',
+      duration: dur,
+      vid_start: 'đầu',
+      vid_end: defaultVidEnd,
+      clip_start: '0',
+      clip_end: dur.toFixed(2), // default end to actual max duration
+      vol: 1.0
+    };
+
+    window._procExtAudios.push(newTrack);
+    procRenderExtAudios();
+
+    _uploadFileWithProgress(file, 'audio',
+      function(pct) {
+        newTrack.name = '⏳ Đang tải (' + pct + '%): ' + file.name;
+        procRenderExtAudios();
+      },
+      function(d) {
+        if (d.ok && d.path) {
+          newTrack.name = file.name;
+          newTrack.path = d.path;
+          if (typeof toast === 'function') toast('✓ Đã tải lên: ' + file.name, 'success');
+        } else {
+          window._procExtAudios = window._procExtAudios.filter(x => x.id !== tempId);
+          if (typeof toast === 'function') toast('✗ Tải file thất bại: ' + (d.error || ''), 'error');
+        }
+        procRenderExtAudios();
+        _syncExtAudiosHidden();
+        if (window.subPreviewUpdate) window.subPreviewUpdate();
+      },
+      function(err) {
+        window._procExtAudios = window._procExtAudios.filter(x => x.id !== tempId);
+        if (typeof toast === 'function') toast('✗ Lỗi kết nối khi tải âm thanh', 'error');
+        procRenderExtAudios();
+        _syncExtAudiosHidden();
+        if (window.subPreviewUpdate) window.subPreviewUpdate();
+      }
+    );
+  }
+
+  function procRemoveExtAudio(id) {
+    window._procExtAudios = window._procExtAudios.filter(x => x.id !== id);
+    procRenderExtAudios();
+    _syncExtAudiosHidden();
+    if (window.subPreviewUpdate) window.subPreviewUpdate();
+  }
+
+  function procUpdateExtAudio(id, key, val) {
+    const track = window._procExtAudios.find(x => x.id === id);
+    if (!track) return;
+
+    if (key === 'vol') {
+      track[key] = parseFloat(val) || 1.0;
+    } else if (key === 'clip_end') {
+      let numVal = parseFloat(val);
+      if (!isNaN(numVal)) {
+        if (numVal > track.duration) {
+          numVal = track.duration;
+          if (typeof toast === 'function') toast(`⚠️ Thời lượng file tối đa là ${track.duration.toFixed(2)}s, tự động giới hạn`, 'warning');
+        }
+        track[key] = numVal.toFixed(2);
+      } else {
+        track[key] = val;
+      }
+    } else if (key === 'clip_start') {
+      let numVal = parseFloat(val);
+      if (!isNaN(numVal)) {
+        if (numVal < 0) numVal = 0;
+        if (numVal > track.duration) numVal = track.duration;
+        track[key] = numVal.toFixed(2);
+      } else {
+        track[key] = val;
+      }
+    } else {
+      track[key] = val;
+    }
+
+    // Force update values in DOM input if they were clamped/changed
+    const startEl = document.querySelector(`[oninput*="clip_start"][oninput*="${id}"]`);
+    const endEl = document.querySelector(`[onchange*="clip_end"][onchange*="${id}"]`);
+    if (startEl) startEl.value = track.clip_start;
+    if (endEl) endEl.value = track.clip_end;
+
+    _syncExtAudiosHidden();
+    if (window.subPreviewUpdate) window.subPreviewUpdate();
+  }
+
+  function _syncExtAudiosHidden() {
+    const hidden = document.getElementById('proc-ext-audios-json');
+    if (hidden) {
+      hidden.value = JSON.stringify(window._procExtAudios);
+    }
+  }
+
+  function procRenderExtAudios() {
+    const container = document.getElementById('proc-ext-audio-list');
+    if (!container) return;
+
+    if (window._procExtAudios.length === 0) {
+      container.innerHTML = `<div style="text-align:center;font-size:11px;color:var(--text-muted,#8a8a93);padding:10px;border:1px dashed var(--border,#dcdce2);border-radius:6px">Chưa thêm âm thanh ngoài nào</div>`;
+      return;
+    }
+
+    container.innerHTML = window._procExtAudios.map((track) => {
+      const volPct = Math.round(track.vol * 100);
+      return `
+        <div class="ov-layer-card" style="padding:10px;background:var(--bg2,#f7f9ff);border-radius:6px;border:1px solid var(--border,#e2e8f0);margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:11px;font-weight:700;word-break:break-all;color:var(--text,#1e293b);flex:1;margin-right:8px">
+              🎵 ${track.name}
+            </span>
+            <span style="font-size:10px;color:var(--accent,#1a73e8);background:rgba(26,115,232,0.1);padding:1px 5px;border-radius:4px;white-space:nowrap;margin-right:6px">
+              Tối đa: ${track.duration.toFixed(2)}s
+            </span>
+            <button type="button" style="border:none;background:transparent;padding:2px 6px;cursor:pointer;font-size:13px;color:#ef4444;line-height:1" 
+              onclick="procRemoveExtAudio('${track.id}')" title="Xóa">
+              🗑️
+            </button>
+          </div>
+
+          <!-- Timeline Range on Video -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+            <div>
+              <label style="font-size:10px;color:var(--text-muted,#8a8a93);display:block;margin-bottom:2px">Xuất hiện tại (s)</label>
+              <input type="text" value="${track.vid_start}" style="width:100%;height:30px;font-size:11px;padding:0 6px;border:1px solid var(--border,#dcdce2);border-radius:4px" 
+                oninput="procUpdateExtAudio('${track.id}', 'vid_start', this.value)">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-muted,#8a8a93);display:block;margin-bottom:2px">Biến mất tại (s)</label>
+              <input type="text" value="${track.vid_end}" style="width:100%;height:30px;font-size:11px;padding:0 6px;border:1px solid var(--border,#dcdce2);border-radius:4px" 
+                oninput="procUpdateExtAudio('${track.id}', 'vid_end', this.value)">
+            </div>
+          </div>
+
+          <!-- Clip range inside file -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+            <div>
+              <label style="font-size:10px;color:var(--text-muted,#8a8a93);display:block;margin-bottom:2px">Cắt từ giây</label>
+              <input type="text" value="${track.clip_start}" style="width:100%;height:30px;font-size:11px;padding:0 6px;border:1px solid var(--border,#dcdce2);border-radius:4px" 
+                oninput="procUpdateExtAudio('${track.id}', 'clip_start', this.value)">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-muted,#8a8a93);display:block;margin-bottom:2px">Cắt đến giây</label>
+              <input type="text" value="${track.clip_end}" style="width:100%;height:30px;font-size:11px;padding:0 6px;border:1px solid var(--border,#dcdce2);border-radius:4px" 
+                onchange="procUpdateExtAudio('${track.id}', 'clip_end', this.value)">
+            </div>
+          </div>
+
+          <!-- Track volume -->
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+              <label style="font-size:10px;color:var(--text-muted,#8a8a93)">Âm lượng:</label>
+              <span style="font-size:10px;font-weight:bold" id="vol-lbl-${track.id}">${volPct}%</span>
+            </div>
+            <input type="range" min="0" max="200" step="5" value="${volPct}" style="width:100%" 
+              oninput="document.getElementById('vol-lbl-${track.id}').textContent=this.value+'%';procUpdateExtAudio('${track.id}', 'vol', this.value/100)">
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Bind change events to sync input
+  setTimeout(() => {
+    const hidden = document.getElementById('proc-ext-audios-json');
+    if (hidden) {
+      const syncList = () => {
+        try {
+          window._procExtAudios = JSON.parse(hidden.value || '[]');
+          procRenderExtAudios();
+        } catch(e) {}
+      };
+      hidden.addEventListener('change', syncList);
+      hidden.addEventListener('input', syncList);
+      syncList();
+    }
+  }, 100);
+
   function _frameStartAnim() {
     if (!window._frameLogoIsGif) return;          // chỉ GIF mới cần
     if (!document.getElementById('frame-enabled')?.checked) return;
@@ -2305,21 +2984,62 @@
   }
   function _isGifSrc(s) { return /\.gif(\?|$)/i.test(String(s || '')); }
 
+  function _onExtAudioFileSelected(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    
+    // Display filename while uploading
+    const pathEl = document.getElementById('proc-ext-audio-path');
+    if (pathEl) pathEl.value = '⏳ Đang tải (0%): ' + file.name;
+
+    _uploadFileWithProgress(file, 'audio',
+      function(pct) {
+        if (pathEl) pathEl.value = '⏳ Đang tải (' + pct + '%): ' + file.name;
+      },
+      function(d) {
+        if (d.ok && d.path) {
+          if (pathEl) {
+            pathEl.value = file.name;
+            pathEl.dataset.serverPath = d.path;
+          }
+          if (typeof toast === 'function') {
+            toast('✓ Đã tải lên âm thanh: ' + file.name, 'success');
+          }
+        } else {
+          if (pathEl) {
+            pathEl.value = '';
+            pathEl.dataset.serverPath = '';
+          }
+          if (typeof toast === 'function') {
+            toast('✗ Tải lên âm thanh thất bại: ' + (d.error || ''), 'error');
+          }
+        }
+      },
+      function(err) {
+        if (pathEl) {
+          pathEl.value = '';
+          pathEl.dataset.serverPath = '';
+        }
+        if (typeof toast === 'function') {
+          toast('✗ Lỗi kết nối khi tải âm thanh', 'error');
+        }
+      }
+    );
+  }
+
   function frameSetLogo(input) {
     const file = input.files?.[0];
     if (!file) return;
     window._frameLogoFile = file;
     
     // Display filename while uploading
-    document.getElementById('frame-logo-path').value = '⏳ Đang tải: ' + file.name;
+    document.getElementById('frame-logo-path').value = '⏳ Đang tải (0%): ' + file.name;
 
-    // Upload to server immediately so backend can use it
-    const form = new FormData();
-    form.append('file', file);
-    form.append('type', 'logo');
-    fetch('/api/upload_anti_fp_image', { method: 'POST', body: form })
-      .then(r => r.json())
-      .then(d => {
+    _uploadFileWithProgress(file, 'logo',
+      function(pct) {
+        document.getElementById('frame-logo-path').value = '⏳ Đang tải (' + pct + '%): ' + file.name;
+      },
+      function(d) {
         if (d.ok && d.path) {
           // Store server path as data attribute
           document.getElementById('frame-logo-path').dataset.serverPath = d.path;
@@ -2356,13 +3076,15 @@
             toast('✗ Upload logo thất bại', 'error');
           }
         }
-      }).catch(() => {
+      },
+      function(err) {
         document.getElementById('frame-logo-path').value = '';
         document.getElementById('frame-logo-path').dataset.serverPath = '';
         if (typeof toast === 'function') {
           toast('✗ Lỗi upload logo', 'error');
         }
-      });
+      }
+    );
 
     // Also show preview immediately from file (before upload completes)
     const reader = new FileReader();
@@ -2933,29 +3655,34 @@
         const blurW = parseFloat(document.getElementById('proc-blur-width')?.value || 80) / 100;
         const blurLift = 0.06;
 
-        const bH = Math.round(vidH * blurH);
-        const bW = Math.round(vidW * blurW);
+        let blurCenterY = 0.5;
+        const blurYOverride = document.getElementById('proc-blur-y')?.value?.trim();
+        if (blurYOverride !== '' && blurYOverride !== undefined) {
+          blurCenterY = parseFloat(blurYOverride) / 100;
+        } else {
+          if (blurZone === 'top') {
+            blurCenterY = blurH / 2 + blurLift;
+          } else {
+            blurCenterY = 1.0 - blurH / 2 - blurLift;
+          }
+        }
 
         const blurXOverride = document.getElementById('proc-blur-x')?.value?.trim();
         let blurCenterX = 0.5;
         if (blurXOverride !== '' && blurXOverride !== undefined) {
           blurCenterX = parseFloat(blurXOverride) / 100;
         }
-        const bX = vidX + Math.round(vidW * Math.max(0, Math.min(1 - blurW, blurCenterX - blurW / 2)));
-        const liftPx = Math.round(vidH * blurLift);
 
-        let bY;
-        const blurYOverride = document.getElementById('proc-blur-y')?.value?.trim();
-        if (blurYOverride !== '' && blurYOverride !== undefined) {
-          const blurTopPct = Math.max(0, Math.min(1, parseFloat(blurYOverride) / 100 - blurH / 2));
-          bY = vidY + Math.round(vidH * blurTopPct);
-        } else {
-          if (blurZone === 'top') {
-            bY = vidY + liftPx;
-          } else {
-            bY = vidY + vidH - bH - liftPx;
-          }
-        }
+        // Tự động co dãn khi kéo sát/vượt mép biên để tránh bị chặn, kẹt hoặc lỗi toạ độ
+        const leftPct = Math.max(0, blurCenterX - blurW / 2);
+        const rightPct = Math.min(1, blurCenterX + blurW / 2);
+        const bX = vidX + Math.round(vidW * leftPct);
+        const bW = Math.round(vidW * Math.max(0.01, rightPct - leftPct));
+
+        const topPct = Math.max(0, blurCenterY - blurH / 2);
+        const bottomPct = Math.min(1, blurCenterY + blurH / 2);
+        const bY = vidY + Math.round(vidH * topPct);
+        const bH = Math.round(vidH * Math.max(0.01, bottomPct - topPct));
 
         // Draw blurred region (simulate with semi-transparent dark overlay)
         ctx.save();
@@ -3007,7 +3734,10 @@
     const scaledFont   = Math.max(6, Math.round(vidH * fontPct   / 100));
     const scaledMargin = Math.max(2, Math.round(vidH * marginPct / 100));
 
-    ctx.font         = `bold ${scaledFont}px Arial, sans-serif`;
+    const boldOn = document.getElementById('proc-font-bold')?.checked ?? true;
+    const outlineW = parseInt(document.getElementById('proc-outline-width')?.value || 2);
+
+    ctx.font         = `${boldOn ? 'bold ' : ''}${scaledFont}px Arial, sans-serif`;
     ctx.fillStyle    = cssColor;
     ctx.textAlign    = 'center';
     ctx.textBaseline = pos === 'top' ? 'top' : 'bottom';
@@ -3041,11 +3771,24 @@
       w: textW + scaledFont * 0.5,
       h: textH + scaledFont * 0.2
     };
+
+    const drawTextLine = (l, tx, ty) => {
+      if (outlineW > 0) {
+        ctx.save();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = outlineW * 2;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(l, tx, ty);
+        ctx.restore();
+      }
+      ctx.fillText(l, tx, ty);
+    };
+
     if (pos === 'top') {
-      lines.forEach((l, i) => ctx.fillText(l, textX, textY + i * lH));
+      lines.forEach((l, i) => drawTextLine(l, textX, textY + i * lH));
     } else {
       // Draw from bottom up
-      [...lines].reverse().forEach((l, i) => ctx.fillText(l, textX, textY - i * lH));
+      [...lines].reverse().forEach((l, i) => drawTextLine(l, textX, textY - i * lH));
     }
     ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
     if (window._pe2Sel && window._pe2Sel.type === 'sub') {
@@ -3190,6 +3933,8 @@
     { id:'proc-font-color',     type:'value' },
     { id:'proc-font-color-picker', type:'value' },
     { id:'proc-margin-v',       type:'value' },
+    { id:'proc-outline-width',  type:'value' },
+    { id:'proc-font-bold',      type:'checkbox' },
     { id:'proc-sub-pos',        type:'value' },
     // Voice
     { id:'proc-voice',          type:'checkbox' },
@@ -3242,6 +3987,7 @@
     { id:'proc-capcut-enabled', type:'checkbox' },
     { id:'proc-capcut-auto-open', type:'checkbox' },
     // Output dir
+    { id:'proc-ext-audios-json', type:'value' },
     { id:'proc-out',            type:'value' },
   ];
 

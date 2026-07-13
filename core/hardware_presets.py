@@ -690,8 +690,8 @@ def get_hardware_info(ffmpeg: Optional[str] = None) -> dict:
     """Trả về thông tin phần cứng dạng dict (cho API/UI)."""
     global _cached_hardware
     if not _cached_hardware:
-        detect_hardware(ffmpeg)
-    hw = _cached_hardware or HardwareInfo()
+        _cached_hardware = detect_hardware(ffmpeg)
+    hw = _cached_hardware
     preset = get_optimal_preset(ffmpeg)
     return {
         "cpu_name": hw.cpu_name,

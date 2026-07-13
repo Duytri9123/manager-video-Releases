@@ -397,8 +397,31 @@ def _endpoint_from_cfg(cfg: Dict[str, Any]) -> str:
 
 
 def _key_from_cfg(cfg: Dict[str, Any]) -> str:
-    nr = cfg.get("nine_router") or {}
-    return str(os.getenv("NINEROUTER_KEY") or nr.get("api_key") or "").strip()
+    nr = dict(cfg.get("nine_router") or {})
+    api_key = str(os.getenv("NINEROUTER_KEY") or nr.get("api_key") or "").strip()
+    
+    if not api_key or "machineId" in api_key:
+        try:
+            from templates.pages.chat.route import _cli_token, _local_dashboard_get
+            token = _cli_token()
+            if token:
+                endpoint = _endpoint_from_cfg(cfg)
+                status_code, body = _local_dashboard_get("/api/keys", endpoint=endpoint)
+                if status_code == 200 and isinstance(body, dict):
+                    keys = body.get("keys") or []
+                    active_key = next((k.get("key") for k in keys if k.get("isActive") and k.get("key")), None)
+                    if not active_key and keys:
+                        active_key = keys[0].get("key")
+                    if active_key:
+                        nr["api_key"] = active_key
+                        cfg["nine_router"] = nr
+                        from core_app import save_cfg
+                        save_cfg(cfg)
+                        api_key = active_key
+        except Exception:
+            pass
+            
+    return api_key
 
 
 def _origin(endpoint: str) -> str:
@@ -683,16 +706,26 @@ def nine_router_tts_engines(cfg: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], 
     models: List[str] = []
     if status["reachable"]:
         try:
-            m_status, body = _http_json(f"{endpoint}/models/tts", api_key=api_key, timeout=12)
+            m_status, body = _http_json(f"{endpoint}/models/tts", api_key=api_key, timeout=5)
             if m_status < 400 and isinstance(body, dict):
                 for item in body.get("data") or []:
                     mid = str((item or {}).get("id") or "").strip()
                     if mid:
                         models.append(mid)
-            elif not status["error"]:
-                status["error"] = f"models_tts_http_{m_status}"
         except Exception as exc:
             status["error"] = str(exc)
+
+        if not models:
+            try:
+                m_status, body = _http_json(f"{endpoint}/models", api_key=api_key, timeout=5)
+                if m_status < 400 and isinstance(body, dict):
+                    for item in body.get("data") or []:
+                        mid = str((item or {}).get("id") or "").strip()
+                        mid_lower = mid.lower()
+                        if mid and ("tts" in mid_lower or "speech" in mid_lower or "voice" in mid_lower or "eleven" in mid_lower or "fastpitch" in mid_lower or "tacotron" in mid_lower):
+                            models.append(mid)
+            except Exception as exc:
+                status["error"] = str(exc)
 
     status["models_count"] = len(models)
     if models:
@@ -723,3 +756,10 @@ def all_tts_engines(cfg: Dict[str, Any], include_9router: bool = True) -> Tuple[
         return local, {"reachable": False, "enabled": False}
     nine, status = nine_router_tts_engines(cfg)
     return local + nine, status
+
+
+def clear_tts_catalog_cache():
+    global _CACHE
+    _CACHE["ts"] = 0.0
+    _CACHE["engines"] = None
+    _CACHE["status"] = None

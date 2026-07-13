@@ -30,18 +30,23 @@ def clean_obf_dir():
 
 
 def check_pyarmor():
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "pyarmor", "--version"],
-            capture_output=True, check=True, timeout=10,
-        )
-        return True
-    except Exception:
-        return False
+    """Check if pyarmor CLI is available in the current venv."""
+    # Try pyarmor.exe next to python.exe first
+    import os as _os
+    pyarmor_exe = Path(_os.path.dirname(sys.executable)) / "pyarmor.exe"
+    if pyarmor_exe.exists():
+        return str(pyarmor_exe)
+    # Fallback: check PATH
+    import shutil
+    found = shutil.which("pyarmor")
+    if found:
+        return found
+    return None
 
 
 def obfuscate():
-    if not check_pyarmor():
+    pyarmor_path = check_pyarmor()
+    if not pyarmor_path:
         print("[!] PyArmor not found. Install: pip install pyarmor")
         print("[!] Falling back: using unobfuscated source files.")
         return False
@@ -60,11 +65,13 @@ def obfuscate():
         shutil.copy2(src, dest)
 
     print("[*] Running PyArmor obfuscation...")
+    # PyArmor 9.x uses: pyarmor gen --output <dir> [--recursive] <source>
+    # Sources will be a single temp dir with our files
     result = subprocess.run(
         [
-            sys.executable, "-m", "pyarmor", "gen",
+            pyarmor_path, "gen",
             "--output", str(OBF_DIR),
-            "--exact",
+            "--recursive",
             str(temp_dir),
         ],
         capture_output=True, text=True, timeout=120,
@@ -78,20 +85,15 @@ def obfuscate():
 
     print(f"[+] PyArmor obfuscation complete -> {OBF_DIR}")
 
-    # Copy resulting .py files from obfuscated output
-    obf_output = OBF_DIR
-    for src_file in temp_dir.iterdir():
-        if src_file.suffix == ".py":
-            # PyArmor creates output with same filenames
-            obf_file = obf_output / src_file.name
-            if obf_file.exists():
-                print(f"    √ {src_file.name}")
-            else:
-                # Search recursively
-                found = list(obf_output.rglob(src_file.name))
-                if found:
-                    shutil.copy2(found[0], obf_output / src_file.name)
-                    print(f"    √ {src_file.name} (found in subdir)")
+    # PyArmor 9.x creates output in OBF_DIR/<src_dirname>/
+    # Copy all .py files to flat obf_src/ for easy inclusion
+    for pyfile in OBF_DIR.rglob("*.py"):
+        if pyfile.name == "__init__.py":
+            continue
+        dest = OBF_DIR / pyfile.name
+        if not dest.exists():
+            shutil.copy2(pyfile, dest)
+            print(f"    v {pyfile.name}")
 
     # Clean temp
     shutil.rmtree(temp_dir)

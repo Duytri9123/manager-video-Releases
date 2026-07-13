@@ -280,10 +280,11 @@ def user_videos_all():
 
     # Kiểm tra Playwright có sẵn không — nếu không, trả lỗi ngay.
     try:
-        import playwright  # noqa: F401
-    except Exception:
+        from utils.helpers import ensure_playwright_chromium
+        ensure_playwright_chromium()
+    except Exception as exc:
         return jsonify({
-            "error": "Playwright chưa được cài. Chạy: pip install playwright && playwright install chromium",
+            "error": f"Playwright không khả dụng hoặc lỗi tải Chromium: {exc}",
         }), 500
 
     def parse_item(item):

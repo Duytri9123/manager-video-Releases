@@ -28,9 +28,9 @@
           <div class="pe2-tabs">
             <button class="pe2-tab active" data-pe2tab="subs"  onclick="pe2Tool('subs')"><span class="ic">💬</span>Phụ đề</button>
             <button class="pe2-tab"        data-pe2tab="ai"    onclick="pe2Tool('ai')"><span class="ic">🤖</span>AI</button>
-            <button class="pe2-tab"        data-pe2tab="blur"  onclick="pe2Tool('blur')"><span class="ic">🛡</span>Vùng che</button>
             <button class="pe2-tab"        data-pe2tab="frame" onclick="pe2Tool('frame')"><span class="ic">🎞</span>Khung</button>
             <button class="pe2-tab"        data-pe2tab="overlay" onclick="pe2Tool('overlay')"><span class="ic">🔤</span>Chữ/Khối</button>
+            <button class="pe2-tab"        data-pe2tab="audio" onclick="pe2Tool('audio')"><span class="ic">🎵</span>Âm thanh</button>
           </div>
 
           <div class="pe2-panel-body">
@@ -83,6 +83,14 @@
                   </div>
                 </div>
                 <div class="field"><label>Đáy (%)</label><input type="number" id="proc-margin-v" min="0" max="50" step="0.5" value="3" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Độ dày viền</label><input type="number" id="proc-outline-width" min="0" max="10" step="1" value="2" oninput="subPreviewUpdate()"></div>
+                <div class="field" style="grid-column:1 / -1;display:flex;align-items:center;gap:8px;margin-top:4px">
+                  <label class="toggle-wrap" style="margin:0">
+                    <input type="checkbox" class="toggle-input" id="proc-font-bold" checked onchange="subPreviewUpdate()">
+                    <div class="toggle"></div>
+                    <span class="toggle-label text-sm" style="font-weight:600">Chữ in đậm (Bold)</span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -115,22 +123,7 @@
               <div id="proc-ai-video-result" class="pe2-ai-result" style="margin-top:10px"></div>
             </div>
 
-            <!-- ══ PANE: Vùng che ══ -->
-            <div class="pe2-pane" data-pe2pane="blur">
-              <div class="pe2-grp">Che phụ đề gốc</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-                <div class="field"><label>Che rộng (%)</label><input type="number" id="proc-blur-width" min="10" max="100" step="1" value="80" oninput="subPreviewUpdate()"></div>
-                <div class="field"><label>Che cao (%)</label><input type="number" id="proc-blur-height" min="3" max="45" step="1" value="15" oninput="subPreviewUpdate()"></div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-                <div class="field"><label>Che X (%)</label><input type="number" id="proc-blur-x" min="0" max="100" step="1" value="" placeholder="50" oninput="subPreviewUpdate()" title="Vị trí X vùng che (0=trái, 100=phải). Để trống = 50"></div>
-                <div class="field"><label>Che Y (%)</label><input type="number" id="proc-blur-y" min="0" max="100" step="1" value="" placeholder="auto" oninput="subPreviewUpdate()" title="Vị trí Y vùng che (0=trên, 100=dưới). Để trống = tự theo phụ đề"></div>
-              </div>
 
-              <div class="pe2-grp">Vùng che bổ sung</div>
-              <div id="proc-blur-extra-list" style="margin-bottom:10px"></div>
-              <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px" onclick="procAddBlurZone()">＋ Thêm vùng che</button>
-            </div>
 
             <!-- ══ PANE: Khung video ══ -->
             <div class="pe2-pane" data-pe2pane="frame">
@@ -229,16 +222,67 @@
 
             <!-- ══ PANE: Chữ / Khối ══ -->
             <div class="pe2-pane" data-pe2pane="overlay">
+              <div class="pe2-grp" style="margin-top:0">Che phụ đề gốc</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="field"><label>Che rộng (%)</label><input type="number" id="proc-blur-width" min="10" max="100" step="1" value="80" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Che cao (%)</label><input type="number" id="proc-blur-height" min="3" max="45" step="1" value="15" oninput="subPreviewUpdate()"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                <div class="field"><label>Che X (%)</label><input type="number" id="proc-blur-x" min="0" max="100" step="1" value="" placeholder="50" oninput="subPreviewUpdate()" title="Vị trí X vùng che (0=trái, 100=phải). Để trống = 50"></div>
+                <div class="field"><label>Che Y (%)</label><input type="number" id="proc-blur-y" min="0" max="100" step="1" value="" placeholder="auto" oninput="subPreviewUpdate()" title="Vị trí Y vùng che (0=trên, 100=dưới). Để trống = tự theo phụ đề"></div>
+              </div>
+
+              <div class="pe2-grp" style="margin-top:10px">Vùng che bổ sung</div>
+              <div id="proc-blur-extra-list" style="margin-bottom:10px"></div>
+              <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 10px;margin-bottom:14px" onclick="procAddBlurZone()">＋ Thêm vùng che</button>
+
+              <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
+
               <div class="flex-between" style="margin-bottom:8px;gap:8px">
                 <div class="pe2-grp" style="margin:0">Chữ / hình khối</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap">
                   <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 9px" onclick="ovAddText()">＋ Text</button>
                   <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 9px" onclick="ovAddRect()">▭ Khối</button>
+                  <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 9px" onclick="document.getElementById('ov-add-image-file').click()">＋ Ảnh</button>
                 </div>
               </div>
               <input type="hidden" id="ov-layers-json" value="[]">
+              <input type="file" id="ov-add-image-file" accept="image/*" style="display:none" onchange="ovAddImage(this)">
+              <input type="file" id="ov-change-image-file" accept="image/*" style="display:none" onchange="ovChangeImage(this)">
+
               <div id="ov-layer-list"></div>
             </div>
+
+            <!-- ══ PANE: Âm thanh ══ -->
+            <div class="pe2-pane" data-pe2pane="audio">
+              <div class="pe2-grp">Ghép âm thanh ngoài</div>
+              
+              <div class="field" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:var(--text2,#1f2430);font-weight:600">Sử dụng âm thanh ngoài</span>
+                <label class="toggle-wrap" style="margin:0;cursor:pointer">
+                  <input type="checkbox" class="toggle-input" id="proc-ext-audio-enabled" onchange="if(window.subPreviewUpdate)subPreviewUpdate()">
+                  <div class="toggle"></div>
+                </label>
+              </div>
+
+              <div style="margin-bottom:16px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                  <label style="font-size:11px;color:var(--text-muted,#8a8a93)">Âm lượng video gốc:</label>
+                  <span style="font-size:11px;font-weight:bold;margin-left:auto" id="proc-vol-orig-val">100%</span>
+                </div>
+                <input type="range" id="proc-vol-orig" min="0" max="200" step="5" value="100" style="width:100%" oninput="document.getElementById('proc-vol-orig-val').textContent=this.value+'%';if(window.subPreviewUpdate)subPreviewUpdate()">
+              </div>
+
+              <!-- List of external audios -->
+              <input type="hidden" id="proc-ext-audios-json" value="[]">
+              <div id="proc-ext-audio-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px"></div>
+
+              <button type="button" class="btn btn-secondary btn-sm" style="width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:600" onclick="document.getElementById('proc-ext-audio-multi-file').click()">
+                ➕ Thêm âm thanh ngoài
+              </button>
+              <input type="file" id="proc-ext-audio-multi-file" accept="audio/*" style="display:none" onchange="procAddExtAudio(this)">
+            </div>
+
 
             {#
             Thumbnail flow disabled by request.
@@ -351,11 +395,11 @@
       return false;
     };
     (function(){
-      if (window.pe2Tool) return;
-      window.pe2Tool = function(name){
+       window.pe2Tool = function(name){
+        if (name === 'blur') name = 'overlay';
         var root = document.querySelector('[data-proc-step="2"] .pe2-editor');
         if (!root) return;
-        var titles = { subs:'⚙ Phụ đề & Dịch', ai:'🤖 Phân tích AI', blur:'🛡 Vùng che', frame:'🎞 Khung video', overlay:'▣ Chữ / Khối' };
+        var titles = { subs:'⚙ Phụ đề & Dịch', ai:'🤖 Phân tích AI', frame:'🎞 Khung video', overlay:'▣ Chữ / Khối', audio:'🎵 Âm thanh ngoài' };
         root.querySelectorAll('[data-pe2tab]').forEach(function(b){
           b.classList.toggle('active', b.getAttribute('data-pe2tab') === name);
         });
@@ -695,11 +739,11 @@
           }
           else if (s.type === 'blur'){
             el = document.getElementById('sub-preview-blur');
-            if (window.pe2Tool) window.pe2Tool('blur');
+            if (window.pe2Tool) window.pe2Tool('overlay');
           }
           else if (s.type === 'extra') {
             el = wrap.querySelector('.extra-blur-zone[data-zone-id="' + s.id + '"]');
-            if (window.pe2Tool) window.pe2Tool('blur');
+            if (window.pe2Tool) window.pe2Tool('overlay');
             if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
             setTimeout(function(){
               var card = document.querySelector('.pe2-extra-zone[data-blur-id="' + s.id + '"]');
@@ -1210,6 +1254,7 @@
               if (posSel) posSel.value = 'bottom';
               if (marginEl) marginEl.value = Math.round(clamp((1 - adjF) * 100, 0, 50) * 10) / 10;
             }
+            if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
           } else if (drag.type === 'blur'){
             var by = document.getElementById('proc-blur-y');
             var bx = document.getElementById('proc-blur-x');
@@ -1221,6 +1266,8 @@
               if (drag._offsetFx === undefined) drag._offsetFx = fx - parseFloat(bx.value || 50) / 100;
               bx.value = Math.round(clamp((fx - drag._offsetFx) * 100, 0, 100));
             }
+            if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+
           } else if (drag.type === 'blur-resize'){
             var bhEl = document.getElementById('proc-blur-height');
             var bwEl = document.getElementById('proc-blur-width');
@@ -1675,6 +1722,86 @@
         box.innerHTML = '';
         var dur = _dur();
         if (!dur) return;   // Duration chưa biết → không vẽ range
+
+        // Draw thin video audio track line (full duration)
+        var vidAudioLine = document.createElement('div');
+        vidAudioLine.className = 'pe2-tl-range';
+        vidAudioLine.style.left = '0%';
+        vidAudioLine.style.width = '100%';
+        vidAudioLine.style.top = 'auto';
+        vidAudioLine.style.bottom = '0px';
+        vidAudioLine.style.height = '12px';
+        vidAudioLine.style.background = 'rgba(34,197,94,0.45)';
+        vidAudioLine.style.border = 'none';
+        vidAudioLine.style.borderRadius = '2px';
+        vidAudioLine.style.display = 'flex';
+        vidAudioLine.style.alignItems = 'center';
+        vidAudioLine.style.paddingLeft = '4px';
+        
+        var vidAudioIcon = document.createElement('span');
+        vidAudioIcon.textContent = '🔊';
+        vidAudioIcon.style.fontSize = '9px';
+        vidAudioIcon.style.color = 'rgb(34,197,94)';
+        vidAudioIcon.style.lineHeight = '12px';
+        vidAudioLine.appendChild(vidAudioIcon);
+        box.appendChild(vidAudioLine);
+
+        // Draw external audio ranges if enabled
+        var extAudioEnabled = document.getElementById('proc-ext-audio-enabled')?.checked || false;
+        if (extAudioEnabled && window._procExtAudios && window._procExtAudios.length > 0) {
+          window._procExtAudios.forEach(function(track, tIdx) {
+            if (!track.path) return;
+            var startStr = String(track.vid_start || '').trim().toLowerCase();
+            var endStr = String(track.vid_end || '').trim().toLowerCase();
+            
+            var s = (startStr === 'đầu' || startStr === 'dau' || startStr === '') ? 0 : parseFloat(startStr);
+            var e = (endStr === 'cuối' || endStr === 'cuoi' || endStr === 'hết' || endStr === 'het' || endStr === '') ? dur : parseFloat(endStr);
+            
+            if (isNaN(s)) s = 0;
+            if (isNaN(e)) e = dur;
+
+            // Cắt bớt phần hiển thị trên timeline nếu vượt quá thời lượng tối đa thực tế của tệp âm thanh
+            var clipStart = parseFloat(track.clip_start) || 0;
+            var audioMaxDur = track.duration ? (track.duration - clipStart) : 999999;
+            e = Math.min(e, s + audioMaxDur);
+
+            s = Math.max(0, Math.min(dur, s));
+            e = Math.max(s, Math.min(dur, e));
+            
+            if (e > s) {
+              var left = Math.max(0, Math.min(100, s / dur * 100));
+              var width = Math.max(1, Math.min(100 - left, (e - s) / dur * 100));
+              var seg = document.createElement('div');
+              seg.className = 'pe2-tl-range';
+              seg.style.left = left + '%';
+              seg.style.width = width + '%';
+              seg.style.top = 'auto';
+              seg.style.bottom = (12 + tIdx * 13) + 'px'; 
+              seg.style.height = '12px';
+              seg.style.background = 'rgb(168,85,247)';
+              seg.style.border = 'none';
+              seg.style.borderRadius = '2px';
+              seg.style.opacity = '0.85';
+              seg.style.display = 'flex';
+              seg.style.alignItems = 'center';
+              seg.style.paddingLeft = '4px';
+              
+              var segIcon = document.createElement('span');
+              segIcon.textContent = '🎵';
+              segIcon.style.fontSize = '9px';
+              segIcon.style.color = '#ffffff';
+              segIcon.style.lineHeight = '12px';
+              seg.appendChild(segIcon);
+              
+              box.appendChild(seg);
+            }
+          });
+        }
+
+
+
+
+
         (window._procExtraBlurZones || []).forEach(function(z){
           var hasS = !(z.start === '' || z.start === null || z.start === undefined);
           var hasE = !(z.end === '' || z.end === null || z.end === undefined);

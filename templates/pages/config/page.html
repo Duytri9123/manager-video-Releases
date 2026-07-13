@@ -553,63 +553,66 @@
               Cấu hình Cookie YouTube giúp yt-dlp tải các video bị giới hạn độ tuổi, video riêng tư, hoặc bỏ qua bot detection của YouTube.
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <!-- Browser Cookie Source -->
-              <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-                <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                  📡 Đọc trực tiếp từ trình duyệt (Khuyên dùng)
-                </h4>
-                <div class="field">
-                  <label>Trình duyệt nguồn (cookies_from_browser)</label>
-                  <select id="ck-yt-browser" class="w-full">
-                    <option value="">-- Không sử dụng --</option>
-                    <option value="chrome">Google Chrome</option>
-                    <option value="firefox">Mozilla Firefox</option>
-                    <option value="edge">Microsoft Edge</option>
-                    <option value="opera">Opera</option>
-                    <option value="safari">Safari</option>
-                    <option value="brave">Brave</option>
-                    <option value="vivaldi">Vivaldi</option>
-                  </select>
-                </div>
-                <p class="text-xs text-muted mt-2">
-                  yt-dlp sẽ tự động đọc dữ liệu cookie từ trình duyệt đã chọn. Bạn cần đăng nhập tài khoản YouTube trên trình duyệt này trước.
-                </p>
-              </div>
-
-              <!-- Cookie File Path -->
-              <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 flex flex-col justify-between">
-                <div>
+            <div class="flex flex-col gap-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Browser Cookie Source -->
+                <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
                   <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                    📄 Sử dụng File Cookie (Netscape .txt)
+                    📡 Đọc trực tiếp từ trình duyệt (Khuyên dùng)
                   </h4>
                   <div class="field">
-                    <label>Đường dẫn File Cookie YouTube</label>
-                    <input type="text" id="ck-yt-file" placeholder="VD: C:\cookies\youtube-cookies.txt" class="w-full">
+                    <label>Trình duyệt nguồn</label>
+                    <select id="ck-yt-browser" class="w-full">
+                      <option value="">-- Không sử dụng --</option>
+                      <option value="chrome">Chrome</option>
+                      <option value="edge">Edge</option>
+                      <option value="firefox">Firefox</option>
+                      <option value="brave">Brave</option>
+                      <option value="opera">Opera</option>
+                      <option value="safari">Safari</option>
+                    </select>
+                  </div>
+                  <p class="text-xs text-muted mt-2">
+                    Lưu ý: Bạn phải đăng nhập tài khoản YouTube trên trình duyệt tương ứng trước khi sử dụng tính năng này.
+                  </p>
+                </div>
+
+                <!-- Cookie File Path -->
+                <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 flex flex-col justify-between">
+                  <div>
+                    <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+                      📄 Sử dụng File Cookie (Netscape .txt)
+                    </h4>
+                    <div class="field">
+                      <label>Đường dẫn File Cookie YouTube</label>
+                      <input type="text" id="ck-yt-file" placeholder="VD: C:\cookies\youtube-cookies.txt" class="w-full">
+                    </div>
                   </div>
                   <p class="text-xs text-muted mt-2">
                     Dành cho VPS/Server hoặc khi không chạy trình duyệt ở môi trường local. Bạn có thể xuất file cookie bằng tiện ích mở rộng như <i>Get cookies.txt LOCALLY</i>.
                   </p>
                 </div>
               </div>
-            </div>
-
-            <!-- Paste Raw Cookie Content -->
-            <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 mt-6">
-              <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                📋 Dán nội dung Cookie (Netscape .txt hoặc chuỗi Raw)
               </h4>
               <div class="field mb-0">
                 <label>Nội dung Cookie (tự động lưu vào hệ thống)</label>
                 <textarea id="ck-yt-content" rows="4" placeholder="Nhấp chọn tất cả (Ctrl+A) trong file .txt của YouTube rồi dán vào đây...&#10;Hoặc dán chuỗi raw: visitor_info1_live=xxx; sid=xxx; ..." class="w-full text-xs font-mono"></textarea>
+              </div>
+              <div class="btn-group mt-8" style="display: flex; gap: 8px; margin-top: 10px; margin-bottom: 10px;">
+                <button class="btn btn-primary btn-sm" onclick="parseYoutubeCookie()">🔍 Phân tích</button>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-yt-json-file')?.click()">Import JSON</button>
+                <input id="ck-yt-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importYoutubeJsonFile(this)">
+                <button class="btn btn-secondary btn-sm" onclick="openYoutubeLoginCookie(this)">⚡ Tự động lấy</button>
               </div>
               <p class="text-xs text-muted mt-2">
                 Dán toàn bộ nội dung file cookie hoặc chuỗi cookie thô vào đây. Hệ thống sẽ tự động chuyển đổi sang file cookie định dạng chuẩn cho yt-dlp mà không cần tự quản lý đường dẫn file.
               </p>
             </div>
 
-            <div class="btn-group mt-12">
-              <button class="btn btn-primary" onclick="savePlatformConfig('youtube')">💾 Lưu cấu hình YouTube</button>
+            <div class="btn-group mt-12" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <button class="btn btn-primary" onclick="saveConfig()">💾 Lưu cấu hình</button>
+              <button class="btn btn-secondary" onclick="validateYoutubeCookie(this)">✅ Kiểm tra hợp lệ</button>
+              <span id="ck-yt-status" style="font-size: 13px; font-weight: 500;"></span>
             </div>
           </div>
         </div>
@@ -621,56 +624,62 @@
               <span class="card-title">👥 Cookie & Hồ sơ Facebook</span>
             </div>
             
-            <div class="alert-info mb-4">
-              Cấu hình cookie và hồ sơ duyệt web của Facebook phục vụ cho việc cào danh sách Reels/Video và tải video chất lượng cao.
-            </div>
+            <div class="flex flex-col gap-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Facebook Profile Folder -->
+                <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
+                  <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+                    📂 Thư mục hồ sơ trình duyệt (Playwright Profile)
+                  </h4>
+                  <div class="field">
+                    <label>Đường dẫn thư mục hồ sơ</label>
+                    <input type="text" id="ck-fb-profile" placeholder="Mặc định: .facebook_profile" class="w-full">
+                  </div>
+                  <p class="text-xs text-muted mt-2">
+                    Đường dẫn lưu dữ liệu Chrome tự động của Playwright. Nhấp nút trên để mở trình duyệt, đăng nhập Facebook 1 lần duy nhất để lưu hồ sơ duyệt web tại đây.
+                  </p>
+                </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <!-- Facebook Profile Folder -->
+                <!-- Facebook Cookie File Path -->
+                <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
+                  <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+                    📄 Đường dẫn File Cookie Facebook (Netscape .txt)
+                  </h4>
+                  <div class="field">
+                    <label>Đường dẫn File Cookie Facebook</label>
+                    <input type="text" id="ck-fb-file" placeholder="VD: C:\cookies\facebook-cookies.txt" class="w-full">
+                  </div>
+                  <p class="text-xs text-muted mt-2">
+                    Cung cấp file cookie dạng Netscape .txt giúp yt-dlp tải được các video Facebook chế độ HD/Riêng tư.
+                  </p>
+                </div>
+              </div>
+
+              <!-- Paste Raw Cookie Content -->
               <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
                 <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                  📂 Thư mục hồ sơ trình duyệt (Playwright Profile)
+                  📋 Dán nội dung Cookie Facebook (Netscape .txt hoặc chuỗi Raw)
                 </h4>
-                <div class="field">
-                  <label>Đường dẫn thư mục hồ sơ</label>
-                  <input type="text" id="ck-fb-profile" placeholder="Mặc định: .facebook_profile" class="w-full">
+                <div class="field mb-0">
+                  <label>Nội dung Cookie Facebook</label>
+                  <textarea id="ck-fb-content" rows="4" placeholder="Dán nội dung file cookie Facebook .txt hoặc chuỗi raw ở đây..." class="w-full text-xs font-mono"></textarea>
+                </div>
+                <div class="btn-group mt-8" style="display: flex; gap: 8px; margin-top: 10px; margin-bottom: 10px;">
+                  <button class="btn btn-primary btn-sm" onclick="parseFacebookCookie()">🔍 Phân tích</button>
+                  <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-fb-json-file')?.click()">Import JSON</button>
+                  <input id="ck-fb-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importFacebookJsonFile(this)">
+                  <button class="btn btn-secondary btn-sm" onclick="openFacebookLoginProfile(this)">⚡ Tự động lấy</button>
                 </div>
                 <p class="text-xs text-muted mt-2">
-                  Đường dẫn lưu dữ liệu Chrome tự động của Playwright. Khi chạy tải Reels lần đầu, trình duyệt sẽ hiện lên để đăng nhập Facebook 1 lần duy nhất, phiên đăng nhập được lưu tại đây.
-                </p>
-              </div>
-
-              <!-- Facebook Cookie File Path -->
-              <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-                <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                  📄 Đường dẫn File Cookie Facebook (Netscape .txt)
-                </h4>
-                <div class="field">
-                  <label>Đường dẫn File Cookie Facebook</label>
-                  <input type="text" id="ck-fb-file" placeholder="VD: C:\cookies\facebook-cookies.txt" class="w-full">
-                </div>
-                <p class="text-xs text-muted mt-2">
-                  Cung cấp file cookie dạng Netscape .txt giúp yt-dlp tải được các video Facebook chế độ HD/Riêng tư.
+                  Hỗ trợ dán trực tiếp nội dung file Netscape hoặc chuỗi header thô. Hệ thống sẽ tự động chuyển đổi định dạng và cấu hình cho yt-dlp tải video Facebook chất lượng cao.
                 </p>
               </div>
             </div>
 
-            <!-- Paste Raw Cookie Content -->
-            <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 mt-6">
-              <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                📋 Dán nội dung Cookie Facebook (Netscape .txt hoặc chuỗi Raw)
-              </h4>
-              <div class="field mb-0">
-                <label>Nội dung Cookie Facebook</label>
-                <textarea id="ck-fb-content" rows="4" placeholder="Dán nội dung file cookie Facebook .txt hoặc chuỗi raw ở đây..." class="w-full text-xs font-mono"></textarea>
-              </div>
-              <p class="text-xs text-muted mt-2">
-                Hỗ trợ dán trực tiếp nội dung file Netscape hoặc chuỗi header thô. Hệ thống sẽ tự động chuyển đổi định dạng và cấu hình cho yt-dlp tải video Facebook chất lượng cao.
-              </p>
-            </div>
-
-            <div class="btn-group mt-12">
-              <button class="btn btn-primary" onclick="savePlatformConfig('facebook')">💾 Lưu cấu hình Facebook</button>
+            <div class="btn-group mt-12" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <button class="btn btn-primary" onclick="saveConfig()">💾 Lưu cấu hình</button>
+              <button class="btn btn-secondary" onclick="validateFacebookCookie(this)">✅ Kiểm tra hợp lệ</button>
+              <span id="ck-fb-status" style="font-size: 13px; font-weight: 500;"></span>
             </div>
           </div>
         </div>

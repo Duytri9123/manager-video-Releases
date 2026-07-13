@@ -46,8 +46,8 @@ _CLI_TOKEN_HEADER = "x-9r-cli-token"
 _CLI_TOKEN_SALT = "9r-cli-auth"
 _MACHINE_ID_SALT_DEFAULT = "endpoint-proxy-salt"
 
-_LIGHT_TIMEOUT = 6     # /api/health, /api/settings, /api/keys
-_MODELS_TIMEOUT = 12   # /v1/models can be slow if upstream lookups
+_LIGHT_TIMEOUT = 2     # /api/health, /api/settings, /api/keys
+_MODELS_TIMEOUT = 5   # /v1/models can be slow if upstream lookups
 _DEFAULT_TIMEOUT = 120 # /v1/chat/completions
 
 # ── Direct provider fallback when 9Router is offline ──────────────────────
@@ -276,6 +276,22 @@ def _mask_key(key: str) -> str:
 def _nine_router_cfg() -> Dict[str, Any]:
     cfg = load_cfg()
     nr = dict(cfg.get("nine_router") or {})
+    api_key = str(nr.get("api_key") or "").strip()
+    if (not api_key or "machineId" in api_key) and _cli_token():
+        try:
+            status_code, body = _local_dashboard_get("/api/keys", endpoint=nr.get("endpoint") or _DEFAULT_ENDPOINT)
+            if status_code == 200 and isinstance(body, dict):
+                keys = body.get("keys") or []
+                active_key = next((k.get("key") for k in keys if k.get("isActive") and k.get("key")), None)
+                if not active_key and keys:
+                    active_key = keys[0].get("key")
+                if active_key:
+                    nr["api_key"] = active_key
+                    cfg["nine_router"] = nr
+                    save_cfg(cfg)
+        except Exception:
+            pass
+
     nr.setdefault("endpoint", _DEFAULT_ENDPOINT)
     nr.setdefault("api_key", "")
     nr.setdefault("default_model", _DEFAULT_MODEL)
@@ -368,6 +384,7 @@ def chatbot_get_config():
         "temperature": float(nr.get("temperature", 0.7)),
         "max_tokens": int(nr.get("max_tokens", 4096)),
         "has_key": bool((nr.get("api_key") or "").strip()),
+        "api_key": nr.get("api_key") or "",
         "masked_key": masked,
     })
 
@@ -411,6 +428,7 @@ def chatbot_set_config():
 
     cfg["nine_router"] = nr
     save_cfg(cfg)
+    clear_status_cache()
     return jsonify({
         "ok": True,
         "endpoint": nr["endpoint"],
@@ -418,6 +436,19 @@ def chatbot_set_config():
         "has_key": bool((nr.get("api_key") or "").strip()),
         "masked_key": _mask_key(nr.get("api_key") or "") if nr.get("api_key") else "",
     })
+
+
+_STATUS_CACHE = None
+_STATUS_CACHE_TIME = 0.0
+
+def clear_status_cache():
+    global _STATUS_CACHE
+    _STATUS_CACHE = None
+    try:
+        from core.tts_catalog import clear_tts_catalog_cache
+        clear_tts_catalog_cache()
+    except Exception:
+        pass
 
 
 # ─── Status / discovery ───────────────────────────────────────────────────
@@ -430,6 +461,34 @@ def chatbot_status():
       { ok, reachable, version, require_api_key, has_key, masked_key,
         endpoint, has_cli_token, settings: {rtk, caveman, ...} }
     """
+    global _STATUS_CACHE, _STATUS_CACHE_TIME
+    import time
+    now = time.time()
+    
+    # Bypass cache if force=1 or force=true is requested
+    force = request.args.get("force", "").lower() in ("1", "true", "yes")
+    
+    if not force and _STATUS_CACHE and (now - _STATUS_CACHE_TIME) < 5.0:
+        return jsonify(_STATUS_CACHE)
+
+    cfg = load_cfg()
+    nr = dict(cfg.get("nine_router") or {})
+    api_key = str(nr.get("api_key") or "").strip()
+    if (not api_key or "machineId" in api_key) and _cli_token():
+        try:
+            status_code, body = _local_dashboard_get("/api/keys", endpoint=nr.get("endpoint") or _DEFAULT_ENDPOINT)
+            if status_code == 200 and isinstance(body, dict):
+                keys = body.get("keys") or []
+                active_key = next((k.get("key") for k in keys if k.get("isActive") and k.get("key")), None)
+                if not active_key and keys:
+                    active_key = keys[0].get("key")
+                if active_key:
+                    nr["api_key"] = active_key
+                    cfg["nine_router"] = nr
+                    save_cfg(cfg)
+        except Exception:
+            pass
+
     nr = _nine_router_cfg()
     endpoint = nr["endpoint"]
 
@@ -490,9 +549,34 @@ def chatbot_status():
         except Exception as exc:
             LOGGER.debug("chatbot_status: mitm status probe failed — %s", exc)
 
+    key_valid = None
+    key_error = None
+    if nr.get("api_key") and reachable:
+        try:
+            status_code, body = _local_dashboard_get("/api/keys", endpoint=endpoint)
+            if status_code == 200 and isinstance(body, dict):
+                keys = body.get("keys") or []
+                match = next((k for k in keys if k.get("key") == nr["api_key"]), None)
+                if match:
+                    key_valid = bool(match.get("isActive", True))
+                else:
+                    key_valid = True
+            else:
+                mstatus, mbody = _http_json(
+                    endpoint + "/models",
+                    headers={"Authorization": f"Bearer {nr['api_key']}"},
+                    timeout=_LIGHT_TIMEOUT
+                )
+                key_valid = mstatus < 400
+                if mstatus >= 400:
+                    key_error = f"HTTP {mstatus}"
+        except Exception as e:
+            key_valid = False
+            key_error = str(e)
+
     cfg = load_cfg()
     fallback = _pick_fallback_provider(cfg)
-    return jsonify({
+    res_payload = {
         "ok": True,
         "endpoint": endpoint,
         "reachable": reachable,
@@ -502,11 +586,16 @@ def chatbot_status():
         "settings": settings_subset,
         "has_key": bool((nr.get("api_key") or "").strip()),
         "masked_key": _mask_key(nr.get("api_key") or "") if nr.get("api_key") else "",
+        "key_valid": key_valid,
+        "key_error": key_error,
         "has_cli_token": bool(_cli_token()),
         "fallback_available": fallback is not None,
         "fallback_provider": fallback["name"] if fallback else None,
         "mitm": mitm_status
-    })
+    }
+    _STATUS_CACHE = res_payload
+    _STATUS_CACHE_TIME = now
+    return jsonify(res_payload)
 
 
 @bp.route("/api/chatbot/mitm", methods=["POST"])
@@ -1554,8 +1643,12 @@ _models_cache: Dict[str, Any] = {"ids": set(), "ts": 0.0}
 def _available_model_ids(endpoint: str, api_key: str) -> set:
     """Return the set of model ids 9Router currently exposes. 30 s TTL."""
     now = time.time()
-    if _models_cache["ids"] and (now - _models_cache["ts"]) < 30.0:
+    if (now - _models_cache["ts"]) < 30.0:
         return _models_cache["ids"]
+    
+    # Update timestamp to prevent immediate retry hangs
+    _models_cache["ts"] = now
+    
     headers = {"Accept": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -1567,7 +1660,6 @@ def _available_model_ids(endpoint: str, api_key: str) -> set:
         if status == 200 and isinstance(body, dict):
             ids = {(it or {}).get("id") for it in (body.get("data") or []) if (it or {}).get("id")}
             _models_cache["ids"] = ids
-            _models_cache["ts"] = now
             return ids
     except Exception as exc:
         LOGGER.debug("_available_model_ids: %s", exc)
@@ -2039,6 +2131,20 @@ def chatbot_chat_stream():
             meta = {"requested_model": payload["model"], "routing": route}
             yield (f"event: route\ndata: {json.dumps(meta)}\n\n").encode("utf-8")
 
+            # Synthetic ack message representing the first-phase agent reading the prompt
+            ack_msg = "Tôi đã đọc yêu cầu của bạn, tôi sẽ phản hồi ngay bây giờ..."
+            last_text = _last_user_text(payload.get("messages") or [])
+            last_text_l = last_text.lower()
+            if any(kw in last_text_l for kw in ("thơ", "poetry", "vè", "lục bát", "song thất", "thơ ca", "tho")):
+                ack_msg = "Tôi đã đọc yêu cầu của bạn, tôi sẽ tạo bài thơ ngay bây giờ..."
+            elif any(kw in last_text_l for kw in _CODE_KEYWORDS):
+                ack_msg = "Tôi đã đọc yêu cầu của bạn, tôi sẽ viết code ngay bây giờ..."
+            elif any(kw in last_text_l for kw in _WEB_KEYWORDS) or (route.get("tier") == "web"):
+                ack_msg = "Tôi đã đọc yêu cầu của bạn. Đang tìm kiếm thông tin mới nhất và phản hồi ngay bây giờ..."
+            
+            ack_data = {"message": ack_msg}
+            yield (f"event: ack\ndata: {json.dumps(ack_data)}\n\n").encode("utf-8")
+
             for chunk in upstream.iter_content(chunk_size=None, decode_unicode=False):
                 if chunk:
                     yield chunk
@@ -2081,7 +2187,7 @@ def chatbot_test():
 
     t0 = time.time()
     try:
-        status, body = _http_json(url, method="POST", headers=headers, payload=payload, timeout=30)
+        status, body = _http_json(url, method="POST", headers=headers, payload=payload, timeout=6)
     except Exception as exc:
         return jsonify({"ok": False, "error": "unreachable", "message": str(exc)}), 502
     elapsed_ms = int((time.time() - t0) * 1000)

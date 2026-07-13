@@ -140,3 +140,30 @@ async function autoFetch() {
   toast('Auto fetching...', 'info');
   // placeholder — implement if backend supports it
 }
+
+async function openYoutubeLoginCookie(btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang chờ đóng trình duyệt...';
+  
+  try {
+    toast('🌐 Trình duyệt đang mở. Vui lòng đăng nhập YouTube và ĐÓNG trình duyệt khi hoàn tất!', 'info');
+    const res = await fetch('/api/youtube/login_cookie', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ Đã lấy và lưu Cookie YouTube thành công!', 'success');
+      const contentEl = document.getElementById('ck-yt-content');
+      if (contentEl) {
+        contentEl.value = data.cookie;
+      }
+    } else {
+      toast('❌ Lỗi lấy cookie: ' + (data.error || 'Vui lòng thử lại'), 'error');
+    }
+  } catch (e) {
+    toast('❌ Lỗi: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+window.openYoutubeLoginCookie = openYoutubeLoginCookie;

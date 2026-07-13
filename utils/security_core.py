@@ -28,7 +28,17 @@ from pathlib import Path
 # HARDCODED secrets — DO NOT move to config.yml
 # ═══════════════════════════════════════════════════════════════
 
-HARDCODED_SERVER_URL = "https://duytristool.io.vn"
+# Tự động chọn server URL:
+#   - Khi chạy EXE (PyInstaller frozen) → production
+#   - Khi chạy .py trực tiếp (dev/test) → có thể đổi sang localhost
+if getattr(sys, 'frozen', False):
+    # EXE build → production server
+    HARDCODED_SERVER_URL = "https://duytristool.io.vn"
+else:
+    # .py dev mode → đổi thành "http://127.0.0.1:8000" để test local
+    HARDCODED_SERVER_URL = "https://duytristool.io.vn"
+
+PRODUCT_NAME = "toolvideo"
 
 # HMAC secret shared with manager_tool (must match .env HMAC_SECRET_KEY)
 _HMAC_SECRET = b"DuYtRiS_s3cr3t_k3y_2024!@#"

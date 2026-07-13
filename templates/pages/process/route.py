@@ -183,6 +183,8 @@ def proc_save_ass():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+_PROBE_CACHE = {}
+
 @bp.route("/api/video_frame", methods=["POST"])
 def video_frame():
     """Extract a frame from a video at a given timestamp and return as base64 JPEG.
@@ -210,29 +212,48 @@ def video_frame():
     if not ffmpeg:
         return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
 
-    # Probe duration (best effort, non-blocking)
-    try:
-        _w, _h, duration = probe_video(vp)
-    except Exception:
-        duration = 0.0
+    # Probe duration using process-level cache to avoid slow ffprobe subprocess
+    path_key = str(vp.resolve())
+    if path_key in _PROBE_CACHE:
+        _w, _h, duration = _PROBE_CACHE[path_key]
+    else:
+        try:
+            _w, _h, duration = probe_video(vp)
+            _PROBE_CACHE[path_key] = (_w, _h, duration)
+        except Exception:
+            duration = 0.0
 
     try:
         with tempfile.TemporaryDirectory(prefix="vframe_") as tmpdir:
-            # Copy video to temp with safe ASCII name to avoid Unicode path issues
-            tmp_video = Path(tmpdir) / f"input{vp.suffix}"
-            shutil.copy2(str(vp), str(tmp_video))
-
             tmp_jpg = Path(tmpdir) / "frame.jpg"
 
+            # Try direct extraction first (fast, zero disk write for copying)
             result = subprocess.run([
                 ffmpeg, "-ss", str(timestamp),
-                "-i", str(tmp_video),
+                "-i", str(vp),
                 "-vframes", "1",
                 "-q:v", "2",
-                "-vf", "scale=720:-1",
+                "-vf", "scale=480:-1",
                 "-strict", "-2",
                 str(tmp_jpg), "-y", "-loglevel", "error"
             ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+
+            # Fallback to copy method if direct run fails or outputs nothing
+            if result.returncode != 0 or not tmp_jpg.exists() or tmp_jpg.stat().st_size == 0:
+                tmp_video = Path(tmpdir) / f"input{vp.suffix}"
+                try:
+                    shutil.copy2(str(vp), str(tmp_video))
+                    subprocess.run([
+                        ffmpeg, "-ss", str(timestamp),
+                        "-i", str(tmp_video),
+                        "-vframes", "1",
+                        "-q:v", "2",
+                        "-vf", "scale=720:-1",
+                        "-strict", "-2",
+                        str(tmp_jpg), "-y", "-loglevel", "error"
+                    ], capture_output=True, timeout=30)
+                except Exception:
+                    pass
 
             if not tmp_jpg.exists() or tmp_jpg.stat().st_size == 0:
                 err_msg = (result.stderr or "").strip()[:200] if result else ""
@@ -294,24 +315,38 @@ def video_filmstrip():
 
     try:
         with tempfile.TemporaryDirectory(prefix="vstrip_") as tmpdir:
-            tmp_video = Path(tmpdir) / f"input{vp.suffix}"
-            shutil.copy2(str(vp), str(tmp_video))
-
             frames: list[str] = []
 
             if duration > 0:
-                # Single pass: evenly spaced frames via fps filter.
                 fps_expr = f"{count}/{duration:.6f}"
                 out_pat = Path(tmpdir) / "f_%03d.jpg"
-                subprocess.run([
-                    ffmpeg, "-i", str(tmp_video),
+                
+                # Try direct extraction first (fast)
+                result = subprocess.run([
+                    ffmpeg, "-i", str(vp),
                     "-vf", f"fps={fps_expr},scale=160:-1",
                     "-frames:v", str(count),
                     "-q:v", "5",
                     "-strict", "-2",
                     str(out_pat), "-y", "-loglevel", "error"
-                ], capture_output=True, text=True, encoding="utf-8",
-                   errors="replace", timeout=60)
+                ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+
+                # Fallback to copy method if direct extraction failed or didn't produce the files
+                if result.returncode != 0 or not any((Path(tmpdir) / f"f_{i:03d}.jpg").exists() for i in range(1, count + 1)):
+                    tmp_video = Path(tmpdir) / f"input{vp.suffix}"
+                    try:
+                        shutil.copy2(str(vp), str(tmp_video))
+                        subprocess.run([
+                            ffmpeg, "-i", str(tmp_video),
+                            "-vf", f"fps={fps_expr},scale=160:-1",
+                            "-frames:v", str(count),
+                            "-q:v", "5",
+                            "-strict", "-2",
+                            str(out_pat), "-y", "-loglevel", "error"
+                        ], capture_output=True, timeout=60)
+                    except Exception:
+                        pass
+
                 for i in range(1, count + 1):
                     fp = Path(tmpdir) / f"f_{i:03d}.jpg"
                     if fp.exists() and fp.stat().st_size > 0:
@@ -323,14 +358,31 @@ def video_filmstrip():
                 for i in range(count):
                     ts = i * 2.0
                     fp = Path(tmpdir) / f"f_{i:03d}.jpg"
-                    subprocess.run([
-                        ffmpeg, "-ss", str(ts), "-i", str(tmp_video),
+                    
+                    # Try direct run first
+                    result = subprocess.run([
+                        ffmpeg, "-ss", str(ts), "-i", str(vp),
                         "-vframes", "1", "-q:v", "5",
                         "-vf", "scale=160:-1",
                         "-strict", "-2",
                         str(fp), "-y", "-loglevel", "error"
-                    ], capture_output=True, text=True, encoding="utf-8",
-                       errors="replace", timeout=20)
+                    ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
+                    
+                    # Fallback to copy if direct run failed
+                    if result.returncode != 0 or not fp.exists() or fp.stat().st_size == 0:
+                        tmp_video = Path(tmpdir) / f"input{vp.suffix}"
+                        try:
+                            shutil.copy2(str(vp), str(tmp_video))
+                            subprocess.run([
+                                ffmpeg, "-ss", str(ts), "-i", str(tmp_video),
+                                "-vframes", "1", "-q:v", "5",
+                                "-vf", "scale=160:-1",
+                                "-strict", "-2",
+                                str(fp), "-y", "-loglevel", "error"
+                            ], capture_output=True, timeout=20)
+                        except Exception:
+                            pass
+
                     if fp.exists() and fp.stat().st_size > 0:
                         with open(fp, "rb") as f:
                             b64 = base64.b64encode(f.read()).decode()
@@ -586,6 +638,7 @@ If no text/logo should be covered, return empty arrays.
             "temperature": 0.2,
             "max_tokens": 1800,
             "response_format": {"type": "json_object"},
+            "stream": False,
         }
         req = urllib.request.Request(
             f"{endpoint.rstrip('/')}/chat/completions",
@@ -594,21 +647,53 @@ If no text/logo should be covered, return empty arrays.
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=120) as resp:
-            raw_body = resp.read().decode("utf-8", "replace")
-            if not raw_body or not raw_body.strip():
+            raw_bytes = resp.read()
+            if not raw_bytes or not raw_bytes.strip():
                 raise RuntimeError(f"9Router tra ve phan hoi rong (HTTP {resp.status})")
+            
+            # Use robust parsing logic that supports SSE stream fallback
+            text = ""
             try:
-                data = _j.loads(raw_body)
+                # Try plain JSON first
+                data = _j.loads(raw_bytes.decode("utf-8", "replace"))
+                text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
             except Exception as json_err:
-                preview = raw_body[:500].replace("\n", " ").strip()
-                LOGGER.error("9Router non-JSON response (HTTP %s): %s", resp.status, preview)
-                raise RuntimeError(f"9Router tra ve phan hoi khong phai JSON (HTTP {resp.status}): {preview}") from json_err
-        text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+                # SSE fallback: concatenate delta content from chunk lines
+                text_content = raw_bytes.decode("utf-8", "replace")
+                pieces = []
+                for line in text_content.split("\n"):
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    payload_str = line[5:].strip()
+                    if not payload_str or payload_str == "[DONE]":
+                        continue
+                    try:
+                        chunk = _j.loads(payload_str)
+                        choice = (chunk.get("choices") or [{}])[0]
+                        delta = choice.get("delta") or {}
+                        if isinstance(delta.get("content"), str):
+                            pieces.append(delta["content"])
+                        elif isinstance((choice.get("message") or {}).get("content"), str):
+                            pieces.append(choice["message"]["content"])
+                    except Exception:
+                        continue
+                text = "".join(pieces).strip()
+                
+                if not text:
+                    preview = text_content[:500].replace("\n", " ").strip()
+                    LOGGER.error("9Router non-JSON response (HTTP %s): %s", resp.status, preview)
+                    raise RuntimeError(f"9Router tra ve phan hoi khong phai JSON (HTTP {resp.status}): {preview}") from json_err
+
         if not text:
-            # Check if there's an error message from the API
-            api_error = (data.get("error") or {}).get("message") or data.get("message") or ""
-            if api_error:
-                raise RuntimeError(f"9Router API error: {str(api_error)[:300]}")
+            # Check if there's an error message from the API in data (if loaded successfully)
+            try:
+                data = _j.loads(raw_bytes.decode("utf-8", "replace"))
+                api_error = (data.get("error") or {}).get("message") or data.get("message") or ""
+                if api_error:
+                    raise RuntimeError(f"9Router API error: {str(api_error)[:300]}")
+            except Exception:
+                pass
             raise RuntimeError("9Router khong tra ve noi dung phan tich")
         return _json_from_text(text)
 
@@ -1095,6 +1180,47 @@ def detect_subtitles():
     })
 
 
+def _make_ytdlp_progress_hook(url):
+    import time
+    from core_app import socketio
+    
+    last_emit_time = [0.0]
+    last_pct = [-1]
+    
+    def progress_hook(d):
+        if d.get("status") == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            downloaded = d.get("downloaded_bytes", 0)
+            pct_str = "0%"
+            pct_val = 0
+            if total > 0:
+                pct_val = int(downloaded / total * 100)
+                pct_str = f"{pct_val}%"
+            
+            speed = d.get("speed")
+            speed_str = ""
+            if speed:
+                if speed > 1024 * 1024:
+                    speed_str = f" tại {speed / (1024 * 1024):.1f} MB/s"
+                else:
+                    speed_str = f" tại {speed / 1024:.1f} KB/s"
+                    
+            now = time.time()
+            if now - last_emit_time[0] >= 1.0 or pct_val != last_pct[0]:
+                last_emit_time[0] = now
+                last_pct[0] = pct_val
+                
+                filename = d.get("filename", "")
+                from pathlib import Path
+                short_name = Path(filename).name if filename else "video"
+                msg = f"⏳ Đang tải {short_name}: {pct_str}{speed_str}"
+                socketio.emit("step1_log", {"msg": msg, "level": "info"})
+        elif d.get("status") == "finished":
+            socketio.emit("step1_log", {"msg": "✅ Đã tải xong video gốc. Đang xử lý...", "level": "success"})
+            
+    return progress_hook
+
+
 @require_valid_license
 @bp.route("/api/process_video", methods=["POST"])
 def process_video():
@@ -1171,6 +1297,7 @@ def process_video():
                         normalized_url0,
                         str(out_path / "Process_video" / "_tmp_dl"),
                         proxy=_resolve_proxy(cfg),
+                        progress_hook=_make_ytdlp_progress_hook(normalized_url0),
                     )
 
                 res = await asyncio.to_thread(_do_generic)
@@ -1393,6 +1520,7 @@ def download_original_video():
                     str(out_path / "Process_video" / "_tmp_dl"),
                     cookiefile=fb_cookie,
                     proxy=_resolve_proxy(cfg),
+                    progress_hook=_make_ytdlp_progress_hook(normalized_url0),
                 )
 
             res = await asyncio.to_thread(_do_generic)

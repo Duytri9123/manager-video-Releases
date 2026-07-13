@@ -1,0 +1,81 @@
+c:/MyTool/toolvideo/templates\layout\_sidebar.html:60: <span class="nav-icon">📖</span><span class="nav-label">Truyện → Video</span>
+c:/MyTool/toolvideo/templates\pages\ads\page.html:57: <button class="btn btn-primary w-full justify-center" onclick="adsWizGo(2)">Tiếp: Thông tin chiến dịch →</button>
+c:/MyTool/toolvideo/templates\pages\ads\page.html:106: <button class="btn btn-primary" onclick="adsWizGo(3)">Tiếp: AI kịch bản →</button>
+c:/MyTool/toolvideo/templates\pages\ads\page.html:153: <button class="btn btn-primary" onclick="adsWizGo(4)">Tiếp: Xử lý →</button>
+c:/MyTool/toolvideo/templates\pages\ads\page.html:186: <button class="btn btn-primary w-full justify-center" onclick="adsWizGo(5)">✓ Xong → Đăng video</button>
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:2: PAGE: AI Studio — Video + Image + Idea→Video (gộp)
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:13: <span class="tab-desc">Prompt → 1 clip (5-8s)</span>
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:18: <span class="tab-desc">Prompt → ảnh AI (Imagen 3)</span>
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:22: <span>Idea → Video</span>
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:23: <span class="tab-desc">Ý tưởng → phim hoàn chỉnh</span>
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:68: <label>🧠 LLM (Idea→Video)</label>
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:233: MODE 3: Idea → Video
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:241: <span class="card-title">Idea → Video (ViMax Pipeline)</span>
+c:/MyTool/toolvideo/templates\pages\ai_studio\page.html:245: Nhập ý tưởng → AI tự viết story → kịch bản → storyboard → tạo video từng shot → ghép thành phim hoàn chỉnh.
+c:/MyTool/toolvideo/templates\pages\chat\page.html:132: prompt ngắn / chào hỏi → <b>fast</b>; prompt dài hoặc có từ khoá kỹ thuật (code, debug, viết kịch bản…) → <b>power</b>;
+c:/MyTool/toolvideo/templates\pages\chat\page.html:133: còn lại → <b>balanced</b>. Override per-message bằng dropdown <b>Model</b> trong khung chat (chọn model cụ thể sẽ vô hiệu hoá auto cho lượt đó).
+c:/MyTool/toolvideo/templates\pages\chat\page.html:338: Upload 1 ảnh + câu hỏi → 9Router gửi message với <code>image_url</code> data-url đến model vision (như <code>kr/claude-sonnet-4.5</code> hoặc <code>gemini/gemini-3-pro-preview</code>).
+c:/MyTool/toolvideo/templates\pages\content\page.html:167: <option value="auto" selected>Tự động (9:16 → Reel)</option>
+c:/MyTool/toolvideo/templates\pages\history\page.html:122: <option value="auto" selected>Tự động (9:16 → Reel)</option>
+c:/MyTool/toolvideo/templates\pages\idea2video\page.html:2: PAGE: Idea → Video  (ViMax pipeline)
+c:/MyTool/toolvideo/templates\pages\idea2video\page.html:12: <span class="card-title">Idea → Video (ViMax Pipeline)</span>
+c:/MyTool/toolvideo/templates\pages\idea2video\page.html:18: Pipeline tự động: <b>Ý tưởng</b> → LLM viết story → kịch bản → storyboard → tạo video từng shot → ghép thành phim hoàn chỉnh.
+c:/MyTool/toolvideo/templates\pages\n8n\page.html:44: <div class="n8n-pal-item" draggable="true" data-type="ai.tts_file"><span class="ic">💾</span>TTS → File MP3</div>
+c:/MyTool/toolvideo/templates\pages\n8n\page.html:45: <div class="n8n-pal-item" draggable="true" data-type="ai.stt"><span class="ic">🎤</span>Giọng nói → Text</div>
+c:/MyTool/toolvideo/templates\pages\n8n\page.html:59: <div id="n8n-empty-hint" class="n8n-empty-hint">Kéo node từ cột trái thả vào đây (hoặc double-click) · nối dây từ chấm phải → chấm trái · phím Delete để xóa</div>
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:75: if (next) next.textContent = (n === MAX) ? '✓ Hoàn tất' : 'Tiếp theo →';
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:761: <b>#${Number(seg.index) + 1}</b> · ${start}s → ${end}s<br>
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:1083: return (s === '' ? 'đầu' : s + 's') + ' → ' + (e === '' ? 'cuối' : e + 's');
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:1664: // Priority: uploaded file path → first ready/processing item in batch queue → proc-video field
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:2039: // Khi frame mode bật, subtitle + vùng che được vẽ trên canvas → bỏ DOM overlay
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:2073: // ảnh được đặt giữa, chừa viền → overlay phải bám theo vùng ẢNH, không phải wrap.
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:2079: // Apply same % to dispH → preview always matches real video proportionally.
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:2149: // → toạ độ so với chính ảnh là (bLeft, bTop).
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:2226: // Giới hạn bề ngang theo vùng ảnh (letterbox dọc→ngang sẽ có viền 2 bên).
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:2646: // Still a URL → feed to proc-url (will download)
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:2650: // Local file path (downloaded or uploaded file) → feed to proc-video (skip download)
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:3909: // All field IDs to save (id → type)
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:4124: //  - 'auto' → dùng aspect của video frame đã load (nếu có), mặc định 16x9
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:4125: //  - '16x9' / '9x16' → ép buộc
+c:/MyTool/toolvideo/templates\pages\process\scripts.html:4514: window._thumbAiModelsLoaded = false; // chưa có dữ liệu → cho thử lại
+c:/MyTool/toolvideo/templates\pages\process\step1_source.html:174: ▶ Xử lý &amp; Xem kết quả (Bước 2) →
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:311: <option value="auto">⚡ Tự động (9Router → Gemini)</option>
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:329: <button class="btn btn-primary" onclick="procWizStep2Continue()" style="font-weight:700">Tiếp tục →</button>
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:464: // Nếu đang có thành phần được chọn → scroll để resize thành phần đó
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:528: // Nếu click vào preview wrap → element drag system sẽ xử lý, không pan
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1101: // Clicked empty area → deselect
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1143: else { window._pe2Sel = null; pe2ApplySelection(); return; }   // bấm vùng trống → bỏ chọn
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1219: // so convert canvas coords → video-area fraction using stored geometry.
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1451: var en = (ov.end_sec === '' || ov.end_sec == null) ? '' : (' → ' + ov.end_sec + 's');
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1703: if (!dur) return;   // Chưa có duration → không vẽ tick (tránh hiển thị sai)
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1718: // Vẽ các đoạn "burn từ → đến" của vùng che bổ sung lên timeline
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1724: if (!dur) return;   // Duration chưa biết → không vẽ range
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1808: if (!hasS && !hasE) return;   // che cả video → không vẽ đoạn
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1819: lab.textContent = _fmt(s) + '→' + _fmt(e);
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1838: lab.textContent = (ov.type === 'text' ? 'T ' : '▭ ') + _fmt(s) + '→' + _fmt(e);
+c:/MyTool/toolvideo/templates\pages\process\step2_edit.html:1844: // Parse "m:ss" hoặc số giây → số giây
+c:/MyTool/toolvideo/templates\pages\process\step4_publish.html:149: <option value="auto" selected>Tự động (9:16 → Reel)</option>
+c:/MyTool/toolvideo/templates\pages\process\step4_publish.html:178: <br>Ví dụ: 10 video + khoảng cách 1 ngày → mỗi ngày 1 video.
+c:/MyTool/toolvideo/templates\pages\process\step5_run.html:31: 🤖 Import & AI viết Caption → Đăng (Bước 5)
+c:/MyTool/toolvideo/templates\pages\process\step5_run.html:34: 👉 Chuyển sang Bước 5 (đã có caption) →
+c:/MyTool/toolvideo/templates\pages\process\wizard_footer.html:6: <button class="btn btn-primary" id="proc-wiz-next" onclick="procWizNext()">Tiếp theo →</button>
+c:/MyTool/toolvideo/templates\pages\proxies\page.html:107: Chọn preset → dán danh sách IP/host (mỗi dòng 1 cái). Mỗi dòng = 1 router mới
+c:/MyTool/toolvideo/templates\pages\publish\page.html:354: <option value="auto" selected>Tự động (9:16 → Reel)</option>
+c:/MyTool/toolvideo/templates\pages\sales\page.html:57: <button class="btn btn-primary w-full justify-center" onclick="salesWizGo(2)">Tiếp: Thông tin sản phẩm →</button>
+c:/MyTool/toolvideo/templates\pages\sales\page.html:97: <button class="btn btn-primary" onclick="salesWizGo(3)">Tiếp: AI kịch bản →</button>
+c:/MyTool/toolvideo/templates\pages\sales\page.html:144: <button class="btn btn-primary" onclick="salesWizGo(4)">Tiếp: Xử lý →</button>
+c:/MyTool/toolvideo/templates\pages\sales\page.html:177: <button class="btn btn-primary w-full justify-center" onclick="salesWizGo(5)">✓ Xong → Đăng video</button>
+c:/MyTool/toolvideo/templates\pages\story\page.html:2: Truyện → Video — MangaDex search + AI narration + render
+c:/MyTool/toolvideo/templates\pages\story\page.html:58: <strong>Cách dùng:</strong> Mở trang đọc chương 1 của truyện trên trình duyệt, copy URL, paste vào đây →
+c:/MyTool/toolvideo/templates\pages\story\page.html:88: <b>9Router Vision</b> (gọi Claude/Gemini multimodal qua local 9Router → đọc cực tốt manga raw, manhua, manhwa).
+c:/MyTool/toolvideo/templates\pages\story\page.html:117: <input id="sw-comic-vision-model" type="text" placeholder="Để trống → dùng default_model">
+c:/MyTool/toolvideo/templates\pages\story\page.html:270: Chỉ cần nhập ý tưởng → AI tự viết truyện, tự tạo nhân vật, chọn bối cảnh và sinh ảnh cho từng cảnh.
+c:/MyTool/toolvideo/templates\pages\story\page.html:533: Bấm <b>✨ Sinh ảnh end</b> trên một cảnh để tạo ảnh kết thúc → renderer sẽ
+c:/MyTool/toolvideo/templates\pages\story\page.html:576: <option value="asc" selected>Cũ → mới</option>
+c:/MyTool/toolvideo/templates\pages\story\page.html:577: <option value="desc">Mới → cũ</option>
+c:/MyTool/toolvideo/templates\pages\transcribe\page.html:143: <span>Chuyển Phồn → Giản</span>
+c:/MyTool/toolvideo/templates\pages\transcribe\page.html:324: // Sync provider → toggle hiển thị model selector
+c:/MyTool/toolvideo/templates\pages\transcribe\page.html:334: // Khi user gõ/sửa input path bằng tay → invalidate file đã chọn trước đó.
+c:/MyTool/toolvideo/templates\pages\videogen\page.html:20: <b>Tạo video bằng AI:</b> Nhập prompt mô tả video bạn muốn → Gemini Veo 2 sẽ tạo video
+c:/MyTool/toolvideo/templates\pages\videogen\page.html:30: <div class="text-xs text-muted mt-4">Lưu trong config.yml → gemini_video.api_key</div>
+c:/MyTool/toolvideo/templates\pages\videogen\page.html:103: Nếu có ảnh → Veo sẽ tạo video dựa trên ảnh + prompt (image-to-video).

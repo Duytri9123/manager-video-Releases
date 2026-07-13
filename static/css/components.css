@@ -64,6 +64,11 @@
     }
     #page-config .config-nav .config-tab .tab-ico{font-size:16px;flex:0 0 auto;width:22px;text-align:center;display:inline-block;}
 
+    #page-config.active {
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100vh - 105px);
+    }
     #page-config .config-panes{flex:1 1 auto;min-width:0}
     #page-config .config-pane{display:none}
     #page-config .config-pane.active{display:block;animation:fadeUp .2s ease}
@@ -115,7 +120,10 @@
     #page-config .config-savebar{
       position:sticky;bottom:-18px;z-index:30;
       background:var(--bg2);
-      margin:16px -18px -18px -18px;
+      margin-top:auto;
+      margin-left:-18px;
+      margin-right:-18px;
+      margin-bottom:-18px;
       padding:12px 18px;
       border-top:1px solid var(--border);
       box-shadow:0 -4px 10px -6px rgba(26,115,232,.25);
@@ -1239,7 +1247,7 @@
       .pe2-screen #sub-preview-text:hover,
       .pe2-screen #sub-preview-blur:hover,
       .pe2-screen #sub-preview-blur-canvas:hover,
-      .pe2-screen .extra-blur-zone:hover{ outline:1.5px solid rgba(26,115,232,.7); outline-offset:1px; }
+      .pe2-screen .extra-blur-zone:hover{ outline:1.5px solid rgba(26,115,232,.7); outline-offset:1px; z-index:8 !important; }
       .pe2-screen .pe2-selected{
         outline:2px solid var(--accent,#1a73e8) !important;
         outline-offset:0;
@@ -1260,31 +1268,31 @@
         display: none !important;
       }
       .pe2-handle{
-        position:absolute; width:11px; height:11px; background:#fff;
-        border:2px solid var(--accent,#1a73e8); border-radius:2px; z-index:20; pointer-events:auto;
-        box-sizing:border-box; box-shadow:0 1px 4px rgba(15,23,42,.25), 0 0 0 1px rgba(255,255,255,.8);
+        position:absolute; width:7px; height:7px; background:#fff;
+        border:1.5px solid var(--accent,#1a73e8); border-radius:1px; z-index:20; pointer-events:auto;
+        box-sizing:border-box; box-shadow:0 1px 3px rgba(15,23,42,.3);
         opacity:0; transition:opacity .12s;
       }
       .pe2-handle::before{
         content:""; position:absolute;
-        top:-10px; left:-10px; right:-10px; bottom:-10px;
+        top:-8px; left:-8px; right:-8px; bottom:-8px;
         background:transparent; pointer-events:auto;
       }
       .pe2-screen .extra-blur-zone:hover .pe2-handle,
       .pe2-screen .extra-blur-zone.pe2-selected .pe2-handle,
       .pe2-screen #sub-preview-blur:hover .pe2-handle,
       .pe2-screen #sub-preview-blur.pe2-selected .pe2-handle{ opacity:1; }
-      .pe2-handle.nw{ left:-6px; top:-6px; cursor:nwse-resize; }
-      .pe2-handle.n{ left:50%; top:-6px; transform:translateX(-50%); cursor:ns-resize; }
-      .pe2-handle.ne{ right:-6px; top:-6px; cursor:nesw-resize; }
-      .pe2-handle.e{ right:-6px; top:50%; transform:translateY(-50%); cursor:ew-resize; }
-      .pe2-handle.se{ right:-6px; bottom:-6px; cursor:nwse-resize; }
-      .pe2-handle.s{ bottom:-6px; left:50%; transform:translateX(-50%); cursor:ns-resize; }
-      .pe2-handle.sw{ left:-6px; bottom:-6px; cursor:nesw-resize; }
-      .pe2-handle.w{ left:-6px; top:50%; transform:translateY(-50%); cursor:ew-resize; }
+      .pe2-handle.nw{ left:-4px; top:-4px; cursor:nwse-resize; }
+      .pe2-handle.n{ left:50%; top:-4px; transform:translateX(-50%); cursor:ns-resize; }
+      .pe2-handle.ne{ right:-4px; top:-4px; cursor:nesw-resize; }
+      .pe2-handle.e{ right:-4px; top:50%; transform:translateY(-50%); cursor:ew-resize; }
+      .pe2-handle.se{ right:-4px; bottom:-4px; cursor:nwse-resize; }
+      .pe2-handle.s{ bottom:-4px; left:50%; transform:translateX(-50%); cursor:ns-resize; }
+      .pe2-handle.sw{ left:-4px; bottom:-4px; cursor:nesw-resize; }
+      .pe2-handle.w{ left:-4px; top:50%; transform:translateY(-50%); cursor:ew-resize; }
       .pe2-dragging *{ cursor:move !important; }
       .pe2-screen .video-overlay-el{ z-index:3; pointer-events:auto !important; cursor:move; }
-      .pe2-screen .video-overlay-el:hover{ outline:1.5px solid rgba(26,115,232,.7); outline-offset:1px; }
+      .pe2-screen .video-overlay-el:hover{ outline:1.5px solid rgba(26,115,232,.7); outline-offset:1px; z-index:8 !important; }
       .pe2-screen .video-overlay-el:hover .pe2-handle,
       .pe2-screen .video-overlay-el.pe2-selected .pe2-handle{ opacity:1; }
       .ov-layer-card{ border:1px solid var(--border,#d7e3fb); border-radius:8px; margin-bottom:8px; background:var(--surface,#fff); overflow:hidden; }
@@ -1722,14 +1730,17 @@
   box-shadow: 0 0 0 3px var(--primary-glow) !important;
 }
 
-/* Make ranges inside the cards clean and organized */
-.pe2-extra-zone-body, .ov-layer-body {
+.pe2-extra-zone-body, .ov-layer-card.open .ov-layer-body {
   background: var(--bg-card) !important;
   padding: 14px !important;
   display: flex !important;
   flex-direction: column !important;
   gap: 12px !important;
 }
+.ov-layer-body {
+  display: none;
+}
+
 .pe2-extra-zone-grid, .pe2-extra-zone-time {
   gap: 12px !important;
 }

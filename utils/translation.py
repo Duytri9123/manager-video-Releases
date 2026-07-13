@@ -290,7 +290,7 @@ def is_9router_working(nr_cfg: Dict) -> bool:
             f"{endpoint}/models",
             headers={"Authorization": f"Bearer {api_key}"}
         )
-        with urllib.request.urlopen(req, timeout=0.5) as r:
+        with urllib.request.urlopen(req, timeout=2.0) as r:
             return r.status == 200
     except Exception:
         return False

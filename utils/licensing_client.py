@@ -25,6 +25,7 @@ import yaml
 
 from utils.security_core import (
     HARDCODED_SERVER_URL,
+    PRODUCT_NAME,
     generate_signature,
     get_secure_hwid,
     xor_deobfuscate,
@@ -87,6 +88,32 @@ def save_config(cfg: dict) -> bool:
         return False
 
 
+def safe_request(method: str, url: str, **kwargs) -> requests.Response:
+    """Make HTTP request, trying curl_cffi first to bypass Cloudflare WAF,
+    falling back to standard requests if curl_cffi is unavailable or fails.
+    """
+    headers = kwargs.get("headers", {})
+    if "User-Agent" not in headers:
+        headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    kwargs["headers"] = headers
+
+    try:
+        from curl_cffi import requests as curl_requests
+        c_kwargs = kwargs.copy()
+        if "impersonate" not in c_kwargs:
+            c_kwargs["impersonate"] = "chrome"
+        
+        # Make request using curl_cffi
+        resp = curl_requests.request(method.upper(), url, **c_kwargs)
+        return resp
+    except Exception as exc:
+        _logger.warning("curl_cffi request failed, falling back to standard requests: %s", exc)
+
+    s_kwargs = kwargs.copy()
+    s_kwargs.pop("impersonate", None)
+    return requests.request(method.upper(), url, **s_kwargs)
+
+
 def check_licensing() -> tuple[bool, dict]:
     """Verify license with manager_tool Laravel backend.
 
@@ -104,6 +131,7 @@ def check_licensing() -> tuple[bool, dict]:
         "os": platform.system() + " " + platform.release(),
         "app_version": "1.0.0",
         "license_key": license_key,
+        "product_name": PRODUCT_NAME,
     }
 
     try:
@@ -112,11 +140,16 @@ def check_licensing() -> tuple[bool, dict]:
             "Content-Type": "application/json",
             "X-Hmac-Signature": sig,
             "X-Hmac-Timestamp": ts,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         }
 
-        resp = requests.post(
+        import json
+        payload_str = json.dumps(payload, separators=(",", ":"))
+
+        resp = safe_request(
+            "POST",
             f"{server_url}/api/auth/device",
-            json=payload,
+            data=payload_str,
             headers=headers,
             timeout=6,
         )

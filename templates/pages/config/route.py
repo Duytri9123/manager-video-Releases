@@ -16,10 +16,34 @@ import core_app as _ca
 bp = Blueprint("config", __name__)
 
 
+def _sync_9router_key_if_needed(cfg):
+    nr = cfg.get("nine_router") or {}
+    api_key = str(nr.get("api_key") or "").strip()
+    if not api_key or "machineId" in api_key:
+        try:
+            from templates.pages.chat.route import _cli_token, _local_dashboard_get
+            token = _cli_token()
+            if token:
+                endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").strip().rstrip("/")
+                status, body = _local_dashboard_get("/api/keys", endpoint=endpoint)
+                if status == 200 and isinstance(body, dict):
+                    keys = body.get("keys") or []
+                    active_key = next((k.get("key") for k in keys if k.get("isActive") and k.get("key")), None)
+                    if not active_key and keys:
+                        active_key = keys[0].get("key")
+                    if active_key:
+                        nr["api_key"] = active_key
+                        cfg["nine_router"] = nr
+                        save_cfg(cfg)
+        except Exception:
+            pass
+
 # ── /api/config ───────────────────────────────────────────────────────────────
 @bp.route("/api/config", methods=["GET"])
 def get_config():
-    return jsonify(load_cfg())
+    cfg = load_cfg()
+    _sync_9router_key_if_needed(cfg)
+    return jsonify(cfg)
 
 
 @bp.route("/api/config", methods=["POST"])
@@ -28,6 +52,17 @@ def post_config():
     cfg = load_cfg()
     cfg = _deep_merge_dict(cfg, data)
     save_cfg(cfg)
+    
+    # Invalidate chatbot cache so changes are synced instantly
+    try:
+        from templates.pages.chat.route import _models_cache, _reachable_cache
+        _models_cache["ids"] = set()
+        _models_cache["ts"] = 0.0
+        _reachable_cache["ok"] = None
+        _reachable_cache["ts"] = 0.0
+    except Exception:
+        pass
+        
     return jsonify({"ok": True})
 
 
@@ -109,6 +144,301 @@ def auto_fetch_cookie():
         asyncio.run(capture_cookies(args))
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"ok": True})
+
+
+# ── /api/youtube/login_cookie ──────────────────────────────────────────────────
+@bp.route("/api/youtube/login_cookie", methods=["POST"])
+def youtube_login_cookie():
+    import time
+    from playwright.sync_api import sync_playwright
+    from utils.helpers import ensure_playwright_chromium
+    
+    try:
+        ensure_playwright_chromium()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Không thể chuẩn bị Playwright: {e}"}), 500
+
+    try:
+        cookie_text = ""
+        lines = []
+        with sync_playwright() as p:
+            import tempfile
+            user_data_dir = tempfile.mkdtemp(prefix="playwright_yt_")
+            
+            from utils.helpers import launch_playwright_browser_sync
+            browser_context = launch_playwright_browser_sync(
+                p.chromium,
+                is_persistent=True,
+                user_data_dir=user_data_dir,
+                headless=False,
+                viewport={"width": 1280, "height": 800},
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+            page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
+            page.goto("https://www.youtube.com")
+            
+            # Wait for user to interact and close the page
+            page_closed = threading.Event()
+            page.on("close", lambda _: page_closed.set())
+            
+            # Wait up to 5 minutes
+            page_closed.wait(timeout=300)
+            
+            # Extract cookies
+            cookies = browser_context.cookies()
+            browser_context.close()
+            
+            # Convert to Netscape format
+            lines.append("# Netscape HTTP Cookie File")
+            lines.append("# http://curl.haxx.se/rfc/cookie_spec.html")
+            lines.append("# This is a generated file! Do not edit.")
+            lines.append("")
+            
+            for c in cookies:
+                domain = c.get("domain", "")
+                if not any(x in domain for x in ["youtube.com", "google.com", "youtube"]):
+                    continue
+                path = c.get("path", "/")
+                secure = "TRUE" if c.get("secure", False) else "FALSE"
+                flag = "TRUE" if domain.startswith(".") else "FALSE"
+                expires = str(int(c.get("expires", -1)))
+                if expires == "-1":
+                    expires = str(int(time.time() + 365 * 24 * 3600))
+                name = c.get("name", "")
+                value = c.get("value", "")
+                lines.append("\t".join([domain, flag, path, secure, expires, name, value]))
+            
+            cookie_text = "\n".join(lines)
+            
+        if not cookie_text or len(lines) <= 4:
+            return jsonify({"ok": False, "error": "Không lấy được cookie nào. Bạn đã đăng nhập chưa?"}), 400
+            
+        # Save to config
+        cfg = load_cfg() or {}
+        if "ytdlp" not in cfg:
+            cfg["ytdlp"] = {}
+        if "cookie_contents" not in cfg["ytdlp"]:
+            cfg["ytdlp"]["cookie_contents"] = {}
+        cfg["ytdlp"]["cookie_contents"]["youtube"] = cookie_text
+        save_cfg(cfg)
+        
+        return jsonify({"ok": True, "cookie": cookie_text})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Lỗi trong quá trình đăng nhập lấy cookie: {e}"}), 500
+
+
+# ── /api/facebook/login_profile ───────────────────────────────────────────────
+@bp.route("/api/facebook/login_profile", methods=["POST"])
+def facebook_login_profile():
+    import time
+    from playwright.sync_api import sync_playwright
+    from utils.helpers import ensure_playwright_chromium
+    
+    try:
+        ensure_playwright_chromium()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Không thể chuẩn bị Playwright: {e}"}), 500
+
+    try:
+        cfg = load_cfg() or {}
+        profile_dir = str(cfg.get("facebook_profile") or ".facebook_profile").strip()
+        
+        from pathlib import Path
+        profile_path = Path(profile_dir)
+        if not profile_path.is_absolute():
+            profile_path = ROOT / profile_path
+        
+        profile_path.mkdir(parents=True, exist_ok=True)
+        
+        with sync_playwright() as p:
+            from utils.helpers import launch_playwright_browser_sync
+            browser_context = launch_playwright_browser_sync(
+                p.chromium,
+                is_persistent=True,
+                user_data_dir=str(profile_path),
+                headless=False,
+                viewport={"width": 1280, "height": 800},
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+            page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
+            page.goto("https://www.facebook.com")
+            
+            page_closed = threading.Event()
+            page.on("close", lambda _: page_closed.set())
+            
+            page_closed.wait(timeout=300)
+            
+            # Extract cookies
+            cookies = browser_context.cookies()
+            browser_context.close()
+            
+            # Convert to Netscape format
+            lines = []
+            lines.append("# Netscape HTTP Cookie File")
+            lines.append("# http://curl.haxx.se/rfc/cookie_spec.html")
+            lines.append("# This is a generated file! Do not edit.")
+            lines.append("")
+            
+            for c in cookies:
+                domain = c.get("domain", "")
+                if not any(x in domain for x in ["facebook.com", "facebook", "messenger.com"]):
+                    continue
+                path = c.get("path", "/")
+                secure = "TRUE" if c.get("secure", False) else "FALSE"
+                flag = "TRUE" if domain.startswith(".") else "FALSE"
+                expires = str(int(c.get("expires", -1)))
+                if expires == "-1":
+                    expires = str(int(time.time() + 365 * 24 * 3600))
+                name = c.get("name", "")
+                value = c.get("value", "")
+                lines.append("\t".join([domain, flag, path, secure, expires, name, value]))
+            
+            cookie_text = "\n".join(lines)
+            
+        if not cookie_text or len(lines) <= 4:
+            return jsonify({"ok": False, "error": "Không lấy được cookie Facebook nào. Bạn đã đăng nhập chưa?"}), 400
+            
+        # Save to config
+        cfg = load_cfg() or {}
+        if "ytdlp" not in cfg:
+            cfg["ytdlp"] = {}
+        if "cookie_contents" not in cfg["ytdlp"]:
+            cfg["ytdlp"]["cookie_contents"] = {}
+        cfg["ytdlp"]["cookie_contents"]["facebook"] = cookie_text
+        save_cfg(cfg)
+        
+        return jsonify({"ok": True, "cookie": cookie_text})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Lỗi trong quá trình đăng nhập Facebook: {e}"}), 500
+
+
+# ── /api/youtube/validate_cookie ──────────────────────────────────────────────
+@bp.route("/api/youtube/validate_cookie", methods=["POST"])
+def youtube_validate_cookie():
+    import tempfile
+    import os
+    import yt_dlp
+    data = request.json or {}
+    content = data.get("content", "").strip()
+    filepath = data.get("filepath", "").strip()
+    browser = data.get("browser", "").strip()
+    
+    cookie_opts = {}
+    temp_file = None
+    try:
+        if content:
+            temp_fd, temp_file = tempfile.mkstemp(suffix=".txt", prefix="yt_cookie_")
+            os.close(temp_fd)
+            with open(temp_file, "w", encoding="utf-8") as f:
+                f.write(content)
+            cookie_opts["cookiefile"] = temp_file
+        elif filepath:
+            if os.path.exists(filepath):
+                cookie_opts["cookiefile"] = filepath
+            else:
+                return jsonify({"ok": False, "error": "Không tìm thấy file cookie tại đường dẫn đã chỉ định"})
+        elif browser:
+            cookie_opts["cookiesfrombrowser"] = (browser,)
+        else:
+            return jsonify({"ok": False, "error": "Chưa cung cấp thông tin cookie để kiểm tra"})
+            
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "playlist_items": "0",
+            **cookie_opts
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                # Test extracting info for a public dummy URL (very fast)
+                ydl.extract_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=False)
+                cookie_jar = ydl.cookiejar
+                has_login_info = False
+                for cookie in cookie_jar:
+                    if cookie.name in ["LOGIN_INFO", "__Secure-3PSID", "HSID", "SID"]:
+                        has_login_info = True
+                        break
+                if has_login_info:
+                    return jsonify({"ok": True, "message": "Cookie hoạt động tốt và đã đăng nhập tài khoản YouTube!"})
+                else:
+                    return jsonify({"ok": True, "message": "Kết nối thành công (Chế độ ẩn danh / Chưa đăng nhập YouTube)"})
+            except Exception as e:
+                return jsonify({"ok": False, "error": f"Lỗi xác thực YouTube: {e}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
+
+
+# ── /api/facebook/validate_cookie ─────────────────────────────────────────────
+@bp.route("/api/facebook/validate_cookie", methods=["POST"])
+def facebook_validate_cookie():
+    import os
+    data = request.json or {}
+    content = data.get("content", "").strip()
+    filepath = data.get("filepath", "").strip()
+    profile = data.get("profile", "").strip() or ".facebook_profile"
+    
+    if not content and not filepath:
+        from pathlib import Path
+        p_path = Path(profile)
+        if not p_path.is_absolute():
+            p_path = ROOT / p_path
+        if p_path.exists() and any(p_path.iterdir()):
+            from playwright.sync_api import sync_playwright
+            from utils.helpers import launch_playwright_browser_sync
+            try:
+                with sync_playwright() as p:
+                    browser_context = launch_playwright_browser_sync(
+                        p.chromium,
+                        is_persistent=True,
+                        user_data_dir=str(p_path),
+                        headless=True,
+                        viewport={"width": 1280, "height": 800},
+                        args=["--disable-blink-features=AutomationControlled"]
+                    )
+                    # Use a very fast timeout and load mbasic.facebook.com to check cookies
+                    page = browser_context.pages[0] if browser_context.pages else browser_context.new_page()
+                    try:
+                        page.goto("https://mbasic.facebook.com/", timeout=10000)
+                    except Exception:
+                        pass
+                    cookies = browser_context.cookies()
+                    has_c_user = any(c["name"] == "c_user" for c in cookies)
+                    browser_context.close()
+                    
+                    if has_c_user:
+                        return jsonify({"ok": True, "message": "Hồ sơ trình duyệt Facebook đã được đăng nhập thành công!"})
+                    else:
+                        return jsonify({"ok": False, "error": "Hồ sơ trình duyệt Facebook chưa được đăng nhập. Hãy nhấn nút 'Mở trình duyệt đăng nhập Facebook' để đăng nhập."})
+            except Exception as e:
+                return jsonify({"ok": False, "error": f"Không thể kiểm tra đăng nhập Playwright: {e}"})
+        else:
+            return jsonify({"ok": False, "error": "Thư mục hồ sơ trống hoặc chưa được khởi tạo. Hãy nhấn nút 'Mở trình duyệt đăng nhập Facebook' để tạo hồ sơ."})
+            
+    cookie_str = ""
+    if content:
+        cookie_str = content
+    elif filepath:
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                    cookie_str = f.read()
+            except Exception as e:
+                return jsonify({"ok": False, "error": f"Không thể đọc file cookie: {e}"})
+        else:
+            return jsonify({"ok": False, "error": "Không tìm thấy file cookie tại đường dẫn chỉ định"})
+            
+    if "c_user" in cookie_str and "xs" in cookie_str:
+        return jsonify({"ok": True, "message": "Cookie hợp lệ (Tìm thấy thông tin phiên đăng nhập c_user & xs)!"})
+    else:
+        return jsonify({"ok": False, "error": "Cookie không hợp lệ hoặc thiếu trường đăng nhập quan trọng (c_user, xs)"})
+
+
 
 
 # ── /api/upload-image ─────────────────────────────────────────────────────────

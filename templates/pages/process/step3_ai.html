@@ -60,6 +60,30 @@
             <div class="alert-info mb-8" style="font-size:12px">
               Video đã sẵn sàng. Nhấn <b>Bắt đầu xử lý</b> để chạy AI phiên âm, dịch phụ đề và lồng tiếng.
             </div>
+            
+            <!-- Tùy chọn tự động hóa ngay tại bước 3 -->
+            <div class="pe2-opts" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+              <label class="pe2-optcard" title="Khi bật: tự động chạy tạo SRT/ASS/Giọng lồng tiếng ở bước 3, dừng lại để check ASS &amp; Thumbnail rồi tiếp tục chạy xử lý ở bước 4.">
+                <input type="checkbox" id="step3-auto-flow" onchange="document.getElementById('proc-auto-flow').checked = this.checked">
+                <span class="pe2-optcard-ic">🔁</span>
+                <span class="pe2-optcard-lbl">Tự động hóa quy trình</span>
+                <span class="pe2-optcard-badge">✓</span>
+              </label>
+              <label class="pe2-optcard" title="Tự động bỏ qua bước kiểm tra và chỉnh sửa phụ đề ASS">
+                <input type="checkbox" id="step3-skip-ass-step3" onchange="document.getElementById('step3-skip-ass').checked = this.checked; _onStep3SkipChange()">
+                <span class="pe2-optcard-ic">⏭</span>
+                <span class="pe2-optcard-lbl">Bỏ qua kiểm tra ASS</span>
+                <span class="pe2-optcard-badge">✓</span>
+              </label>
+              <label class="pe2-optcard" title="Bỏ qua việc nhận diện phụ đề bằng AI Whisper và dịch thuật (chỉ chạy chỉnh sửa video)">
+                <input type="checkbox" id="step3-skip-transcription-step3" onchange="document.getElementById('proc-skip-transcription').checked = this.checked; _onSkipTranscriptionChange()">
+                <span class="pe2-optcard-ic">🚫</span>
+                <span class="pe2-optcard-lbl">Bỏ qua tạo phụ đề</span>
+                <span class="pe2-optcard-badge">✓</span>
+              </label>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:-8px;margin-bottom:12px">(*) Cấu hình trên sẽ áp dụng cho toàn bộ hàng chờ nếu không có cấu hình riêng cho từng video.</div>
+
             <div class="btn-group">
               <button class="btn btn-primary" style="flex:1;justify-content:center;font-weight:700"
                 onclick="_step3StartProc()">

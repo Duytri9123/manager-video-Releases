@@ -19,14 +19,22 @@
           <div class="flex-center gap-8">
             <input type="text" id="proc-video" readonly style="flex:1" placeholder="Chọn file video...">
             <button class="btn btn-secondary btn-sm" onclick="document.getElementById('proc-file').click()">📂 Chọn</button>
-            <input type="file" id="proc-file" accept="video/*" style="display:none">
+            <input type="file" id="proc-file" accept="video/*" style="display:none" multiple onchange="_onProcFileSelected(this)">
           </div>
           <div class="text-xs text-muted mt-4" id="proc-file-name">--</div>
+          <div id="proc-file-progress" style="display:none;margin-top:4px">
+            <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden;margin-bottom:4px">
+              <div id="proc-file-progress-bar" style="background:var(--primary);height:100%;width:0%;transition:width 0.3s"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="loader-spinner"></div>
+              <span class="text-xs text-muted" id="proc-file-progress-text"></span>
+            </div>
+          </div>
         </div>
         <div class="field">
-          <label>URL video (Douyin tải không logo · TikTok/YouTube/... qua yt-dlp)</label>
+          <label>URL video</label>
           <input type="text" id="proc-url" placeholder="Douyin · TikTok · YouTube · Instagram · Facebook ...">
-          <div class="text-xs text-muted mt-4">Douyin dùng API gốc (không logo); các nền tảng khác tải bằng yt-dlp.</div>
         </div>
         <div class="field">
           <label>Thư mục xuất (để trống = cùng thư mục video)</label>
@@ -122,11 +130,18 @@
             <span class="pe2-optcard-lbl">Bỏ qua kiểm tra ASS</span>
             <span class="pe2-optcard-badge">✓</span>
           </label>
+          <label class="pe2-optcard" title="Bỏ qua việc nhận diện phụ đề bằng AI Whisper và dịch thuật (chỉ chạy chỉnh sửa video)">
+            <input type="checkbox" id="proc-skip-transcription" onchange="_onSkipTranscriptionChange()">
+            <span class="pe2-optcard-ic">🚫</span>
+            <span class="pe2-optcard-lbl">Bỏ qua tạo phụ đề</span>
+            <span class="pe2-optcard-badge">✓</span>
+          </label>
           {# Thumbnail flow disabled by request. #}
         </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">(*) Cấu hình trên sẽ áp dụng cho toàn bộ hàng chờ nếu không có cấu hình riêng cho từng video.</div>
       </div>
 
-      <div id="batch-queue-list" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
+      <div id="batch-queue-list" style="display:flex;flex-direction:column;gap:4px">
         <div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>
       </div>
 

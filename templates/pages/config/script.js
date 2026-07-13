@@ -56,12 +56,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 /* ── Config page ─────────────────────────────────────────────────────────── */
 async function loadConfig() {
-  const cfg = await API.get('/api/config');
-  if (!cfg) return;
-  window._loadedCfg = cfg;
+  try {
+    const cfg = await API.get('/api/config');
+    if (!cfg) return;
+    window._loadedCfg = cfg;
 
-  // Lưu path download từ config để các trang khác dùng
-  window._cfgDownloadPath = cfg.path || './Downloaded/';
+    // Lưu path download từ config để các trang khác dùng
+    window._cfgDownloadPath = cfg.path || './Downloaded/';
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
   const setChk = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
@@ -239,6 +240,9 @@ async function loadConfig() {
       if (key && key.length > 8) testApiKey(provider);
     }
   }, 500);
+  } catch (e) {
+    console.error('loadConfig error:', e);
+  }
 }
 
 async function saveConfig() {
@@ -355,6 +359,22 @@ async function saveConfig() {
   data.movie = {
     tmdb_api_key: get('cfg-tmdb-key'),
     tmdb_read_token: get('cfg-tmdb-token'),
+  };
+
+  // YouTube & Facebook cookie settings
+  data.facebook_profile = get('ck-fb-profile') || '.facebook_profile';
+  data.ytdlp = {
+    youtube_cookie_mode: 'custom',
+    facebook_cookie_mode: 'custom',
+    cookies_from_browser: get('ck-yt-browser'),
+    cookie_files: {
+      youtube: get('ck-yt-file'),
+      facebook: get('ck-fb-file')
+    },
+    cookie_contents: {
+      youtube: get('ck-yt-content'),
+      facebook: get('ck-fb-content')
+    }
   };
 
   await API.post('/api/config', data);
@@ -1228,3 +1248,286 @@ window.filterActiveProviders = async function() {
     _refreshTtsEngineSelects();
   }
 };
+
+async function openYoutubeLoginCookie(btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang chờ đóng trình duyệt...';
+  
+  try {
+    toast('🌐 Trình duyệt đang mở. Vui lòng đăng nhập YouTube và ĐÓNG trình duyệt khi hoàn tất!', 'info');
+    const res = await fetch('/api/youtube/login_cookie', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ Đã lấy và lưu Cookie YouTube thành công!', 'success');
+      const contentEl = document.getElementById('ck-yt-content');
+      if (contentEl) {
+        contentEl.value = data.cookie;
+      }
+    } else {
+      toast('❌ Lỗi lấy cookie: ' + (data.error || 'Vui lòng thử lại'), 'error');
+    }
+  } catch (e) {
+    toast('❌ Lỗi: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+window.openYoutubeLoginCookie = openYoutubeLoginCookie;
+
+async function openFacebookLoginProfile(btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang chờ đóng trình duyệt...';
+  
+  try {
+    toast('🌐 Trình duyệt đang mở. Vui lòng đăng nhập Facebook và ĐÓNG trình duyệt khi hoàn tất!', 'info');
+    const res = await fetch('/api/facebook/login_profile', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ Đã lưu phiên đăng nhập Facebook và lấy Cookie thành công!', 'success');
+      const contentEl = document.getElementById('ck-fb-content');
+      if (contentEl) {
+        contentEl.value = data.cookie;
+      }
+    } else {
+      toast('❌ Lỗi đăng nhập: ' + (data.error || 'Vui lòng thử lại'), 'error');
+    }
+  } catch (e) {
+    toast('❌ Lỗi: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+window.openFacebookLoginProfile = openFacebookLoginProfile;
+
+async function validateYoutubeCookie(btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang kiểm tra...';
+  const statusEl = document.getElementById('ck-yt-status');
+  if (statusEl) {
+    statusEl.textContent = '⏳ Đang kết nối xác thực...';
+    statusEl.style.color = '#888';
+  }
+  
+  try {
+    const payload = {
+      content: document.getElementById('ck-yt-content')?.value || '',
+      filepath: document.getElementById('ck-yt-file')?.value?.trim() || '',
+      browser: document.getElementById('ck-yt-browser')?.value || ''
+    };
+    
+    const res = await fetch('/api/youtube/validate_cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ Xác thực thành công: ' + (data.message || ''), 'success');
+      if (statusEl) {
+        statusEl.textContent = '✅ ' + (data.message || 'Hoạt động tốt');
+        statusEl.style.color = '#0d7a4e';
+      }
+    } else {
+      toast('❌ Lỗi xác thực: ' + (data.error || 'Vui lòng kiểm tra lại cookie'), 'error');
+      if (statusEl) {
+        statusEl.textContent = '❌ ' + (data.error || 'Không hợp lệ');
+        statusEl.style.color = '#c0392b';
+      }
+    }
+  } catch (e) {
+    toast('❌ Lỗi kết nối: ' + e.message, 'error');
+    if (statusEl) {
+      statusEl.textContent = '❌ Lỗi kết nối';
+      statusEl.style.color = '#c0392b';
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+window.validateYoutubeCookie = validateYoutubeCookie;
+
+async function validateFacebookCookie(btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang kiểm tra...';
+  const statusEl = document.getElementById('ck-fb-status');
+  if (statusEl) {
+    statusEl.textContent = '⏳ Đang kết nối xác thực...';
+    statusEl.style.color = '#888';
+  }
+  
+  try {
+    const payload = {
+      content: document.getElementById('ck-fb-content')?.value || '',
+      filepath: document.getElementById('ck-fb-file')?.value?.trim() || '',
+      profile: document.getElementById('ck-fb-profile')?.value?.trim() || '.facebook_profile'
+    };
+    
+    const res = await fetch('/api/facebook/validate_cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ Xác thực thành công: ' + (data.message || ''), 'success');
+      if (statusEl) {
+        statusEl.textContent = '✅ ' + (data.message || 'Hoạt động tốt');
+        statusEl.style.color = '#0d7a4e';
+      }
+    } else {
+      toast('❌ Lỗi xác thực: ' + (data.error || 'Vui lòng kiểm tra lại'), 'error');
+      if (statusEl) {
+        statusEl.textContent = '❌ ' + (data.error || 'Không hợp lệ');
+        statusEl.style.color = '#c0392b';
+      }
+    }
+  } catch (e) {
+    toast('❌ Lỗi kết nối: ' + e.message, 'error');
+    if (statusEl) {
+      statusEl.textContent = '❌ Lỗi kết nối';
+      statusEl.style.color = '#c0392b';
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+window.validateFacebookCookie = validateFacebookCookie;
+
+function onYoutubeCookieModeChange() {
+  const toggle = document.getElementById('ck-yt-mode-toggle');
+  const isCustom = toggle ? toggle.checked : false;
+  const desc = document.getElementById('ck-yt-mode-desc');
+  const wrap = document.getElementById('ck-yt-custom-wrap');
+  
+  if (desc) desc.textContent = isCustom ? 'Sử dụng cấu hình Cookie tùy chỉnh.' : 'Sử dụng cookie mặc định (tự động).';
+  if (wrap) wrap.style.display = isCustom ? 'flex' : 'none';
+}
+window.onYoutubeCookieModeChange = onYoutubeCookieModeChange;
+
+function onFacebookCookieModeChange() {
+  const toggle = document.getElementById('ck-fb-mode-toggle');
+  const isCustom = toggle ? toggle.checked : false;
+  const desc = document.getElementById('ck-fb-mode-desc');
+  const wrap = document.getElementById('ck-fb-custom-wrap');
+  
+  if (desc) desc.textContent = isCustom ? 'Sử dụng cấu hình Cookie/Hồ sơ tùy chỉnh.' : 'Sử dụng hồ sơ trình duyệt mặc định.';
+  if (wrap) wrap.style.display = isCustom ? 'flex' : 'none';
+}
+window.onFacebookCookieModeChange = onFacebookCookieModeChange;
+
+function convertJsonToNetscape(jsonText) {
+  try {
+    const cookies = JSON.parse(jsonText);
+    if (!Array.isArray(cookies)) return null;
+    let netscape = "# Netscape HTTP Cookie File\n# This file was generated automatically by conversion\n";
+    cookies.forEach(c => {
+      if (!c.domain || !c.name) return;
+      const domain = c.domain;
+      const flag = domain.startsWith('.') ? 'TRUE' : 'FALSE';
+      const path = c.path || '/';
+      const secure = c.secure ? 'TRUE' : 'FALSE';
+      const expiration = c.expirationDate ? Math.round(c.expirationDate) : 0;
+      const name = c.name;
+      const value = c.value || '';
+      netscape += `${domain}\t${flag}\t${path}\t${secure}\t${expiration}\t${name}\t${value}\n`;
+    });
+    return netscape;
+  } catch (e) {
+    return null;
+  }
+}
+window.convertJsonToNetscape = convertJsonToNetscape;
+
+async function parseYoutubeCookie() {
+  const raw = document.getElementById('ck-yt-content')?.value?.trim();
+  if (!raw) { toast('Vui lòng dán chuỗi cookie YouTube trước!', 'warning'); return; }
+  
+  let count = 0;
+  if (raw.includes('\t') || raw.startsWith('#')) {
+    count = raw.split('\n').filter(line => line.trim() && !line.startsWith('#') && line.split('\t').length >= 7).length;
+  } else {
+    count = raw.split(';').filter(part => part.trim() && part.includes('=')).length;
+  }
+  
+  if (count > 0) {
+    toast(`Phân tích cookie YouTube thành công! Tìm thấy ${count} trường cookie.`, 'success');
+  } else {
+    toast('Không tìm thấy trường cookie YouTube phù hợp hoặc định dạng chưa đúng.', 'warning');
+  }
+}
+window.parseYoutubeCookie = parseYoutubeCookie;
+
+async function importYoutubeJsonFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const netscape = convertJsonToNetscape(raw);
+    if (netscape) {
+      const el = document.getElementById('ck-yt-content');
+      if (el) el.value = netscape;
+      toast('Đã nhập cookie YouTube từ JSON và chuyển đổi sang Netscape thành công!', 'success');
+      parseYoutubeCookie();
+    } else {
+      toast('File JSON không đúng định dạng danh sách cookie!', 'error');
+    }
+  } catch (e) {
+    toast('Lỗi import JSON: ' + e.message, 'error');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+window.importYoutubeJsonFile = importYoutubeJsonFile;
+
+async function parseFacebookCookie() {
+  const raw = document.getElementById('ck-fb-content')?.value?.trim();
+  if (!raw) { toast('Vui lòng dán chuỗi cookie Facebook trước!', 'warning'); return; }
+  
+  let count = 0;
+  if (raw.includes('\t') || raw.startsWith('#')) {
+    count = raw.split('\n').filter(line => line.trim() && !line.startsWith('#') && line.split('\t').length >= 7).length;
+  } else {
+    count = raw.split(';').filter(part => part.trim() && part.includes('=')).length;
+  }
+  
+  if (count > 0) {
+    toast(`Phân tích cookie Facebook thành công! Tìm thấy ${count} trường cookie.`, 'success');
+  } else {
+    toast('Không tìm thấy trường cookie Facebook phù hợp hoặc định dạng chưa đúng.', 'warning');
+  }
+}
+window.parseFacebookCookie = parseFacebookCookie;
+
+async function importFacebookJsonFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const netscape = convertJsonToNetscape(raw);
+    if (netscape) {
+      const el = document.getElementById('ck-fb-content');
+      if (el) el.value = netscape;
+      toast('Đã nhập cookie Facebook từ JSON và chuyển đổi sang Netscape thành công!', 'success');
+      parseFacebookCookie();
+    } else {
+      toast('File JSON không đúng định dạng danh sách cookie!', 'error');
+    }
+  } catch (e) {
+    toast('Lỗi import JSON: ' + e.message, 'error');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+window.importFacebookJsonFile = importFacebookJsonFile;
+
+
+
+

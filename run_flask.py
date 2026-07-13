@@ -45,7 +45,7 @@ if __name__ == "__main__":
     import core_app as _ca
 
     HOST = os.getenv("FLASK_HOST", "127.0.0.1")
-    PORT = int(os.getenv("FLASK_PORT", "5000"))
+    PORT = int(os.getenv("FLASK_PORT", "9123"))
     DEBUG = os.getenv("FLASK_DEBUG", "false").lower() in ("1", "true", "yes")
     OPEN_BROWSER = os.getenv("OPEN_BROWSER", "1") not in ("0", "false", "no")
 
