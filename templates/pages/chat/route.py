@@ -1461,10 +1461,23 @@ def chatbot_models():
         status, body = _http_json(url, method="GET", headers=headers, timeout=_MODELS_TIMEOUT)
         if status < 400 and isinstance(body, dict):
             nine_router_ok = True
+            
+            from utils.translation import get_9router_active_providers, _matches_provider, is_chat_model
+            active_providers = get_9router_active_providers()
+            
             for it in body.get("data") or []:
                 mid = (it or {}).get("id")
                 if mid:
-                    items.append({"id": mid, "owned_by": (it or {}).get("owned_by", "")})
+                    if is_chat_model(mid):
+                        # Filter based on active providers if the database was successfully read
+                        if active_providers is not None:
+                            parts = mid.split('/')
+                            if len(parts) > 1:
+                                prefix = parts[0]
+                                if not _matches_provider(prefix, active_providers):
+                                    continue
+                                    
+                        items.append({"id": mid, "owned_by": (it or {}).get("owned_by", "")})
     except Exception as exc:
         LOGGER.warning("chatbot_models: 9Router unreachable — %s", exc)
 
