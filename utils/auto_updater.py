@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Callable
 
 # ── Current version (bump this on every release) ──────────────────────────
-CURRENT_VERSION = "2.0.1"
+CURRENT_VERSION = "2.0.2"
 
 # ── Remote version.json URL (GitHub raw) ──────────────────────────────────
 VERSION_CHECK_URL = (
