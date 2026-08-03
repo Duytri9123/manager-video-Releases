@@ -403,36 +403,8 @@ def is_chat_model(model_id: str) -> bool:
 
 
 def get_dtrouter_active_providers() -> set[str] | None:
-    """Read local DTRouter SQLite database to get active provider names.
-    Returns a set of lowercase active provider names, or None on failure.
-    """
-    import os
-    import json
-    import sqlite3
-    
-    appdata = os.environ.get('APPDATA')
-    if not appdata:
-        return None
-        
-    db_path = os.path.join(appdata, 'dtrouter', 'db', 'data.sqlite')
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, '9router', 'db', 'data.sqlite')
-    if not os.path.exists(db_path):
-        return None
-        
-    try:
-        # Open in read-only mode to avoid locking issues
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        cur = conn.cursor()
-        cur.execute('SELECT provider, isActive FROM providerConnections')
-        active = {"oc", "opencode"}
-        for provider, is_active in cur.fetchall():
-            if is_active == 1:
-                active.add(provider.lower())
-        conn.close()
-        return active
-    except Exception:
-        return None
+    """Read active provider names (returns None to avoid 9router DB access)."""
+    return None
 
 
 def _matches_provider(prefix: str, active_providers: set[str]) -> bool:
@@ -747,24 +719,7 @@ def translate_texts(
     nine_endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/") if isinstance(nr, dict) else "http://localhost:20128/v1"
     nine_model = (nr.get("default_model") or "duytris").strip() if isinstance(nr, dict) else "duytris"
 
-    if not nine_key:
-        import sqlite3
-        import os
-        appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-        db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-        if not os.path.exists(db_path):
-            db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-        if os.path.exists(db_path):
-            try:
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-                cursor.execute("SELECT key FROM apiKeys WHERE isActive != 0 LIMIT 1")
-                row = cursor.fetchone()
-                if row:
-                    nine_key = row[0]
-                conn.close()
-            except Exception:
-                pass
+
 
     try:
         from core.config import load_cfg
