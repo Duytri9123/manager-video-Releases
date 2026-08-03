@@ -5478,22 +5478,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             elif transcribe_provider == "model":
                 transcriber = FasterWhisperTranscriber(model_name, language, use_vad=True)
             elif transcribe_provider == "dtrouter":
-                nine_key = (
-                    str(data.get("dtrouter_key") or "").strip()
-                    or str(cfg_raw.get("dtrouter", {}).get("api_key") or "").strip()
-                )
-                nine_endpoint = (
-                    str(cfg_raw.get("dtrouter", {}).get("endpoint") or "http://localhost:20128/v1").strip()
-                )
-                nine_model = str(model_name).strip()
-                if nine_model in ["tiny", "base", "small", "medium", "large"]:
-                    nine_model = str(cfg_raw.get("dtrouter", {}).get("default_model") or "whisper-1").strip()
-                transcriber = DTRouterTranscriber(
-                    language=language,
-                    api_key=nine_key,
-                    endpoint=nine_endpoint,
-                    model=nine_model
-                )
+                ag_data = all_provs.get("antigravity") or all_provs.get("gemini") or {}
+                ag_conns = [c for c in ag_data.get("connections", []) if c.get("enabled")] or ag_data.get("connections", [])
+                ag_key = ag_conns[0].get("api_key", "").strip() if ag_conns else ""
+                transcriber = AntigravityTranscriber(language=language, api_key=ag_key, model_name=model_name)
             else:
                 groq_key = (
                     str(data.get("groq_api_key") or "").strip()

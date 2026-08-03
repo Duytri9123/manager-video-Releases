@@ -475,7 +475,18 @@ def serve_page_static(page, filename):
     elif filename.endswith(".svg"):
         mimetype = "image/svg+xml"
         
-    return Response(content, mimetype=mimetype)
+    res = Response(content, mimetype=mimetype)
+    res.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return res
+
+
+@app.after_request
+def add_no_cache_headers(response):
+    if request.path.startswith("/static/") or request.path.startswith("/page-static/") or request.path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 # ═══════════════════════════════════════════════════════════════
