@@ -204,6 +204,19 @@ class AntigravityTranscriber:
                 except Exception:
                     pass
 
+            if not key or key.startswith("AQ.Ab"):
+                try:
+                    from core.video_processor import FasterWhisperTranscriber
+                    fw = FasterWhisperTranscriber(model_name="base", language=self.language, use_vad=True)
+                    segs = []
+                    for step in fw.transcribe(video_path, ffmpeg_bin, tmp_srt_path or (video_path.parent / f"{video_path.stem}.srt")):
+                        if isinstance(step, tuple) and step[0] == "result":
+                            segs = step[1]
+                    if segs:
+                        return segs
+                except Exception as ex:
+                    print("[AntigravityTranscriber] FasterWhisper fallback error:", ex)
+
             cmd = [ffmpeg_bin, "-y", "-i", str(video_path), "-vn", "-ar", "16000", "-ac", "1", "-b:a", "64k", str(temp_audio)]
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             

@@ -1380,7 +1380,7 @@ class AntigravityTranscriber:
             try:
                 from templates.pages.config.route import load_providers_from_db
                 all_provs = load_providers_from_db()
-                for p_id in ["antigravity", "gemini"]:
+                for p_id in ["gemini", "antigravity"]:
                     conns = (all_provs.get(p_id) or {}).get("connections") or []
                     for c in conns:
                         k = (c.get("api_key") or "").strip()
@@ -1392,8 +1392,12 @@ class AntigravityTranscriber:
             except Exception:
                 pass
 
-        if not key:
-            raise RuntimeError("Chưa có kết nối API Key/Access Token Antigravity hoặc Gemini hợp lệ. Vui lòng mở trang Nhà cung cấp để cập nhật.")
+        if not key or key.startswith("AQ.Ab"):
+            yield ("log", "ℹ Tự động chuyển sang FasterWhisper Local phiên âm (miễn phí & chính xác)...", "info")
+            fw = FasterWhisperTranscriber(model_name="base", language=self.language, use_vad=True)
+            for step in fw.transcribe(video_path, ffmpeg, out_srt):
+                yield step
+            return
 
         with tempfile.TemporaryDirectory(prefix="ag_stt_") as tmpdir:
             audio_path = Path(tmpdir) / "audio.mp3"
