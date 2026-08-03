@@ -9,10 +9,13 @@ function _syncColorPicker() {
   if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
 }
 function _onColorPickerChange() {
+  const sel = document.getElementById('proc-font-color');
   if (sel) sel.value = 'custom';
   if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
 }
 function _getSubtitleColor() {
+  const sel = document.getElementById('proc-font-color');
+  const picker = document.getElementById('proc-font-color-picker');
   if (sel?.value === 'custom' && picker) return picker.value;
   return _colorPresets[sel?.value] || '#ffffff';
 }
