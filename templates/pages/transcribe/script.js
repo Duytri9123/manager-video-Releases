@@ -15,7 +15,7 @@
     document.getElementById('tr-tts-engine')?.addEventListener('change', trSaveTtsSettings);
     document.getElementById('tr-tts-lang')?.addEventListener('change', trSaveTtsSettings);
     document.getElementById('tr-tts-voice')?.addEventListener('change', trSaveTtsSettings);
-    document.getElementById('tr-9r-model')?.addEventListener('change', trSaveTtsSettings);
+    document.getElementById('tr-dtr-model')?.addEventListener('change', trSaveTtsSettings);
     document.getElementById('tr-tts-rate')?.addEventListener('change', trSaveTtsSettings);
     document.getElementById('tr-tts-pitch')?.addEventListener('change', trSaveTtsSettings);
   });
@@ -23,7 +23,7 @@
   // Export functions to global scope
   window.trLoadTtsCatalog = trLoadTtsCatalog;
   window.trSyncVoiceOptions = trSyncVoiceOptions;
-  window.trSync9RouterVoices = trSync9RouterVoices;
+  window.trSyncDTRouterVoices = trSyncDTRouterVoices;
   window.trStartTranscribe = trStartTranscribe;
   window.trExtractAudio = trExtractAudio;
   window.trPreviewVoice = trPreviewVoice;
@@ -35,20 +35,20 @@
   // ── CATALOG LOADING ──────────────────────────────────────────────────
   async function trLoadTtsCatalog() {
     try {
-      const res = await fetch('/api/tts/engines?include_9router=1');
+      const res = await fetch('/api/tts/engines?include_dtrouter=1');
       const data = await res.json();
       if (data && data.ok) {
         enginesCatalog = data.engines || [];
         trPopulateEngines();
       }
       
-      // Load 9Router API Key to display
+      // Load DTRouter API Key to display
       try {
         const cfgRes = await fetch('/api/config');
         const cfgData = await cfgRes.json();
-        const nrKey = cfgData?.nine_router?.api_key || '';
-        const keyEl = document.getElementById('tr-9r-api-key');
-        const statusEl = document.getElementById('tr-9r-api-key-status');
+        const nrKey = cfgData?.dtrouter?.api_key || '';
+        const keyEl = document.getElementById('tr-dtr-api-key');
+        const statusEl = document.getElementById('tr-dtr-api-key-status');
         if (keyEl) {
           if (nrKey) {
             keyEl.value = nrKey.slice(0, 8) + '•'.repeat(Math.max(10, nrKey.length - 8));
@@ -58,13 +58,13 @@
                 const checkRes = await fetch('/api/test_api_key', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ provider: '9router', key: nrKey })
+                  body: JSON.stringify({ provider: 'dtrouter', key: nrKey })
                 });
                 const checkData = await checkRes.json();
                 if (checkData.ok) {
-                  statusEl.innerHTML = '<span style="color:#10b981; font-weight:600">● 9Router API Key hoạt động tốt (Còn hạn)</span>';
+                  statusEl.innerHTML = '<span style="color:#10b981; font-weight:600">● DTRouter API Key hoạt động tốt (Còn hạn)</span>';
                 } else {
-                  statusEl.innerHTML = `<span style="color:#ef4444; font-weight:600">⚠️ 9Router API Key lỗi: ${checkData.error || 'Không hợp lệ'}</span>`;
+                  statusEl.innerHTML = `<span style="color:#ef4444; font-weight:600">⚠️ DTRouter API Key lỗi: ${checkData.error || 'Không hợp lệ'}</span>`;
                 }
               } catch (checkErr) {
                 statusEl.innerHTML = '<span style="color:#f59e0b; font-weight:600">⚠️ Không thể kiểm tra thời hạn key (Lỗi kết nối)</span>';
@@ -73,7 +73,7 @@
           } else {
             keyEl.value = '';
             if (statusEl) {
-              statusEl.innerHTML = '<span style="color:#ef4444; font-weight:600">⚠️ Thiếu API Key 9Router. Vui lòng vào mục Cài đặt hoặc Chat Bot để thêm key.</span>';
+              statusEl.innerHTML = '<span style="color:#ef4444; font-weight:600">⚠️ Thiếu API Key DTRouter. Vui lòng vào mục Cài đặt hoặc Chat Bot để thêm key.</span>';
             }
           }
         }
@@ -97,10 +97,10 @@
         if (voiceSel && vp.tts_voice) {
           if (vp.tts_voice.includes('|')) {
             const parts = vp.tts_voice.split('|');
-            const modelSel = document.getElementById('tr-9r-model');
+            const modelSel = document.getElementById('tr-dtr-model');
             if (modelSel) {
               modelSel.value = parts[0];
-              trSync9RouterVoices();
+              trSyncDTRouterVoices();
             }
             if (voiceSel) {
               voiceSel.value = parts[1];
@@ -131,9 +131,9 @@
     const curVal = engineSel.value;
     engineSel.innerHTML = '';
     
-    // Split into Local and 9Router engines
-    const locals = enginesCatalog.filter(e => e.backend !== '9router');
-    const nineR = enginesCatalog.filter(e => e.backend === '9router');
+    // Split into Local and DTRouter engines
+    const locals = enginesCatalog.filter(e => e.backend !== 'dtrouter');
+    const nineR = enginesCatalog.filter(e => e.backend === 'dtrouter');
     
     const addOpt = (parent, eng) => {
       const opt = document.createElement('option');
@@ -149,7 +149,7 @@
       engineSel.appendChild(grpLocal);
       
       const grp9R = document.createElement('optgroup');
-      grp9R.label = '9Router Cloud';
+      grp9R.label = 'DTRouter Cloud';
       nineR.forEach(e => addOpt(grp9R, e));
       engineSel.appendChild(grp9R);
     } else {
@@ -168,7 +168,7 @@
     const engineSel = document.getElementById('tr-tts-engine');
     const langSel = document.getElementById('tr-tts-lang');
     const voiceSel = document.getElementById('tr-tts-voice');
-    const field9R = document.getElementById('tr-9r-fields');
+    const field9R = document.getElementById('tr-dtr-fields');
     
     if (!engineSel || !voiceSel || !enginesCatalog) return;
     
@@ -178,10 +178,10 @@
     const engine = enginesCatalog.find(e => e.id === engineId);
     if (!engine) return;
     
-    // Toggle 9Router specific model fields
-    if (engineId === '9router') {
+    // Toggle DTRouter specific model fields
+    if (engineId === 'dtrouter') {
       if (field9R) field9R.style.display = '';
-      trPopulate9RouterModels(engine);
+      trPopulateDTRouterModels(engine);
       return;
     } else {
       if (field9R) field9R.style.display = 'none';
@@ -215,8 +215,8 @@
     }
   }
 
-  function trPopulate9RouterModels(engine) {
-    const modelSel = document.getElementById('tr-9r-model');
+  function trPopulateDTRouterModels(engine) {
+    const modelSel = document.getElementById('tr-dtr-model');
     if (!modelSel) return;
     
     const curVal = modelSel.value;
@@ -225,7 +225,7 @@
     const models = engine.models || [];
     const groups = {};
     models.forEach(m => {
-      const g = m.group || m.provider || '9router';
+      const g = m.group || m.provider || 'dtrouter';
       (groups[g] = groups[g] || []).push(m);
     });
     
@@ -247,18 +247,18 @@
       modelSel.value = engine.defaultModel || (models[0] && models[0].id) || '';
     }
     
-    trSync9RouterVoices();
+    trSyncDTRouterVoices();
   }
 
-  function trSync9RouterVoices() {
+  function trSyncDTRouterVoices() {
     const engineSel = document.getElementById('tr-tts-engine');
-    const modelSel = document.getElementById('tr-9r-model');
+    const modelSel = document.getElementById('tr-dtr-model');
     const voiceSel = document.getElementById('tr-tts-voice');
     
     if (!engineSel || !modelSel || !voiceSel || !enginesCatalog) return;
     
     const engine = enginesCatalog.find(e => e.id === engineSel.value);
-    if (!engine || engine.backend !== '9router') return;
+    if (!engine || engine.backend !== 'dtrouter') return;
     
     const modelId = modelSel.value;
     const model = (engine.models || []).find(m => m.id === modelId);
@@ -375,11 +375,20 @@
   }
 
   // ── EXTRACT AUDIO ─────────────────────────────────────────────────────
+  let _isExtracting = false;
   async function trExtractAudio() {
+    if (_isExtracting) return;
     const trFile = document.getElementById('tr-file')?.value?.trim();
     if (!trFile && !window._trSelectedFile) {
       toast('Vui lòng chọn tệp tin video nguồn!', 'warning');
       return;
+    }
+    
+    const btn = document.getElementById('btn-tr-extract');
+    _isExtracting = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="w-3.5 h-3.5 border-2 border-slate-600 border-t-transparent rounded-full animate-spin inline-block mr-1"></span> Đang tách MP3...';
     }
     
     trAppendLog('Tách âm thanh từ video...', 'info');
@@ -414,32 +423,46 @@
     } catch (e) {
       trAppendLog('✗ Tách nhạc thất bại: ' + e.message, 'error');
       toast('Tách nhạc thất bại!', 'error');
+    } finally {
+      _isExtracting = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🎵 Tách MP3</span>';
+      }
     }
   }
 
   // ── PREVIEW DYNAMIC VOICE ─────────────────────────────────────────────
+  let _isPreviewing = false;
   async function trPreviewVoice() {
+    if (_isPreviewing) return;
     const text = document.getElementById('tr-preview-text')?.value?.trim();
     const engineSel = document.getElementById('tr-tts-engine');
     const voiceSel = document.getElementById('tr-tts-voice');
     const audio = document.getElementById('tr-preview-audio');
+    const btn = document.getElementById('btn-tr-preview');
     
     if (!text) {
       toast('Vui lòng nhập văn bản cần thử giọng!', 'warning');
       return;
     }
     
+    _isPreviewing = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="w-3.5 h-3.5 border-2 border-slate-600 border-t-transparent rounded-full animate-spin inline-block mr-1"></span> Đang thử giọng...';
+    }
+    
     let engine = engineSel?.value || 'edge-tts';
     let voice = voiceSel?.value || '';
     
-    const cat = enginesCatalog.find(e => e.id === engine);
-    if (cat && cat.backend === '9router') {
-      const model = document.getElementById('tr-9r-model')?.value || '';
+    const cat = enginesCatalog?.find(e => e.id === engine);
+    if (cat && cat.backend === 'dtrouter') {
+      const model = document.getElementById('tr-dtr-model')?.value || '';
       voice = model + '|' + voice;
-      engine = '9router';
+      engine = 'dtrouter';
     }
     
-    // Show log of the request
     trAppendLog(`⏳ Đang tạo giọng nói thử nghiệm (${engine} / ${voice.split('|')[0] || voice})...`, 'info');
     
     try {
@@ -475,19 +498,27 @@
       trAppendLog('✅ Đã tạo giọng nói thử nghiệm thành công.', 'success');
     } catch (e) {
       let errMsg = e.message;
-      if (engine === '9router' && (errMsg.includes('401') || errMsg.includes('403') || errMsg.toLowerCase().includes('api key'))) {
-        errMsg = 'Thiếu hoặc sai 9Router API Key. Vui lòng kiểm tra lại cấu hình API Key trong mục Cài đặt.';
+      if (engine === 'dtrouter' && (errMsg.includes('401') || errMsg.includes('403') || errMsg.toLowerCase().includes('api key'))) {
+        errMsg = 'Thiếu hoặc sai DTRouter API Key. Vui lòng kiểm tra lại cấu hình API Key trong mục Cài đặt.';
       }
       toast('Nghe thử thất bại: ' + errMsg, 'error');
       trAppendLog('❌ Nghe thử thất bại: ' + errMsg, 'error');
+    } finally {
+      _isPreviewing = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '▶ Nghe thử giọng';
+      }
     }
   }
 
   // ── TTS FROM ASS WORKFLOW ─────────────────────────────────────────────
+  let _isTtsRunning = false;
   async function trRunTtsFromAss() {
+    if (_isTtsRunning) return;
     const trFile = document.getElementById('tr-file')?.value?.trim();
+    const btn = document.getElementById('btn-tr-tts');
     
-    // Guess associated .ass file if video is selected
     let assPath = trFile;
     if (assPath && !assPath.endsWith('.ass')) {
       const dotIdx = assPath.lastIndexOf('.');
@@ -499,6 +530,12 @@
       return;
     }
     
+    _isTtsRunning = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-1"></span> Đang lồng tiếng...';
+    }
+    
     trClearLogs();
     trAppendLog('Bắt đầu lồng tiếng từ file phụ đề .ass...', 'info');
     
@@ -506,10 +543,10 @@
     let voice = document.getElementById('tr-tts-voice')?.value || '';
     
     const cat = enginesCatalog?.find(e => e.id === engine);
-    if (cat && cat.backend === '9router') {
-      const model = document.getElementById('tr-9r-model')?.value || '';
+    if (cat && cat.backend === 'dtrouter') {
+      const model = document.getElementById('tr-dtr-model')?.value || '';
       voice = model + '|' + voice;
-      engine = '9router';
+      engine = 'dtrouter';
     }
     
     const payload = {
@@ -573,6 +610,12 @@
     } catch (e) {
       trAppendLog('Lỗi lồng tiếng: ' + e.message, 'error');
       toast('Lồng tiếng thất bại!', 'error');
+    } finally {
+      _isTtsRunning = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🔊 Lồng tiếng &amp; Xuất MP3</span>';
+      }
     }
   }
 
@@ -771,9 +814,19 @@
     if (logBox) logBox.innerHTML = '';
   }
 
+  let lastLogMsg = '';
+  let lastLogTime = 0;
+
   function trAppendLog(msg, level) {
     const logBox = document.getElementById('tr-log');
     if (!logBox) return;
+    
+    const now = Date.now();
+    if (msg === lastLogMsg && (now - lastLogTime) < 1500) {
+      return;
+    }
+    lastLogMsg = msg;
+    lastLogTime = now;
     
     const div = document.createElement('div');
     div.className = 'log-line ' + (level || 'info');
@@ -815,10 +868,10 @@
     const pitch = document.getElementById('tr-tts-pitch')?.value || '+0Hz';
     
     const cat = enginesCatalog.find(e => e.id === engine);
-    if (cat && cat.backend === '9router') {
-      const model = document.getElementById('tr-9r-model')?.value || '';
+    if (cat && cat.backend === 'dtrouter') {
+      const model = document.getElementById('tr-dtr-model')?.value || '';
       voice = model + '|' + voice;
-      engine = '9router';
+      engine = 'dtrouter';
     }
     
     const payload = {

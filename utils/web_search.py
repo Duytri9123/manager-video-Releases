@@ -1,12 +1,12 @@
 """Web search + page-fetch helpers used by the chatbot for realtime
 questions ("tin tức mới nhất", "giá vàng hôm nay", ...).
 
-Primary path: call 9Router's `/v1/search` endpoint (Tavily / Brave / Exa /
-SearXNG / Google PSE / ... — provider-agnostic). 9Router runs locally and
+Primary path: call DTRouter's `/v1/search` endpoint (Tavily / Brave / Exa /
+SearXNG / Google PSE / ... — provider-agnostic). DTRouter runs locally and
 the user already has API keys configured there, so we don't need any extra
 keys on the toolvideo side.
 
-Fallback path: a no-deps Google News RSS scrape, used when 9Router doesn't
+Fallback path: a no-deps Google News RSS scrape, used when DTRouter doesn't
 have any search provider configured. This keeps the chat usable in a fresh
 install where the user hasn't set up Tavily/Brave keys yet.
 
@@ -36,8 +36,8 @@ _UA = (
 )
 _NINER_TIMEOUT = 12
 
-# 9Router search providers we'll try in order if no specific one is
-# configured. `search-combo` is 9Router's auto-fallback chain — first
+# DTRouter search providers we'll try in order if no specific one is
+# configured. `search-combo` is DTRouter's auto-fallback chain — first
 # choice if the user enabled it. Otherwise we try Tavily (most polished),
 # then Brave (good free tier), Serper (Google-backed), Exa (LLM-friendly),
 # Linkup (deep search), and finally SearXNG (self-hosted).
@@ -47,7 +47,7 @@ _NINER_PROVIDER_FALLBACK = (
 )
 
 
-# ── 9Router primary path ──────────────────────────────────────────────────
+# ── DTRouter primary path ──────────────────────────────────────────────────
 def _niner_endpoint(endpoint: Optional[str], api_key: Optional[str]) -> Tuple[str, Dict[str, str]]:
     base = (endpoint or "http://localhost:20128/v1").rstrip("/")
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -95,7 +95,7 @@ def _niner_list_search_providers(endpoint: Optional[str], api_key: Optional[str]
         if (it or {}).get("kind") == "webSearch":
             mid = (it or {}).get("id")
             if mid:
-                # IDs are like "tavily/search" — 9Router accepts both the
+                # IDs are like "tavily/search" — DTRouter accepts both the
                 # full id and the bare provider name.
                 out.append(mid.split("/", 1)[0])
     return out
@@ -121,11 +121,11 @@ def _niner_pick_provider(endpoint: Optional[str], api_key: Optional[str]) -> Opt
     return avail[0]
 
 
-def search_via_9router(
+def search_via_dtrouter(
     query: str, *, kind: str = "auto", lang: str = "vi", region: str = "VN",
     limit: int = 6, endpoint: Optional[str] = None, api_key: Optional[str] = None,
 ) -> List[Dict[str, str]]:
-    """Search via 9Router's `/v1/search`. Returns [] on any failure so the
+    """Search via DTRouter's `/v1/search`. Returns [] on any failure so the
     caller can fall through to the RSS scraper."""
     provider = _niner_pick_provider(endpoint, api_key)
     if not provider:
@@ -157,13 +157,13 @@ def search_via_9router(
     return [r for r in out if r["title"] and r["url"]]
 
 
-def fetch_via_9router(
+def fetch_via_dtrouter(
     url: str, *, fmt: str = "markdown", max_chars: int = 4000,
     endpoint: Optional[str] = None, api_key: Optional[str] = None,
 ) -> str:
-    """Fetch a URL → readable text via 9Router /v1/web/fetch. Empty string
+    """Fetch a URL → readable text via DTRouter /v1/web/fetch. Empty string
     on any failure."""
-    # 9Router expects a full provider id. Try common ones in order — the
+    # DTRouter expects a full provider id. Try common ones in order — the
     # first one available will succeed. We don't bother enumerating /v1/models/web
     # for every fetch; instead call jina-reader (free, fastest) first.
     for provider in ("fetch-combo", "jina-reader", "firecrawl", "tavily", "exa"):
@@ -402,7 +402,7 @@ def search(
     query: str, *, kind: str = "auto", lang: str = "vi", region: str = "VN",
     limit: int = 6, endpoint: Optional[str] = None, api_key: Optional[str] = None,
 ) -> List[Dict[str, str]]:
-    """Top-level helper: try 9Router first (best snippets), fall back to
+    """Top-level helper: try DTRouter first (best snippets), fall back to
     Gemini grounding, then Google News RSS.
 
     `kind` ∈ {auto, news, web}.
@@ -410,9 +410,9 @@ def search(
     q = (query or "").strip()
     if not q:
         return []
-    # 1. 9Router /v1/search — best quality (Tavily/Brave/SearXNG snippets)
+    # 1. DTRouter /v1/search — best quality (Tavily/Brave/SearXNG snippets)
     try:
-        results = search_via_9router(
+        results = search_via_dtrouter(
             q, kind=kind, lang=lang, region=region, limit=limit,
             endpoint=endpoint, api_key=api_key,
         )

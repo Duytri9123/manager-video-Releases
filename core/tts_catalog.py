@@ -3,7 +3,7 @@
 The frontend expects this shape:
   {id, label, default, backend, voices: {lang: [[voice_id, label], ...]}}
 
-Local engines are static. 9Router engines are added only when its gateway is
+Local engines are static. DTRouter engines are added only when its gateway is
 reachable and has TTS models configured.
 """
 from __future__ import annotations
@@ -328,7 +328,7 @@ def _local_engine_by_id(engine_id: str) -> Dict[str, Any] | None:
 
 def engine_voices_for_lang(engine: Dict[str, Any], lang: str) -> List[Tuple[str, str]]:
     """Voices an engine offers for `lang`. Falls back to its `multi` bucket for
-    multilingual engines (ElevenLabs, Fish Audio, 9Router)."""
+    multilingual engines (ElevenLabs, Fish Audio, DTRouter)."""
     voices = engine.get("voices") or {}
     rows = voices.get(lang) or voices.get("multi") or []
     return [tuple(v) for v in rows]
@@ -355,8 +355,8 @@ def resolve_engine_voice(
     eid = (engine_id or "").strip().lower()
     vid = (voice_id or "").strip()
 
-    # 9Router / MiniMax models are multilingual — trust the caller's selection.
-    if eid == "9router" or eid.startswith("9r:") or eid == "minimax":
+    # DTRouter / MiniMax models are multilingual — trust the caller's selection.
+    if eid == "dtrouter" or eid.startswith("dtr:") or eid == "minimax":
         return (eid or "edge-tts"), vid, False, ""
 
     eng = _local_engine_by_id(eid)
@@ -384,7 +384,7 @@ def resolve_engine_voice(
 
 
 def _endpoint_from_cfg(cfg: Dict[str, Any]) -> str:
-    nr = cfg.get("nine_router") or {}
+    nr = cfg.get("dtrouter") or {}
     endpoint = (
         os.getenv("NINEROUTER_URL")
         or nr.get("endpoint")
@@ -397,7 +397,7 @@ def _endpoint_from_cfg(cfg: Dict[str, Any]) -> str:
 
 
 def _key_from_cfg(cfg: Dict[str, Any]) -> str:
-    nr = dict(cfg.get("nine_router") or {})
+    nr = dict(cfg.get("dtrouter") or {})
     api_key = str(os.getenv("NINEROUTER_KEY") or nr.get("api_key") or "").strip()
     
     if not api_key or "machineId" in api_key:
@@ -414,7 +414,7 @@ def _key_from_cfg(cfg: Dict[str, Any]) -> str:
                         active_key = keys[0].get("key")
                     if active_key:
                         nr["api_key"] = active_key
-                        cfg["nine_router"] = nr
+                        cfg["dtrouter"] = nr
                         from core_app import save_cfg
                         save_cfg(cfg)
                         api_key = active_key
@@ -497,7 +497,7 @@ def _has_model(models: List[str], *patterns: str) -> str:
     return ""
 
 
-# Voice presets per 9Router provider. Mirrors the Chat Bot tab — each model's
+# Voice presets per DTRouter provider. Mirrors the Chat Bot tab — each model's
 # provider decides which voices apply. Providers not listed here (edge-tts,
 # google-tts, deepgram, ...) use the model's own default voice, so the UI
 # just offers a "default" entry for them.
@@ -534,7 +534,7 @@ _PROVIDER_TTS_VOICES: Dict[str, List[Tuple[str, str]]] = {
 
 
 def _provider_of(model_id: str) -> str:
-    """Top-level provider for a 9Router model id.
+    """Top-level provider for a DTRouter model id.
 
     "openai/tts-1" -> "openai"; "openrouter/openai/tts-1" -> "openai";
     "el/eleven_multilingual_v2" -> "elevenlabs"; "gemini/...-tts" -> "gemini".
@@ -550,10 +550,10 @@ def _provider_of(model_id: str) -> str:
     return p
 
 
-def _consolidated_9router_engine(models: List[str]) -> Dict[str, Any] | None:
-    """Build ONE "9Router TTS" engine carrying the live model list (grouped by
+def _consolidated_dtrouter_engine(models: List[str]) -> Dict[str, Any] | None:
+    """Build ONE "DTRouter TTS" engine carrying the live model list (grouped by
     provider) plus a per-provider voice map — mirroring the Chat Bot tab's
-    Text-to-Speech panel (Model + Voice dropdowns). Returns None when 9Router
+    Text-to-Speech panel (Model + Voice dropdowns). Returns None when DTRouter
     exposes no TTS models, so the UI shows nothing rather than a fake entry.
     """
     if not models:
@@ -561,7 +561,7 @@ def _consolidated_9router_engine(models: List[str]) -> Dict[str, Any] | None:
 
     model_items: List[Dict[str, str]] = []
     for m in models:
-        grp = (m.split("/", 1)[0] or "9router").lower()
+        grp = (m.split("/", 1)[0] or "dtrouter").lower()
         model_items.append({
             "id": m,
             "label": m,
@@ -578,12 +578,12 @@ def _consolidated_9router_engine(models: List[str]) -> Dict[str, Any] | None:
         or voices_by_provider["openai"]
 
     return {
-        "id": "9router",
-        "label": "9Router TTS",
+        "id": "dtrouter",
+        "label": "DTRouter TTS",
         "default": default_voices[0][0] if default_voices else "",
         "defaultModel": default_model,
-        "backend": "9router",
-        "provider": "9router",
+        "backend": "dtrouter",
+        "provider": "dtrouter",
         "models": model_items,
         "voicesByProvider": voices_by_provider,
         # `multi` keeps _engineSupportsLang() happy for every target language.
@@ -591,15 +591,15 @@ def _consolidated_9router_engine(models: List[str]) -> Dict[str, Any] | None:
     }
 
 
-def _static_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
-    engine = _consolidated_9router_engine(models)
+def _static_dtrouter_engines(models: List[str]) -> List[Dict[str, Any]]:
+    engine = _consolidated_dtrouter_engine(models)
     return [engine] if engine else []
 
 
-def _shortcut_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
+def _shortcut_dtrouter_engines(models: List[str]) -> List[Dict[str, Any]]:
     """Provider-specific shortcuts for the Transcribe/TTS UI.
 
-    The consolidated 9Router selector is still the most flexible option. These
+    The consolidated DTRouter selector is still the most flexible option. These
     shortcuts expose common provider groups directly as normal engine entries.
     """
     engines: List[Dict[str, Any]] = []
@@ -611,11 +611,11 @@ def _shortcut_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
     )
     if gemini_model:
         engines.append({
-            "id": "9r:gemini",
+            "id": "dtr:gemini",
             "label": "Google Gemini",
             "default": "Kore",
             "defaultModel": gemini_model,
-            "backend": "9router",
+            "backend": "dtrouter",
             "provider": "gemini",
             "voices": {"multi": _GEMINI_TTS_VOICES},
         })
@@ -629,11 +629,11 @@ def _shortcut_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
         }
         voices.setdefault("multi", _PROVIDER_TTS_VOICES["google-tts"])
         engines.append({
-            "id": "9r:google-tts",
+            "id": "dtr:google-tts",
             "label": "Google Cloud",
             "default": _PROVIDER_TTS_VOICES["google-tts"][0][0],
             "defaultModel": google_model,
-            "backend": "9router",
+            "backend": "dtrouter",
             "provider": "google-tts",
             "voices": voices,
         })
@@ -642,11 +642,11 @@ def _shortcut_9router_engines(models: List[str]) -> List[Dict[str, Any]]:
     if edge_model:
         edge = _local_engine_by_id("edge-tts") or {}
         engines.append({
-            "id": "9r:edge-tts",
+            "id": "dtr:edge-tts",
             "label": "Microsoft Edge",
             "default": "vi-VN-HoaiMyNeural",
             "defaultModel": edge_model,
-            "backend": "9router",
+            "backend": "dtrouter",
             "provider": "edge-tts",
             "voices": edge.get("voices") or {},
         })
@@ -671,13 +671,13 @@ def _dynamic_provider_engine(
         "label": label,
         "default": default_voice,
         "defaultModel": default_voice,
-        "backend": "9router",
+        "backend": "dtrouter",
         "provider": provider,
         "voices": voices,
     }
 
 
-def nine_router_tts_engines(cfg: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def dtrouter_tts_engines(cfg: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     endpoint = _endpoint_from_cfg(cfg)
     api_key = _key_from_cfg(cfg)
     now = time.time()
@@ -729,8 +729,8 @@ def nine_router_tts_engines(cfg: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], 
 
     status["models_count"] = len(models)
     if models:
-        engines.extend(_static_9router_engines(models))
-        engines.extend(_shortcut_9router_engines(models))
+        engines.extend(_static_dtrouter_engines(models))
+        engines.extend(_shortcut_dtrouter_engines(models))
 
     seen = set()
     deduped = []
@@ -750,11 +750,11 @@ def nine_router_tts_engines(cfg: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], 
     return deduped, status
 
 
-def all_tts_engines(cfg: Dict[str, Any], include_9router: bool = True) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def all_tts_engines(cfg: Dict[str, Any], include_dtrouter: bool = True) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     local = local_tts_engines()
-    if not include_9router:
+    if not include_dtrouter:
         return local, {"reachable": False, "enabled": False}
-    nine, status = nine_router_tts_engines(cfg)
+    nine, status = dtrouter_tts_engines(cfg)
     return local + nine, status
 
 

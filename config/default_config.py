@@ -167,23 +167,23 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "list": [],   # filled via UI; persisted to .state/proxies.json
     },
     # ── 4G router pool (HiLink/Huawei IP rotation) ──
-    # NOTE: This is the 4G modem pool — NOT to be confused with 9Router
-    # (the OpenAI-compatible AI gateway), which lives under "nine_router".
+    # NOTE: This is the 4G modem pool — NOT to be confused with DTRouter
+    # (the OpenAI-compatible AI gateway), which lives under "dtrouter".
     "routers": {
         "enabled": False,
         "list": [],   # {id,label,type,endpoint,method,headers,body,success_check}
         "cooldown_sec": 30,
         "default_id": "",
     },
-    # ── 9Router (local AI gateway, OpenAI-compatible) ──
+    # ── DTRouter (local AI gateway, OpenAI-compatible) ──
     # Used by the Chat Bot tab to talk to 60+ AI providers via one endpoint.
-    # See: https://9router.com — repo decolua/9router. The integration uses the
-    # same wire format as 9Router's own dashboard:
+    # See: https://dtrouter.com — repo decolua/dtrouter. The integration uses the
+    # same wire format as DTRouter's own dashboard:
     #   • Base URL `http://localhost:20128/v1` (Next.js rewrites to /api/v1).
     #   • Auth `Authorization: Bearer sk-{machineId}-{keyId}-{crc8}`.
     #   • Keys are managed via /api/keys, protected by the dashboard cookie or
-    #     the local `x-9r-cli-token` header (sha256(rawMachineId + "9r-cli-auth")[:16]).
-    "nine_router": {
+    #     the local `x-dtr-cli-token` header (sha256(rawMachineId + "9r-cli-auth")[:16]).
+    "dtrouter": {
         "endpoint": "http://localhost:20128/v1",
         "api_key": "",
         "default_model": "duytris",
@@ -230,8 +230,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         "comic": {
             "ocr_enabled": False,
-            "ocr_provider": "tesseract",   # "tesseract" | "9router"
-            "vision_model": "",            # blank → use nine_router.default_model
+            "ocr_provider": "tesseract",   # "tesseract" | "dtrouter"
+            "vision_model": "",            # blank → use dtrouter.default_model
         },
         "output_dir": "./Downloaded/scripts",
     },

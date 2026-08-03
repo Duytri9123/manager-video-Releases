@@ -29,10 +29,17 @@ _SETTINGS_CACHE_TIME = 0
 CACHE_DURATION = 300      # 5 minutes
 CACHE_FAIL_DURATION = 60 # 1 minute if server is down
 
+# ── Order cache: tái sử dụng order cùng gói/giá trong 30 phút ──────────────
+# key: (package_key, amount) → value: {order_code, qr_url, bank_*, ts}
+_ORDER_CACHE: dict = {}
+_ORDER_CACHE_TTL = 1800  # 30 phút — đủ thời gian cho việc chuyển khoản
+
 def _update_settings_async():
     global _SETTINGS_CACHE, _SETTINGS_CACHE_TIME
     try:
+        from utils.security_core import API_KEY
         headers = {
+            "X-Api-Key": API_KEY,
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         from utils.licensing_client import _load_license_key
@@ -72,15 +79,18 @@ def _get_cached_settings() -> tuple[list, dict]:
     now = time.time()
     
     if _SETTINGS_CACHE is None:
-        # Prevent blocking on first run by returning empty and updating in background
-        _SETTINGS_CACHE = {
-            "packages": [],
-            "contact": {},
-            "expiry": CACHE_FAIL_DURATION
-        }
-        _SETTINGS_CACHE_TIME = now
-        threading.Thread(target=_update_settings_async, daemon=True).start()
-        return [], {}
+        # Lần chạy đầu tiên: Gọi đồng bộ để đảm bảo giao diện EXE tải đúng dữ liệu gói cước ngay.
+        # Nếu gặp lỗi hoặc quá thời gian, khởi tạo cache trống.
+        _logger.info("_get_cached_settings: First run, fetching settings synchronously...")
+        _update_settings_async()
+        if _SETTINGS_CACHE is None:
+            _SETTINGS_CACHE = {
+                "packages": [],
+                "contact": {},
+                "expiry": CACHE_FAIL_DURATION
+            }
+            _SETTINGS_CACHE_TIME = now
+        return _SETTINGS_CACHE["packages"], _SETTINGS_CACHE["contact"]
         
     cache_age = now - _SETTINGS_CACHE_TIME
     if cache_age >= _SETTINGS_CACHE["expiry"]:
@@ -170,15 +180,37 @@ def activate_view():
 @bp.route("/api/license/activate", methods=["POST"])
 def api_activate():
     req_data = request.get_json() or {}
-    key = req_data.get("license_key", "").strip()
+    key = req_data.get("license_key", "").strip().upper()
     if not key:
         return jsonify({"success": False, "message": "Vui lòng nhập mã key."}), 400
 
+    # Xóa cờ revoked trước khi thử activate key mới — tránh bị block bởi guard
+    import utils.license_guard as _guard
+    with _guard._LOCK:
+        _guard._LICENSE_REVOKED = False
+        _guard._LICENSING_OK = False  # buộc re-check sạch
+
     success, message = activate_license(key)
     if success:
-        force_check()
-        return jsonify({"success": True, "message": message})
+        ok, data = force_check()  # cập nhật cache sau khi activate thành công
+        _ORDER_CACHE.clear()  # xóa cache order — đã kích hoạt xong
+        _logger.info("License activated successfully with key: %s...", key[:8])
+        expire_at = None
+        remaining_days = None
+        if data:
+            try:
+                from datetime import datetime, timezone
+                expire_raw = data.get("license", {}).get("expire_at")
+                if expire_raw:
+                    dt = datetime.fromisoformat(expire_raw.replace("Z", "+00:00"))
+                    expire_at = dt.strftime("%d/%m/%Y")
+                    remaining_days = max(0, (dt - datetime.now(timezone.utc)).days)
+            except Exception:
+                pass
+        return jsonify({"success": True, "message": message,
+                        "expire_at": expire_at, "remaining_days": remaining_days})
     else:
+        _logger.warning("License activation failed: key=%s..., msg=%s", key[:8], message)
         return jsonify({"success": False, "message": message}), 403
 
 
@@ -197,7 +229,11 @@ def api_activate_trial():
 
 @bp.route("/api/license/check_status", methods=["GET"])
 def api_check_status():
-    is_ok, data = force_check()
+    """Trả về trạng thái bản quyền từ CACHE (không gọi server).
+    Dùng cho UI polling (mỗi 3-5s). Server sẽ được gọi thực bởi guard thread.
+    Dùng /api/license/force_refresh để buộc gọi server ngay.
+    """
+    is_ok, data = is_license_active()  # ← đọc cache, KHÔNG gọi server
     expire_at = None
     expire_ts = None
     remaining_days = None
@@ -224,10 +260,54 @@ def api_check_status():
             if is_ok and data
             else "unauthorized"
         ),
-        "message": data.get("message", ""),
+        "message": data.get("message", "") if data else "",
         "expire_at": expire_ts,
         "remaining_days": remaining_days,
     })
+
+
+@bp.route("/api/license/force_refresh", methods=["POST"])
+def api_force_refresh():
+    """Buộc gọi server ngay để re-check license (dùng sau thanh toán hoặc khi reload).
+    Throttle: không gọi lại trong vòng 8s để tránh spam nhưng đảm bảo gọi được
+    ít nhất mỗi 2 lần poll (với interval poll = 5s).
+    """
+    import time as _time
+    from utils.license_guard import _LAST_CHECK
+    # Throttle: nếu vừa check trong 8s thì trả về cache
+    elapsed = _time.time() - _LAST_CHECK
+    if elapsed < 8:
+        is_ok, data = is_license_active()
+        return jsonify({
+            "active": is_ok,
+            "cached": True,
+            "message": (data or {}).get("message", ""),
+            "retry_in": round(8 - elapsed, 1),
+        })
+    is_ok, data = force_check()  # gọi server thực
+    _logger.info("force_refresh: active=%s", is_ok)
+    return jsonify({
+        "active": is_ok,
+        "cached": False,
+        "message": (data or {}).get("message", ""),
+    })
+
+
+@bp.route("/api/license/clear_order_cache", methods=["POST"])
+def api_clear_order_cache():
+    """Xóa cache order của một gói — cho phép tạo QR mới khi user yêu cầu."""
+    req_data = request.get_json() or {}
+    package_key = req_data.get("package_key")
+    if package_key:
+        # Xóa tất cả cache có package_key này (bất kể giá)
+        keys_to_delete = [k for k in _ORDER_CACHE if k[0] == package_key]
+        for k in keys_to_delete:
+            del _ORDER_CACHE[k]
+        _logger.info("Cleared order cache for package: %s", package_key)
+    else:
+        _ORDER_CACHE.clear()
+        _logger.info("Cleared all order cache")
+    return jsonify({"success": True})
 
 
 @bp.route("/api/license/buy", methods=["POST"])
@@ -238,10 +318,9 @@ def api_buy():
 
     if not license_key or license_key == "NEW-KEY":
         _, check_data = is_license_active()
-        license_key = check_data.get("license", {}).get("license_key", "NEW-KEY")
+        license_key = (check_data or {}).get("license", {}).get("license_key", "NEW-KEY")
 
     cfg = load_config()
-    lic_cfg = cfg.get("licensing") or {}
 
     amount = 150000
     bank_name = bank_bin = bank_account = bank_holder = ""
@@ -260,6 +339,23 @@ def api_buy():
             bank_holder = settings_data.get("bank_holder", "")
     except Exception:
         pass
+
+    # ── Kiểm tra cache order cùng gói/giá — tránh tạo QR mới khi mở lại ──
+    cache_key = (package_key, int(amount))
+    cached_order = _ORDER_CACHE.get(cache_key)
+    if cached_order and (time.time() - cached_order["ts"]) < _ORDER_CACHE_TTL:
+        _logger.info("api_buy: reusing cached order %s for pkg=%s", cached_order["order_code"], package_key)
+        return jsonify({
+            "success": True,
+            "order_code": cached_order["order_code"],
+            "amount": int(amount),
+            "bank_name": cached_order["bank_name"],
+            "bank_account": cached_order["bank_account"],
+            "bank_holder": cached_order["bank_holder"],
+            "qr_url": cached_order["qr_url"],
+            "checkout_url": cached_order.get("checkout_url", ""),
+            "cached": True,
+        })
 
     try:
         from utils.security_core import generate_signature
@@ -300,6 +396,17 @@ def api_buy():
 
             checkout_url = rdata.get("checkout_url", "")
 
+            # Lưu cache — tái sử dụng trong 30 phút nếu cùng gói/giá
+            _ORDER_CACHE[cache_key] = {
+                "order_code": order_code,
+                "qr_url": qr_url,
+                "bank_name": bank_name,
+                "bank_account": bank_account,
+                "bank_holder": bank_holder,
+                "checkout_url": checkout_url,
+                "ts": time.time(),
+            }
+
             return jsonify({
                 "success": True,
                 "order_code": order_code,
@@ -309,11 +416,16 @@ def api_buy():
                 "bank_holder": bank_holder,
                 "qr_url": qr_url,
                 "checkout_url": checkout_url,
+                "cached": False,
             })
         else:
+            try:
+                err_msg = resp.json().get("message", "Không thể khởi tạo giao dịch.")
+            except Exception:
+                err_msg = "Không thể khởi tạo giao dịch."
             return jsonify({
                 "success": False,
-                "message": resp.json().get("message", "Không thể khởi tạo giao dịch."),
+                "message": err_msg,
             }), resp.status_code
     except Exception as e:
         return jsonify({

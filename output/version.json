@@ -1,7 +1,7 @@
 {
-  "version": "2.0.2",
-  "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/download/v2.0.2/DuyTrisDownloader_Setup.exe",
-  "message": "Cập nhật bộ lọc danh sách model hoạt động thực tế từ 9Router.",
-  "release_date": "2026-07-14",
+  "version": "2.0.5",
+  "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/download/v2.0.5/DuyTrisDownloader_Setup.exe",
+  "message": "Sửa lỗi không hiển thị danh sách gói bản quyền khi khởi chạy EXE (đồng bộ hóa luồng lấy cài đặt đầu tiên và thêm tự động reload dự phòng).",
+  "release_date": "2026-07-15",
   "minimum_version": "1.5.0"
 }

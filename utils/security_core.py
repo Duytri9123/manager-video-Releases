@@ -17,6 +17,7 @@ import hmac
 import json
 import os
 import platform
+import socket
 import struct
 import sys
 import time
@@ -39,6 +40,7 @@ else:
     HARDCODED_SERVER_URL = "https://duytristool.io.vn"
 
 PRODUCT_NAME = "toolvideo"
+API_KEY = "app_F1NL3Zcrn9KmzGMbWd9lFpMK2aNcw1ku"
 
 # HMAC secret shared with manager_tool (must match .env HMAC_SECRET_KEY)
 _HMAC_SECRET = b"DuYtRiS_s3cr3t_k3y_2024!@#"
@@ -233,7 +235,7 @@ def detect_tamper() -> bool:
 # Throttle helper — obfuscated sleep to confuse timing analysis
 # ═══════════════════════════════════════════════════════════════
 
-import socket  # noqa: E402 (needed in get_secure_hwid)
+# socket imported at top of file
 
 
 def obfuscated_sleep(seconds: float) -> None:

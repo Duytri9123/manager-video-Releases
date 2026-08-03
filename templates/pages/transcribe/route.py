@@ -175,6 +175,114 @@ def _write_outputs(segments: list[dict], video_path: Path, out_dir: Path,
     return txt_path, srt_path
 
 
+class AntigravityTranscriber:
+    def __init__(self, api_key: str = "", language: str = "zh", model_name: str = "gemini-2.0-flash"):
+        self.api_key = (api_key or "").strip()
+        self.language = language
+        self.model_name = (model_name or "gemini-2.0-flash").strip()
+        if "/" in self.model_name:
+            self.model_name = self.model_name.split("/")[-1]
+
+    def transcribe(self, video_path: Path, ffmpeg_bin: str, tmp_srt_path: Path | None = None) -> list[dict]:
+        import subprocess, base64, urllib.request, urllib.error, json
+        temp_audio = video_path.parent / f"{video_path.stem}_temp_stt.mp3"
+        try:
+            key = self.api_key
+            if not key or key.startswith("AQ.Ab"):
+                try:
+                    from templates.pages.config.route import load_providers_from_db
+                    all_provs = load_providers_from_db()
+                    for p_id in ["gemini", "antigravity"]:
+                        conns = (all_provs.get(p_id) or {}).get("connections") or []
+                        for c in conns:
+                            k = (c.get("api_key") or "").strip()
+                            if k and not k.startswith("AQ.Ab"):
+                                key = k
+                                break
+                        if key and not key.startswith("AQ.Ab"):
+                            break
+                except Exception:
+                    pass
+
+            cmd = [ffmpeg_bin, "-y", "-i", str(video_path), "-vn", "-ar", "16000", "-ac", "1", "-b:a", "64k", str(temp_audio)]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            audio_bytes = temp_audio.read_bytes()
+            b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
+
+            lang_names = {"zh": "Tiếng Trung", "en": "Tiếng Anh", "vi": "Tiếng Việt", "ja": "Tiếng Nhật", "ko": "Tiếng Hàn", "th": "Tiếng Thái"}
+            target_lang = lang_names.get(self.language, self.language)
+
+            prompt = (
+                f"Hãy phiên âm toàn bộ giọng nói trong tệp âm thanh này sang {target_lang}.\n"
+                "Yêu cầu xuất ra định dạng SRT phụ đề chuẩn 100% gồm số thứ tự, mốc thời gian dạng 00:00:00,000 --> 00:00:05,000 và nội dung lời thoại.\n"
+                "Không thêm bất kỳ văn bản chào hỏi hay giải thích nào khác ngoài khối SRT."
+            )
+
+            payload = json.dumps({
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/mp3",
+                                "data": b64_audio
+                            }
+                        }
+                    ]
+                }]
+            }).encode("utf-8")
+
+            if key.startswith("AIza"):
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={key}"
+                headers = {"Content-Type": "application/json"}
+            else:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={key}"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {key}"
+                }
+
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                r_json = json.loads(resp.read().decode("utf-8"))
+                srt_text = r_json["candidates"][0]["content"]["parts"][0]["text"]
+                return _parse_srt_to_segments(srt_text)
+        except urllib.error.HTTPError as he:
+            print(f"[AntigravityTranscriber] HTTP Error {he.code}: {he.reason}")
+            return []
+        except Exception as e:
+            print("[AntigravityTranscriber] Error:", e)
+            return []
+        finally:
+            if temp_audio.exists():
+                try: temp_audio.unlink()
+                except Exception: pass
+
+
+def _parse_srt_to_segments(srt_text: str) -> list[dict]:
+    segments = []
+    blocks = srt_text.strip().split("\n\n")
+    for block in blocks:
+        lines = [l.strip() for l in block.splitlines() if l.strip()]
+        if len(lines) >= 3:
+            time_line = lines[1]
+            if "-->" in time_line:
+                parts = time_line.split("-->")
+                def parse_sec(t_str):
+                    t_str = t_str.strip().replace(",", ".")
+                    sub = t_str.split(":")
+                    if len(sub) == 3:
+                        return float(sub[0])*3600 + float(sub[1])*60 + float(sub[2])
+                    return 0.0
+                start_sec = parse_sec(parts[0])
+                end_sec = parse_sec(parts[1])
+                text = " ".join(lines[2:])
+                segments.append({"start": start_sec, "end": end_sec, "text": text})
+    return segments
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # /api/transcribe
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,8 +303,6 @@ def transcribe():
         safe_name = sanitize_filename(Path(original_name).stem) + Path(original_name).suffix
         saved_path = uploaded_tmp_dir / safe_name
         uploaded_file.save(saved_path)
-        # File đã upload → ưu tiên path thật, ignore "single" do FE gửi
-        # (FE có thể chỉ gửi tên file từ <input type=file>).
         data["single"] = str(saved_path)
         data["_uploaded"] = True
 
@@ -228,7 +334,6 @@ def transcribe():
                 yield send(log="✗ Không tìm thấy ffmpeg trên hệ thống", level="error")
                 return
 
-            # OpenCC chuyển phồn → giản (tùy chọn)
             converter = None
             if as_bool(data.get("sc"), False):
                 try:
@@ -242,13 +347,10 @@ def transcribe():
             export_srt = as_bool(data.get("srt"), False)
             language = str(data.get("lang") or "zh").strip() or "zh"
             model_name = str(data.get("model") or "base").strip() or "base"
-            provider = str(data.get("provider") or "groq").strip().lower()
-            if provider not in ("groq", "model"):
-                provider = "groq"
+            provider = str(data.get("provider") or "antigravity").strip().lower()
+            if provider not in ("antigravity", "gemini", "groq", "model"):
+                provider = "antigravity"
 
-            # ── Nếu user gõ tay path mà không tồn tại, thử resolve trong
-            #    ./Downloaded/ (nhiều người chỉ paste tên file). Skip cho
-            #    file đã upload (đã là tmp path tuyệt đối).
             if single and not data.get("_uploaded"):
                 sp = Path(single).expanduser()
                 if not sp.exists():
@@ -258,7 +360,6 @@ def transcribe():
                     if candidate.exists():
                         candidates.append(candidate)
                     else:
-                        # rglob theo basename
                         try:
                             for p in folder_root.rglob(Path(single).name):
                                 if p.is_file():
@@ -281,7 +382,6 @@ def transcribe():
                         )
                         return
 
-            # ── Trường hợp đặc biệt: file .ass → chỉ convert ra txt/srt ──
             if single and Path(single).suffix.lower() == ".ass":
                 yield send(log=f"ℹ Import ASS: {Path(single).name}", level="info")
                 yield send(overall=25, overall_lbl="Đang đọc ASS...", file=30, file_lbl="reading")
@@ -294,7 +394,18 @@ def transcribe():
                 return
 
             # ── Build transcriber ──
-            if provider == "model":
+            if provider == "antigravity" or provider == "gemini":
+                from templates.pages.config.route import load_providers_from_db
+                all_provs = load_providers_from_db()
+                ag_data = all_provs.get("antigravity") or all_provs.get("gemini") or {}
+                ag_conns = [c for c in ag_data.get("connections", []) if c.get("enabled")] or ag_data.get("connections", [])
+                ag_key = ag_conns[0].get("api_key", "").strip() if ag_conns else ""
+                if not ag_key:
+                    yield send(log="✗ Chưa có kết nối Antigravity / Gemini nào. Vui lòng mở Nhà cung cấp -> Thêm kết nối Antigravity trước.", level="error")
+                    return
+                yield send(log="ℹ Dùng Antigravity / Gemini Multimodal AI (Nhanh & Chính xác)", level="info")
+                transcriber = AntigravityTranscriber(api_key=ag_key, language=language, model_name=model_name)
+            elif provider == "model":
                 yield send(log=f"ℹ Đang load Whisper local: {model_name}…", level="info")
                 try:
                     transcriber = FasterWhisperTranscriber(model_name, language, use_vad=True)
@@ -306,8 +417,7 @@ def transcribe():
                 api_key, groq_model, groq_max_mb = _resolve_groq_credentials(data)
                 if not api_key:
                     yield send(
-                        log="✗ Thiếu Groq API Key. Mở trang Cấu hình → nhập Groq API Key, "
-                            "hoặc set biến môi trường GROQ_API_KEY.",
+                        log="✗ Thiếu Groq API Key. Mở trang Cấu hình → nhập Groq API Key.",
                         level="error",
                     )
                     return
@@ -350,7 +460,19 @@ def transcribe():
                     file=10, file_lbl="đang trích xuất audio…",
                 )
                 try:
-                    target_dir = Path(out_dir_raw).expanduser() if out_dir_raw else v.parent
+                    if out_dir_raw:
+                        target_dir = Path(out_dir_raw).expanduser()
+                    else:
+                        temp_root = Path(tempfile.gettempdir()).resolve()
+                        is_in_temp = False
+                        try:
+                            is_in_temp = temp_root in v.resolve().parents
+                        except Exception:
+                            pass
+                        if is_in_temp:
+                            target_dir = Path(data.get("folder") or "./Downloaded").expanduser()
+                        else:
+                            target_dir = v.parent
                     tmp_srt = target_dir / f"{v.stem}.srt"
                     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -425,6 +547,7 @@ def extract_audio():
         if not ffmpeg:
             return jsonify({"ok": False, "error": "ffmpeg not found"}), 400
 
+        audio_fmt = str(data.get("format") or data.get("audio_fmt") or "mp3").strip().lower()
         video_path = str(data.get("video_path") or "").strip()
         if not video_path:
             return jsonify({"ok": False, "error": "Vui lòng chọn file video"}), 400
@@ -457,10 +580,25 @@ def extract_audio():
 
         vp = vp_obj
         out_dir_str = str(data.get("output_dir") or data.get("out_dir") or "").strip()
-        out_dir = Path(out_dir_str) if out_dir_str else vp.parent
-        out_dir.mkdir(parents=True, exist_ok=True)
+        temp_root = Path(tempfile.gettempdir()).resolve()
 
-        audio_fmt = str(data.get("format") or "mp3").strip().lower()
+        if out_dir_str:
+            out_dir = Path(out_dir_str).expanduser()
+        else:
+            is_in_temp = False
+            try:
+                is_in_temp = temp_root in vp.resolve().parents
+            except Exception:
+                pass
+            if is_in_temp:
+                from core_app import load_cfg
+                cfg = load_cfg() or {}
+                out_dir_cfg = cfg.get("output_dir") or cfg.get("download_path") or "./Downloaded"
+                out_dir = Path(out_dir_cfg).expanduser()
+            else:
+                out_dir = vp.parent
+
+        out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"{vp.stem}_audio.{audio_fmt}"
 
         cmd = [ffmpeg, "-y", "-i", str(vp)]

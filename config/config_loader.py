@@ -13,6 +13,31 @@ from .default_config import DEFAULT_CONFIG
 logger = logging.getLogger("ConfigLoader")
 
 
+def get_provider_api_key(provider_name: str) -> str:
+    """Unified API Key resolver from Provider Connections database."""
+    if not provider_name:
+        return ""
+    try:
+        from templates.pages.config.route import load_providers_from_db
+        all_provs = load_providers_from_db()
+        p_name = provider_name.lower().strip()
+        prov_map = {
+            "fpt": "fptai", "fpt-ai": "fptai", "fptai": "fptai",
+            "elevenlabs": "elevenlabs", "eleven-labs": "elevenlabs",
+            "fish": "fishaudio", "fish-audio": "fishaudio", "fishaudio": "fishaudio",
+            "groq": "groq", "openai": "openai", "deepseek": "deepseek",
+            "antigravity": "antigravity", "gemini": "gemini", "google": "gemini"
+        }
+        target = prov_map.get(p_name, p_name)
+        pdata = all_provs.get(target) or all_provs.get(p_name) or {}
+        conns = [c for c in pdata.get("connections", []) if c.get("enabled")] or pdata.get("connections", [])
+        if conns and conns[0].get("api_key"):
+            return conns[0]["api_key"].strip()
+    except Exception:
+        pass
+    return ""
+
+
 class ConfigLoader:
     def __init__(self, config_path: Optional[str] = None):
         self.config_path = config_path

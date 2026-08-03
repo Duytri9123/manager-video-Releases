@@ -110,8 +110,8 @@ async function loadConfig() {
   set('cfg-elevenlabs-key', cfg.video_process?.elevenlabs_api_key || '');
   // Fish Audio key (stored in video_process)
   set('cfg-fish-key', cfg.video_process?.fish_api_key || '');
-  // 9Router API key
-  set('cfg-9router-key', cfg.nine_router?.api_key || '');
+  // DTRouter API key
+  set('cfg-dtrouter-key', cfg.dtrouter?.api_key || '');
   // Gemini Video key
   set('cfg-gemini-key', cfg.gemini_video?.api_key || '');
   // TMDb keys
@@ -242,6 +242,11 @@ async function loadConfig() {
   }, 500);
   } catch (e) {
     console.error('loadConfig error:', e);
+    const banner = document.getElementById('cfg-error-banner');
+    if (banner) {
+      banner.style.display = 'block';
+      banner.textContent = '[loadConfig ERROR] ' + e.message + '\n' + e.stack;
+    }
   }
 }
 
@@ -349,9 +354,9 @@ async function saveConfig() {
     }
   };
 
-  // NineRouter, Gemini, TMDb keys
-  data.nine_router = {
-    api_key: get('cfg-9router-key'),
+  // DTRouter, Gemini, TMDb keys
+  data.dtrouter = {
+    api_key: get('cfg-dtrouter-key'),
   };
   data.gemini_video = {
     api_key: get('cfg-gemini-key'),
@@ -383,7 +388,7 @@ async function saveConfig() {
 
 /* ── API Key Test ─────────────────────────────────────────────────────────── */
 const _API_KEY_IDS = {
-  '9router':    { inputId: 'cfg-9router-key',    statusId: 'cfg-9router-status' },
+  'dtrouter':    { inputId: 'cfg-dtrouter-key',    statusId: 'cfg-dtrouter-status' },
   deepseek:    { inputId: 'cfg-deepseek-key',    statusId: 'cfg-deepseek-status' },
   groq:        { inputId: 'cfg-groq-key',         statusId: 'cfg-groq-status' },
   openai:      { inputId: 'cfg-openai-key',       statusId: 'cfg-openai-status' },
@@ -882,7 +887,7 @@ function fillDirFromConfig() {
 
 /**
  * Kiểm tra API key đang dùng trước khi thực hiện tác vụ dịch/TTS.
- * @param {string} provider  - 'deepseek' | 'groq' | 'fpt' | 'elevenlabs' | 'fish-audio' | '9router' | 'openai'
+ * @param {string} provider  - 'deepseek' | 'groq' | 'fpt' | 'elevenlabs' | 'fish-audio' | 'dtrouter' | 'openai'
  * @param {string} keyValue  - giá trị key cần test
  * @param {Function} onOk    - callback khi test thành công, sẽ tiếp tục tác vụ
  * @param {Function} onCancel - callback khi người dùng hủy
@@ -929,7 +934,7 @@ function _showApiCheckModal(provider, currentKey, errorMsg, onOk, onCancel) {
   const LABELS = {
     deepseek: 'DeepSeek', groq: 'Groq', fpt: 'FPT AI TTS',
     elevenlabs: 'ElevenLabs TTS', 'fish-audio': 'Fish Audio TTS',
-    '9router': '9Router', openai: 'OpenAI', gemini: 'Gemini'
+    'dtrouter': 'DTRouter', openai: 'OpenAI', gemini: 'Gemini'
   };
 
   const providerLabel = LABELS[provider] || provider;
@@ -997,7 +1002,7 @@ function _apiCheckSaveKeyToConfig(provider, key) {
   else if (provider === 'fpt') updates.video_process = { ...(cfg.video_process || {}), fpt_api_key: key };
   else if (provider === 'elevenlabs') updates.video_process = { ...(cfg.video_process || {}), elevenlabs_api_key: key };
   else if (provider === 'fish-audio') updates.video_process = { ...(cfg.video_process || {}), fish_api_key: key };
-  else if (provider === '9router') updates.nine_router = { ...(cfg.nine_router || {}), api_key: key };
+  else if (provider === 'dtrouter') updates.dtrouter = { ...(cfg.dtrouter || {}), api_key: key };
   else if (provider === 'gemini') updates.gemini_video = { ...(cfg.gemini_video || {}), api_key: key };
 
   if (Object.keys(updates).length) {
@@ -1012,7 +1017,7 @@ function _apiCheckSaveKeyToConfig(provider, key) {
     const inputMap = {
       deepseek: 'cfg-deepseek-key', groq: 'cfg-groq-key', openai: 'cfg-openai-key',
       fpt: 'cfg-fpt-key', elevenlabs: 'cfg-elevenlabs-key', 'fish-audio': 'cfg-fish-key',
-      '9router': 'cfg-9router-key', gemini: 'cfg-gemini-key'
+      'dtrouter': 'cfg-dtrouter-key', gemini: 'cfg-gemini-key'
     };
     const inputEl = document.getElementById(inputMap[provider]);
     if (inputEl) inputEl.value = key;
@@ -1053,7 +1058,7 @@ function getApiKeyForProvider(provider) {
     fpt: vp.fpt_api_key,
     elevenlabs: vp.elevenlabs_api_key,
     'fish-audio': vp.fish_api_key,
-    '9router': (cfg.nine_router || {}).api_key,
+    'dtrouter': (cfg.dtrouter || {}).api_key,
     gemini: (cfg.gemini_video || {}).api_key,
   };
   return map[provider] || '';
@@ -1097,88 +1102,65 @@ window.filterActiveProviders = async function() {
     el.appendChild(optAuto);
 
     if (status && status.models && status.models.length) {
-      // Group models by provider
+      // Group models by owned_by / provider
       const groups = {};
       status.models.forEach(m => {
-        const prov = m.provider || 'others';
-        if (!groups[prov]) groups[prov] = [];
-        groups[prov].push(m);
+        let owner = (m.owned_by || m.provider || 'others').toLowerCase();
+        if (m.id === 'google' || m.provider === 'google') owner = 'google';
+        if (m.id === 'opencode' || m.provider === 'opencode') owner = 'oc';
+        if (!groups[owner]) groups[owner] = [];
+        groups[owner].push(m);
       });
 
       const providerLabels = {
         'google': '🌐 Google Translate',
-        'huggingface': '🤗 HuggingFace',
+        'oc': '🎁 OpenCode Free',
+        'ag': '🌌 Google Antigravity',
+        'cx': '⚡ OpenAI Codex',
+        'gc': '🔷 Gemini',
         'openai': '🧠 OpenAI',
         'deepseek': '🐳 DeepSeek',
         'groq': '⚡ Groq',
-        'gemini': '🔷 Gemini'
+        'nvidia': '🟢 NVIDIA NIM',
+        'huggingface': '🤗 HuggingFace'
       };
 
-      // Sort providers: google first, then 9router, then others alphabetically
+      const sortOrder = ['google', 'oc', 'ag', 'cx', 'gc', 'openai', 'deepseek', 'groq', 'nvidia', 'huggingface'];
       const sortedProviders = Object.keys(groups).sort((a, b) => {
-        if (a === 'google') return -1;
-        if (b === 'google') return 1;
-        if (a === '9router') return -1;
-        if (b === '9router') return 1;
+        const idxA = sortOrder.indexOf(a);
+        const idxB = sortOrder.indexOf(b);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
         return a.localeCompare(b);
       });
 
       sortedProviders.forEach(prov => {
-        if (prov === '9router') {
-          // Group 9router models by owned_by
-          const subGroups = {};
-          groups[prov].forEach(m => {
-            const owner = m.owned_by || 'others';
-            if (!subGroups[owner]) subGroups[owner] = [];
-            subGroups[owner].push(m);
-          });
-
-          const ownerLabel = (k) => ({
-            'kr': '🥝 Kiro (FREE)',
-            'gemini': '🔷 Gemini',
-            'gc': '🐙 GitHub Copilot',
-            'ag': '🌌 Antigravity',
-            'combo': '✨ Combo (custom)',
-          })[k] || (k || 'others');
-
-          // Sort owner keys: combo first, then ag, then gc, then gemini, then kr, then others
-          const sortedOwners = Object.keys(subGroups).sort((a, b) => {
-            const order = ['combo', 'ag', 'gc', 'gemini', 'kr'];
-            const idxA = order.indexOf(a);
-            const idxB = order.indexOf(b);
-            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-            if (idxA !== -1) return -1;
-            if (idxB !== -1) return 1;
-            return a.localeCompare(b);
-          });
-
-          sortedOwners.forEach(owner => {
-            const og = document.createElement('optgroup');
-            og.label = '🔀 9Router: ' + ownerLabel(owner);
-            subGroups[owner].forEach(m => {
-              const opt = document.createElement('option');
-              opt.value = m.id;
-              opt.textContent = m.name;
-              og.appendChild(opt);
-            });
-            el.appendChild(og);
-          });
-        } else {
-          const og = document.createElement('optgroup');
-          og.label = providerLabels[prov] || prov;
-          groups[prov].forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m.id;
-            opt.textContent = m.name;
-            og.appendChild(opt);
-          });
-          el.appendChild(og);
-        }
+        const og = document.createElement('optgroup');
+        const pLabel = providerLabels[prov] || prov.toUpperCase();
+        og.label = pLabel;
+        groups[prov].forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          let displayName = m.name;
+          if (displayName.includes('/')) {
+            const parts = displayName.split('/');
+            displayName = parts[parts.length - 1];
+          }
+          if (prov !== 'google') {
+            const cleanLabel = pLabel.replace(/^[^\w\sÀ-ỹ]+/, '').strip ? pLabel.replace(/^[^\w\sÀ-ỹ]+/, '').strip() : pLabel;
+            opt.textContent = `${cleanLabel.replace(/^[^\w\sÀ-ỹ]+/, '').trim()} — ${displayName}`;
+          } else {
+            opt.textContent = displayName;
+          }
+          og.appendChild(opt);
+        });
+        el.appendChild(og);
       });
 
       // Show '-----' separator and fallback warning trigger if there are inactive providers
       const activeProviders = status.providers || [];
-      const allProviders = ['9router', 'deepseek', 'openai', 'huggingface', 'groq', 'gemini'];
+      const allProviders = ['dtrouter', 'deepseek', 'openai', 'huggingface', 'groq', 'gemini'];
       const hasInactive = allProviders.some(p => !activeProviders.includes(p));
       if (hasInactive) {
         const optPrompt = document.createElement('option');
@@ -1226,7 +1208,7 @@ window.filterActiveProviders = async function() {
         const groqKey = cfg.translation?.groq_key;
         return groqKey && String(groqKey).trim().length > 0;
       }
-      return true; // model (local) is always active
+      return true; // model (local) and dtrouter are always active
     });
     transcEl.innerHTML = '';
     activeOpts.forEach(opt => {
@@ -1241,6 +1223,8 @@ window.filterActiveProviders = async function() {
     if (transcEl.value !== currentVal && transcEl.options.length) {
       transcEl.options[0].selected = true;
     }
+    // Kích hoạt sự kiện change để cập nhật danh sách model con phụ thuộc
+    transcEl.dispatchEvent(new Event('change'));
   });
 
   // Trigger TTS engine selects refresh

@@ -1,0 +1,76 @@
+<div id="page-quota" class="page min-h-screen p-4 sm:p-6 bg-slate-50/50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 hidden">
+  <div class="max-w-6xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-xl font-extrabold tracking-tight text-slate-900 dark:text-slate-550 flex items-center gap-2">
+          <span class="material-symbols-outlined text-orange-500">monitoring</span>
+          Quota Tracker
+        </h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Track and manage your API quota limits</p>
+      </div>
+    </div>
+
+    <!-- Toolbar Filters (exactly like 9Router screenshot!) -->
+    <div class="flex flex-wrap items-center gap-2 text-xs py-2">
+      <!-- All Providers Select -->
+      <div class="relative flex items-center">
+        <span class="material-symbols-outlined absolute left-2.5 text-slate-400 text-sm pointer-events-none z-10">grid_view</span>
+        <select id="quota-filter-provider" style="padding-left: 32px !important; padding-right: 28px !important; -webkit-appearance: none; -moz-appearance: none; appearance: none;" class="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-medium text-slate-600 dark:text-slate-400 cursor-pointer py-1.5">
+          <option value="all">All Providers</option>
+          <option value="antigravity">Antigravity</option>
+        </select>
+        <span class="material-symbols-outlined absolute right-2.5 text-slate-400 text-xs pointer-events-none z-10">expand_more</span>
+      </div>
+
+      <!-- All accounts Select -->
+      <div class="relative flex items-center">
+        <select id="quota-filter-account" style="padding-left: 12px !important; padding-right: 28px !important; -webkit-appearance: none; -moz-appearance: none; appearance: none;" class="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-medium text-slate-600 dark:text-slate-400 cursor-pointer py-1.5">
+          <option value="all">All accounts</option>
+        </select>
+        <span class="material-symbols-outlined absolute right-2.5 text-slate-400 text-xs pointer-events-none z-10">expand_more</span>
+      </div>
+
+      <!-- Expiring first -->
+      <button class="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-xl text-slate-600 dark:text-slate-400 font-medium cursor-pointer transition-all">
+        <span class="material-symbols-outlined text-sm text-slate-455">hourglass_empty</span>
+        <span>Expiring first</span>
+      </button>
+
+      <!-- Turn off Empty -->
+      <button class="flex items-center gap-1.5 px-3 py-1.5 border border-rose-200 dark:border-rose-950 bg-rose-50/10 dark:bg-rose-950/10 text-rose-600 dark:text-rose-450 font-medium rounded-xl hover:bg-rose-50/30 transition-all cursor-pointer">
+        <span class="material-symbols-outlined text-sm">cancel</span>
+        <span>Turn off Empty</span>
+      </button>
+
+      <!-- Turn on Available -->
+      <button class="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-200 dark:border-emerald-950 bg-emerald-50/10 dark:bg-emerald-950/10 text-emerald-600 dark:text-emerald-400 font-medium rounded-xl hover:bg-emerald-50/30 transition-all cursor-pointer">
+        <span class="material-symbols-outlined text-sm">check_circle</span>
+        <span>Turn on Available</span>
+      </button>
+
+      <!-- Auto-refresh -->
+      <div class="flex items-center gap-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 py-1.5 rounded-xl text-slate-600 dark:text-slate-400 font-medium ml-auto">
+        <span class="material-symbols-outlined text-sm">hourglass</span>
+        <span>Auto-refresh (56s)</span>
+        <label class="relative inline-flex items-center cursor-pointer ml-1">
+          <input type="checkbox" checked class="sr-only peer">
+          <div class="w-6 h-3 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-2.5 after:w-2.5 after:transition-all peer-checked:bg-orange-500"></div>
+        </label>
+      </div>
+
+      <!-- Refresh Icon -->
+      <button onclick="refreshAllQuotas()" class="p-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-xl cursor-pointer transition-all">
+        <span class="material-symbols-outlined text-sm text-slate-500">sync</span>
+      </button>
+    </div>
+
+    <!-- Main Quota Dashboard Card (2-column layout just like 9Router!) -->
+    <div id="quota-page-tracker-container" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="text-center py-12 text-slate-450 dark:text-slate-550 space-y-2">
+          <span class="material-symbols-outlined text-4xl block text-slate-350 animate-pulse">analytics</span>
+          <p class="text-xs">Đang tải thông tin quota từ AI Providers của bạn...</p>
+        </div>
+      </div>
+  </div>
+</div>

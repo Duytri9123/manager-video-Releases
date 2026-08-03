@@ -29,7 +29,7 @@ const TTS_VOICE_PRESETS = {
     { value: 'en-US-EmmaNeural', label: 'Emma (Microsoft - Nữ)' },
     { value: 'en-US-BrianNeural', label: 'Brian (Microsoft - Nam)' },
   ],
-  '9r:gemini': [
+  'dtr:gemini': [
     { value: 'Kore', label: 'Kore (Google Gemini - Nữ, chắc)' },
     { value: 'Puck', label: 'Puck (Google Gemini - Nam, vui)' },
     { value: 'Aoede', label: 'Aoede (Google Gemini - Nữ, ấm)' },
@@ -38,15 +38,15 @@ const TTS_VOICE_PRESETS = {
     { value: 'Laomedeia', label: 'Laomedeia (Google Gemini - Nữ, hào hứng)' },
     { value: 'Achird', label: 'Achird (Google Gemini - Nam, thân thiện)' },
   ],
-  '9r:google-tts': [
+  'dtr:google-tts': [
     { value: 'google-tts/vi-VN-Wavenet-A', label: 'vi-VN Wavenet A (Google - Nữ)' },
     { value: 'google-tts/vi-VN-Wavenet-B', label: 'vi-VN Wavenet B (Google - Nam)' },
     { value: 'google-tts/en-US-Neural2-F', label: 'en-US Neural2 F (Google - Nữ)' },
     { value: 'google-tts/en-US-Neural2-J', label: 'en-US Neural2 J (Google - Nam)' },
   ],
-  '9r:edge-tts': [
-    { value: 'vi-VN-HoaiMyNeural', label: 'Hoài My (Microsoft 9Router - Nữ)' },
-    { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Microsoft 9Router - Nam)' },
+  'dtr:edge-tts': [
+    { value: 'vi-VN-HoaiMyNeural', label: 'Hoài My (Microsoft DTRouter - Nữ)' },
+    { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Microsoft DTRouter - Nam)' },
   ],
   'elevenlabs': [
     { value: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel (ElevenLabs - Nữ EN)' },
@@ -82,9 +82,9 @@ const TTS_DEFAULT_VOICE = {
   vieneu: 'Ngọc Linh',
   'fpt-ai':  'banmai',
   'edge-tts': 'vi-VN-HoaiMyNeural',
-  '9r:gemini': 'Kore',
-  '9r:google-tts': 'google-tts/vi-VN-Wavenet-A',
-  '9r:edge-tts': 'vi-VN-HoaiMyNeural',
+  'dtr:gemini': 'Kore',
+  'dtr:google-tts': 'google-tts/vi-VN-Wavenet-A',
+  'dtr:edge-tts': 'vi-VN-HoaiMyNeural',
   'elevenlabs': '21m00Tcm4TlvDq8ikWAM',
   'minimax': 'Calm_Woman',
   gtts: 'vi|com.vn',
@@ -205,8 +205,8 @@ function _refreshTtsEngineSelects() {
   const cfg = window._loadedCfg || {};
   const isTtsEngineActive = (eng) => {
     if (!eng) return false;
-    if (eng.backend === '9router') {
-      const nineRouterKey = cfg.nine_router?.api_key;
+    if (eng.backend === 'dtrouter') {
+      const nineRouterKey = cfg.dtrouter?.api_key;
       return !!(nineRouterKey && nineRouterKey.trim().length > 0);
     }
     if (eng.id === 'fpt-ai') {
@@ -233,8 +233,8 @@ function _refreshTtsEngineSelects() {
     const lang = _getTtsTargetLangForSelect(id);
     const fallback = _pickTtsEngineForLang(lang, current);
     sel.innerHTML = '';
-    const localEngs = catalog.filter(e => e.backend !== '9router');
-    const nineEngs = catalog.filter(e => e.backend === '9router');
+    const localEngs = catalog.filter(e => e.backend !== 'dtrouter');
+    const nineEngs = catalog.filter(e => e.backend === 'dtrouter');
     const addOpt = (parent, eng) => {
       const opt = document.createElement('option');
       opt.value = eng.id;
@@ -250,7 +250,7 @@ function _refreshTtsEngineSelects() {
       localEngs.forEach(e => addOpt(gLocal, e));
       sel.appendChild(gLocal);
       const gNine = document.createElement('optgroup');
-      gNine.label = '9Router';
+      gNine.label = 'DTRouter';
       nineEngs.forEach(e => addOpt(gNine, e));
       sel.appendChild(gNine);
     } else {
@@ -262,8 +262,8 @@ function _refreshTtsEngineSelects() {
       ? current
       : fallback?.id || '';
     sel.value = targetValue;
-    if (typeof _handle9RouterEngine === 'function') {
-      _handle9RouterEngine(id, id.replace('-tts-engine', '-tts-voice'));
+    if (typeof _handleDTRouterEngine === 'function') {
+      _handleDTRouterEngine(id, id.replace('-tts-engine', '-tts-voice'));
     }
   });
 }
@@ -284,7 +284,7 @@ async function _loadTtsEngineCatalog() {
       }
       if (jEng?.ok && Array.isArray(jEng.engines) && jEng.engines.length) {
         TTS_ENGINE_CATALOG = jEng.engines;
-        window._ttsNineRouterStatus = jEng.nine_router || {};
+        window._ttsDTRouterStatus = jEng.dtrouter || {};
         // Dùng requestAnimationFrame để đảm bảo DOM đã render xong trước khi refresh
         requestAnimationFrame(() => {
           _refreshTtsEngineSelects();
@@ -429,29 +429,29 @@ function _onTargetLangChange() {
   voiceEl.value = voices[0]?.value || '';
 }
 
-/* ── 9Router consolidated TTS engine — SHARED dynamic component ────────────
- * The catalog exposes ONE "9Router TTS" engine carrying `models` (grouped by
+/* ── DTRouter consolidated TTS engine — SHARED dynamic component ────────────
+ * The catalog exposes ONE "DTRouter TTS" engine carrying `models` (grouped by
  * provider) + `voicesByProvider`. Given any (engineSelectId, voiceSelectId)
  * pair, this injects a Model dropdown + free-text Voice input (with
  * suggestions) + "save as default" button right after the engine field — so it
  * works on process / transcribe / movie / story / sales / ads uniformly.
  * Final value is sent as "model|voice"; backend builds the provider's real
  * model id (openai => voice field, elevenlabs/edge => model/voice path). */
-function _9rKey(engineSelectId) {
+function _dtrKey(engineSelectId) {
   return String(engineSelectId || '').replace(/[^a-z0-9]/gi, '_');
 }
 
 function _find9rEngine(engineId) {
   const eng = String(engineId || '').toLowerCase();
   return (TTS_ENGINE_CATALOG || []).find(
-    e => String(e.id || '').toLowerCase() === eng && e.backend === '9router');
+    e => String(e.id || '').toLowerCase() === eng && e.backend === 'dtrouter');
 }
 
 // Create (once) the Model + Voice + Save controls after the engine field.
-function _ensure9rComponent(engineSelectId, voiceSelectId) {
+function _ensureDtRouterComponent(engineSelectId, voiceSelectId) {
   _ensure9rStyles();
-  const key = _9rKey(engineSelectId);
-  let wrap = document.getElementById(key + '-9r-wrap');
+  const key = _dtrKey(engineSelectId);
+  let wrap = document.getElementById(key + '-dtr-wrap');
   if (wrap) {
     if (voiceSelectId) wrap.dataset.voiceSel = voiceSelectId;
     return wrap;
@@ -461,7 +461,7 @@ function _ensure9rComponent(engineSelectId, voiceSelectId) {
   if (!engineField) return null;
 
   wrap = document.createElement('div');
-  wrap.id = key + '-9r-wrap';
+  wrap.id = key + '-dtr-wrap';
   wrap.className = 'field';
   wrap.style.gridColumn = '1 / -1';
   wrap.style.display = 'none';
@@ -470,27 +470,27 @@ function _ensure9rComponent(engineSelectId, voiceSelectId) {
   wrap.innerHTML =
     '<div class="grid-2">' +
       '<div class="field">' +
-        '<label>Model (9Router)</label>' +
-        '<select id="' + key + '-9r-model"></select>' +
+        '<label>Model (DTRouter)</label>' +
+        '<select id="' + key + '-dtr-model"></select>' +
       '</div>' +
       '<div class="field" style="position:relative">' +
         '<label>Voice (nhập ID hoặc chọn gợi ý)</label>' +
-        '<input type="text" id="' + key + '-9r-voice" autocomplete="off" style="width:100%" ' +
+        '<input type="text" id="' + key + '-dtr-voice" autocomplete="off" style="width:100%" ' +
           'placeholder="để trống = giọng mặc định">' +
-        '<div id="' + key + '-9r-voice-pop" class="nr-voice-pop" style="display:none"></div>' +
+        '<div id="' + key + '-dtr-voice-pop" class="nr-voice-pop" style="display:none"></div>' +
       '</div>' +
     '</div>' +
     '<div class="flex-center gap-8 mt-8">' +
-      '<button type="button" class="btn btn-secondary btn-sm" id="' + key + '-9r-save">💾 Lưu làm mặc định</button>' +
-      '<span class="text-xs text-muted" id="' + key + '-9r-hint"></span>' +
+      '<button type="button" class="btn btn-secondary btn-sm" id="' + key + '-dtr-save">💾 Lưu làm mặc định</button>' +
+      '<span class="text-xs text-muted" id="' + key + '-dtr-hint"></span>' +
     '</div>';
   engineField.parentNode.insertBefore(wrap, engineField.nextSibling);
 
-  document.getElementById(key + '-9r-model')
+  document.getElementById(key + '-dtr-model')
     .addEventListener('change', () => _sync9rVoice(engineSelectId));
 
-  const voiceInput = document.getElementById(key + '-9r-voice');
-  const pop = document.getElementById(key + '-9r-voice-pop');
+  const voiceInput = document.getElementById(key + '-dtr-voice');
+  const pop = document.getElementById(key + '-dtr-voice-pop');
   if (voiceInput && pop) {
     const show = () => { _9rRenderVoicePop(engineSelectId); pop.style.display = 'block'; };
     voiceInput.addEventListener('focus', show);
@@ -502,7 +502,7 @@ function _ensure9rComponent(engineSelectId, voiceSelectId) {
     });
   }
 
-  document.getElementById(key + '-9r-save')
+  document.getElementById(key + '-dtr-save')
     .addEventListener('click', () => _save9rDefault(engineSelectId, wrap.dataset.voiceSel || ''));
   return wrap;
 }
@@ -526,12 +526,12 @@ function _ensure9rStyles() {
 
 // Render the floating voice-suggestion popover for the engine's selected model.
 function _9rRenderVoicePop(engineSelectId) {
-  const key = _9rKey(engineSelectId);
+  const key = _dtrKey(engineSelectId);
   const engineEl = document.getElementById(engineSelectId);
   const cat = engineEl ? _find9rEngine(engineEl.value) : null;
-  const modelSel = document.getElementById(key + '-9r-model');
-  const pop = document.getElementById(key + '-9r-voice-pop');
-  const input = document.getElementById(key + '-9r-voice');
+  const modelSel = document.getElementById(key + '-dtr-model');
+  const pop = document.getElementById(key + '-dtr-voice-pop');
+  const input = document.getElementById(key + '-dtr-voice');
   if (!cat || !modelSel || !pop) return;
   const model = (cat.models || []).find(m => m.id === modelSel.value) || {};
   const prov = model.provider || '';
@@ -575,18 +575,18 @@ function _9rRenderVoicePop(engineSelectId) {
 
 function _sync9rVoice(engineSelectId) {
   _ensure9rStyles();
-  const key = _9rKey(engineSelectId);
-  const pop = document.getElementById(key + '-9r-voice-pop');
+  const key = _dtrKey(engineSelectId);
+  const pop = document.getElementById(key + '-dtr-voice-pop');
   // Re-render suggestions if the popover is open; otherwise just refresh data
   // lazily on next focus.
   if (pop && pop.style.display !== 'none') _9rRenderVoicePop(engineSelectId);
 }
 
-// Save current 9Router model+voice as the default in config.yml (video_process).
+// Save current DTRouter model+voice as the default in config.yml (video_process).
 async function _save9rDefault(engineSelectId, voiceSelectId) {
-  const key = _9rKey(engineSelectId);
+  const key = _dtrKey(engineSelectId);
   const { tts_engine, tts_voice } = _resolveTtsEngineVoiceEx(engineSelectId, voiceSelectId);
-  const hint = document.getElementById(key + '-9r-hint');
+  const hint = document.getElementById(key + '-dtr-hint');
   try {
     await fetch('/api/config', {
       method: 'POST',
@@ -600,18 +600,18 @@ async function _save9rDefault(engineSelectId, voiceSelectId) {
   }
 }
 
-// Returns true when the selected engine is a 9Router engine (and sets up its
+// Returns true when the selected engine is a DTRouter engine (and sets up its
 // Model + voice controls), false otherwise (so the caller runs normal logic).
-function _handle9RouterEngine(engineSelectId, voiceSelectId) {
+function _handleDTRouterEngine(engineSelectId, voiceSelectId) {
   const engineEl = document.getElementById(engineSelectId);
   if (!engineEl) return false;
-  const key = _9rKey(engineSelectId);
-  const cat = (TTS_ENGINE_CATALOG || []).find(e => e.id === '9router');
-  const is9r = engineEl.value === '9router';
+  const key = _dtrKey(engineSelectId);
+  const cat = (TTS_ENGINE_CATALOG || []).find(e => e.id === 'dtrouter');
+  const is9r = engineEl.value === 'dtrouter';
 
   const voiceEl = voiceSelectId ? document.getElementById(voiceSelectId) : null;
   const voiceField = voiceEl && voiceEl.closest('.field');
-  const wrap = _ensure9rComponent(engineSelectId, voiceSelectId);
+  const wrap = _ensureDtRouterComponent(engineSelectId, voiceSelectId);
 
 
   if (!is9r) {
@@ -624,13 +624,13 @@ function _handle9RouterEngine(engineSelectId, voiceSelectId) {
   if (voiceField) voiceField.style.display = 'none';
   wrap.style.display = '';
 
-  const modelSel = document.getElementById(key + '-9r-model');
+  const modelSel = document.getElementById(key + '-dtr-model');
   if (modelSel) {
     const cur = modelSel.value;
     const models = cat.models || [];
     const groups = {};
     models.forEach(m => {
-      const g = m.group || m.provider || '9router';
+      const g = m.group || m.provider || 'dtrouter';
       (groups[g] = groups[g] || []).push(m);
     });
     modelSel.innerHTML = '';
@@ -655,13 +655,13 @@ function _handle9RouterEngine(engineSelectId, voiceSelectId) {
 
 // Explicit resolver: {tts_engine, tts_voice} from an (engine, voice) id pair.
 function _resolveTtsEngineVoiceEx(engineSelectId, voiceSelectId) {
-  const key = _9rKey(engineSelectId);
+  const key = _dtrKey(engineSelectId);
   const engineEl = document.getElementById(engineSelectId);
   const cat = engineEl ? _find9rEngine(engineEl.value) : null;
   if (cat) {
-    const model = document.getElementById(key + '-9r-model')?.value || cat.defaultModel || '';
-    const voice = (document.getElementById(key + '-9r-voice')?.value || '').trim();
-    return { tts_engine: '9router', tts_voice: model + '|' + voice };
+    const model = document.getElementById(key + '-dtr-model')?.value || cat.defaultModel || '';
+    const voice = (document.getElementById(key + '-dtr-voice')?.value || '').trim();
+    return { tts_engine: 'dtrouter', tts_voice: model + '|' + voice };
   }
   return {
     tts_engine: engineEl?.value || 'edge-tts',
@@ -679,8 +679,8 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
   const voiceEl = document.getElementById(voiceSelectId);
   if (!engineEl || !voiceEl) return;
 
-  // 9Router engine → dedicated Model + voice-id controls; skip normal logic.
-  if (_handle9RouterEngine(engineSelectId, voiceSelectId)) return;
+  // DTRouter engine → dedicated Model + voice-id controls; skip normal logic.
+  if (_handleDTRouterEngine(engineSelectId, voiceSelectId)) return;
 
   // Nếu engine select trống (chưa được populate), thử refresh trước
   let engine = (engineEl.value || '').toLowerCase();
@@ -785,67 +785,7 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
   voiceEl.value = keep ? current : (TTS_DEFAULT_VOICE[engine] || preset[0].value);
 }
 
-function switchPage(name) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(n => n.classList.remove('active'));
-  const page = document.getElementById('page-' + name);
-  const navs = document.querySelectorAll('[data-page="' + name + '"]');
-  if (page) page.classList.add('active');
-  navs.forEach(n => n.classList.add('active'));
-  const el = document.getElementById('topbar-title');
-  const titles = {
-    user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
-    publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
-    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router',
-    videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng', ads:'Video quảng cáo'
-  };
-  if (el) el.textContent = titles[name] || t('title_' + name) || name;
-  if (name === 'config' && !window._configLoaded) {
-    loadConfig();
-    loadCookieMode();
-    loadCookieFields();
-    window._configLoaded = true;
-  }
-  if (name === 'history') { loadHistory(); if (typeof loadFiles === 'function') loadFiles(''); }
-  if (name === 'content') cptSwitch('files');
-  if (name === 'process') {
-    loadQueue();
-    // Refresh TTS engine dropdown mỗi khi switch sang trang process
-    // (catalog có thể đã load sau khi DOM render)
-    requestAnimationFrame(() => {
-      if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
-        _refreshTtsEngineSelects();
-        _onTargetLangChange();
-      } else {
-        _loadTtsEngineCatalog().then(() => {
-          _refreshTtsEngineSelects();
-          _onTargetLangChange();
-        });
-      }
-    });
-  }
-  if (name === 'transcribe') {
-    requestAnimationFrame(() => {
-      if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
-        _refreshTtsEngineSelects();
-        _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
-        if (typeof renderTranscribeVoiceLibrary === 'function') renderTranscribeVoiceLibrary();
-      } else {
-        _loadTtsEngineCatalog().then(() => {
-          _refreshTtsEngineSelects();
-          _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
-          if (typeof renderTranscribeVoiceLibrary === 'function') renderTranscribeVoiceLibrary();
-        });
-      }
-    });
-  }
-  if (name === 'proxies') { if (typeof proxyLoadList === 'function') proxyLoadList(); if (typeof routerLoadList === 'function') routerLoadList(); }
-  if (name === 'chat' && typeof chatInit === 'function') chatInit();
-  if (name === 'videogen' && typeof vgInit === 'function') vgInit();
-  if (name === 'n8n' && typeof n8nInit === 'function') n8nInit();
-  if (name === 'sales' && typeof salesInit === 'function') salesInit();
-  if (name === 'ads' && typeof adsInit === 'function') adsInit();
-}
+
 
 
 
@@ -966,13 +906,10 @@ function setProcessMode(mode) {
 }
 
 function _getProcessProvider(kind) {
-  const isModel = (window._procMode || 'ai') === 'model';
-  const transcribeId = isModel ? 'proc-transcribe-provider-model' : 'proc-transcribe-provider-ai';
-  const translateId = isModel ? 'proc-trans-provider-model' : 'proc-trans-provider-ai';
   if (kind === 'transcribe') {
-    return document.getElementById(transcribeId)?.value || (isModel ? 'model' : 'groq');
+    return document.getElementById('proc-transcribe-provider-model')?.value || 'model';
   }
-  return document.getElementById(translateId)?.value || 'deepseek';
+  return document.getElementById('proc-trans-provider-model')?.value || 'deepseek';
 }
 
 function startProcessVideo() {
@@ -991,11 +928,26 @@ function startProcessVideo() {
   // Preflight: nếu user bật tự-động-đăng, check trạng thái các nền tảng trước khi
   // bắt đầu pipeline xử lý dài. Người dùng có thể tắt nền tảng lỗi hoặc hủy.
   (async () => {
+    // Reset log box & ghi log bắt đầu
+    const logBox = document.getElementById('proc-log');
+    if (logBox) logBox.innerHTML = '';
+    const logBox3 = document.getElementById('step3-log');
+    if (logBox3) logBox3.innerHTML = '';
+    if (typeof _appendProcLog === 'function') {
+      _appendProcLog('🚀 Khởi động tiến trình xử lý...', 'info');
+    }
+
     if (window._procUploadPromise) {
       try {
+        if (typeof _appendProcLog === 'function') {
+          _appendProcLog('⏳ Đang chờ hoàn tất upload file import...', 'info');
+        }
         await window._procUploadPromise;
       } catch (e) {
         toast('Upload file import chưa hoàn tất: ' + (e.message || e), 'error');
+        if (typeof _appendProcLog === 'function') {
+          _appendProcLog('❌ File import tải lên thất bại.', 'error');
+        }
         if (typeof window._onProcTaskFinished === 'function') {
           window._onProcTaskFinished(false);
         }
@@ -1011,14 +963,14 @@ function startProcessVideo() {
       const translateSubs = document.getElementById('proc-translate-subs')?.checked ?? true;
       if (translateSubs) {
         const transProv = _getProcessProvider('translate');
-        if (['deepseek', 'groq', 'openai', 'gemini', '9router'].includes(transProv)) {
+        if (['deepseek', 'groq', 'openai', 'gemini', 'dtrouter'].includes(transProv)) {
           providersToCheck.push(transProv);
         }
       }
       
       // 2. Check Transcription API if enabled
       const transcribeProv = _getProcessProvider('transcribe');
-      if (['groq', 'openai', 'gemini', '9router'].includes(transcribeProv)) {
+      if (['groq', 'openai', 'gemini', 'dtrouter'].includes(transcribeProv)) {
         providersToCheck.push(transcribeProv);
       }
       
@@ -1036,26 +988,36 @@ function startProcessVideo() {
       const uniqueProviders = [...new Set(providersToCheck)];
       
       if (uniqueProviders.length > 0 && typeof checkApiBeforeAction === 'function') {
+        if (typeof _appendProcLog === 'function') {
+          _appendProcLog('🔍 Đang kiểm tra trạng thái các API key cần thiết...', 'info');
+        }
         for (const provider of uniqueProviders) {
+          if (typeof _appendProcLog === 'function') {
+            _appendProcLog(`🧪 Đang xác minh API key cho: ${provider}...`, 'info');
+          }
           const key = getApiKeyForProvider(provider);
           await new Promise((resolve, reject) => {
-            checkApiBeforeAction(provider, key, resolve, () => reject(new Error('Hủy bỏ hoặc kiểm tra API thất bại.')));
+            checkApiBeforeAction(provider, key, resolve, () => reject(new Error(`Hủy bỏ hoặc xác minh API ${provider} thất bại.`)));
           });
+          if (typeof _appendProcLog === 'function') {
+            _appendProcLog(`✅ API key cho: ${provider} hoạt động tốt.`, 'success');
+          }
         }
       }
     } catch (err) {
       console.warn('API Preflight check failed:', err);
-      // Reset task status in queue
+      if (typeof _appendProcLog === 'function') {
+        _appendProcLog(`❌ Tiến trình bị hủy hoặc lỗi preflight check: ${err.message || err}`, 'error');
+      }
+      // Reset task status in queue to pending so user can fix and retry
       if (window._procCurrentTaskId) {
         const t = (window._batchQueue || []).find(x => x.id === window._procCurrentTaskId);
-        if (t && t.status === 'processing') t.status = 'pending';
+        if (t) t.status = 'pending';
       }
       window._procCurrentTaskId = null;
       window._procRunning = false;
       if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
-      if (typeof window._onProcTaskFinished === 'function') {
-        window._onProcTaskFinished(false);
-      }
+      if (typeof _step3RefreshStartCard === 'function') _step3RefreshStartCard();
       return; // Do not proceed to process video
     }
     // --- END OF PRE-FLIGHT API CHECKS ---
@@ -1093,13 +1055,11 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
   const btn = document.getElementById('btn-proc');
   if (btn) { btn.disabled = true; btn.textContent = 'Đang xử lý...'; }
 
-  // Reset UI
-  const logBox = document.getElementById('proc-log');
-  if (logBox) logBox.innerHTML = '';
-  // Reset step3 log mirror
-  const logBox3 = document.getElementById('step3-log');
-  if (logBox3) logBox3.innerHTML = '';
-  _setProcProgress(0, 'Bắt đầu...');
+  // Reset UI (logBox is already cleared in startProcessVideo)
+  _setProcProgress(0, 'Khởi chạy...');
+  if (typeof _appendProcLog === 'function') {
+    _appendProcLog('📡 Đang gửi request xử lý video tới server backend...', 'info');
+  }
 
   const baseFields = {
     video_path:       videoPath,
@@ -1110,6 +1070,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     target_language:  document.getElementById('proc-target-lang')?.value || 'vi',
     transcribe_provider: _getProcessProvider('transcribe'),
     translate_provider:  _getProcessProvider('translate'),
+    dtrouter_key:     (window._loadedCfg?.dtrouter || {}).api_key || localStorage.getItem('cfg-dtrouter-key') || '',
     burn_subs:        (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn')?.checked ?? true),
     blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
     blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
@@ -1289,6 +1250,13 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
             const d = JSON.parse(line);
             if (d.log) {
               _appendProcLog(d.log, d.level || 'info');
+              if (d.level === 'error') {
+                window._procRunning = false;
+                const btn = document.getElementById('btn-proc');
+                if (btn) { btn.disabled = false; btn.textContent = '🚀 Bắt đầu xử lý (Thử lại)'; }
+                const btn3 = document.getElementById('btn-start-proc');
+                if (btn3) { btn3.disabled = false; btn3.textContent = '▶ Thử lại xử lý'; }
+              }
               if (d.log.includes('File cuối cùng:') || d.log.includes('final_output_path')) {
                 const match = d.log.match(/[:\s]([^\s]+\.mp4)/);
                 if (match) {
@@ -1560,4 +1528,61 @@ function _extractPreviewTextFromAss(content, maxLines = 2) {
   return texts.join(' ');
 }
 
+function _sanitizeVoiceParam(val) {
+  if (!val) return '+0%';
+  val = String(val).trim();
+  // Ensure starts with + or -
+  if (!val.startsWith('+') && !val.startsWith('-')) {
+    val = '+' + val;
+  }
+  // Fallback to % if no unit
+  if (!val.endsWith('%') && !val.endsWith('Hz')) {
+    val += '%';
+  }
+  return val;
+}
 
+async function previewProcessVoice() {
+  const text = 'Xin chào, đây là phần nghe thử giọng đọc từ cấu hình xử lý video.';
+  const btn = event?.currentTarget;
+  const audio = document.getElementById('proc-preview-audio');
+  if (!btn) return;
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    const res = await fetch('/api/tts_preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        tts_engine: document.getElementById('proc-tts-engine')?.value || 'edge-tts',
+        tts_voice: document.getElementById('proc-tts-voice')?.value || 'vi-VN-HoaiMyNeural',
+        tts_pitch: _sanitizeVoiceParam(document.getElementById('proc-tts-pitch')?.value || '+0Hz'),
+        tts_rate: _sanitizeVoiceParam(document.getElementById('proc-tts-rate')?.value || '+0%'),
+        tts_emotion: document.getElementById('proc-tts-emotion')?.value || 'default',
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Lỗi preview');
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    if (audio) {
+      audio.src = url;
+      audio.style.display = 'inline-block';
+      audio.play();
+    }
+  } catch (err) {
+    alert('Lỗi preview giọng: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+window.previewProcessVoice = previewProcessVoice;

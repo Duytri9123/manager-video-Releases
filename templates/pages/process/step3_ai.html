@@ -111,7 +111,7 @@
               <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="none" checked onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">🚫</span><span class="pe2-optcard-lbl">Không dùng</span><span class="pe2-optcard-badge">✓</span></label>
               <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="frame" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">🎞</span><span class="pe2-optcard-lbl">Frame video</span><span class="pe2-optcard-badge">✓</span></label>
               <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="import" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">📤</span><span class="pe2-optcard-lbl">Upload ảnh</span><span class="pe2-optcard-badge">✓</span></label>
-              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="ai" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">✨</span><span class="pe2-optcard-lbl">AI (9Router/Gemini)</span><span class="pe2-optcard-badge">✓</span></label>
+              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="ai" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">✨</span><span class="pe2-optcard-lbl">AI (DTRouter/Gemini)</span><span class="pe2-optcard-badge">✓</span></label>
             </div>
             <div id="proc-thumb-pick-frame-opts" style="display:none">
               <label class="lbl">Thời điểm lấy frame (giây)</label>
@@ -207,8 +207,9 @@
               </div>
               <div class="field">
                 <label>Phiên âm bằng</label>
-                <select id="proc-transcribe-provider-model">
-                  <option value="groq" selected>Groq Whisper API</option>
+                <select id="proc-transcribe-provider-model" onchange="onTranscribeProviderChanged()">
+                  <option value="antigravity" selected>🌌 Antigravity / Gemini STT (Nhanh & Chuẩn)</option>
+                  <option value="groq">Groq Whisper API</option>
                   <option value="model">Whisper local</option>
                 </select>
               </div>
@@ -219,7 +220,7 @@
             </div>
             <div style="display:none">
               <select id="proc-transcribe-provider-ai"><option value="groq" selected>Groq</option></select>
-              <select id="proc-trans-provider-ai"><option value="9router">🔀 9Router</option><option value="deepseek" selected>DeepSeek</option><option value="groq">Groq</option><option value="openai">OpenAI</option><option value="google">Google</option><option value="auto">Auto</option></select>
+              <select id="proc-trans-provider-ai"><option value="dtrouter">🔀 DTRouter</option><option value="deepseek" selected>DeepSeek</option><option value="groq">Groq</option><option value="openai">OpenAI</option><option value="google">Google</option><option value="auto">Auto</option></select>
             </div>
             <div id="proc-ai-panel" style="display:none"></div>
             <div id="proc-model-panel" style="display:none"></div>

@@ -127,20 +127,29 @@ function _storeProfileTranslatedData(translatedName, translatedSig) {
   _saveProfileTranslationCache();
 }
 
-async function _translateUserProfileAsync(info, provider, nameViEl, sigViEl) {
-  const nickname = (info?.nickname || '').trim();
-  const signature = (info?.signature || '').trim();
+let _lastFetchedUserInfo = null;
+
+async function _translateUserProfileAsync(info, provider, nameViEl, sigViEl, force = false) {
+  if (info) _lastFetchedUserInfo = info;
+  const targetInfo = info || _lastFetchedUserInfo;
+  const nickname = (targetInfo?.nickname || '').trim();
+  const signature = (targetInfo?.signature || '').trim();
   if (!nickname && !signature) return;
 
-  const cachedProfile = _getProfileTranslatedData();
+  if (force) {
+    _profileTranslationCache = {};
+    _saveProfileTranslationCache();
+  }
+
+  const cachedProfile = force ? {} : _getProfileTranslatedData();
   const texts = [];
   const fieldMap = [];
 
-  if (nickname && !cachedProfile.name) {
+  if (nickname && (force || !cachedProfile.name)) {
     texts.push(nickname);
     fieldMap.push('name');
   }
-  if (signature && !cachedProfile.signature) {
+  if (signature && (force || !cachedProfile.signature)) {
     texts.push(signature);
     fieldMap.push('signature');
   }
@@ -148,8 +157,8 @@ async function _translateUserProfileAsync(info, provider, nameViEl, sigViEl) {
   if (!texts.length) return;
 
   try {
-    if (nameViEl && !cachedProfile.name) nameViEl.textContent = t('lbl_translating');
-    if (sigViEl && !cachedProfile.signature) sigViEl.textContent = t('lbl_translating');
+    if (nameViEl && (force || !cachedProfile.name)) nameViEl.textContent = t('lbl_translating');
+    if (sigViEl && (force || !cachedProfile.signature)) sigViEl.textContent = t('lbl_translating');
 
     const endpoint = texts.length > 1 ? '/api/translate_batch' : '/api/translate';
     const body = texts.length > 1 ? { texts, provider } : { text: texts[0], provider };
@@ -164,8 +173,8 @@ async function _translateUserProfileAsync(info, provider, nameViEl, sigViEl) {
       ? translated.results
       : [translated?.result || ''];
 
-    const translatedName = cachedProfile.name || (fieldMap.includes('name') ? (results[fieldMap.indexOf('name')] || nickname) : nickname);
-    const translatedSig = cachedProfile.signature || (fieldMap.includes('signature') ? (results[fieldMap.indexOf('signature')] || signature) : signature);
+    const translatedName = fieldMap.includes('name') ? (results[fieldMap.indexOf('name')] || nickname) : (cachedProfile.name || nickname);
+    const translatedSig = fieldMap.includes('signature') ? (results[fieldMap.indexOf('signature')] || signature) : (cachedProfile.signature || signature);
 
     if (nameViEl) nameViEl.textContent = translatedName;
     if (sigViEl) sigViEl.textContent = translatedSig;
@@ -907,8 +916,16 @@ function _translateVisibleDebounced(delay = 800) {
 async function retranslateAll() {
   if (!confirm(t('lbl_retranslate_confirm'))) return;
   _clearTranslationCache();
+  _profileTranslationCache = {};
+  _saveProfileTranslationCache();
   _userVideos.forEach(v => { delete v.desc_vi; });
   _renderVideos();
+  const nameViEl = document.getElementById('u-name-vi');
+  const sigViEl = document.getElementById('u-sig-vi');
+  const currentProvider = document.getElementById('provider-select')?.value || 'auto';
+  if (_lastFetchedUserInfo) {
+    _translateUserProfileAsync(_lastFetchedUserInfo, currentProvider, nameViEl, sigViEl, true);
+  }
   if (_viEnabled) _translateVisible();
 }
 
@@ -924,6 +941,12 @@ function _initUserPageListeners() {
   });
   document.getElementById('provider-select')?.addEventListener('change', (e) => {
     const val = e.target.value;
+    const sel = e.target;
+    const selectedOptText = sel.options[sel.selectedIndex]?.text || (val === 'auto' ? 'Tự động (Auto)' : val);
+    const badge = document.getElementById('current-provider-badge');
+    if (badge) {
+      badge.innerHTML = '<span class="dot dot-green"></span>Provider: ' + selectedOptText;
+    }
     const warningEl = document.getElementById('provider-warning-msg');
     if (val === 'prompt_connect') {
       if (warningEl) {
@@ -939,7 +962,16 @@ function _initUserPageListeners() {
     }
     const scopeUrl = document.getElementById('user-url')?.value.trim() || _translationScopeUrl;
     _setTranslationContext(scopeUrl, val || 'auto');
+    _clearTranslationCache();
+    _profileTranslationCache = {};
+    _saveProfileTranslationCache();
+    _userVideos.forEach(v => { delete v.desc_vi; });
     _renderVideos();
+    const nameViEl = document.getElementById('u-name-vi');
+    const sigViEl = document.getElementById('u-sig-vi');
+    if (_lastFetchedUserInfo) {
+      _translateUserProfileAsync(_lastFetchedUserInfo, val || 'auto', nameViEl, sigViEl, true);
+    }
     if (_viEnabled) _translateVisibleDebounced();
   });
 
@@ -970,18 +1002,90 @@ async function _loadTranslationStatus() {
     const badge = document.getElementById('current-provider-badge');
     if (badge) {
       let preferred = status.preferred || 'auto';
-      const providers = status.providers || [];
-      if (preferred !== 'auto' && !providers.includes(preferred) && !providers.some(p => preferred.startsWith(p + '/'))) {
-        preferred = 'auto';
+      let displayProv = preferred === 'prompt_connect' || preferred === 'auto' ? 'Tự động (Auto)' : preferred;
+      if (displayProv.includes('/')) {
+        const parts = displayProv.split('/');
+        displayProv = parts[parts.length - 1];
       }
-      const hasKey = providers.length > 1 || (providers.length === 1 && providers[0] !== 'google');
-      badge.innerHTML = hasKey
-        ? '<span class="dot dot-green"></span>' + (typeof t === 'function' ? t('lbl_provider_badge') : 'Provider:') + ' ' + (preferred === 'prompt_connect' ? 'auto' : preferred)
-        : '<span class="dot dot-yellow"></span>Google only (no API keys)';
+      badge.innerHTML = '<span class="dot dot-green"></span>Provider: ' + displayProv;
     }
 
     const sel = document.getElementById('provider-select');
     const warningEl = document.getElementById('provider-warning-msg');
+    
+    if (sel && status.models) {
+      const currentVal = sel.value;
+      let preferred = status.preferred || 'auto';
+      sel.innerHTML = '<option value="auto">Tự động (Auto)</option>';
+      
+      // Group models by provider / owned_by
+      const groups = {};
+      status.models.forEach(m => {
+        let groupName = 'Nhà cung cấp cục bộ (Local)';
+        if (m.provider === 'google') {
+          groupName = 'Google Translate';
+        } else if (m.id === 'opencode' || m.provider === 'opencode') {
+          groupName = 'OpenCode Free';
+        } else {
+          const owned = m.owned_by || m.provider;
+          const names = {
+            oc: 'OpenCode Free',
+            ag: 'Google Antigravity',
+            gc: 'Gemini',
+            qd: 'Qoder',
+            kr: 'Kiro AI',
+            mimo: 'Xiaomi Mimo',
+            cx: 'OpenAI Codex',
+            openai: 'OpenAI',
+            deepseek: 'DeepSeek',
+            groq: 'Groq',
+            huggingface: 'HuggingFace',
+            nvidia: 'NVIDIA NIM'
+          };
+          groupName = names[owned.toLowerCase()] || owned.toUpperCase();
+        }
+        if (!groups[groupName]) {
+          groups[groupName] = [];
+        }
+        groups[groupName].push(m);
+      });
+
+      // Render each group
+      Object.keys(groups).forEach(gName => {
+        const groupEl = document.createElement('optgroup');
+        groupEl.label = gName;
+        groups[gName].forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          let displayName = m.name;
+          if (displayName.includes('/')) {
+            const parts = displayName.split('/');
+            displayName = parts[parts.length - 1];
+          }
+          if (gName !== 'Google Translate' && gName !== 'Tự động (Auto)') {
+            opt.textContent = `${gName} — ${displayName}`;
+          } else {
+            opt.textContent = displayName;
+          }
+          groupEl.appendChild(opt);
+        });
+        sel.appendChild(groupEl);
+      });
+
+      // Try to select previous value or preferred value
+      if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+      } else if (preferred && Array.from(sel.options).some(o => o.value === preferred)) {
+        sel.value = preferred;
+      }
+      
+      // Update badge with exact option label (e.g. deepseek-v4-flash-free)
+      const selectedOptText = sel.options[sel.selectedIndex]?.text || (sel.value === 'auto' ? 'Tự động (Auto)' : sel.value);
+      if (badge) {
+        badge.innerHTML = '<span class="dot dot-green"></span>Provider: ' + selectedOptText;
+      }
+    }
+
     if (sel && warningEl) {
       if (sel.value === 'prompt_connect') {
         warningEl.classList.remove('hidden');

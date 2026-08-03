@@ -4,6 +4,85 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Dict, List, Tuple
+import sqlite3
+
+
+def load_db_connections() -> List[dict]:
+    import sqlite3
+    import os
+    import json
+    from pathlib import Path
+
+    # 1. Load disabled status from .state/providers.db
+    disabled_providers = set()
+    legacy_db = Path(__file__).parent.parent / ".state" / "providers.db"
+    if legacy_db.exists():
+        try:
+            conn_legacy = sqlite3.connect(legacy_db)
+            rows_legacy = conn_legacy.execute("SELECT provider, enabled FROM provider_connections").fetchall()
+            conn_legacy.close()
+            prov_map = {}
+            for p, en in rows_legacy:
+                p_norm = p.lower()
+                if p_norm not in prov_map:
+                    prov_map[p_norm] = []
+                prov_map[p_norm].append(bool(en))
+            for p_norm, en_list in prov_map.items():
+                if not any(en_list):
+                    disabled_providers.add(p_norm)
+        except Exception:
+            pass
+
+    # 2. Also check system config for provider toggles
+    try:
+        from core.config import load_cfg
+        cfg = load_cfg()
+        providers_cfg = cfg.get("providers") or {}
+        for p_id, p_data in providers_cfg.items():
+            conns = (p_data or {}).get("connections") or []
+            if not conns or all(c.get("enabled") is False for c in conns):
+                disabled_providers.add(p_id.lower())
+    except Exception:
+        pass
+
+    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
+    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
+    if not os.path.exists(db_path):
+        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
+    if not os.path.exists(db_path):
+        return []
+        
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT id, provider, name, data, isActive FROM providerConnections WHERE isActive != 0").fetchall()
+        conn.close()
+        res = []
+        for r in rows:
+            d = dict(r)
+            prov = (d.get("provider") or "").lower()
+            if prov in disabled_providers:
+                continue
+            try:
+                js_data = json.loads(d.get("data") or "{}")
+                if js_data.get("enabled") is False or js_data.get("testStatus") == "unavailable":
+                    continue
+                d["api_key"] = js_data.get("apiKey") or js_data.get("accessToken") or ""
+                d["base_url"] = js_data.get("baseUrl") or ""
+            except Exception:
+                d["api_key"] = ""
+                d["base_url"] = ""
+            
+            # Non-noAuth providers MUST have a valid non-empty API key or token
+            if prov not in ["opencode", "opencodefree", "google"] and not d["api_key"].strip():
+                continue
+
+            d["enabled"] = d["isActive"]
+            d["status"] = "active"
+            res.append(d)
+        return res
+    except Exception:
+        return []
 
 
 def _parse_chat_response_body(raw: bytes) -> str:
@@ -50,9 +129,15 @@ def _normalize_provider_name(name: str) -> str:
     normalized = str(name).strip().lower()
     if normalized in {"hf", "huggingface"}:
         return "huggingface"
-    if normalized in {"9r", "nine_router", "ninerouter", "9router"}:
-        return "9router"
-    if normalized in {"deepseek", "openai", "google", "groq", "9router", "auto", "opencode"}:
+    if normalized in {"9r", "dtrouter", "ninerouter"}:
+        return "dtrouter"
+    if normalized in {"opencode", "opencodefree", "oc"}:
+        return "opencode"
+    if normalized in {"antigravity", "ag"}:
+        return "antigravity"
+    if normalized in {"codex", "cx"}:
+        return "codex"
+    if normalized in {"deepseek", "openai", "google", "groq", "dtrouter", "auto", "gemini", "nvidia"}:
         return normalized
     return "auto"
 
@@ -60,12 +145,16 @@ def _normalize_provider_name(name: str) -> str:
 def _parse_numbered_translation(content: str, size: int) -> List[str]:
     results = [""] * size
     for line in (content or "").split("\n"):
-        match = re.match(r"^(\d+)[.)]\s*(.*)", line.strip())
-        if not match:
+        line_clean = line.strip()
+        if not line_clean:
             continue
-        idx = int(match.group(1)) - 1
-        if 0 <= idx < size:
-            results[idx] = (match.group(2) or "").strip()
+        match = re.match(r"^[*\s#]*(\d+)[.)、:\s-]+\s*(.*)", line_clean)
+        if match:
+            idx = int(match.group(1)) - 1
+            if 0 <= idx < size:
+                val = match.group(2).strip()
+                val = re.sub(r"^\*+|\*+$", "", val).strip()
+                results[idx] = val
     return results
 
 
@@ -156,77 +245,58 @@ def _llm_translate(
     )
 
     correction_map = ""
-    try:
-        analysis_payload = json.dumps({
-            "model": model,
-            "messages": [
-                {"role": "system", "content": analysis_system},
-                {"role": "user", "content": analysis_prompt},
-            ],
-            "temperature": 0.1,
-            "max_tokens": 1500,
-            "stream": False,
-        }).encode()
-        analysis_req = urllib.request.Request(
-            api_url, data=analysis_payload, method="POST",
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
-        )
-        with urllib.request.urlopen(analysis_req, timeout=timeout) as response:
-            correction_map = _parse_chat_response_body(response.read())
-    except Exception:
-        correction_map = ""
+    # Skip ASR analysis for short batches (e.g. video titles/descriptions) or weak/free models
+    is_weak_model = "opencode" in model.lower() or "free" in model.lower() or len(texts) <= 15
+    
+    if not is_weak_model:
+        try:
+            analysis_payload = json.dumps({
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": analysis_system},
+                    {"role": "user", "content": analysis_prompt},
+                ],
+                "temperature": 0.1,
+                "max_tokens": 1500,
+                "stream": False,
+            }).encode()
+            analysis_req = urllib.request.Request(
+                api_url, data=analysis_payload, method="POST",
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            )
+            with urllib.request.urlopen(analysis_req, timeout=timeout) as response:
+                correction_map = _parse_chat_response_body(response.read())
+        except Exception:
+            correction_map = ""
 
-    # ── Step 2: Translate in batches using the analysis ────────────────────────
+    # ── Step 2: Parallel sub-batch translation for maximum speed ────────────────
     system_msg = (
         f"You are an expert {target_lang_name} subtitle translator for Chinese social media videos. "
-        f"You produce natural, engaging {target_lang_name} subtitles that sound like a native "
-        f"{target_lang_name} content creator is narrating. You ALWAYS fix ASR errors before translating."
+        f"You produce natural, engaging {target_lang_name} subtitles. ALWAYS output numbered lines only."
     )
 
-    for batch_start in range(0, len(texts), batch_size):
-        batch = texts[batch_start: batch_start + batch_size]
+    sub_size = 5 if len(texts) > 5 else len(texts)
+    sub_batches = []
+    for b_start in range(0, len(texts), sub_size):
+        sub_batches.append((b_start, texts[b_start: b_start + sub_size]))
+
+    def _translate_sub_batch(b_start: int, batch: List[str]) -> Tuple[int, List[str]]:
         numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(batch))
-
-        # Add surrounding lines for continuity between batches
-        prev_context = ""
-        next_context = ""
-        if batch_start > 0:
-            prev_lines = texts[max(0, batch_start - 3): batch_start]
-            prev_context = "\n".join(f"  {t}" for t in prev_lines if t.strip())
-        if batch_start + batch_size < len(texts):
-            next_lines = texts[batch_start + batch_size: batch_start + batch_size + 3]
-            next_context = "\n".join(f"  {t}" for t in next_lines if t.strip())
-
-        # Build the translation prompt
         parts = []
-        parts.append(f"VIDEO: {context or '(unknown)'}")
-
+        if context:
+            parts.append(f"VIDEO: {context}")
         if correction_map:
-            parts.append(f"\nVIDEO ANALYSIS (use this to fix errors and maintain consistency):\n{correction_map}")
-
+            parts.append(f"ANALYSIS:\n{correction_map}")
         if style_guide:
-            parts.append(f"\nSTYLE GUIDE:\n{style_guide}")
-
-        if prev_context:
-            parts.append(f"\nPREVIOUS LINES (already translated, for continuity):\n{prev_context}")
-
-        parts.append(f"\nLINES TO TRANSLATE:\n{numbered}")
-
-        if next_context:
-            parts.append(f"\nNEXT LINES (coming up, for context):\n{next_context}")
-
+            parts.append(f"STYLE GUIDE:\n{style_guide}")
+        parts.append(f"LINES TO TRANSLATE:\n{numbered}")
         parts.append(
             "\nRULES:\n"
-            "1. Fix ALL ASR errors using the ANALYSIS above before translating.\n"
-            "2. Use TERMS list for consistent translations — same word = same translation everywhere.\n"
-            f"3. Each line must be a complete, natural {target_lang_name} sentence.\n"
-            "4. Match the TONE described in the analysis.\n"
-            "5. Keep translations concise (subtitle-friendly, not too long).\n"
-            "6. OUTPUT: Return ONLY numbered lines (1. ..., 2. ...). No explanations, no extra text."
+            f"1. Each line must be a complete, natural {target_lang_name} sentence.\n"
+            "2. Keep translations concise and natural.\n"
+            "3. OUTPUT: Return ONLY numbered lines (1. ..., 2. ...). No explanations, no extra text."
         )
-
         prompt = "\n".join(parts)
-
         payload = json.dumps({
             "model": model,
             "messages": [
@@ -234,7 +304,7 @@ def _llm_translate(
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.3,
-            "max_tokens": max(2048, min(8000, len(batch) * 120)),
+            "max_tokens": max(512, min(4096, len(batch) * 90)),
             "stream": False,
         }).encode()
         req = urllib.request.Request(
@@ -249,18 +319,23 @@ def _llm_translate(
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 raw_body = response.read()
+            if raw_body:
+                content = _parse_chat_response_body(raw_body)
+                if content:
+                    return b_start, _parse_numbered_translation(content, len(batch))
         except Exception:
-            raise
-        if not raw_body:
-            # 9Router occasionally streams 0 bytes when an upstream chain
-            # exhausts itself. Skip this batch instead of blowing up.
-            continue
-        content = _parse_chat_response_body(raw_body)
-        if not content:
-            continue
-        batch_results = _parse_numbered_translation(content, len(batch))
-        for i, result in enumerate(batch_results):
-            all_results[batch_start + i] = result
+            pass
+        return b_start, [""] * len(batch)
+
+    from concurrent.futures import ThreadPoolExecutor
+    max_w = min(8, max(1, len(sub_batches)))
+    with ThreadPoolExecutor(max_workers=max_w) as executor:
+        futures = [executor.submit(_translate_sub_batch, bs, b) for bs, b in sub_batches]
+        for fut in futures:
+            b_start, batch_results = fut.result()
+            for i, res in enumerate(batch_results):
+                if b_start + i < len(texts):
+                    all_results[b_start + i] = res
 
     return all_results
 
@@ -279,7 +354,7 @@ def load_api_keys_status() -> Dict:
     return {}
 
 
-def is_9router_working(nr_cfg: Dict) -> bool:
+def is_dtrouter_working(nr_cfg: Dict) -> bool:
     import urllib.request
     endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
     api_key = (nr_cfg.get("api_key") or "").strip()
@@ -327,8 +402,8 @@ def is_chat_model(model_id: str) -> bool:
     return True
 
 
-def get_9router_active_providers() -> set[str] | None:
-    """Read local 9Router SQLite database to get active provider names.
+def get_dtrouter_active_providers() -> set[str] | None:
+    """Read local DTRouter SQLite database to get active provider names.
     Returns a set of lowercase active provider names, or None on failure.
     """
     import os
@@ -339,7 +414,9 @@ def get_9router_active_providers() -> set[str] | None:
     if not appdata:
         return None
         
-    db_path = os.path.join(appdata, '9router', 'db', 'data.sqlite')
+    db_path = os.path.join(appdata, 'dtrouter', 'db', 'data.sqlite')
+    if not os.path.exists(db_path):
+        db_path = os.path.join(appdata, '9router', 'db', 'data.sqlite')
     if not os.path.exists(db_path):
         return None
         
@@ -347,16 +424,11 @@ def get_9router_active_providers() -> set[str] | None:
         # Open in read-only mode to avoid locking issues
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         cur = conn.cursor()
-        cur.execute('SELECT provider, isActive, data FROM providerConnections')
-        active = set()
-        for provider, is_active, data_str in cur.fetchall():
+        cur.execute('SELECT provider, isActive FROM providerConnections')
+        active = {"oc", "opencode"}
+        for provider, is_active in cur.fetchall():
             if is_active == 1:
-                try:
-                    data = json.loads(data_str)
-                    if data.get('testStatus') == 'active':
-                        active.add(provider.lower())
-                except Exception:
-                    pass
+                active.add(provider.lower())
         conn.close()
         return active
     except Exception:
@@ -381,7 +453,7 @@ def _matches_provider(prefix: str, active_providers: set[str]) -> bool:
     return False
 
 
-def get_9router_models(nr_cfg: Dict) -> List[Dict]:
+def get_dtrouter_models(nr_cfg: Dict) -> List[Dict]:
     if not nr_cfg:
         return []
     endpoint = nr_cfg.get("endpoint") or "http://localhost:20128/v1"
@@ -400,7 +472,7 @@ def get_9router_models(nr_cfg: Dict) -> List[Dict]:
                 body = json.loads(resp.read())
                 models = []
                 
-                active_providers = get_9router_active_providers()
+                active_providers = get_dtrouter_active_providers()
                 
                 for it in body.get("data") or []:
                     mid = it.get("id")
@@ -414,9 +486,9 @@ def get_9router_models(nr_cfg: Dict) -> List[Dict]:
                                     continue
                                     
                             models.append({
-                                "id": f"9router/{mid}",
+                                "id": f"dtrouter/{mid}",
                                 "name": mid,
-                                "provider": "9router",
+                                "provider": "dtrouter",
                                 "owned_by": it.get("owned_by", "")
                             })
                 return models
@@ -425,118 +497,162 @@ def get_9router_models(nr_cfg: Dict) -> List[Dict]:
     return []
 
 
+def get_enabled_models_for_provider(provider_id: str, provider_alias: str) -> List[dict]:
+    import sqlite3
+    import os
+    import json
+    try:
+        from templates.pages.config.route import DEFAULT_PROVIDER_MODELS
+    except Exception:
+        DEFAULT_PROVIDER_MODELS = {}
+
+    defaults = list(DEFAULT_PROVIDER_MODELS.get(provider_id, []))
+    
+    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
+    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
+    if not os.path.exists(db_path):
+        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
+        
+    disabled_set = set()
+    custom_list = []
+    
+    if os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            cur = conn.cursor()
+            
+            # Fetch disabled models for this provider alias or provider id
+            cur.execute("SELECT key, value FROM kv WHERE scope='disabledModels'")
+            for key, val in cur.fetchall():
+                if key.lower() in [provider_id.lower(), provider_alias.lower()]:
+                    try:
+                        arr = json.loads(val)
+                        if isinstance(arr, list):
+                            for dis in arr:
+                                disabled_set.add(str(dis).lower())
+                    except Exception:
+                        pass
+                        
+            # Fetch custom models for this provider
+            cur.execute("SELECT key, value FROM kv WHERE scope='customModels'")
+            for key, val in cur.fetchall():
+                try:
+                    data = json.loads(val)
+                    p_alias = data.get("providerAlias", "").lower()
+                    if p_alias in [provider_id.lower(), provider_alias.lower()]:
+                        m_id = data.get("id")
+                        if m_id:
+                            custom_list.append({"id": m_id, "name": data.get("name") or m_id, "type": "llm"})
+                except Exception:
+                    pass
+            conn.close()
+        except Exception:
+            pass
+
+    # Combine defaults + custom
+    all_models = []
+    seen = set()
+    for m in defaults + custom_list:
+        m_id = m.get("id", "")
+        if m_id and m_id not in seen:
+            seen.add(m_id)
+            all_models.append(m)
+
+    # Filter out disabled models and non-LLM models
+    enabled_models = []
+    for m in all_models:
+        m_id = m.get("id", "")
+        if m.get("type") in ["llm", "chat", None, ""]:
+            if m_id.lower() in disabled_set or m_id.split("/")[-1].lower() in disabled_set:
+                continue
+            enabled_models.append(m)
+            
+    return enabled_models
+
+
 def get_translation_models(trans_cfg: Dict, full_cfg: Dict | None = None) -> List[Dict]:
     models = []
     
-    # 1. Google Translate & OpenCode Free
+    # 1. Google Translate (always active)
     models.append({
         "id": "google",
         "name": "Google Translate",
-        "provider": "google"
+        "provider": "google",
+        "owned_by": "google"
     })
-    models.append({
-        "id": "opencode",
-        "name": "OpenCode Free",
-        "provider": "opencode"
-    })
-    
-    # 2. HuggingFace
-    status = load_api_keys_status()
-    def is_provider_ok(name: str) -> bool:
-        if name in status and not status[name].get("ok", True):
-            return False
-        return True
 
-    if (trans_cfg or {}).get("hf_token") and is_provider_ok("huggingface"):
+    db_conns = load_db_connections()
+    db_providers = {c["provider"] for c in db_conns}
+
+    # OpenCode Free (always active)
+    oc_enabled = get_enabled_models_for_provider("opencode", "oc")
+    for m in oc_enabled:
         models.append({
-            "id": "huggingface",
-            "name": "HuggingFace Qwen-2.5",
-            "provider": "huggingface"
-        })
-        
-    # 3. OpenAI
-    if (trans_cfg or {}).get("openai_key") and is_provider_ok("openai"):
-        models.append({
-            "id": "openai/gpt-4o-mini",
-            "name": "OpenAI: gpt-4o-mini",
-            "provider": "openai"
-        })
-        models.append({
-            "id": "openai/gpt-4o",
-            "name": "OpenAI: gpt-4o",
-            "provider": "openai"
-        })
-        
-    # 4. DeepSeek
-    if (trans_cfg or {}).get("deepseek_key") and is_provider_ok("deepseek"):
-        models.append({
-            "id": "deepseek/deepseek-chat",
-            "name": "DeepSeek: deepseek-chat",
-            "provider": "deepseek"
+            "id": f"opencode/{m['id']}",
+            "name": m['name'],
+            "provider": "opencode",
+            "owned_by": "oc"
         })
 
-    # 5. Groq
-    if (trans_cfg or {}).get("groq_key") and is_provider_ok("groq"):
-        groq_model = (trans_cfg or {}).get("groq_model", "llama-3.1-8b-instant")
-        models.append({
-            "id": f"groq/{groq_model}",
-            "name": f"Groq: {groq_model}",
-            "provider": "groq"
-        })
+    # Provider map: (provider_id, provider_alias)
+    provider_map = [
+        ("antigravity", "ag"),
+        ("codex", "cx"),
+        ("openai", "openai"),
+        ("deepseek", "deepseek"),
+        ("groq", "groq"),
+        ("gemini", "gc"),
+        ("nvidia", "nvidia"),
+        ("huggingface", "huggingface"),
+    ]
 
-    # 5b. Gemini
-    gemini_key = ((full_cfg or {}).get("gemini_video") or {}).get("api_key") or ""
-    if gemini_key and is_provider_ok("gemini"):
-        models.append({
-            "id": "gemini/gemini-2.0-flash",
-            "name": "Gemini: gemini-2.0-flash",
-            "provider": "gemini"
-        })
-        models.append({
-            "id": "gemini/gemini-2.5-flash",
-            "name": "Gemini: gemini-2.5-flash",
-            "provider": "gemini"
-        })
+    for p_id, p_alias in provider_map:
+        if p_id in db_providers or (p_id == "gemini" and ((full_cfg or {}).get("gemini_video") or {}).get("api_key")):
+            enabled_m = get_enabled_models_for_provider(p_id, p_alias)
+            for m in enabled_m:
+                models.append({
+                    "id": f"{p_id}/{m['id']}",
+                    "name": m['name'],
+                    "provider": p_id,
+                    "owned_by": p_alias
+                })
 
-    # 6. 9Router
-    nr = ((full_cfg or {}).get("nine_router") or {}) if isinstance(full_cfg, dict) else {}
-    if (nr.get("api_key") or "").strip() and is_9router_working(nr):
-        nr_models = get_9router_models(nr)
-        models.extend(nr_models)
-        
     return models
 
 
 def get_translation_providers(trans_cfg: Dict, full_cfg: Dict | None = None) -> List[str]:
     providers = []
-    status = load_api_keys_status()
+    db_conns = load_db_connections()
+    for c in db_conns:
+        prov = c["provider"]
+        if prov not in providers:
+            providers.append(prov)
 
+    status = load_api_keys_status()
     def is_provider_ok(name: str) -> bool:
         if name in status and not status[name].get("ok", True):
             return False
         return True
 
-    # 9Router check FIRST (Try 9Router before direct keys)
-    nr = ((full_cfg or {}).get("nine_router") or {}) if isinstance(full_cfg, dict) else {}
-    if (nr.get("api_key") or "").strip():
-        if is_9router_working(nr):
-            providers.append("9router")
+    if "opencode" not in providers:
+        providers.append("opencode")
 
-    if (trans_cfg or {}).get("deepseek_key") and is_provider_ok("deepseek"):
+    if "deepseek" not in providers and (trans_cfg or {}).get("deepseek_key") and is_provider_ok("deepseek"):
         providers.append("deepseek")
-    if (trans_cfg or {}).get("openai_key") and is_provider_ok("openai"):
+    if "openai" not in providers and (trans_cfg or {}).get("openai_key") and is_provider_ok("openai"):
         providers.append("openai")
-    if (trans_cfg or {}).get("groq_key") and is_provider_ok("groq"):
+    if "groq" not in providers and (trans_cfg or {}).get("groq_key") and is_provider_ok("groq"):
         providers.append("groq")
 
     gemini_key = ((full_cfg or {}).get("gemini_video") or {}).get("api_key") or ""
-    if gemini_key and is_provider_ok("gemini"):
+    if "gemini" not in providers and gemini_key and is_provider_ok("gemini"):
         providers.append("gemini")
 
-    if (trans_cfg or {}).get("hf_token") and is_provider_ok("huggingface"):
+    if "huggingface" not in providers and (trans_cfg or {}).get("hf_token") and is_provider_ok("huggingface"):
         providers.append("huggingface")
 
-    providers.append("google")
+    if "google" not in providers:
+        providers.append("google")
     return providers
 
 
@@ -544,9 +660,12 @@ def build_provider_order(trans_cfg: Dict, preferred_provider: str = "auto", full
     available = get_translation_providers(trans_cfg, full_cfg=full_cfg)
     prov_req, _ = parse_provider_and_model(preferred_provider)
     preferred = _normalize_provider_name(prov_req)
-    if preferred != "auto" and preferred in available:
-        # Nếu người dùng chọn một provider cụ thể, chỉ dùng provider đó, không tự động fallback
-        return [preferred]
+    if preferred != "auto":
+        order = [preferred]
+        for p in available:
+            if p not in order:
+                order.append(p)
+        return order
     return available
 
 
@@ -571,13 +690,40 @@ def mark_provider_failed(provider_name: str, error_message: str):
         pass
 
 
+def _translate_google_parallel(texts: List[str], target_lang: str = "vi") -> List[str]:
+    from concurrent.futures import ThreadPoolExecutor
+    def _fetch_one(text: str) -> str:
+        if not text or not str(text).strip():
+            return ""
+        try:
+            query = urllib.parse.quote(str(text)[:500])
+            url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_lang}&dt=t&dj=1&q={query}"
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "vi", "Connection": "close"},
+            )
+            with urllib.request.urlopen(req, timeout=4) as response:
+                data = json.loads(response.read())
+            if isinstance(data, dict):
+                sentences = data.get("sentences") or []
+                return "".join(s.get("trans", "") for s in sentences)
+            elif isinstance(data, list) and data and data[0]:
+                return "".join(p[0] for p in data[0] if isinstance(p, list) and p and p[0])
+        except Exception:
+            pass
+        return text
+
+    with ThreadPoolExecutor(max_workers=min(12, max(1, len(texts)))) as executor:
+        return list(executor.map(_fetch_one, texts))
+
+
 def translate_texts(
     texts: List[str],
     trans_cfg: Dict,
     preferred_provider: str = "auto",
     context: str = "",
     target_lang: str = "vi",
-    nine_router_cfg: Dict | None = None,
+    dtrouter_cfg: Dict | None = None,
 ) -> Tuple[List[str], str]:
     if not texts:
         return [], "none"
@@ -596,10 +742,29 @@ def translate_texts(
     groq_key = cfg.get("groq_key", "") or ""
     groq_model = cfg.get("groq_model", "llama-3.1-8b-instant") or "llama-3.1-8b-instant"
     hf_token = cfg.get("hf_token", "") or ""
-    nr = nine_router_cfg or cfg.get("_nine_router") or {}  # legacy passthrough
+    nr = dtrouter_cfg or cfg.get("_dtrouter") or {}  # legacy passthrough
     nine_key = (nr.get("api_key") or "").strip() if isinstance(nr, dict) else ""
     nine_endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/") if isinstance(nr, dict) else "http://localhost:20128/v1"
     nine_model = (nr.get("default_model") or "duytris").strip() if isinstance(nr, dict) else "duytris"
+
+    if not nine_key:
+        import sqlite3
+        import os
+        appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
+        db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
+        if not os.path.exists(db_path):
+            db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
+        if os.path.exists(db_path):
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT key FROM apiKeys WHERE isActive != 0 LIMIT 1")
+                row = cursor.fetchone()
+                if row:
+                    nine_key = row[0]
+                conn.close()
+            except Exception:
+                pass
 
     try:
         from core.config import load_cfg
@@ -610,15 +775,30 @@ def translate_texts(
     if isinstance(full_cfg_live, dict):
         gemini_key = (full_cfg_live.get("gemini_video") or {}).get("api_key", "") or ""
 
+    # Load active connections from DB
+    db_conns = load_db_connections()
+    db_conns_map = {}
+    for c in db_conns:
+        p_name = c["provider"]
+        if p_name not in db_conns_map:
+            db_conns_map[p_name] = c
+
+    # Override keys with DB connections
+    if "deepseek" in db_conns_map:
+        deepseek_key = db_conns_map["deepseek"]["api_key"]
+    if "openai" in db_conns_map:
+        openai_key = db_conns_map["openai"]["api_key"]
+    if "groq" in db_conns_map:
+        groq_key = db_conns_map["groq"]["api_key"]
+    if "huggingface" in db_conns_map:
+        hf_token = db_conns_map["huggingface"]["api_key"]
+    if "gemini" in db_conns_map:
+        gemini_key = db_conns_map["gemini"]["api_key"]
+
     # Parse preferred provider/model
     prov_req, model_req = parse_provider_and_model(preferred_provider)
-    if prov_req == "9router" and model_req:
-        nine_model = model_req
-
-    # Synthesize a fake_full_cfg so build_provider_order can see 9Router
-    # and Gemini availability via its existing API.
+    
     full_cfg_fake = {
-        "nine_router": nr if isinstance(nr, dict) else {},
         "gemini_video": {"api_key": gemini_key}
     }
     provider_order = build_provider_order(cfg, preferred_provider, full_cfg=full_cfg_fake)
@@ -635,44 +815,85 @@ def translate_texts(
 
     for provider in provider_order:
         try:
-            if provider == "9router" and nine_key:
-                candidates = [nine_model]
-                try:
-                    nr_models = get_9router_models(nr)
-                    available_ids = {m["id"].replace("9router/", "") for m in nr_models}
-                    fast_priorities = [
-                        "gemini-2.5-flash",
-                        "gemini-1.5-flash",
-                        "gemini-3-flash",
-                        "gpt-4o-mini",
-                        "llama-3.1-8b-instant",
-                    ]
-                    for fm in fast_priorities:
-                        if fm in available_ids and fm not in candidates:
-                            candidates.append(fm)
-                except Exception:
-                    pass
-
-                last_nr_err = None
-                success = False
-                for model_cand in candidates:
+            # Helper for executing LLM translation with local 9Router gateway fallback
+            def _try_llm_translate(alias_prefix: str, direct_url: str, direct_key: str, default_model: str, prov_label: str) -> Tuple[List[str] | None, str]:
+                model_name = model_req if model_req else default_model
+                # 1. Try local 9Router gateway on port 20128 if available
+                nine_model_id = model_name if "/" in model_name else f"{alias_prefix}/{model_name}"
+                disp_name = model_name.split("/")[-1] if "/" in model_name else model_name
+                if nine_key:
                     try:
-                        result = _llm_translate(
+                        res = _llm_translate(
                             source_texts,
                             f"{nine_endpoint}/chat/completions",
                             nine_key,
-                            model_cand,
+                            nine_model_id,
+                            timeout=7,
                             context=context,
                             target_lang=target_lang,
                         )
-                        if any(result):
-                            return _rebuild(result), "9router"
-                    except Exception as e:
-                        last_nr_err = e
-                        continue
-                if last_nr_err:
-                    raise last_nr_err
-                _errors.append("9router: empty result")
+                        if any(res):
+                            return res, disp_name
+                    except Exception:
+                        pass
+                        
+                # 2. Try direct provider API call
+                if direct_url and direct_key:
+                    try:
+                        res = _llm_translate(
+                            source_texts,
+                            direct_url,
+                            direct_key,
+                            model_name,
+                            timeout=7,
+                            context=context,
+                            target_lang=target_lang,
+                        )
+                        if any(res):
+                            return res, disp_name
+                    except Exception:
+                        pass
+                return None, ""
+
+            if provider == "antigravity" and "antigravity" in db_conns_map:
+                c = db_conns_map["antigravity"]
+                key = c["api_key"]
+                base_url = (c.get("base_url") or "https://generativelanguage.googleapis.com/v1beta/openai").rstrip("/")
+                endpoint = base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
+                res, m_label = _try_llm_translate("ag", endpoint, key, "gemini-3.6-flash", "antigravity")
+                if res and any(res):
+                    return _rebuild(res), m_label or "antigravity"
+                _errors.append("antigravity: failed")
+
+            elif provider in ["opencode", "opencodefree"]:
+                c = db_conns_map.get("opencode") or db_conns_map.get("opencodefree") or {}
+                key = c.get("api_key", "")
+                base_url = (c.get("base_url") or "https://opencode.ai/zen/v1").rstrip("/")
+                endpoint = base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
+                res, m_label = _try_llm_translate("oc", endpoint, key, "hy3-free", "opencode")
+                if res and any(res):
+                    return _rebuild(res), m_label or "opencode"
+                _errors.append("opencode: failed")
+
+            elif provider == "codex" and "codex" in db_conns_map:
+                c = db_conns_map["codex"]
+                key = c["api_key"]
+                base_url = (c.get("base_url") or "https://api.openai.com/v1").rstrip("/")
+                endpoint = base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
+                res, m_label = _try_llm_translate("cx", endpoint, key, "gpt-5.6-sol", "codex")
+                if res and any(res):
+                    return _rebuild(res), m_label or "codex"
+                _errors.append("codex: failed")
+
+            elif provider == "nvidia" and "nvidia" in db_conns_map:
+                c = db_conns_map["nvidia"]
+                key = c["api_key"]
+                base_url = (c.get("base_url") or "https://integrate.api.nvidia.com/v1").rstrip("/")
+                endpoint = base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
+                res, m_label = _try_llm_translate("nvidia", endpoint, key, "meta/llama3-70b-instruct", "nvidia")
+                if res and any(res):
+                    return _rebuild(res), m_label or "nvidia"
+                _errors.append("nvidia: failed")
 
             elif provider == "deepseek" and deepseek_key:
                 ds_model = model_req if prov_req == "deepseek" and model_req else "deepseek-chat"
@@ -685,7 +906,7 @@ def translate_texts(
                     target_lang=target_lang,
                 )
                 if any(result):
-                    return _rebuild(result), "deepseek"
+                    return _rebuild(result), ds_model
                 _errors.append("deepseek: empty result")
 
             elif provider == "openai" and openai_key:
@@ -699,7 +920,7 @@ def translate_texts(
                     target_lang=target_lang,
                 )
                 if any(result):
-                    return _rebuild(result), "openai"
+                    return _rebuild(result), oa_model
                 _errors.append("openai: empty result")
 
             elif provider == "groq" and groq_key:
@@ -713,7 +934,7 @@ def translate_texts(
                     target_lang=target_lang,
                 )
                 if any(result):
-                    return _rebuild(result), "groq"
+                    return _rebuild(result), g_model
                 _errors.append("groq: empty result")
 
             elif provider == "gemini" and gemini_key:
@@ -727,7 +948,7 @@ def translate_texts(
                     target_lang=target_lang,
                 )
                 if any(result):
-                    return _rebuild(result), "gemini"
+                    return _rebuild(result), gem_model
                 _errors.append("gemini: empty result")
 
             elif provider == "huggingface" and hf_token:
@@ -752,33 +973,12 @@ def translate_texts(
                 for hf_url, hf_model in hf_endpoints:
                     result = _llm_translate(source_texts, hf_url, hf_token, hf_model, context=context, target_lang=target_lang)
                     if any(result):
-                        return _rebuild(result), "huggingface"
+                        return _rebuild(result), hf_model
 
             elif provider == "google":
-                translated = []
-                for text in source_texts:
-                    query = urllib.parse.quote(text[:500])
-                    url = (
-                        "https://translate.googleapis.com/translate_a/single"
-                        f"?client=gtx&sl=auto&tl={target_lang}&dt=t&dj=1&q={query}"
-                    )
-                    req = urllib.request.Request(
-                        url,
-                        headers={
-                            "User-Agent": "Mozilla/5.0",
-                            "Accept-Language": "vi",
-                            "Connection": "close"
-                        },
-                    )
-                    with urllib.request.urlopen(req, timeout=6) as response:
-                        data = json.loads(response.read())
-                    if isinstance(data, dict):
-                        sentences = data.get("sentences") or []
-                        translated.append("".join(s.get("trans", "") for s in sentences))
-                    else:
-                        translated.append("".join(p[0] for p in data[0] if p[0]))
+                translated = _translate_google_parallel(source_texts, target_lang=target_lang)
                 if any(translated):
-                    return _rebuild(translated), "google"
+                    return _rebuild(translated), "Google Translate"
         except Exception as e:
             _errors.append(f"{provider}: {e}")
             err_str = str(e).lower()
@@ -786,7 +986,14 @@ def translate_texts(
                 mark_provider_failed(provider, str(e))
             continue
 
-    # All providers failed — raise with details so caller can log it
+    # Emergency Fallback: Google Translate if all selected AI providers failed/timed out
+    try:
+        translated = _translate_google_parallel(source_texts, target_lang=target_lang)
+        if any(translated):
+            return _rebuild(translated), "Google Translate"
+    except Exception:
+        pass
+
     if _errors:
         raise RuntimeError("All translation providers failed: " + " | ".join(_errors))
     return list(texts), "fallback"
@@ -807,12 +1014,12 @@ def _format_srt_time(seconds: float) -> str:
 class BatchTranslator:
     """Batch translation with multi-provider fallback.
 
-    Fallback chain: DeepSeek → OpenAI → HuggingFace → Google → 9Router
+    Fallback chain: DeepSeek → OpenAI → HuggingFace → Google → DTRouter
     """
 
-    def __init__(self, trans_cfg: dict, nine_router_cfg: dict | None = None):
+    def __init__(self, trans_cfg: dict, dtrouter_cfg: dict | None = None):
         self._cfg = trans_cfg or {}
-        self._nine = nine_router_cfg or {}
+        self._nine = dtrouter_cfg or {}
 
     def translate(
         self,
@@ -829,7 +1036,7 @@ class BatchTranslator:
         return translate_texts(
             texts, self._cfg, preferred_provider,
             context=context, target_lang=target_lang,
-            nine_router_cfg=self._nine,
+            dtrouter_cfg=self._nine,
         )
 
     def write_vi_srt(

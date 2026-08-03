@@ -323,16 +323,52 @@
         <span id="modal-status-text">Đang chờ bạn quét mã QR...</span>
       </div>
       
-      <!-- Warning prompt -->
+      <!-- Warning prompt + nút đổi mã QR -->
       <div class="text-[10px] text-amber-600 dark:text-amber-500 font-bold bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-xl border border-amber-100 dark:border-amber-900/30 w-full">
-        ⚠️ Chuyển chính xác số tiền & nội dung để kích hoạt tự động.
+        ⚠️ Chuyển chính xác số tiền &amp; nội dung để kích hoạt tự động.
       </div>
+      <button id="btn-refresh-qr"
+        onclick="refreshPaymentQR()"
+        class="text-[10px] text-slate-400 hover:text-slate-600 underline underline-offset-2 mt-1 bg-transparent border-none cursor-pointer">
+        🔄 Tạo mã QR mới (nếu mã cũ hết hạn)
+      </button>
     </div>
   </div>
 </div>
 
 <script>
   let statusPoller = null;
+  let _currentPkgKey = null;   // lưu gói đang mở để refresh QR
+
+  // Xóa cache order phía server rồi tạo lại QR mới
+  async function refreshPaymentQR() {
+    if (!_currentPkgKey) return;
+    const btn = document.getElementById('btn-refresh-qr');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tạo mã mới...'; }
+
+    try {
+      // Xóa cache phía server cho gói này
+      await fetch('/api/license/clear_order_cache', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({package_key: _currentPkgKey})
+      });
+    } catch(e) {}
+
+    // Gọi lại buy để tạo order mới
+    const d = await fetch('/api/license/buy', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({package_key: _currentPkgKey})
+    }).then(r => r.json()).catch(() => null);
+
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Tạo mã QR mới (nếu mã cũ hết hạn)'; }
+    if (d && d.success) {
+      document.getElementById('modal-qr-img').src = d.qr_url;
+      document.getElementById('modal-amount').textContent = Number(d.amount).toLocaleString('vi-VN') + 'đ';
+      document.getElementById('modal-order-code').textContent = d.order_code || '---';
+    }
+  }
 
   document.getElementById('activate-form')?.addEventListener('submit', function(e) {
     e.preventDefault();
@@ -346,8 +382,12 @@
       body: JSON.stringify({license_key: key})
     }).then(r => r.json()).then(d => {
       if (d.success) {
-        showStatus('success', 'Kích hoạt thành công! Đang mở phần mềm...');
-        setTimeout(() => window.location.href = '/', 1500);
+        let msg = 'Kích hoạt thành công!';
+        if (d.expire_at) msg += ` Hạn dùng: ${d.expire_at}`;
+        if (d.remaining_days !== null && d.remaining_days !== undefined)
+          msg += ` (còn ${d.remaining_days} ngày)`;
+        showStatus('success', msg + ' Đang mở phần mềm...');
+        setTimeout(() => window.location.href = '/', 1800);
       } else {
         btn.disabled = false; btn.textContent = 'Kích hoạt bản quyền';
         alert('❌ ' + d.message);
@@ -396,8 +436,7 @@
       document.querySelectorAll('.pkg').forEach(el => el.style.pointerEvents = '');
       
       if (d.success) {
-        // Pop the modal directly
-        openPaymentModal(d);
+        openPaymentModal(d, pkgKey);  // truyền pkgKey để refresh QR sau này
       } else {
         alert('❌ ' + (d.message || 'Không thể tạo đơn hàng.'));
       }
@@ -407,9 +446,10 @@
     });
   }
 
-  function openPaymentModal(data) {
+  function openPaymentModal(data, pkgKey) {
     const modal = document.getElementById('payment-modal');
     if (!modal) return;
+    _currentPkgKey = pkgKey || null;  // lưu để refresh QR sau này
     
     document.getElementById('modal-qr-img').src = data.qr_url;
     document.getElementById('modal-amount').textContent = Number(data.amount).toLocaleString('vi-VN') + 'đ';
@@ -427,10 +467,10 @@
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     
-    // Start active status poller
+    // Start payment status poller — dùng force_refresh (gọi server thực) mỗi 5s
     if (statusPoller) clearInterval(statusPoller);
     statusPoller = setInterval(() => {
-      fetch('/api/license/check_status')
+      fetch('/api/license/force_refresh', {method: 'POST'})
         .then(r => r.json())
         .then(res => {
           if (res.active) {
@@ -445,7 +485,7 @@
             }, 1800);
           }
         }).catch(() => {});
-    }, 2500);
+    }, 5000);
   }
 
   function closePaymentModal() {
@@ -467,7 +507,7 @@
     b.innerHTML = `<svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><p class="font-bold leading-normal">${msg}</p>`;
   }
 
-  // Poll for license status
+  // Poll for license status (từ cache — không spam server)
   const statusCode = "{{ status_code }}";
   if (statusCode !== 'active') {
     const mainPoller = setInterval(() => {
@@ -478,8 +518,15 @@
           setTimeout(() => window.location.href = '/', 1800);
         }
       }).catch(() => {});
-    }, 3000);
+    }, 5000);  // 5s — đọc cache, không gọi server
   }
+
+  // Nếu không có gói cước nào (lỗi mạng hoặc chưa load kịp), tự động reload sau 3s
+  {% if not packages %}
+  setTimeout(() => {
+    window.location.reload();
+  }, 3000);
+  {% endif %}
 </script>
 </body>
 </html>

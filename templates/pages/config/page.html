@@ -1,7 +1,8 @@
 <!-- PAGE: CONFIG -->
 <div id="page-config" class="page">
+  <!-- Debug error banner -->
+  <div id="cfg-error-banner" style="display:none;padding:12px 16px;margin-bottom:16px;background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;font-size:12px;font-family:monospace;color:#b91c1c;white-space:pre-wrap;"></div>
 
-  
 
   <!-- ════════════════ Shell: left nav + right panes ════════════════ -->
   <div class="config-shell">
@@ -134,7 +135,6 @@
               <label>Provider dịch thuật ưu tiên</label>
               <select id="cfg-preferred-provider">
                 <option value="auto" selected>Auto (tự động chọn)</option>
-                <option value="9router">🔀 9Router (local gateway)</option>
                 <option value="deepseek">DeepSeek</option>
                 <option value="openai">OpenAI</option>
                 <option value="groq">Groq</option>
@@ -152,121 +152,19 @@
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">🔑 API Keys</span>
-          </div>
-
-          <div class="apikey-grid">
-
-            <!-- 9Router (AI Gateway) -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>🔀 9Router<span class="apikey-hint">AI Gateway (chat, dịch, giọng đọc)</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('9router')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-9router-key">
-              <div class="text-xs apikey-status" id="cfg-9router-status"></div>
-            </div>
-
-            <!-- DeepSeek -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>DeepSeek<span class="apikey-hint">Dịch thuật</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('deepseek')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-deepseek-key">
-              <div class="text-xs apikey-status" id="cfg-deepseek-status"></div>
-            </div>
-
-            <!-- Groq -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>Groq<span class="apikey-hint">Whisper phiên âm + Dịch</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('groq')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-groq-key">
-              <input type="text" id="cfg-groq-model" placeholder="llama-3.1-8b-instant" style="margin-top:6px">
-              <div class="text-xs apikey-status" id="cfg-groq-status"></div>
-            </div>
-
-            <!-- OpenAI -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>OpenAI<span class="apikey-hint">Dịch thuật + Phiên âm</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('openai')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-openai-key">
-              <div class="text-xs apikey-status" id="cfg-openai-status"></div>
-            </div>
-
-            <!-- HuggingFace -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>HuggingFace<span class="apikey-hint">Token (dịch, TTS)</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('huggingface')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-hf-token">
-              <div class="text-xs apikey-status" id="cfg-hf-status"></div>
-            </div>
-
-            <!-- FPT AI -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>FPT AI<span class="apikey-hint">TTS giọng Việt</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('fpt')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-fpt-key">
-              <div class="text-xs apikey-status" id="cfg-fpt-status"></div>
-            </div>
-
-            <!-- ElevenLabs -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>ElevenLabs<span class="apikey-hint">TTS đa ngôn ngữ (fallback)</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('elevenlabs')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-elevenlabs-key">
-              <div class="text-xs apikey-status" id="cfg-elevenlabs-status"></div>
-            </div>
-
-            <!-- Fish Audio -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>Fish Audio<span class="apikey-hint">TTS đa ngôn ngữ</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('fish-audio')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-fish-key">
-              <div class="text-xs apikey-status" id="cfg-fish-status"></div>
-            </div>
-
-            <!-- Gemini Video -->
-            <div class="apikey-card">
-              <div class="apikey-head">
-                <label>Gemini<span class="apikey-hint">Video gen (Veo 2) + Ảnh</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('gemini')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-gemini-key">
-              <div class="text-xs apikey-status" id="cfg-gemini-status"></div>
-            </div>
-
-            <!-- TMDb -->
-            <div class="apikey-card" style="display:none">
-              <div class="apikey-head">
-                <label>TMDb<span class="apikey-hint">API cho Review phim</span></label>
-                <button class="btn btn-secondary btn-xs" onclick="testApiKey('tmdb')">🧪 Test</button>
-              </div>
-              <input type="password" id="cfg-tmdb-key">
-              <input type="password" id="cfg-tmdb-token" placeholder="Read Access Token (v4)" style="margin-top:6px">
-
-              <div class="text-xs apikey-status" id="cfg-tmdb-status"></div>
-            </div>
-
-          </div><!-- /apikey-grid -->
-        </div>
-
-        <!-- Hidden fields (kept for save/load compatibility) -->
-        <div class="hidden-fields">
+        <!-- Hidden fields for compatibility -->
+        <div class="hidden-fields" style="display:none">
+          <input type="password" id="cfg-deepseek-key">
+          <input type="password" id="cfg-groq-key">
+          <input type="text" id="cfg-groq-model">
+          <input type="password" id="cfg-openai-key">
+          <input type="password" id="cfg-hf-token">
+          <input type="password" id="cfg-fpt-key">
+          <input type="password" id="cfg-elevenlabs-key">
+          <input type="password" id="cfg-fish-key">
+          <input type="password" id="cfg-gemini-key">
+          <input type="password" id="cfg-tmdb-key">
+          <input type="password" id="cfg-tmdb-token">
           <input type="checkbox" id="vp-enabled" checked>
           <select id="vp-model"><option value="base" selected>base</option></select>
           <select id="vp-lang"><option value="zh" selected>zh</option></select>

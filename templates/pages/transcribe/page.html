@@ -104,9 +104,10 @@
           <!-- Whisper configuration -->
           <div class="grid grid-cols-2 gap-3">
             <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Whisper Engine</label>
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Engine Phiên Âm (STT)</label>
               <select id="tr-provider" class="w-full text-xs">
-                <option value="groq" selected>Groq API (Nhanh)</option>
+                <option value="antigravity" selected>🌌 Antigravity / Gemini AI (Multimodal Audio)</option>
+                <option value="groq">Groq Whisper API (Nhanh)</option>
                 <option value="model">Whisper Local</option>
               </select>
             </div>
@@ -149,7 +150,7 @@
             <button class="btn btn-primary flex-1 py-2 font-semibold text-xs flex justify-center items-center gap-1.5" id="btn-tr" onclick="trStartTranscribe()">
               <span>🚀 Bắt đầu phiên âm</span>
             </button>
-            <button class="btn btn-secondary py-2 text-xs flex justify-center items-center gap-1.5" onclick="trExtractAudio()" title="Chỉ tách lấy nhạc MP3 từ video">
+            <button class="btn btn-secondary py-2 text-xs flex justify-center items-center gap-1.5" id="btn-tr-extract" onclick="trExtractAudio()" title="Chỉ tách lấy nhạc MP3 từ video">
               <span>🎵 Tách MP3</span>
             </button>
           </div>
@@ -196,18 +197,18 @@
             </div>
           </div>
 
-          <!-- Dynamic 9Router fields (shown only when selected 9router engine) -->
-          <div id="tr-9r-fields" class="grid grid-cols-1 gap-3" style="display:none">
+          <!-- Dynamic DTRouter fields (shown only when selected dtrouter engine) -->
+          <div id="tr-dtr-fields" class="grid grid-cols-1 gap-3" style="display:none">
             <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Mô hình 9Router</label>
-              <select id="tr-9r-model" class="w-full text-xs" onchange="trSync9RouterVoices()"></select>
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Mô hình DTRouter</label>
+              <select id="tr-dtr-model" class="w-full text-xs" onchange="trSyncDTRouterVoices()"></select>
             </div>
             <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">9Router API Key</label>
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">DTRouter API Key</label>
               <div class="flex items-center gap-2">
-                <input type="text" id="tr-9r-api-key" readonly class="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2" placeholder="Thiếu API Key 9Router - Vui lòng cấu hình ở Cài đặt" style="flex:1">
+                <input type="text" id="tr-dtr-api-key" readonly class="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2" placeholder="Thiếu API Key DTRouter - Vui lòng cấu hình ở Cài đặt" style="flex:1">
               </div>
-              <span id="tr-9r-api-key-status" class="text-[10px] mt-1 block"></span>
+              <span id="tr-dtr-api-key-status" class="text-[10px] mt-1 block"></span>
             </div>
           </div>
 
@@ -231,12 +232,12 @@
             <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Thử giọng nói</label>
             <textarea id="tr-preview-text" placeholder="Nhập văn bản thử giọng..." class="w-full text-xs min-h-[50px] p-2 border border-slate-200 dark:border-slate-700 rounded-lg" rows="2"></textarea>
             <div class="flex flex-col gap-2 mt-2">
-              <button class="btn btn-secondary text-[11px] py-2 w-full" onclick="trPreviewVoice()">▶ Nghe thử giọng</button>
+              <button class="btn btn-secondary text-[11px] py-2 w-full flex justify-center items-center gap-1.5" id="btn-tr-preview" onclick="trPreviewVoice()">▶ Nghe thử giọng</button>
               <audio id="tr-preview-audio" class="hidden w-full mt-1" controls style="outline: none;"></audio>
             </div>
           </div>
 
-          <button class="btn btn-primary w-full py-2 font-semibold text-xs flex justify-center items-center gap-1.5 mt-1" onclick="trRunTtsFromAss()">
+          <button class="btn btn-primary w-full py-2 font-semibold text-xs flex justify-center items-center gap-1.5 mt-1" id="btn-tr-tts" onclick="trRunTtsFromAss()">
             <span>🔊 Lồng tiếng &amp; Xuất MP3</span>
           </button>
         </div>
@@ -245,34 +246,8 @@
     
     <!-- RIGHT COLUMN: Subtitle Editor & Logs (span 2) -->
     <div class="xl:col-span-2 flex flex-col gap-6">
-      
-      <!-- Card 3: Biên tập phụ đề -->
-      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-5 flex-1 flex flex-col min-h-[500px]">
-        <div class="flex justify-between items-center mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
-          <div class="flex items-center gap-2">
-            <span class="text-lg">📝</span>
-            <h3 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Biên tập phụ đề &amp; lồng tiếng</h3>
-          </div>
-          <div class="flex gap-2">
-            <button class="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1" onclick="trLoadSubtitles()">
-              <span>🔄 Tải phụ đề từ file nguồn</span>
-            </button>
-            <button class="btn btn-success text-xs py-1.5 px-3 flex items-center gap-1" onclick="trSaveSubtitles()">
-              <span>💾 Lưu phụ đề</span>
-            </button>
-          </div>
-        </div>
 
-        <!-- Subtitles Editor Table -->
-        <div class="flex-1 overflow-y-auto max-h-[460px] border border-slate-200 dark:border-slate-700 rounded-xl mb-2" id="tr-sub-editor-wrap">
-          <div class="p-8 text-center text-slate-400 dark:text-slate-500 text-xs flex flex-col items-center justify-center gap-2 h-full">
-            <span>📭 Chưa có phụ đề để hiển thị.</span>
-            <span class="text-[11px] text-slate-400">Chọn tệp .ass đã có hoặc chạy Bắt đầu phiên âm.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Card 4: Nhật ký & Tiến trình -->
+      <!-- Card 4: Nhật ký & Tiến trình (Đưa lên TRÊN) -->
       <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-5">
         <div class="flex justify-between items-center mb-3">
           <h3 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Nhật ký hoạt động</h3>
@@ -304,6 +279,32 @@
         </div>
 
         <div class="log-box text-xs font-mono bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3.5 rounded-xl h-40 overflow-y-auto" id="tr-log"></div>
+      </div>
+      
+      <!-- Card 3: Biên tập phụ đề (Chuyển xuống DƯỚI) -->
+      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-5 flex-1 flex flex-col min-h-[500px]">
+        <div class="flex justify-between items-center mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">📝</span>
+            <h3 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Biên tập phụ đề &amp; lồng tiếng</h3>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1" onclick="trLoadSubtitles()">
+              <span>🔄 Tải phụ đề từ file nguồn</span>
+            </button>
+            <button class="btn btn-success text-xs py-1.5 px-3 flex items-center gap-1" onclick="trSaveSubtitles()">
+              <span>💾 Lưu phụ đề</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Subtitles Editor Table -->
+        <div class="flex-1 overflow-y-auto max-h-[460px] border border-slate-200 dark:border-slate-700 rounded-xl mb-2" id="tr-sub-editor-wrap">
+          <div class="p-8 text-center text-slate-400 dark:text-slate-500 text-xs flex flex-col items-center justify-center gap-2 h-full">
+            <span>📭 Chưa có phụ đề để hiển thị.</span>
+            <span class="text-[11px] text-slate-400">Chọn tệp .ass đã có hoặc chạy Bắt đầu phiên âm.</span>
+          </div>
+        </div>
       </div>
       
     </div>

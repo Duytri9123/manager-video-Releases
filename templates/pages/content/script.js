@@ -191,6 +191,14 @@ function _fbMgrShowConnected(user, pages) {
 
   window._fbMgrPages = pages || [];
   _fbMgrRenderPages(pages);
+
+  // Auto select first page if none selected yet
+  if (pages && pages.length > 0) {
+    const targetPageId = window._fbMgrSelectedPage?.id && pages.some(p => p.id === window._fbMgrSelectedPage.id)
+      ? window._fbMgrSelectedPage.id
+      : pages[0].id;
+    fbMgrSelectPage(targetPageId);
+  }
 }
 
 function _fbMgrRenderPages(pages) {
@@ -233,9 +241,12 @@ function fbMgrSelectPage(pageId) {
   });
 
   // Show post form
-  document.getElementById('fb-mgr-no-page-msg').style.display  = 'none';
-  document.getElementById('fb-mgr-post-form').style.display    = 'block';
-  document.getElementById('fb-mgr-recent-card').style.display  = 'block';
+  const noMsg = document.getElementById('fb-mgr-no-page-msg');
+  if (noMsg) noMsg.style.display = 'none';
+  const postForm = document.getElementById('fb-mgr-post-form');
+  if (postForm) postForm.style.display = 'block';
+  const recentCard = document.getElementById('fb-mgr-recent-card');
+  if (recentCard) recentCard.style.display = 'block';
 
   const badge = document.getElementById('fb-mgr-selected-page-badge');
   if (badge) { badge.textContent = page.name; badge.style.display = 'inline-flex'; }

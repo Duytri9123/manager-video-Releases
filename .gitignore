@@ -70,3 +70,10 @@ temp_uploads/
 # Output directory — only version.json is tracked for auto-update
 output/*.exe
 output/*.zip
+
+# Temporary search & backup files
+*.bak
+search_*.py
+find_*.py
+inspect_*.py
+

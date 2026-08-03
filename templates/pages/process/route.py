@@ -624,7 +624,7 @@ If no text/logo should be covered, return empty arrays.
             raise RuntimeError("OpenAI khong tra ve noi dung phan tich")
         return _json_from_text(text)
 
-    def _call_9router(api_key: str, endpoint: str, model: str, prompt: str, frames: list[dict]) -> dict:
+    def _call_dtrouter(api_key: str, endpoint: str, model: str, prompt: str, frames: list[dict]) -> dict:
         content = [{"type": "text", "text": prompt}]
         for f in frames:
             content.append({"type": "text", "text": f"Frame at {f['timestamp']} seconds"})
@@ -649,7 +649,7 @@ If no text/logo should be covered, return empty arrays.
         with urllib.request.urlopen(req, timeout=120) as resp:
             raw_bytes = resp.read()
             if not raw_bytes or not raw_bytes.strip():
-                raise RuntimeError(f"9Router tra ve phan hoi rong (HTTP {resp.status})")
+                raise RuntimeError(f"DTRouter tra ve phan hoi rong (HTTP {resp.status})")
             
             # Use robust parsing logic that supports SSE stream fallback
             text = ""
@@ -682,8 +682,8 @@ If no text/logo should be covered, return empty arrays.
                 
                 if not text:
                     preview = text_content[:500].replace("\n", " ").strip()
-                    LOGGER.error("9Router non-JSON response (HTTP %s): %s", resp.status, preview)
-                    raise RuntimeError(f"9Router tra ve phan hoi khong phai JSON (HTTP {resp.status}): {preview}") from json_err
+                    LOGGER.error("DTRouter non-JSON response (HTTP %s): %s", resp.status, preview)
+                    raise RuntimeError(f"DTRouter tra ve phan hoi khong phai JSON (HTTP {resp.status}): {preview}") from json_err
 
         if not text:
             # Check if there's an error message from the API in data (if loaded successfully)
@@ -691,10 +691,10 @@ If no text/logo should be covered, return empty arrays.
                 data = _j.loads(raw_bytes.decode("utf-8", "replace"))
                 api_error = (data.get("error") or {}).get("message") or data.get("message") or ""
                 if api_error:
-                    raise RuntimeError(f"9Router API error: {str(api_error)[:300]}")
+                    raise RuntimeError(f"DTRouter API error: {str(api_error)[:300]}")
             except Exception:
                 pass
-            raise RuntimeError("9Router khong tra ve noi dung phan tich")
+            raise RuntimeError("DTRouter khong tra ve noi dung phan tich")
         return _json_from_text(text)
 
     def _call_gemini_video(api_key: str, model: str, prompt: str, video_path: Path) -> dict:
@@ -744,8 +744,8 @@ If no text/logo should be covered, return empty arrays.
         return jsonify({"ok": False, "error": f"Video khong ton tai: {vp}"}), 404
 
     cfg = load_cfg()
-    nr_cfg = cfg.get("nine_router") or {}
-    nine_key = (nr_cfg.get("api_key") or os.environ.get("NINE_ROUTER_API_KEY") or os.environ.get("NINER_API_KEY") or "").strip()
+    nr_cfg = cfg.get("dtrouter") or {}
+    nine_key = (nr_cfg.get("api_key") or os.environ.get("DTROUTER_API_KEY") or os.environ.get("NINER_API_KEY") or "").strip()
     requested_nine_model = str(data.get("nine_model") or "").strip()
     language = str(data.get("language") or "").strip()
     target_language = str(data.get("target_language") or "vi").strip()
@@ -761,7 +761,7 @@ If no text/logo should be covered, return empty arrays.
         sample_count = max(2, min(40, sample_count))
 
     if not nine_key:
-        return jsonify({"ok": False, "code": "missing_api_key", "error": "Chua co API key 9Router de doc video"}), 400
+        return jsonify({"ok": False, "code": "missing_api_key", "error": "Chua co API key DTRouter de doc video"}), 400
 
     try:
         frames, duration = _extract_frames(vp, sample_count)
@@ -776,11 +776,11 @@ If no text/logo should be covered, return empty arrays.
     try:
         endpoint = str(nr_cfg.get("endpoint") or "http://localhost:20128/v1").strip().rstrip("/")
         model = str(requested_nine_model or nr_cfg.get("vision_model") or nr_cfg.get("default_model") or "duytris").strip()
-        LOGGER.info("analyze_video_ai: trying 9router model=%s endpoint=%s", model, endpoint)
-        result = _call_9router(nine_key, endpoint, model, prompt, frames)
+        LOGGER.info("analyze_video_ai: trying dtrouter model=%s endpoint=%s", model, endpoint)
+        result = _call_dtrouter(nine_key, endpoint, model, prompt, frames)
         return jsonify({
             "ok": True,
-            "provider": "9router",
+            "provider": "dtrouter",
             "model": model,
             "frame_count": len(frames),
             "duration": round(duration, 3),
@@ -793,11 +793,11 @@ If no text/logo should be covered, return empty arrays.
             msg = (err_json.get("error") or {}).get("message") or body[:300]
         except Exception:
             msg = f"HTTP {e.code}"
-        LOGGER.warning("analyze_video_ai 9router HTTPError: %s", msg)
-        errors.append(f"9Router: {msg}")
+        LOGGER.warning("analyze_video_ai dtrouter HTTPError: %s", msg)
+        errors.append(f"DTRouter: {msg}")
     except Exception as e:
-        LOGGER.warning("analyze_video_ai 9router failed: %s", e)
-        errors.append(f"9Router: {str(e)[:200]}")
+        LOGGER.warning("analyze_video_ai dtrouter failed: %s", e)
+        errors.append(f"DTRouter: {str(e)[:200]}")
 
     # ── Try 2: Gemini direct (fallback) ──────────────────────────────────
     gemini_key = (
@@ -1224,11 +1224,14 @@ def _make_ytdlp_progress_hook(url):
 @require_valid_license
 @bp.route("/api/process_video", methods=["POST"])
 def process_video():
+    import sys
+    print("=== [BACKEND] process_video() route called ===", file=sys.stderr, flush=True)
     data = {}
     if request.form:
         data.update(request.form.to_dict(flat=True))
     if request.is_json:
         data.update(request.get_json(silent=True) or {})
+
 
     uploaded_file = request.files.get("video_file") if request.files else None
     if uploaded_file and uploaded_file.filename:
@@ -1409,6 +1412,9 @@ def process_video():
             video_url = str(req.get("video_url") or "").strip()
             req.setdefault("cleanup_outputs", True)
             req.setdefault("delete_source_after_process", False)
+            import sys
+            print(f"=== [BACKEND] generate() started, video_path={video_path}, video_url={video_url} ===", file=sys.stderr, flush=True)
+
 
             if not video_path and video_url:
                 yield _j.dumps({"log": f"Resolving URL: {video_url}", "level": "info"}, ensure_ascii=False) + "\n"
@@ -2027,21 +2033,21 @@ def generate_thumbnail_ai():
     subtitle_text = str(data.get("subtitle_text") or "").strip()
 
     # Mô hình AI tạo ảnh do người dùng chọn ở UI Thumbnail trước khi bấm 🤖.
-    #   "auto"               → 9Router (nếu cấu hình) rồi fallback Gemini
+    #   "auto"               → DTRouter (nếu cấu hình) rồi fallback Gemini
     #   "gemini*"/"imagen*"  → ép dùng Gemini native image
-    #   còn lại (vd cx/...)  → ép dùng 9Router với đúng model đó
+    #   còn lại (vd cx/...)  → ép dùng DTRouter với đúng model đó
     image_model = str(data.get("image_model") or "auto").strip() or "auto"
 
-    # Get API keys (need at least 1 of: 9Router or Gemini)
+    # Get API keys (need at least 1 of: DTRouter or Gemini)
     cfg = load_cfg()
     api_key = (
         (cfg.get("gemini_video") or {}).get("api_key", "").strip()
         or os.environ.get("GEMINI_API_KEY", "").strip()
     )
-    nr_check = cfg.get("nine_router") or {}
-    has_9router = bool((nr_check.get("endpoint") or "").strip() and (nr_check.get("api_key") or "").strip())
-    if not api_key and not has_9router:
-        return jsonify({"ok": False, "error": "Chưa cấu hình 9Router (nine_router) hoặc Gemini API key (gemini_video.api_key)"}), 400
+    nr_check = cfg.get("dtrouter") or {}
+    has_dtrouter = bool((nr_check.get("endpoint") or "").strip() and (nr_check.get("api_key") or "").strip())
+    if not api_key and not has_dtrouter:
+        return jsonify({"ok": False, "error": "Chưa cấu hình DTRouter (dtrouter) hoặc Gemini API key (gemini_video.api_key)"}), 400
 
     # ── Step 1: Extract frame from video ──────────────────────────────────────
     frame_b64 = data.get("frame_b64") or None
@@ -2085,7 +2091,7 @@ def generate_thumbnail_ai():
         gen_prompt = custom_prompt
     else:
         # Use Gemini Vision to analyze frame và viết prompt — chỉ khi có Gemini key.
-        # Nếu không có (chỉ có 9Router) thì dùng prompt mặc định dựa trên title/subtitle.
+        # Nếu không có (chỉ có DTRouter) thì dùng prompt mặc định dựa trên title/subtitle.
         if frame_b64 and api_key:
             gen_prompt = _ai_thumbnail_prompt_from_frame(api_key, frame_b64, title, subtitle_text, style, aspect_ratio, is_editing_existing_thumb)
         else:
@@ -2107,27 +2113,27 @@ def generate_thumbnail_ai():
                     f"Make it click-worthy and engaging."
                 )
 
-    # ── Step 3: Generate thumbnail — ưu tiên 9Router, fallback Gemini ─────────
+    # ── Step 3: Generate thumbnail — ưu tiên DTRouter, fallback Gemini ─────────
     cfg_full = load_cfg()
-    nr_cfg = cfg_full.get("nine_router") or {}
+    nr_cfg = cfg_full.get("dtrouter") or {}
     nr_endpoint = (nr_cfg.get("endpoint") or "").strip().rstrip("/")
     nr_key = (nr_cfg.get("api_key") or "").strip()
 
     img_b64_data = None
     used_provider = None
 
-    nr_error = None  # lỗi thật từ 9Router (nếu có) để báo cho người dùng
+    nr_error = None  # lỗi thật từ DTRouter (nếu có) để báo cho người dùng
 
     # Phân loại lựa chọn model của người dùng
     _model_lc = image_model.lower()
     explicit_choice = bool(image_model and image_model != "auto")
     force_gemini = _model_lc.startswith(("gemini", "imagen"))
-    # User chọn 1 model 9Router cụ thể (vd: nb/nanobanana-flash, cx/gpt-5.5-image)
-    forced_9router_model = image_model if (explicit_choice and not force_gemini) else None
+    # User chọn 1 model DTRouter cụ thể (vd: nb/nanobanana-flash, cx/gpt-5.5-image)
+    forced_dtrouter_model = image_model if (explicit_choice and not force_gemini) else None
 
-    # Priority 1: 9Router — dùng khi auto hoặc user chọn 1 model 9Router (bỏ qua nếu ép Gemini)
+    # Priority 1: DTRouter — dùng khi auto hoặc user chọn 1 model DTRouter (bỏ qua nếu ép Gemini)
     if nr_endpoint and nr_key and not force_gemini:
-        model_id = (forced_9router_model or nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
+        model_id = (forced_dtrouter_model or nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
         try:
             size_map = {"9:16": "1024x1792", "16:9": "1792x1024", "1:1": "1024x1024"}
             size_str = size_map.get(aspect_ratio, "1024x1792")
@@ -2157,15 +2163,15 @@ def generate_thumbnail_ai():
             img_data = (rdata.get("data") or [{}])[0]
             if img_data.get("b64_json"):
                 img_b64_data = img_data["b64_json"]
-                used_provider = f"9Router ({model_id})"
+                used_provider = f"DTRouter ({model_id})"
             elif img_data.get("url"):
                 with urllib.request.urlopen(img_data["url"], timeout=180) as dl:
                     img_b64_data = base64.b64encode(dl.read()).decode("ascii")
-                used_provider = f"9Router ({model_id})"
+                used_provider = f"DTRouter ({model_id})"
             else:
                 nr_error = ((rdata.get("error") or {}).get("message")
                             if isinstance(rdata.get("error"), dict) else rdata.get("error")) \
-                           or "9Router không trả về ảnh"
+                           or "DTRouter không trả về ảnh"
         except urllib.error.HTTPError as e:
             try:
                 ebody = e.read().decode("utf-8", "replace")
@@ -2176,18 +2182,18 @@ def generate_thumbnail_ai():
         except Exception as e:
             nr_error = str(e)[:300]
 
-    # Nếu user CHỌN model 9Router cụ thể mà thất bại → báo đúng lỗi, KHÔNG fallback Gemini
+    # Nếu user CHỌN model DTRouter cụ thể mà thất bại → báo đúng lỗi, KHÔNG fallback Gemini
     # (tránh hiện lỗi quota Gemini gây hiểu lầm khi user đã chọn nanobanana/codex…)
-    if forced_9router_model and not img_b64_data:
+    if forced_dtrouter_model and not img_b64_data:
         return jsonify({
             "ok": False,
-            "error": f"Model '{forced_9router_model}' (9Router) lỗi: {nr_error or 'không tạo được ảnh'}",
+            "error": f"Model '{forced_dtrouter_model}' (DTRouter) lỗi: {nr_error or 'không tạo được ảnh'}",
         }), 502
 
     # Priority 2: Gemini — chỉ khi auto fallback, hoặc user chọn model Gemini
     if not img_b64_data:
         if not api_key:
-            return jsonify({"ok": False, "error": nr_error or "Chưa có 9Router cũng như Gemini API key"}), 400
+            return jsonify({"ok": False, "error": nr_error or "Chưa có DTRouter cũng như Gemini API key"}), 400
         gemini_model = image_model if (force_gemini and _model_lc.startswith("gemini")) else "gemini-2.5-flash-image"
         result = _ai_generate_thumbnail_image(api_key, gen_prompt, frame_b64, aspect_ratio, gemini_model)
         if result.get("ok"):
@@ -2196,7 +2202,7 @@ def generate_thumbnail_ai():
         else:
             msg = result.get("error", "AI thumbnail generation failed")
             if nr_error:
-                msg = f"9Router lỗi: {nr_error} · Gemini lỗi: {msg}"
+                msg = f"DTRouter lỗi: {nr_error} · Gemini lỗi: {msg}"
             return jsonify({"ok": False, "error": msg}), 500
 
     # Save to file

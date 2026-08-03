@@ -152,8 +152,8 @@ gemini_video:
   aspect_ratio: '16:9'
   duration: '8'
 
-# 9Router — local AI gateway (OpenAI-compatible)
-nine_router:
+# DTRouter — local AI gateway (OpenAI-compatible)
+dtrouter:
   endpoint: http://localhost:20128/v1
   api_key: ''           # sk-{machineId}-{keyId}-{crc8}
   default_model: duytris
@@ -162,7 +162,7 @@ nine_router:
   max_tokens: 4096
 
 # Idea → Video pipeline (ViMax architecture)
-# Dùng LLM (9Router/DeepSeek/OpenAI/Groq) + Gemini Veo 2 để tạo video từ ý tưởng
+# Dùng LLM (DTRouter/DeepSeek/OpenAI/Groq) + Gemini Veo 2 để tạo video từ ý tưởng
 idea2video:
   output_dir: ./Downloaded/idea2video
   default_style: 'cinematic, high quality, dramatic lighting'

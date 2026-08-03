@@ -86,8 +86,8 @@
 .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
 /* ── Page system ───────────────────────────────────────────── */
-.page { display: none; }
-.page.active { display: block; animation: fadeUp 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.page { display: none !important; }
+.page.active { display: block !important; animation: fadeUp 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }

@@ -16,17 +16,17 @@ bp = Blueprint("tts", __name__)
 
 @bp.route("/api/tts/engines", methods=["GET"])
 def tts_engines():
-    include_9router = str(request.args.get("include_9router", "1")).lower() not in ("0", "false", "no")
+    include_dtrouter = str(request.args.get("include_dtrouter", "1")).lower() not in ("0", "false", "no")
     try:
         from core.tts_catalog import all_tts_engines
-        engines, nine_router = all_tts_engines(load_cfg(), include_9router=include_9router)
-        return jsonify({"ok": True, "engines": engines, "nine_router": nine_router})
+        engines, dtrouter = all_tts_engines(load_cfg(), include_dtrouter=include_dtrouter)
+        return jsonify({"ok": True, "engines": engines, "dtrouter": dtrouter})
     except Exception as exc:
         from core.tts_catalog import local_tts_engines
         return jsonify({
             "ok": True,
             "engines": local_tts_engines(),
-            "nine_router": {"reachable": False, "error": str(exc)},
+            "dtrouter": {"reachable": False, "error": str(exc)},
         })
 
 
@@ -102,20 +102,28 @@ def tts_preview():
     try:
         from core.video_processor import (
             _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs,
-            _tts_nine_router, _tts_vieneu,
+            _tts_dtrouter, _tts_vieneu,
             FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID,
         )
         cfg = load_cfg()
         vp_cfg = cfg.get("video_process") or {}
+
+        from config.config_loader import get_provider_api_key
+
+        def _get_provider_key(provider_id: str) -> str:
+            return get_provider_api_key(provider_id)
+
         fpt_api_key = (
             str(data.get("fpt_api_key") or "").strip()
             or str(vp_cfg.get("fpt_api_key") or "").strip()
+            or _get_provider_key("fptai")
             or FPT_TTS_DEFAULT_KEY
         )
         fpt_speed = int(data.get("fpt_speed") or 0)
         elevenlabs_api_key = (
             str(data.get("elevenlabs_api_key") or "").strip()
             or str(vp_cfg.get("elevenlabs_api_key") or "").strip()
+            or _get_provider_key("elevenlabs")
             or os.environ.get("ELEVENLABS_API_KEY", "").strip()
         )
         elevenlabs_voice_id = (
@@ -146,8 +154,8 @@ def tts_preview():
                         style=tts_emotion,
                         ref_audio=str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip(),
                     )
-                elif tts_engine == "9router" or tts_engine.startswith("9r:"):
-                    ok = asyncio.run(_tts_nine_router(
+                elif tts_engine == "dtrouter" or tts_engine.startswith("dtr:"):
+                    ok = asyncio.run(_tts_dtrouter(
                         text, tts_voice, out_path,
                         engine=tts_engine,
                         language=str(data.get("tts_lang") or data.get("language") or ""),
@@ -179,6 +187,7 @@ def tts_preview():
                     fish_key = (
                         str(data.get("fish_api_key") or "").strip()
                         or str(fish_cfg.get("fish_api_key") or "").strip()
+                        or _get_provider_key("fishaudio")
                         or os.environ.get("FISH_API_KEY", "").strip()
                         or os.environ.get("FISH_AUDIO_API_KEY", "").strip()
                     )
@@ -505,7 +514,7 @@ def tts_to_mp3():
     """
     import asyncio as _asyncio
     from core.video_processor import (
-        _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs, _tts_nine_router,
+        _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs, _tts_dtrouter,
         FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID,
         find_ffmpeg, _run_ffmpeg,
     )
@@ -560,7 +569,7 @@ def tts_to_mp3():
         max_chars = 2500  # ElevenLabs supports up to 5000 chars
     elif tts_engine == "fish-audio":
         max_chars = 1500
-    elif tts_engine == "9router" or tts_engine.startswith("9r:"):
+    elif tts_engine == "dtrouter" or tts_engine.startswith("dtr:"):
         max_chars = 1500
     elif tts_engine == "vieneu":
         max_chars = 240
@@ -591,8 +600,8 @@ def tts_to_mp3():
                             style=tts_emotion,
                             ref_audio=str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip(),
                         )
-                    elif tts_engine == "9router" or tts_engine.startswith("9r:"):
-                        ok = _asyncio.run(_tts_nine_router(
+                    elif tts_engine == "dtrouter" or tts_engine.startswith("dtr:"):
+                        ok = _asyncio.run(_tts_dtrouter(
                             chunk, tts_voice, clip_path,
                             engine=tts_engine,
                             language=str(data.get("tts_lang") or data.get("language") or ""),

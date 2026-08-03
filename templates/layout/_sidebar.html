@@ -39,42 +39,44 @@
     <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mt-4 mb-2">Công
       cụ</div>
 
-    <a class="nav-item" data-page="chat" onclick="switchPage('chat')">
-      <span class="nav-icon">🤖</span><span class="nav-label">Chat Bot · 9Router</span>
+    <a class="nav-item" data-page="providers" onclick="switchPage('providers')">
+      <span class="nav-icon">🔌</span><span class="nav-label">AI Providers</span>
+    </a>
+    <a class="nav-item" data-page="quota" onclick="switchPage('quota')">
+      <span class="nav-icon">📊</span><span class="nav-label">Quota Tracker</span>
     </a>
 
-    <!-- Commented-out pages — kept for future enable
-    <a class="nav-item" data-page="n8n" onclick="switchPage('n8n')">
-      <span class="nav-icon">🔗</span><span class="nav-label">Điều phối n8n</span>
-    </a>
-    <a class="nav-item" data-page="sales" onclick="switchPage('sales')">
-      <span class="nav-icon">🛍</span><span class="nav-label">Video bán hàng</span>
-    </a>
-    <a class="nav-item" data-page="ads" onclick="switchPage('ads')">
-      <span class="nav-icon">📣</span><span class="nav-label">Video quảng cáo</span>
-    </a>
-    <a class="nav-item" data-page="subtitle" onclick="switchPage('subtitle')">
-      <span class="nav-icon">🖼</span><span class="nav-label">Phụ đề & Khung</span>
-    </a>
-    <a class="nav-item" data-page="story" onclick="switchPage('story')">
-      <span class="nav-icon">📖</span><span class="nav-label">Truyện → Video</span>
-    </a>
-    <a class="nav-item" data-page="ai_studio" onclick="switchPage('ai_studio')">
-      <span class="nav-icon">🧪</span><span class="nav-label">AI Studio</span>
-    </a>
-    <a class="nav-item" data-page="movie" onclick="switchPage('movie')">
-      <span class="nav-icon">🎬</span><span class="nav-label">Review phim</span>
-    </a>
-    <a class="nav-item" data-page="proxies" onclick="switchPage('proxies')">
-      <span class="nav-icon">🌐</span><span class="nav-label">Proxy & Router</span>
-    </a>
 
-    -->
     <a class="nav-item" data-page="history" onclick="switchPage('history')">
       <span class="nav-icon">🗃</span><span class="nav-label">Lịch sử</span>
     </a>
     <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mt-4 mb-2">Hệ
       thống</div>
+    <a class="nav-item" data-page="proxies" onclick="switchPage('proxies')">
+      <span class="nav-icon">🌐</span><span class="nav-label">Proxy & Router</span>
+    </a>
+
+    <!-- SYSTEM dropdown and submenus -->
+    <div class="flex flex-col">
+      <a class="nav-item justify-between" onclick="toggleSidebarDropdown('system-media')">
+        <div class="flex items-center">
+          <span class="nav-icon">📁</span>
+          <span class="nav-label">Media Providers</span>
+        </div>
+        <span class="text-[10px] text-slate-400 transition-transform duration-200" id="arrow-system-media">▼</span>
+      </a>
+      <div id="dropdown-system-media" class="hidden flex-col pl-4 bg-slate-50/50 dark:bg-slate-900/20 py-1 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3">
+        <a class="nav-item py-1 text-[11px]" onclick="switchPage('media-tts')">
+          <span class="nav-icon text-xs">🗣️</span><span class="nav-label">Text To Speech</span>
+        </a>
+        <a class="nav-item py-1 text-[11px]" onclick="switchPage('media-stt')">
+          <span class="nav-icon text-xs">🎙️</span><span class="nav-label">Speech To Text</span>
+        </a>
+        <a class="nav-item py-1 text-[11px]" onclick="switchPage('media-video')">
+          <span class="nav-icon text-xs">📹</span><span class="nav-label">Video</span>
+        </a>
+      </div>
+    </div>
 
     <a class="nav-item" data-page="config" onclick="switchPage('config')">
       <span class="nav-icon">⚙️</span><span class="nav-label" data-i18n="nav_config">Cấu hình</span>

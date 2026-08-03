@@ -85,7 +85,7 @@ function _getTtsApiProvider(engine) {
   if (engine === 'fpt-ai') return 'fpt';
   if (engine === 'elevenlabs') return 'elevenlabs';
   if (engine === 'fish-audio') return 'fish-audio';
-  if (engine === '9router') return '9router';
+  if (engine === 'dtrouter') return 'dtrouter';
   return '';
 }
 
@@ -371,6 +371,7 @@ const I18N = {
     badge_done: 'Xong', badge_error: 'Lỗi',
     badge_running: 'Đang chạy', badge_waiting: 'Chờ',
     lbl_tts_rate: 'Tốc độ',
+    title_providers: 'AI Providers',
   },
   en: {
     nav_user: 'Search User', nav_download: 'Download', nav_config: 'Config',
@@ -520,6 +521,7 @@ const I18N = {
     badge_done: 'Done', badge_error: 'Error',
     badge_running: 'Running', badge_waiting: 'Waiting',
     lbl_tts_rate: 'Rate',
+    title_providers: 'AI Providers',
   }
 };
 
@@ -550,6 +552,18 @@ function toggleLang() {
 }
 
 /* ── Core navigation (from app.js) ───────────────────────────── */
+function toggleSidebarDropdown(id) {
+  const dropdown = document.getElementById('dropdown-' + id);
+  const arrow = document.getElementById('arrow-' + id);
+  if (dropdown) {
+    dropdown.classList.toggle('hidden');
+    dropdown.classList.toggle('flex');
+    if (arrow) {
+      arrow.style.transform = dropdown.classList.contains('hidden') ? '' : 'rotate(180deg)';
+    }
+  }
+}
+
 function switchPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item,.mobile-nav-item').forEach(n => n.classList.remove('active'));
@@ -561,15 +575,31 @@ function switchPage(name) {
   const titles = {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
-    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · 9Router',
-    videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng', ads:'Video quảng cáo'
+    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · DTRouter', providers:'AI Providers',
+    videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng', ads:'Video quảng cáo',
+    quota: 'Quota Tracker',
+    'media-embedding': 'Embedding Providers',
+    'media-image': 'Text to Image Providers',
+    'media-tts': 'Text to Speech Providers',
+    'media-stt': 'Speech to Text Providers',
+    'media-video': 'Video Generation Providers',
+    'media-web': 'Web Fetch & Search Providers'
   };
   if (el) el.textContent = titles[name] || t('title_' + name) || name;
-  if (name === 'config' && !window._configLoaded) {
+  if (name === 'providers') {
+    if (typeof window.loadProvidersConfig === 'function') {
+      window.loadProvidersConfig();
+    } else if (typeof loadProvidersConfig === 'function') {
+      loadProvidersConfig();
+    }
+  }
+  if (name === 'quota') {
+    if (typeof refreshAllQuotas === 'function') refreshAllQuotas();
+  }
+  if (name === 'config') {
     loadConfig();
     loadCookieMode();
     loadCookieFields();
-    window._configLoaded = true;
   }
   if (name === 'history') { loadHistory(); if (typeof loadFiles === 'function') loadFiles(''); }
   if (name === 'content') cptSwitch('files');
@@ -596,12 +626,12 @@ function switchPage(name) {
       if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
         _refreshTtsEngineSelects();
         _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
-        renderTranscribeVoiceLibrary();
+        if (typeof renderTranscribeVoiceLibrary === 'function') renderTranscribeVoiceLibrary();
       } else {
         _loadTtsEngineCatalog().then(() => {
           _refreshTtsEngineSelects();
           _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
-          renderTranscribeVoiceLibrary();
+          if (typeof renderTranscribeVoiceLibrary === 'function') renderTranscribeVoiceLibrary();
         });
       }
     });

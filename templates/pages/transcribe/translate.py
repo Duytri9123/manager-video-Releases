@@ -16,12 +16,12 @@ def api_translate_batch():
         return jsonify({"results": [], "provider": "none"})
     cfg = load_cfg()
     trans_cfg = cfg.get("translation") or {}
-    nr_cfg = cfg.get("nine_router") or {}
+    nr_cfg = cfg.get("dtrouter") or {}
     try:
         from utils.translation import translate_texts
         results, used = translate_texts(
             texts, trans_cfg, provider, context=context,
-            nine_router_cfg=nr_cfg,
+            dtrouter_cfg=nr_cfg,
         )
         return jsonify({"results": results, "provider": used})
     except Exception as e:
@@ -38,12 +38,12 @@ def api_translate():
         return jsonify({"result": "", "provider": "none"})
     cfg = load_cfg()
     trans_cfg = cfg.get("translation") or {}
-    nr_cfg = cfg.get("nine_router") or {}
+    nr_cfg = cfg.get("dtrouter") or {}
     try:
         from utils.translation import translate_texts
         results, used = translate_texts(
             [text], trans_cfg, provider, context=context,
-            nine_router_cfg=nr_cfg,
+            dtrouter_cfg=nr_cfg,
         )
         return jsonify({"result": results[0] if results else text, "provider": used})
     except Exception as e:
@@ -60,12 +60,12 @@ def api_translate_descs():
         return jsonify({"results": descs, "provider": "none"})
     cfg = load_cfg()
     tr_cfg = dict(cfg.get("translation") or {})
-    nr_cfg = cfg.get("nine_router") or {}
+    nr_cfg = cfg.get("dtrouter") or {}
     tr_cfg["preferred_provider"] = provider
     try:
         from utils.translation import translate_texts
         results, used = translate_texts(
-            descs, tr_cfg, provider, nine_router_cfg=nr_cfg,
+            descs, tr_cfg, provider, dtrouter_cfg=nr_cfg,
         )
         if results and len(results) == len(descs):
             return jsonify({"results": results, "provider": used})
@@ -79,7 +79,7 @@ def api_translate_descs():
 def translation_status():
     cfg = load_cfg()
     trans_cfg = cfg.get("translation") or {}
-    nr_cfg = cfg.get("nine_router") or {}
+    nr_cfg = cfg.get("dtrouter") or {}
     from utils.translation import get_translation_providers, get_translation_models
     providers = get_translation_providers(trans_cfg, full_cfg=cfg)
     preferred = trans_cfg.get("preferred_provider", "auto")
@@ -92,8 +92,8 @@ def translation_status():
         "has_openai": bool(trans_cfg.get("openai_key")),
         "has_groq": bool(trans_cfg.get("groq_key")),
         "has_hf": bool(trans_cfg.get("hf_token")),
-        "has_9router": bool((nr_cfg.get("api_key") or "").strip()),
-        "nine_router": {
+        "has_dtrouter": bool((nr_cfg.get("api_key") or "").strip()),
+        "dtrouter": {
             "endpoint": nr_cfg.get("endpoint", "http://localhost:20128/v1"),
             "default_model": nr_cfg.get("default_model", "duytris"),
         },
@@ -177,23 +177,26 @@ def api_analyze_video_content():
 
     cfg = load_cfg()
     trans_cfg = cfg.get("translation") or {}
-    nr_cfg = cfg.get("nine_router") or {}
+    nr_cfg = cfg.get("dtrouter") or {}
     nine_endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
     nine_model = (nr_cfg.get("default_model") or "duytris").strip()
 
     provider = (data.get("provider") or trans_cfg.get("preferred_provider") or "deepseek").strip().lower()
     if provider == "auto":
         provider = trans_cfg.get("preferred_provider") or "auto"
+    if provider == "opencode":
+        provider = "dtrouter"
+        nine_model = "opencode"
 
     api_configs = {
         "deepseek": ("https://api.deepseek.com/v1/chat/completions", trans_cfg.get("deepseek_key", ""), "deepseek-chat"),
         "openai": ("https://api.openai.com/v1/chat/completions", trans_cfg.get("openai_key", ""), "gpt-4o-mini"),
         "groq": ("https://api.groq.com/openai/v1/chat/completions", trans_cfg.get("groq_key", ""), "llama-3.1-8b-instant"),
-        "9router": (f"{nine_endpoint}/chat/completions", (nr_cfg.get("api_key") or ""), nine_model),
+        "dtrouter": (f"{nine_endpoint}/chat/completions", (nr_cfg.get("api_key") or ""), nine_model),
     }
 
     # Try requested provider first, then fallback
-    order = [provider] + [p for p in ["9router", "deepseek", "openai", "groq"] if p != provider]
+    order = [provider] + [p for p in ["dtrouter", "deepseek", "openai", "groq"] if p != provider]
 
     prompt = f"""Bạn là chuyên gia marketing video trên mạng xã hội. Phân tích nội dung video sau và tạo thông tin đăng cho 3 nền tảng.
 NGÔN NGỮ ĐẦU RA: {target_lang_name} — Tất cả title, description, caption PHẢI viết bằng {target_lang_name}.

@@ -34,17 +34,9 @@ _BLUEPRINTS: List[Tuple[str, str, str]] = [
     ("templates.pages.publish.facebook",   "bp", "facebook"),
     ("templates.pages.publish.accounts",   "bp", "accounts"),
     ("templates.pages.publish.tiktok",     "bp", "tiktok"),
-    # New blueprints (proxies/routers/movie/story)
     ("templates.pages.proxies.route",    "bp", "proxies"),
-    ("templates.pages.movie.route",      "bp", "movie"),
-    ("templates.pages.story.route",      "bp", "story"),
-    ("templates.pages.chat.route",    "bp", "chatbot"),
-    ("templates.pages.videogen.route",   "bp", "videogen"),
-    ("templates.pages.idea2video.route", "bp", "idea2video"),
     ("templates.pages.ai_studio.route",  "bp", "ai_studio"),
     ("templates.pages.n8n.route",        "bp", "n8n"),
-    ("templates.pages.sales.route",      "bp", "sales"),
-    ("templates.pages.ads.route",        "bp", "ads"),
 ]
 
 _REGISTERED: List[str] = []

@@ -146,11 +146,11 @@
     if (isHidden) el.classList.remove('hidden');
   }
 
-  // Refresh license status via API
+  // Refresh license status via API (gọi server thực khi user bấm nút)
   function refreshLicense() {
     const btn = document.querySelector('#btn-license-info span:first-child');
     if (btn) btn.textContent = '⏳';
-    fetch('/api/license/check_status')
+    fetch('/api/license/force_refresh', {method: 'POST'})
       .then(r => r.json())
       .then(d => {
         // Reload page to reflect new status

@@ -77,6 +77,11 @@ def _resolve_cors_origins(cfg: dict) -> list:
             "http://localhost:3000",
             "http://127.0.0.1:3000",
         ]
+    port = os.getenv("FLASK_PORT", "9123")
+    for host in ["localhost", "127.0.0.1"]:
+        o = f"http://{host}:{port}"
+        if o not in origins:
+            origins.append(o)
     if _NGROK_PUBLIC_URL and _NGROK_PUBLIC_URL not in origins and "*" not in origins:
         origins.append(_NGROK_PUBLIC_URL)
     public_cfg = ((cfg or {}).get("ngrok") or {}).get("public_url") or ""
@@ -107,7 +112,6 @@ _initial_origins = _resolve_cors_origins(_initial_cfg)
 socketio = SocketIO(
     app,
     cors_allowed_origins=_initial_origins if _initial_origins != ["*"] else "*",
-    async_mode="threading",
     ping_timeout=120,
     ping_interval=30,
 )
@@ -449,9 +453,29 @@ def _reset_youtube_uploader():
 @app.route("/page-static/<page>/<path:filename>")
 def serve_page_static(page, filename):
     import os
-    from flask import send_from_directory
-    directory = os.path.join(ROOT, "templates", "pages", page)
-    return send_from_directory(directory, filename)
+    from flask import Response
+    filepath = os.path.join(ROOT, "templates", "pages", page, filename)
+    if not os.path.exists(filepath):
+        return "File not found", 404
+    
+    with open(filepath, "rb") as f:
+        content = f.read()
+    
+    mimetype = "application/octet-stream"
+    if filename.endswith(".js"):
+        mimetype = "application/javascript; charset=utf-8"
+    elif filename.endswith(".css"):
+        mimetype = "text/css; charset=utf-8"
+    elif filename.endswith(".html"):
+        mimetype = "text/html; charset=utf-8"
+    elif filename.endswith(".png"):
+        mimetype = "image/png"
+    elif filename.endswith(".jpg") or filename.endswith(".jpeg"):
+        mimetype = "image/jpeg"
+    elif filename.endswith(".svg"):
+        mimetype = "image/svg+xml"
+        
+    return Response(content, mimetype=mimetype)
 
 
 # ═══════════════════════════════════════════════════════════════

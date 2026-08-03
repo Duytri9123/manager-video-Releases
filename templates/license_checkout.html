@@ -163,9 +163,9 @@
     </div>
 
     <script>
-        // Poll every 3s to detect payment
+        // Poll every 5s using force_refresh (gọi server thực để phát hiện thanh toán)
         const poller = setInterval(() => {
-            fetch('/api/license/check_status')
+            fetch('/api/license/force_refresh', {method: 'POST'})
                 .then(r => r.json())
                 .then(d => {
                     if (d.active) {
