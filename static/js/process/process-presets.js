@@ -1,4 +1,4 @@
-﻿  /* ════════════════════════════════════════════════════════
+  /* ════════════════════════════════════════════════════════
      SAVE / RESTORE DEFAULTS — per aspect ratio (9:16 / 16:9)
   ════════════════════════════════════════════════════════ */
   const _PROC_DEFAULTS_KEY      = 'proc_settings_defaults_v1';      // legacy single preset
@@ -59,18 +59,22 @@
   /** Apply the saved preset for window._procActiveAspect to the form. */
   // All field IDs to save (id → type)
   const _PROC_FIELDS = [
-    // Aspect / Preview
-    { id:'proc-aspect-blur-bg', type:'checkbox' },
-    // AI Model + Language
-    { id:'proc-model',          type:'value' },
+    // ── STEP 1: Source, Translation & Auto Options ──
     { id:'proc-lang',           type:'value' },
     { id:'proc-target-lang',    type:'value' },
-    { id:'proc-transcribe-provider-model', type:'value' },
     { id:'proc-trans-provider-model', type:'value' },
     { id:'proc-ai-video-auto',  type:'checkbox' },
-    { id:'proc-ai-video-samples',  type:'value' },
+    { id:'proc-ai-video-samples', type:'value' },
     { id:'proc-ai-video-nine-model', type:'value' },
-    // Subtitle
+    { id:'proc-auto-flow',      type:'checkbox' },
+    { id:'step3-skip-ass',      type:'checkbox' },
+    { id:'proc-skip-transcription', type:'checkbox' },
+    { id:'batch-auto-drain',    type:'checkbox' },
+    { id:'proc-batch-resolution', type:'value' },
+    { id:'proc-batch-cookie',   type:'value' },
+
+    // ── STEP 2: Aspect, Subtitles, Frame, Overlays & FX ──
+    { id:'proc-aspect-blur-bg', type:'checkbox' },
     { id:'proc-burn',           type:'checkbox' },
     { id:'proc-translate-subs', type:'checkbox' },
     { id:'proc-burn-vi',        type:'checkbox' },
@@ -87,27 +91,6 @@
     { id:'proc-outline-width',  type:'value' },
     { id:'proc-font-bold',      type:'checkbox' },
     { id:'proc-sub-pos',        type:'value' },
-    // Voice
-    { id:'proc-voice',          type:'checkbox' },
-    { id:'proc-tts-engine',     type:'value' },
-    { id:'proc-tts-voice',      type:'value' },
-    { id:'proc-tts-pitch',      type:'value' },
-    { id:'proc-tts-rate',       type:'value' },
-    { id:'proc-tts-emotion',    type:'value' },
-    { id:'proc-tts-speed',      type:'value' },
-    { id:'proc-auto-speed',     type:'checkbox' },
-    { id:'proc-keep-bg',        type:'checkbox' },
-    { id:'proc-bg-vol',         type:'value' },
-    // FX
-    { id:'proc-fx-enabled',     type:'checkbox' },
-    { id:'proc-fx-pitch',       type:'value' },
-    { id:'proc-fx-speed',       type:'value' },
-    { id:'proc-fx-bass',        type:'value' },
-    { id:'proc-fx-mid',         type:'value' },
-    { id:'proc-fx-treble',      type:'value' },
-    { id:'proc-fx-comp',        type:'value' },
-    { id:'proc-fx-reverb',      type:'value' },
-    // Frame video
     { id:'frame-enabled',       type:'checkbox' },
     { id:'frame-title',         type:'value' },
     { id:'frame-title-enabled', type:'checkbox' },
@@ -130,22 +113,152 @@
     { id:'frame-logo-top',      type:'value' },
     { id:'frame-logo-left',     type:'value' },
     { id:'frame-logo-radius',   type:'value' },
-    // Text / shape overlays
     { id:'ov-layers-json',      type:'value' },
     { id:'sub-preview-sample',  type:'value' },
     { id:'sub-preview-ts',      type:'value' },
-    // CapCut
     { id:'proc-capcut-enabled', type:'checkbox' },
     { id:'proc-capcut-auto-open', type:'checkbox' },
-    // Output dir
     { id:'proc-ext-audios-json', type:'value' },
     { id:'proc-out',            type:'value' },
+
+    // ── STEP 3: AI Models, Voice & FX ──
+    { id:'proc-model',          type:'value' },
+    { id:'proc-transcribe-provider-model', type:'value' },
+    { id:'proc-voice',          type:'checkbox' },
+    { id:'proc-tts-engine',     type:'value' },
+    { id:'proc-tts-voice',      type:'value' },
+    { id:'proc-tts-pitch',      type:'value' },
+    { id:'proc-tts-rate',       type:'value' },
+    { id:'proc-tts-emotion',    type:'value' },
+    { id:'proc-tts-speed',      type:'value' },
+    { id:'proc-auto-speed',     type:'checkbox' },
+    { id:'proc-keep-bg',        type:'checkbox' },
+    { id:'proc-bg-vol',         type:'value' },
+    { id:'proc-fx-enabled',     type:'checkbox' },
+    { id:'proc-fx-pitch',       type:'value' },
+    { id:'proc-fx-speed',       type:'value' },
+    { id:'proc-fx-bass',        type:'value' },
+    { id:'proc-fx-mid',         type:'value' },
+    { id:'proc-fx-treble',      type:'value' },
+    { id:'proc-fx-comp',        type:'value' },
+    { id:'proc-fx-reverb',      type:'value' },
   ];
+  window._PROC_FIELDS = _PROC_FIELDS;
+
+  const _STEP_FIELD_IDS = {
+    1: ['proc-lang', 'proc-target-lang', 'proc-trans-provider-model', 'proc-ai-video-auto', 'proc-ai-video-samples', 'proc-ai-video-nine-model', 'proc-auto-flow', 'step3-skip-ass', 'proc-skip-transcription', 'batch-auto-drain', 'proc-batch-resolution', 'proc-batch-cookie'],
+    2: ['proc-aspect-blur-bg', 'proc-burn', 'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-blur-height', 'proc-blur-width', 'proc-blur-zone', 'proc-blur-x', 'proc-blur-y', 'proc-font-size', 'proc-font-color', 'proc-font-color-picker', 'proc-margin-v', 'proc-outline-width', 'proc-font-bold', 'proc-sub-pos', 'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y', 'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex', 'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'ov-layers-json', 'sub-preview-sample', 'sub-preview-ts', 'proc-capcut-enabled', 'proc-capcut-auto-open', 'proc-ext-audios-json', 'proc-out'],
+    3: ['proc-model', 'proc-transcribe-provider-model', 'proc-ai-video-samples', 'proc-voice', 'proc-tts-engine', 'proc-tts-voice', 'proc-tts-pitch', 'proc-tts-rate', 'proc-tts-emotion', 'proc-tts-speed', 'proc-auto-speed', 'proc-keep-bg', 'proc-bg-vol', 'proc-fx-enabled', 'proc-fx-pitch', 'proc-fx-speed', 'proc-fx-bass', 'proc-fx-mid', 'proc-fx-treble', 'proc-fx-comp', 'proc-fx-reverb']
+  };
+
+  /** Save config for a specific step (1, 2, or 3) */
+  function procSaveStep(stepNum, silent) {
+    if (typeof _ovSyncHidden === 'function') _ovSyncHidden();
+    const map = _loadPresetsMap();
+    const aspect = window._procActiveAspect || '16x9';
+    const data = map[aspect] || {};
+
+    const targetIds = _STEP_FIELD_IDS[stepNum] || [];
+    _PROC_FIELDS.forEach(f => {
+      if (targetIds.length && !targetIds.includes(f.id)) return;
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      data[f.id] = f.type === 'checkbox' ? el.checked : el.value;
+    });
+
+    if (stepNum === 2 || !stepNum) {
+      const blurMode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value;
+      if (blurMode) data['frame-blur-mode'] = blurMode;
+    }
+
+    try {
+      map[aspect] = data;
+      _savePresetsMap(map);
+      try { localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data)); } catch (_) {}
+      if (!silent) {
+        const stepNames = { 1: 'Bước 1 (Nguồn & Dịch)', 2: 'Bước 2 (Khung hình & Sub)', 3: 'Bước 3 (AI & Lồng tiếng)' };
+        const msg = stepNames[stepNum] ? `✅ Đã lưu cấu hình ${stepNames[stepNum]} (${aspect.replace('x', ':')})` : `✅ Đã lưu cấu hình (${aspect.replace('x', ':')})`;
+        if (typeof toast === 'function') toast(msg, 'success');
+      }
+      _updateAspectBadge();
+    } catch (e) {
+      if (!silent && typeof toast === 'function') toast('Lỗi lưu: ' + e.message, 'error');
+    }
+  }
+  window.procSaveStep = procSaveStep;
+
+  /** Save all settings */
+  function procSaveDefaults(silent) {
+    const data = {};
+    if (typeof _ovSyncHidden === 'function') _ovSyncHidden();
+    _PROC_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      data[f.id] = f.type === 'checkbox' ? el.checked : el.value;
+    });
+    const blurMode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value;
+    if (blurMode) data['frame-blur-mode'] = blurMode;
+
+    try {
+      const map = _loadPresetsMap();
+      const aspect = window._procActiveAspect || '16x9';
+      map[aspect] = data;
+      _savePresetsMap(map);
+      try { localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data)); } catch (_) {}
+      if (!silent && typeof toast === 'function') {
+        toast(`✅ Đã lưu cài đặt mặc định cho ${aspect.replace('x', ':')}`, 'success');
+      }
+      _updateAspectBadge();
+    } catch (e) {
+      if (!silent && typeof toast === 'function') toast('Lỗi lưu: ' + e.message, 'error');
+    }
+  }
+  window.procSaveDefaults = procSaveDefaults;
+
+  /** Restore defaults */
+  function procRestoreDefaults(stepNum) {
+    try {
+      const map = _loadPresetsMap();
+      const aspect = window._procActiveAspect || '16x9';
+      const data = map[aspect];
+      if (!data) {
+        if (typeof toast === 'function') toast(`Chưa có cài đặt mặc định cho tỉ lệ ${aspect.replace('x', ':')}`, 'warning');
+        return;
+      }
+      const targetIds = (stepNum && _STEP_FIELD_IDS[stepNum]) ? _STEP_FIELD_IDS[stepNum] : null;
+      _PROC_FIELDS.forEach(f => {
+        if (targetIds && !targetIds.includes(f.id)) return;
+        const el = document.getElementById(f.id);
+        if (!el || !(f.id in data)) return;
+        if (f.type === 'checkbox') el.checked = data[f.id];
+        else el.value = data[f.id];
+        el.dispatchEvent(new Event('change'));
+        el.dispatchEvent(new Event('input'));
+      });
+      if (!stepNum || stepNum === 2) {
+        if (data['frame-blur-mode']) {
+          const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
+          if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+        }
+      }
+      if (typeof _onTargetLangChange === 'function') {
+        _onTargetLangChange();
+      } else if (typeof _syncVoiceOptions === 'function') {
+        _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+      }
+      if (typeof frameToggle === 'function') frameToggle();
+      if (typeof toast === 'function') {
+        toast(`↺ Đã khôi phục cài đặt ${stepNum ? `Bước ${stepNum}` : ''} (${aspect.replace('x', ':')})`, 'info');
+      }
+    } catch (e) {
+      if (typeof toast === 'function') toast('Lỗi khôi phục: ' + e.message, 'error');
+    }
+  }
+  window.procRestoreDefaults = procRestoreDefaults;
 
   // Auto-restore on page load
   document.addEventListener('DOMContentLoaded', () => {
     try {
-      // Pick initial preset to apply on first load
       const map = _loadPresetsMap();
       const aspectSel = document.getElementById('proc-preview-aspect');
       let selectedAspect = aspectSel?.value || 'auto';
@@ -162,7 +275,7 @@
         ? ((img && img.naturalWidth) ? _classifyAspect(img.naturalWidth, img.naturalHeight) : '16x9')
         : selectedAspect;
       window._procActiveAspect = initialAspect;
-      const data = map[initialAspect] || map['9x16'];
+      const data = map[initialAspect] || map['9x16'] || map['16x9'];
 
       if (data) {
         _PROC_FIELDS.forEach(f => {
@@ -171,7 +284,9 @@
           if (f.type === 'checkbox') el.checked = data[f.id];
           else el.value = data[f.id];
         });
-        // Restore blur mode radio (not in _PROC_FIELDS because it's a radio group)
+        if (data['proc-ai-video-nine-model'] && typeof window._syncAiVideoModel === 'function') {
+          window._syncAiVideoModel(data['proc-ai-video-nine-model']);
+        }
         if (data['frame-blur-mode']) {
           const radio = document.querySelector(`input[name="frame-blur-mode"][value="${data['frame-blur-mode']}"]`);
           if (radio) radio.checked = true;
@@ -186,22 +301,27 @@
         if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
       }
       _updateAspectBadge();
-      // Sync frame controls visibility on page load
       if (typeof frameToggle === 'function') frameToggle();
-      // Apply preview aspect on page load (reads from proc-preview-aspect select which was restored above)
       if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
       if (typeof window._syncAspectBtns === 'function') window._syncAspectBtns();
-      // Sync time input display after restore
       if (typeof window.pe2SyncPlayhead === 'function') window.pe2SyncPlayhead();
-      // Sync Whisper models based on restored provider
       if (typeof onTranscribeProviderChanged === 'function') onTranscribeProviderChanged(true);
+
+      // Debounced auto-save on input change
+      let _autoSaveTimer = null;
+      document.getElementById('page-process')?.addEventListener('change', (e) => {
+        if (e.target && (e.target.id || e.target.name)) {
+          clearTimeout(_autoSaveTimer);
+          _autoSaveTimer = setTimeout(() => {
+            if (typeof procSaveDefaults === 'function') procSaveDefaults(true);
+          }, 800);
+        }
+      });
     } catch (_) {}
   });
 
-  // ── Đổi khung hình Preview (16:9, 9:16, hoặc auto) ───────────
-  // Auto-update frame preview when frame-enabled toggled
+  // Auto-update frame preview when toggle flags change
   document.addEventListener('DOMContentLoaded', () => {
-    // frame-enabled change is handled by inline onchange="frameToggle()"
     const blurChk = document.getElementById('proc-blur-original');
     if (blurChk) blurChk.addEventListener('change', () => _renderSubOverlay());
     const burnChk2 = document.getElementById('proc-burn');

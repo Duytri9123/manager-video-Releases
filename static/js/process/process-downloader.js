@@ -199,7 +199,9 @@ async function _runStep1QueueDownload() {
       toast('✅ Đã thêm file vào hàng chờ', 'success');
     }
     _renderBatchQueue();
-    _step1UpdateDownloadArea();
+    if (typeof _step1UpdateDownloadArea === 'function') {
+      _step1UpdateDownloadArea();
+    }
   }
   function detectPlatform(url) {
     const low = (url || '').toLowerCase();

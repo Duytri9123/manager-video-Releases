@@ -38,16 +38,6 @@ const TTS_VOICE_PRESETS = {
     { value: 'Laomedeia', label: 'Laomedeia (Google Gemini - Nữ, hào hứng)' },
     { value: 'Achird', label: 'Achird (Google Gemini - Nam, thân thiện)' },
   ],
-  'dtr:google-tts': [
-    { value: 'google-tts/vi-VN-Wavenet-A', label: 'vi-VN Wavenet A (Google - Nữ)' },
-    { value: 'google-tts/vi-VN-Wavenet-B', label: 'vi-VN Wavenet B (Google - Nam)' },
-    { value: 'google-tts/en-US-Neural2-F', label: 'en-US Neural2 F (Google - Nữ)' },
-    { value: 'google-tts/en-US-Neural2-J', label: 'en-US Neural2 J (Google - Nam)' },
-  ],
-  'dtr:edge-tts': [
-    { value: 'vi-VN-HoaiMyNeural', label: 'Hoài My (Microsoft DTRouter - Nữ)' },
-    { value: 'vi-VN-NamMinhNeural', label: 'Nam Minh (Microsoft DTRouter - Nam)' },
-  ],
   'elevenlabs': [
     { value: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel (ElevenLabs - Nữ EN)' },
     { value: 'AZnzlk1XvdvUeBnXmlld', label: 'Domi (ElevenLabs - Nữ EN)' },
@@ -205,10 +195,6 @@ function _refreshTtsEngineSelects() {
   const cfg = window._loadedCfg || {};
   const isTtsEngineActive = (eng) => {
     if (!eng) return false;
-    if (eng.backend === 'dtrouter') {
-      const nineRouterKey = cfg.dtrouter?.api_key;
-      return !!(nineRouterKey && nineRouterKey.trim().length > 0);
-    }
     if (eng.id === 'fpt-ai') {
       const key = cfg.video_process?.fpt_api_key;
       return !!(key && key.trim().length > 0);
@@ -233,38 +219,21 @@ function _refreshTtsEngineSelects() {
     const lang = _getTtsTargetLangForSelect(id);
     const fallback = _pickTtsEngineForLang(lang, current);
     sel.innerHTML = '';
-    const localEngs = catalog.filter(e => e.backend !== 'dtrouter');
-    const nineEngs = catalog.filter(e => e.backend === 'dtrouter');
-    const addOpt = (parent, eng) => {
+    catalog.forEach(eng => {
       const opt = document.createElement('option');
       opt.value = eng.id;
       opt.textContent = eng.label || eng.id;
       if (eng.id === current || (!current && fallback && eng.id === fallback.id)) {
         opt.selected = true;
       }
-      parent.appendChild(opt);
-    };
-    if (nineEngs.length) {
-      const gLocal = document.createElement('optgroup');
-      gLocal.label = 'Local';
-      localEngs.forEach(e => addOpt(gLocal, e));
-      sel.appendChild(gLocal);
-      const gNine = document.createElement('optgroup');
-      gNine.label = 'DTRouter';
-      nineEngs.forEach(e => addOpt(gNine, e));
-      sel.appendChild(gNine);
-    } else {
-      localEngs.forEach(e => addOpt(sel, e));
-    }
+      sel.appendChild(opt);
+    });
     // Giữ giá trị hiện tại nếu còn trong catalog, không thì dùng fpt-ai hoặc edge-tts làm default
     const currentEngine = catalog.find(e => e.id === current);
     const targetValue = currentEngine && _engineSupportsLang(currentEngine, lang)
       ? current
       : fallback?.id || '';
     sel.value = targetValue;
-    if (typeof _handleDTRouterEngine === 'function') {
-      _handleDTRouterEngine(id, id.replace('-tts-engine', '-tts-voice'));
-    }
   });
 }
 
@@ -284,7 +253,6 @@ async function _loadTtsEngineCatalog() {
       }
       if (jEng?.ok && Array.isArray(jEng.engines) && jEng.engines.length) {
         TTS_ENGINE_CATALOG = jEng.engines;
-        window._ttsDTRouterStatus = jEng.dtrouter || {};
         // Dùng requestAnimationFrame để đảm bảo DOM đã render xong trước khi refresh
         requestAnimationFrame(() => {
           _refreshTtsEngineSelects();
@@ -429,240 +397,9 @@ function _onTargetLangChange() {
   voiceEl.value = voices[0]?.value || '';
 }
 
-/* ── DTRouter consolidated TTS engine — SHARED dynamic component ────────────
- * The catalog exposes ONE "DTRouter TTS" engine carrying `models` (grouped by
- * provider) + `voicesByProvider`. Given any (engineSelectId, voiceSelectId)
- * pair, this injects a Model dropdown + free-text Voice input (with
- * suggestions) + "save as default" button right after the engine field — so it
- * works on process / transcribe / movie / story / sales / ads uniformly.
- * Final value is sent as "model|voice"; backend builds the provider's real
- * model id (openai => voice field, elevenlabs/edge => model/voice path). */
-function _dtrKey(engineSelectId) {
-  return String(engineSelectId || '').replace(/[^a-z0-9]/gi, '_');
-}
-
-function _find9rEngine(engineId) {
-  const eng = String(engineId || '').toLowerCase();
-  return (TTS_ENGINE_CATALOG || []).find(
-    e => String(e.id || '').toLowerCase() === eng && e.backend === 'dtrouter');
-}
-
-// Create (once) the Model + Voice + Save controls after the engine field.
-function _ensureDtRouterComponent(engineSelectId, voiceSelectId) {
-  _ensure9rStyles();
-  const key = _dtrKey(engineSelectId);
-  let wrap = document.getElementById(key + '-dtr-wrap');
-  if (wrap) {
-    if (voiceSelectId) wrap.dataset.voiceSel = voiceSelectId;
-    return wrap;
-  }
-  const engineEl = document.getElementById(engineSelectId);
-  const engineField = engineEl && engineEl.closest('.field');
-  if (!engineField) return null;
-
-  wrap = document.createElement('div');
-  wrap.id = key + '-dtr-wrap';
-  wrap.className = 'field';
-  wrap.style.gridColumn = '1 / -1';
-  wrap.style.display = 'none';
-  wrap.dataset.engineSel = engineSelectId;
-  if (voiceSelectId) wrap.dataset.voiceSel = voiceSelectId;
-  wrap.innerHTML =
-    '<div class="grid-2">' +
-      '<div class="field">' +
-        '<label>Model (DTRouter)</label>' +
-        '<select id="' + key + '-dtr-model"></select>' +
-      '</div>' +
-      '<div class="field" style="position:relative">' +
-        '<label>Voice (nhập ID hoặc chọn gợi ý)</label>' +
-        '<input type="text" id="' + key + '-dtr-voice" autocomplete="off" style="width:100%" ' +
-          'placeholder="để trống = giọng mặc định">' +
-        '<div id="' + key + '-dtr-voice-pop" class="nr-voice-pop" style="display:none"></div>' +
-      '</div>' +
-    '</div>' +
-    '<div class="flex-center gap-8 mt-8">' +
-      '<button type="button" class="btn btn-secondary btn-sm" id="' + key + '-dtr-save">💾 Lưu làm mặc định</button>' +
-      '<span class="text-xs text-muted" id="' + key + '-dtr-hint"></span>' +
-    '</div>';
-  engineField.parentNode.insertBefore(wrap, engineField.nextSibling);
-
-  document.getElementById(key + '-dtr-model')
-    .addEventListener('change', () => _sync9rVoice(engineSelectId));
-
-  const voiceInput = document.getElementById(key + '-dtr-voice');
-  const pop = document.getElementById(key + '-dtr-voice-pop');
-  if (voiceInput && pop) {
-    const show = () => { _9rRenderVoicePop(engineSelectId); pop.style.display = 'block'; };
-    voiceInput.addEventListener('focus', show);
-    voiceInput.addEventListener('click', show);
-    voiceInput.addEventListener('input', () => { _9rRenderVoicePop(engineSelectId); pop.style.display = 'block'; });
-    // Hide when focus/click leaves the field.
-    document.addEventListener('click', (e) => {
-      if (!wrap.contains(e.target)) pop.style.display = 'none';
-    });
-  }
-
-  document.getElementById(key + '-dtr-save')
-    .addEventListener('click', () => _save9rDefault(engineSelectId, wrap.dataset.voiceSel || ''));
-  return wrap;
-}
-
-function _ensure9rStyles() {
-  if (document.getElementById('nr-voice-pop-style')) return;
-  const st = document.createElement('style');
-  st.id = 'nr-voice-pop-style';
-  st.textContent =
-    '.nr-voice-pop{position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:50;' +
-    'max-height:240px;overflow-y:auto;background:var(--bg2,#fff);border:1px solid var(--border,#d8d8de);' +
-    'border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px}' +
-    '.nr-voice-pop .nr-vi{padding:8px 10px;border-radius:7px;cursor:pointer;display:flex;' +
-    'flex-direction:column;gap:1px}' +
-    '.nr-voice-pop .nr-vi:hover{background:var(--accent-light,#eef3ff)}' +
-    '.nr-voice-pop .nr-vi b{font-size:12.5px;color:var(--text,#1f2430);font-weight:600}' +
-    '.nr-voice-pop .nr-vi small{font-size:11px;color:var(--text-muted,#8a8f9a);font-family:monospace;word-break:break-all}' +
-    '.nr-voice-pop .nr-empty{padding:8px 10px;font-size:12px;color:var(--text-muted,#8a8f9a)}';
-  document.head.appendChild(st);
-}
-
-// Render the floating voice-suggestion popover for the engine's selected model.
-function _9rRenderVoicePop(engineSelectId) {
-  const key = _dtrKey(engineSelectId);
-  const engineEl = document.getElementById(engineSelectId);
-  const cat = engineEl ? _find9rEngine(engineEl.value) : null;
-  const modelSel = document.getElementById(key + '-dtr-model');
-  const pop = document.getElementById(key + '-dtr-voice-pop');
-  const input = document.getElementById(key + '-dtr-voice');
-  if (!cat || !modelSel || !pop) return;
-  const model = (cat.models || []).find(m => m.id === modelSel.value) || {};
-  const prov = model.provider || '';
-  const baseVoices = (cat.voicesByProvider && cat.voicesByProvider[prov])
-    || (cat.voices && cat.voices.multi) || [];
-  const customVoices = (typeof _getTranscribeCustomVoices === 'function')
-    ? _getTranscribeCustomVoices()
-        .filter(item => String(item.engine || '').toLowerCase() === String(engineEl.value || '').toLowerCase())
-        .map(item => [item.voice, `${item.label} (tự thêm)`])
-    : [];
-  const voices = [...baseVoices, ...customVoices];
-  const filter = (input?.value || '').trim().toLowerCase();
-  pop.innerHTML = '';
-  let shown = 0;
-  voices.forEach(v => {
-    const val = Array.isArray(v) ? v[0] : (v.value || v.id || '');
-    const lab = Array.isArray(v) ? (v[1] || v[0]) : (v.label || val);
-    if (!val) return;
-    if (filter && !(val.toLowerCase().includes(filter) || String(lab).toLowerCase().includes(filter))) return;
-    const item = document.createElement('div');
-    item.className = 'nr-vi';
-    item.innerHTML = '<b></b><small></small>';
-    item.querySelector('b').textContent = lab;
-    item.querySelector('small').textContent = val;
-    // mousedown fires before input blur so the value sticks.
-    item.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      if (input) input.value = val;
-      pop.style.display = 'none';
-    });
-    pop.appendChild(item);
-    shown++;
-  });
-  if (!shown) {
-    const empty = document.createElement('div');
-    empty.className = 'nr-empty';
-    empty.textContent = voices.length ? 'Không khớp gợi ý nào.' : 'Model này không có giọng gợi ý — nhập ID thủ công.';
-    pop.appendChild(empty);
-  }
-}
-
-function _sync9rVoice(engineSelectId) {
-  _ensure9rStyles();
-  const key = _dtrKey(engineSelectId);
-  const pop = document.getElementById(key + '-dtr-voice-pop');
-  // Re-render suggestions if the popover is open; otherwise just refresh data
-  // lazily on next focus.
-  if (pop && pop.style.display !== 'none') _9rRenderVoicePop(engineSelectId);
-}
-
-// Save current DTRouter model+voice as the default in config.yml (video_process).
-async function _save9rDefault(engineSelectId, voiceSelectId) {
-  const key = _dtrKey(engineSelectId);
-  const { tts_engine, tts_voice } = _resolveTtsEngineVoiceEx(engineSelectId, voiceSelectId);
-  const hint = document.getElementById(key + '-dtr-hint');
-  try {
-    await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video_process: { tts_engine, tts_voice } }),
-    });
-    if (hint) { hint.textContent = '✓ Đã lưu mặc định'; hint.style.color = 'var(--success)'; }
-    if (typeof toast === 'function') toast('Đã lưu TTS mặc định', 'success');
-  } catch (e) {
-    if (hint) { hint.textContent = '✗ Lưu thất bại'; hint.style.color = 'var(--danger)'; }
-  }
-}
-
-// Returns true when the selected engine is a DTRouter engine (and sets up its
-// Model + voice controls), false otherwise (so the caller runs normal logic).
-function _handleDTRouterEngine(engineSelectId, voiceSelectId) {
-  const engineEl = document.getElementById(engineSelectId);
-  if (!engineEl) return false;
-  const key = _dtrKey(engineSelectId);
-  const cat = (TTS_ENGINE_CATALOG || []).find(e => e.id === 'dtrouter');
-  const is9r = engineEl.value === 'dtrouter';
-
-  const voiceEl = voiceSelectId ? document.getElementById(voiceSelectId) : null;
-  const voiceField = voiceEl && voiceEl.closest('.field');
-  const wrap = _ensureDtRouterComponent(engineSelectId, voiceSelectId);
-
-
-  if (!is9r) {
-    if (wrap) wrap.style.display = 'none';
-    if (voiceField) voiceField.style.display = '';
-    return false;
-  }
-  if (!wrap) return false; // no engine field on this page — let normal logic run
-
-  if (voiceField) voiceField.style.display = 'none';
-  wrap.style.display = '';
-
-  const modelSel = document.getElementById(key + '-dtr-model');
-  if (modelSel) {
-    const cur = modelSel.value;
-    const models = cat.models || [];
-    const groups = {};
-    models.forEach(m => {
-      const g = m.group || m.provider || 'dtrouter';
-      (groups[g] = groups[g] || []).push(m);
-    });
-    modelSel.innerHTML = '';
-    Object.keys(groups).forEach(g => {
-      const og = document.createElement('optgroup');
-      og.label = g;
-      groups[g].forEach(m => {
-        const o = document.createElement('option');
-        o.value = m.id;
-        o.textContent = m.label || m.id;
-        og.appendChild(o);
-      });
-      modelSel.appendChild(og);
-    });
-    modelSel.value = models.some(m => m.id === cur)
-      ? cur
-      : (cat.defaultModel || (models[0] && models[0].id) || '');
-    _sync9rVoice(engineSelectId);
-  }
-  return true;
-}
-
 // Explicit resolver: {tts_engine, tts_voice} from an (engine, voice) id pair.
 function _resolveTtsEngineVoiceEx(engineSelectId, voiceSelectId) {
-  const key = _dtrKey(engineSelectId);
   const engineEl = document.getElementById(engineSelectId);
-  const cat = engineEl ? _find9rEngine(engineEl.value) : null;
-  if (cat) {
-    const model = document.getElementById(key + '-dtr-model')?.value || cat.defaultModel || '';
-    const voice = (document.getElementById(key + '-dtr-voice')?.value || '').trim();
-    return { tts_engine: 'dtrouter', tts_voice: model + '|' + voice };
-  }
   return {
     tts_engine: engineEl?.value || 'edge-tts',
     tts_voice: (voiceSelectId && document.getElementById(voiceSelectId)?.value) || 'vi-VN-HoaiMyNeural',
@@ -678,9 +415,6 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
   const engineEl = document.getElementById(engineSelectId);
   const voiceEl = document.getElementById(voiceSelectId);
   if (!engineEl || !voiceEl) return;
-
-  // DTRouter engine → dedicated Model + voice-id controls; skip normal logic.
-  if (_handleDTRouterEngine(engineSelectId, voiceSelectId)) return;
 
   // Nếu engine select trống (chưa được populate), thử refresh trước
   let engine = (engineEl.value || '').toLowerCase();
@@ -963,14 +697,14 @@ function startProcessVideo() {
       const translateSubs = document.getElementById('proc-translate-subs')?.checked ?? true;
       if (translateSubs) {
         const transProv = _getProcessProvider('translate');
-        if (['deepseek', 'groq', 'openai', 'gemini', 'dtrouter'].includes(transProv)) {
+        if (['deepseek', 'groq', 'openai', 'gemini'].includes(transProv)) {
           providersToCheck.push(transProv);
         }
       }
       
       // 2. Check Transcription API if enabled
       const transcribeProv = _getProcessProvider('transcribe');
-      if (['groq', 'openai', 'gemini', 'dtrouter'].includes(transcribeProv)) {
+      if (['groq', 'openai', 'gemini'].includes(transcribeProv)) {
         providersToCheck.push(transcribeProv);
       }
       
@@ -1070,7 +804,6 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     target_language:  document.getElementById('proc-target-lang')?.value || 'vi',
     transcribe_provider: _getProcessProvider('transcribe'),
     translate_provider:  _getProcessProvider('translate'),
-    dtrouter_key:     (window._loadedCfg?.dtrouter || {}).api_key || localStorage.getItem('cfg-dtrouter-key') || '',
     burn_subs:        (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn')?.checked ?? true),
     blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
     blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
@@ -1250,6 +983,11 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
             const d = JSON.parse(line);
             if (d.log) {
               _appendProcLog(d.log, d.level || 'info');
+              if (d.log.includes('Antigravity STT thất bại') || d.log.includes('Chưa cấu hình khóa kết nối') || d.log.includes('hết hạn')) {
+                if (typeof _showSttKeyModal === 'function') {
+                  _showSttKeyModal(d.log);
+                }
+              }
               if (d.level === 'error') {
                 window._procRunning = false;
                 const btn = document.getElementById('btn-proc');
@@ -1586,3 +1324,73 @@ async function previewProcessVoice() {
   }
 }
 window.previewProcessVoice = previewProcessVoice;
+
+function _showSttKeyModal(errorMsg) {
+  let modal = document.getElementById('stt-key-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'stt-key-modal';
+    modal.className = 'modal-backdrop';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:20px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);font-family:inherit;box-sizing:border-box">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <span style="font-size:24px">⚠️</span>
+          <h3 style="margin:0;font-size:17px;font-weight:700;color:#1e293b">Cập nhật API Key phiên âm (STT)</h3>
+        </div>
+        <p style="font-size:13px;color:#64748b;margin:0 0 12px;line-height:1.5">
+          Kết nối Antigravity / Gemini gặp sự cố. Bạn có thể cập nhật Gemini API Key mới hoặc nhấn Bỏ qua để xử lý tiếp.
+        </p>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;font-size:12px;color:#991b1b;margin-bottom:12px" id="stt-modal-err"></div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:4px">Nhập Gemini API Key mới (dạng AIzaSy...):</label>
+          <input type="text" id="stt-modal-key-input" placeholder="AIzaSy..." style="width:100%;height:38px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;box-sizing:border-box">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-secondary" onclick="_closeSttKeyModal()" style="font-size:13px">⏭ Bỏ qua</button>
+          <button type="button" class="btn btn-secondary" onclick="window.location.href='/config'" style="font-size:13px">⚙️ Cấu hình</button>
+          <button type="button" class="btn btn-primary" onclick="_saveSttKeyModal()" style="font-size:13px;font-weight:600">💾 Lưu Key & Thử lại</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+  const errEl = document.getElementById('stt-modal-err');
+  if (errEl) errEl.textContent = errorMsg || 'Token hết hạn hoặc lỗi kết nối Antigravity STT.';
+  modal.style.display = 'flex';
+}
+
+function _closeSttKeyModal() {
+  const modal = document.getElementById('stt-key-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function _saveSttKeyModal() {
+  const input = document.getElementById('stt-modal-key-input');
+  const key = input ? input.value.trim() : '';
+  if (!key) {
+    alert('Vui lòng nhập API Key trước khi lưu!');
+    return;
+  }
+  try {
+    const res = await fetch('/api/update_antigravity_key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: key })
+    }).then(r => r.json());
+
+    if (res.ok) {
+      alert('✅ Đã cập nhật API Key Antigravity thành công! Bạn có thể bấm xử lý lại.');
+      _closeSttKeyModal();
+    } else {
+      alert('❌ Lỗi: ' + (res.error || 'Không thể lưu key'));
+    }
+  } catch (err) {
+    alert('❌ Lỗi kết nối: ' + err.message);
+  }
+}
+
+window._showSttKeyModal = _showSttKeyModal;
+window._closeSttKeyModal = _closeSttKeyModal;
+window._saveSttKeyModal = _saveSttKeyModal;
+

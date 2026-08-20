@@ -38,9 +38,9 @@ const N8N_NODE_DEFS = {
     fields: [{ k: 'platform', label: 'Nền tảng', type: 'select', opts: ['youtube', 'tiktok', 'facebook'] }],
     note: 'Cấu hình tài khoản ở tab "Đăng video".' },
 
-  /* ── AI / giọng nói (dùng 9Router/AI đã kết nối) ── */
+  /* ── AI / giọng nói ── */
   'ai.chat': { title: 'AI Chat (LLM)', ic: '🤖', endpoint: '/api/chatbot/chat', method: 'POST', ai: true,
-    fields: [{ k: 'model', label: 'Model (trống = mặc định)', ph: 'kr/claude-sonnet-4.5' },
+    fields: [{ k: 'model', label: 'Model (trống = mặc định)', ph: 'gemini-3.6-flash' },
              { k: 'system', label: 'System prompt', type: 'textarea' },
              { k: 'prompt', label: 'Prompt', type: 'textarea', def: 'Viết kịch bản ngắn về {{input}}', ask: true }],
     payload: c => {
@@ -54,7 +54,7 @@ const N8N_NODE_DEFS = {
     out: r => r.content },
   'ai.translate': { title: 'Dịch (AI)', ic: '🌍', endpoint: '/api/translate', method: 'POST', ai: true,
     fields: [{ k: 'text', label: 'Văn bản', type: 'textarea', def: '{{input.content}}' },
-             { k: 'provider', label: 'Provider', type: 'select', opts: ['auto', '9router', 'deepseek', 'openai', 'google'] }],
+             { k: 'provider', label: 'Provider', type: 'select', opts: ['auto', 'deepseek', 'openai', 'google'] }],
     payload: c => ({ text: c.text || '', provider: c.provider || 'auto' }),
     out: r => r.result },
   'ai.tts': { title: 'Đọc văn bản (TTS)', ic: '🔊', endpoint: '/api/chatbot/tts?json=1', method: 'POST', ai: true,
@@ -65,7 +65,7 @@ const N8N_NODE_DEFS = {
     out: r => (r.ok ? `audio ${r.format || 'mp3'} (${Math.round((r.audio_base64 || '').length * 0.75 / 1024)}KB)` : '') },
   'ai.tts_file': { title: 'TTS → File MP3', ic: '💾', endpoint: '/api/tts_to_mp3', method: 'POST', ai: true,
     fields: [{ k: 'text', label: 'Văn bản', type: 'textarea', def: '{{input.content}}' },
-             { k: 'tts_engine', label: 'Engine', type: 'select', opts: ['edge-tts', 'fpt-ai', 'elevenlabs', '9router', 'gtts'] },
+             { k: 'tts_engine', label: 'Engine', type: 'select', opts: ['edge-tts', 'fpt-ai', 'elevenlabs', 'gtts'] },
              { k: 'tts_voice', label: 'Giọng', ph: 'vi-VN-HoaiMyNeural', def: 'vi-VN-HoaiMyNeural' }],
     payload: c => ({ text: c.text || '', tts_engine: c.tts_engine || 'edge-tts', tts_voice: c.tts_voice || 'vi-VN-HoaiMyNeural' }),
     note: 'Trả file MP3 (lưu trên server). Không trả JSON — chỉ xem status.' },

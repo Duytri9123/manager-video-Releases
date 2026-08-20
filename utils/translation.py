@@ -9,76 +9,22 @@ import sqlite3
 
 def load_db_connections() -> List[dict]:
     import sqlite3
-    import os
-    import json
     from pathlib import Path
 
-    # 1. Load disabled status from .state/providers.db
-    disabled_providers = set()
-    legacy_db = Path(__file__).parent.parent / ".state" / "providers.db"
-    if legacy_db.exists():
-        try:
-            conn_legacy = sqlite3.connect(legacy_db)
-            rows_legacy = conn_legacy.execute("SELECT provider, enabled FROM provider_connections").fetchall()
-            conn_legacy.close()
-            prov_map = {}
-            for p, en in rows_legacy:
-                p_norm = p.lower()
-                if p_norm not in prov_map:
-                    prov_map[p_norm] = []
-                prov_map[p_norm].append(bool(en))
-            for p_norm, en_list in prov_map.items():
-                if not any(en_list):
-                    disabled_providers.add(p_norm)
-        except Exception:
-            pass
-
-    # 2. Also check system config for provider toggles
-    try:
-        from core.config import load_cfg
-        cfg = load_cfg()
-        providers_cfg = cfg.get("providers") or {}
-        for p_id, p_data in providers_cfg.items():
-            conns = (p_data or {}).get("connections") or []
-            if not conns or all(c.get("enabled") is False for c in conns):
-                disabled_providers.add(p_id.lower())
-    except Exception:
-        pass
-
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-    if not os.path.exists(db_path):
+    db_path = Path(__file__).parent.parent / ".state" / "providers.db"
+    if not db_path.exists():
         return []
-        
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT id, provider, name, data, isActive FROM providerConnections WHERE isActive != 0").fetchall()
+        rows = conn.execute("SELECT id, provider, name, api_key, base_url, enabled, status FROM provider_connections WHERE enabled != 0").fetchall()
         conn.close()
         res = []
         for r in rows:
             d = dict(r)
             prov = (d.get("provider") or "").lower()
-            if prov in disabled_providers:
+            if prov not in ["opencode", "opencodefree", "google"] and not (d.get("api_key") or "").strip():
                 continue
-            try:
-                js_data = json.loads(d.get("data") or "{}")
-                if js_data.get("enabled") is False or js_data.get("testStatus") == "unavailable":
-                    continue
-                d["api_key"] = js_data.get("apiKey") or js_data.get("accessToken") or ""
-                d["base_url"] = js_data.get("baseUrl") or ""
-            except Exception:
-                d["api_key"] = ""
-                d["base_url"] = ""
-            
-            # Non-noAuth providers MUST have a valid non-empty API key or token
-            if prov not in ["opencode", "opencodefree", "google"] and not d["api_key"].strip():
-                continue
-
-            d["enabled"] = d["isActive"]
-            d["status"] = "active"
             res.append(d)
         return res
     except Exception:
@@ -129,15 +75,13 @@ def _normalize_provider_name(name: str) -> str:
     normalized = str(name).strip().lower()
     if normalized in {"hf", "huggingface"}:
         return "huggingface"
-    if normalized in {"9r", "dtrouter", "ninerouter"}:
-        return "dtrouter"
     if normalized in {"opencode", "opencodefree", "oc"}:
         return "opencode"
     if normalized in {"antigravity", "ag"}:
         return "antigravity"
     if normalized in {"codex", "cx"}:
         return "codex"
-    if normalized in {"deepseek", "openai", "google", "groq", "dtrouter", "auto", "gemini", "nvidia"}:
+    if normalized in {"deepseek", "openai", "google", "groq", "auto", "gemini", "nvidia"}:
         return normalized
     return "auto"
 
@@ -354,23 +298,6 @@ def load_api_keys_status() -> Dict:
     return {}
 
 
-def is_dtrouter_working(nr_cfg: Dict) -> bool:
-    import urllib.request
-    endpoint = (nr_cfg.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
-    api_key = (nr_cfg.get("api_key") or "").strip()
-    if not api_key:
-        return False
-    try:
-        req = urllib.request.Request(
-            f"{endpoint}/models",
-            headers={"Authorization": f"Bearer {api_key}"}
-        )
-        with urllib.request.urlopen(req, timeout=2.0) as r:
-            return r.status == 200
-    except Exception:
-        return False
-
-
 def parse_provider_and_model(preferred: str) -> Tuple[str, str]:
     if not preferred or preferred == "auto":
         return "auto", ""
@@ -402,143 +329,18 @@ def is_chat_model(model_id: str) -> bool:
     return True
 
 
-def get_dtrouter_active_providers() -> set[str] | None:
-    """Read active provider names (returns None to avoid 9router DB access)."""
-    return None
-
-
-def _matches_provider(prefix: str, active_providers: set[str]) -> bool:
-    prefix = prefix.lower()
-    if prefix in active_providers:
-        return True
-    for p in active_providers:
-        if prefix in p or p in prefix:
-            return True
-        if prefix == "gc" and "gemini-cli" in p:
-            return True
-        if prefix == "ag" and "antigravity" in p:
-            return True
-        if prefix == "bpm" and "byteplus" in p:
-            return True
-        if prefix == "kc" and "kilocode" in p:
-            return True
-    return False
-
-
-def get_dtrouter_models(nr_cfg: Dict) -> List[Dict]:
-    if not nr_cfg:
-        return []
-    endpoint = nr_cfg.get("endpoint") or "http://localhost:20128/v1"
-    api_key = nr_cfg.get("api_key") or ""
-    headers = {"Accept": "application/json"}
-    if api_key.strip():
-        headers["Authorization"] = f"Bearer {api_key}"
-    
-    url = f"{endpoint.rstrip('/')}/models"
-    try:
-        import urllib.request
-        import json
-        req = urllib.request.Request(url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=1.5) as resp:
-            if resp.status == 200:
-                body = json.loads(resp.read())
-                models = []
-                
-                active_providers = get_dtrouter_active_providers()
-                
-                for it in body.get("data") or []:
-                    mid = it.get("id")
-                    if mid:
-                        if is_chat_model(mid):
-                            parts = mid.split('/')
-                            # If it's a provider model (e.g. prefix/model_name), check if provider is active
-                            if len(parts) > 1 and active_providers is not None:
-                                prefix = parts[0]
-                                if not _matches_provider(prefix, active_providers):
-                                    continue
-                                    
-                            models.append({
-                                "id": f"dtrouter/{mid}",
-                                "name": mid,
-                                "provider": "dtrouter",
-                                "owned_by": it.get("owned_by", "")
-                            })
-                return models
-    except Exception:
-        pass
-    return []
-
-
 def get_enabled_models_for_provider(provider_id: str, provider_alias: str) -> List[dict]:
-    import sqlite3
-    import os
-    import json
     try:
         from templates.pages.config.route import DEFAULT_PROVIDER_MODELS
     except Exception:
         DEFAULT_PROVIDER_MODELS = {}
 
     defaults = list(DEFAULT_PROVIDER_MODELS.get(provider_id, []))
-    
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-        
-    disabled_set = set()
-    custom_list = []
-    
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-            cur = conn.cursor()
-            
-            # Fetch disabled models for this provider alias or provider id
-            cur.execute("SELECT key, value FROM kv WHERE scope='disabledModels'")
-            for key, val in cur.fetchall():
-                if key.lower() in [provider_id.lower(), provider_alias.lower()]:
-                    try:
-                        arr = json.loads(val)
-                        if isinstance(arr, list):
-                            for dis in arr:
-                                disabled_set.add(str(dis).lower())
-                    except Exception:
-                        pass
-                        
-            # Fetch custom models for this provider
-            cur.execute("SELECT key, value FROM kv WHERE scope='customModels'")
-            for key, val in cur.fetchall():
-                try:
-                    data = json.loads(val)
-                    p_alias = data.get("providerAlias", "").lower()
-                    if p_alias in [provider_id.lower(), provider_alias.lower()]:
-                        m_id = data.get("id")
-                        if m_id:
-                            custom_list.append({"id": m_id, "name": data.get("name") or m_id, "type": "llm"})
-                except Exception:
-                    pass
-            conn.close()
-        except Exception:
-            pass
-
-    # Combine defaults + custom
-    all_models = []
-    seen = set()
-    for m in defaults + custom_list:
-        m_id = m.get("id", "")
-        if m_id and m_id not in seen:
-            seen.add(m_id)
-            all_models.append(m)
-
-    # Filter out disabled models and non-LLM models
     enabled_models = []
-    for m in all_models:
+    for m in defaults:
         m_id = m.get("id", "")
-        if m.get("type") in ["llm", "chat", None, ""]:
-            if m_id.lower() in disabled_set or m_id.split("/")[-1].lower() in disabled_set:
-                continue
+        if m.get("type") in ["llm", "chat", None, ""] and m.get("enabled", True) is not False:
             enabled_models.append(m)
-            
     return enabled_models
 
 
@@ -595,9 +397,12 @@ def get_translation_models(trans_cfg: Dict, full_cfg: Dict | None = None) -> Lis
 def get_translation_providers(trans_cfg: Dict, full_cfg: Dict | None = None) -> List[str]:
     providers = []
     db_conns = load_db_connections()
+    # Ensure antigravity is always first if available
     for c in db_conns:
         prov = c["provider"]
-        if prov not in providers:
+        if prov == "antigravity" and prov not in providers:
+            providers.insert(0, prov)
+        elif prov not in providers:
             providers.append(prov)
 
     status = load_api_keys_status()
@@ -695,7 +500,6 @@ def translate_texts(
     preferred_provider: str = "auto",
     context: str = "",
     target_lang: str = "vi",
-    dtrouter_cfg: Dict | None = None,
 ) -> Tuple[List[str], str]:
     if not texts:
         return [], "none"
@@ -714,12 +518,6 @@ def translate_texts(
     groq_key = cfg.get("groq_key", "") or ""
     groq_model = cfg.get("groq_model", "llama-3.1-8b-instant") or "llama-3.1-8b-instant"
     hf_token = cfg.get("hf_token", "") or ""
-    nr = dtrouter_cfg or cfg.get("_dtrouter") or {}  # legacy passthrough
-    nine_key = (nr.get("api_key") or "").strip() if isinstance(nr, dict) else ""
-    nine_endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/") if isinstance(nr, dict) else "http://localhost:20128/v1"
-    nine_model = (nr.get("default_model") or "duytris").strip() if isinstance(nr, dict) else "duytris"
-
-
 
     try:
         from core.config import load_cfg
@@ -770,29 +568,10 @@ def translate_texts(
 
     for provider in provider_order:
         try:
-            # Helper for executing LLM translation with local 9Router gateway fallback
+            # Helper for executing LLM translation via direct provider API call
             def _try_llm_translate(alias_prefix: str, direct_url: str, direct_key: str, default_model: str, prov_label: str) -> Tuple[List[str] | None, str]:
                 model_name = model_req if model_req else default_model
-                # 1. Try local 9Router gateway on port 20128 if available
-                nine_model_id = model_name if "/" in model_name else f"{alias_prefix}/{model_name}"
                 disp_name = model_name.split("/")[-1] if "/" in model_name else model_name
-                if nine_key:
-                    try:
-                        res = _llm_translate(
-                            source_texts,
-                            f"{nine_endpoint}/chat/completions",
-                            nine_key,
-                            nine_model_id,
-                            timeout=7,
-                            context=context,
-                            target_lang=target_lang,
-                        )
-                        if any(res):
-                            return res, disp_name
-                    except Exception:
-                        pass
-                        
-                # 2. Try direct provider API call
                 if direct_url and direct_key:
                     try:
                         res = _llm_translate(
@@ -893,7 +672,7 @@ def translate_texts(
                 _errors.append("groq: empty result")
 
             elif provider == "gemini" and gemini_key:
-                gem_model = model_req if prov_req == "gemini" and model_req else "gemini-2.5-flash"
+                gem_model = model_req if prov_req == "gemini" and model_req else "gemini-3.6-flash"
                 result = _llm_translate(
                     source_texts,
                     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -969,12 +748,11 @@ def _format_srt_time(seconds: float) -> str:
 class BatchTranslator:
     """Batch translation with multi-provider fallback.
 
-    Fallback chain: DeepSeek → OpenAI → HuggingFace → Google → DTRouter
+    Fallback chain: DeepSeek → OpenAI → HuggingFace → Google
     """
 
-    def __init__(self, trans_cfg: dict, dtrouter_cfg: dict | None = None):
+    def __init__(self, trans_cfg: dict):
         self._cfg = trans_cfg or {}
-        self._nine = dtrouter_cfg or {}
 
     def translate(
         self,
@@ -991,7 +769,6 @@ class BatchTranslator:
         return translate_texts(
             texts, self._cfg, preferred_provider,
             context=context, target_lang=target_lang,
-            dtrouter_cfg=self._nine,
         )
 
     def write_vi_srt(

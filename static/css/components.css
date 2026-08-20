@@ -1168,13 +1168,13 @@
         padding:7px 4px; border-radius:9px; border:1px solid transparent; background:transparent;
         color:var(--text-muted,#6b7280); font-size:11px; cursor:pointer; transition:all .15s;
       }
-      .pe2-tab span.ic{ font-size:18px; line-height:1; display:inline-block; width:24px; text-align:center; }
+      .pe2-tab span.ic{ line-height:1; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; color:currentColor; }
       .pe2-tab:hover{ background:var(--bg2,#fff); color:var(--text,#1f2430); }
       .pe2-tab.active{ background:var(--bg2,#fff); color:var(--accent,#1a73e8); border-color:var(--accent2,#9cc3ff); font-weight:700; }
 
       .pe2-panel-body{ padding:14px; overflow-y:auto; flex:1 1 auto; }
       .pe2-grp{
-        font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+        font-size:10px; text-transform:uppercase; letter-spacing:0.06em;
         color:var(--text-muted,#8a8a93); font-weight:700; margin:16px 0 8px;
       }
       .pe2-grp:first-child{ margin-top:0; }
@@ -1201,8 +1201,8 @@
         background:var(--bg2,#fff); cursor:pointer; text-align:center; transition:all .15s; min-height:74px;
       }
       .pe2-optcard input{ position:absolute; opacity:0; width:0; height:0; }
-      .pe2-optcard-ic{ font-size:20px; line-height:1; }
-      .pe2-optcard-lbl{ font-size:12.5px; font-weight:600; color:var(--text,#1f2430); line-height:1.25; }
+      .pe2-optcard-ic{ line-height:1; display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; color:var(--accent,#1a73e8); }
+      .pe2-optcard-lbl{ font-size:12px; font-weight:600; color:var(--text,#1f2430); line-height:1.25; }
       .pe2-optcard-badge{
         position:absolute; top:8px; right:8px; width:18px; height:18px; border-radius:50%;
         border:2px solid var(--border,#cfcfd6); background:var(--bg2,#fff);

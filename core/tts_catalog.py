@@ -2,9 +2,6 @@
 
 The frontend expects this shape:
   {id, label, default, backend, voices: {lang: [[voice_id, label], ...]}}
-
-Local engines are static. DTRouter engines are added only when its gateway is
-reachable and has TTS models configured.
 """
 from __future__ import annotations
 
@@ -280,6 +277,55 @@ def local_tts_engines() -> List[Dict[str, Any]]:
             },
         },
         {
+            "id": "omnivoice",
+            "label": "OmniVoice (Zero-Shot / Multi-Language)",
+            "default": "default",
+            "backend": "local",
+            "voices": {
+                "multi": [
+                    ("default", "OmniVoice Default (Tự nhiên / Auto)"),
+                    ("female_warm", "OmniVoice Nữ (Ấm áp)"),
+                    ("female_bright", "OmniVoice Nữ (Tươi sáng)"),
+                    ("male_deep", "OmniVoice Nam (Trầm ấm)"),
+                    ("male_energetic", "OmniVoice Nam (Năng động)"),
+                ],
+                "vi": [
+                    ("default", "OmniVoice Tiếng Việt (Tự nhiên)"),
+                    ("female_warm", "OmniVoice Tiếng Việt (Nữ nhẹ nhàng)"),
+                    ("male_deep", "OmniVoice Tiếng Việt (Nam truyền cảm)"),
+                ],
+                "en": [
+                    ("default", "OmniVoice English (Default)"),
+                    ("female_bright", "OmniVoice English (Female Bright)"),
+                    ("male_deep", "OmniVoice English (Male Deep)"),
+                ],
+                "zh": [
+                    ("default", "OmniVoice Chinese (Default)"),
+                ],
+                "ja": [
+                    ("default", "OmniVoice Japanese (Default)"),
+                ],
+                "ko": [
+                    ("default", "OmniVoice Korean (Default)"),
+                ],
+                "th": [
+                    ("default", "OmniVoice Thai (Default)"),
+                ],
+                "fr": [
+                    ("default", "OmniVoice French (Default)"),
+                ],
+                "de": [
+                    ("default", "OmniVoice German (Default)"),
+                ],
+                "es": [
+                    ("default", "OmniVoice Spanish (Default)"),
+                ],
+                "ru": [
+                    ("default", "OmniVoice Russian (Default)"),
+                ],
+            },
+        },
+        {
             "id": "gtts",
             "label": "Google gTTS",
             "default": "vi",
@@ -315,7 +361,7 @@ def local_tts_engines() -> List[Dict[str, Any]]:
 # Engines that can synthesize (almost) any language — used as fallback when the
 # chosen engine can't speak the target language. edge-tts covers every entry in
 # _LANGS; gTTS is the simpler last resort.
-_UNIVERSAL_FALLBACKS = ("edge-tts", "gtts")
+_UNIVERSAL_FALLBACKS = ("edge-tts", "omnivoice", "gtts")
 
 
 def _local_engine_by_id(engine_id: str) -> Dict[str, Any] | None:
@@ -328,7 +374,7 @@ def _local_engine_by_id(engine_id: str) -> Dict[str, Any] | None:
 
 def engine_voices_for_lang(engine: Dict[str, Any], lang: str) -> List[Tuple[str, str]]:
     """Voices an engine offers for `lang`. Falls back to its `multi` bucket for
-    multilingual engines (ElevenLabs, Fish Audio, DTRouter)."""
+    multilingual engines (ElevenLabs, Fish Audio)."""
     voices = engine.get("voices") or {}
     rows = voices.get(lang) or voices.get("multi") or []
     return [tuple(v) for v in rows]
@@ -355,8 +401,8 @@ def resolve_engine_voice(
     eid = (engine_id or "").strip().lower()
     vid = (voice_id or "").strip()
 
-    # DTRouter / MiniMax models are multilingual — trust the caller's selection.
-    if eid == "dtrouter" or eid.startswith("dtr:") or eid == "minimax":
+    # MiniMax / OmniVoice models are multilingual — trust the caller's selection.
+    if eid in ("minimax", "omnivoice"):
         return (eid or "edge-tts"), vid, False, ""
 
     eng = _local_engine_by_id(eid)
@@ -383,379 +429,13 @@ def resolve_engine_voice(
     return (eid or "edge-tts"), vid, False, ""
 
 
-def _endpoint_from_cfg(cfg: Dict[str, Any]) -> str:
-    nr = cfg.get("dtrouter") or {}
-    endpoint = (
-        os.getenv("NINEROUTER_URL")
-        or nr.get("endpoint")
-        or "http://localhost:20128/v1"
-    )
-    endpoint = str(endpoint).strip().rstrip("/")
-    if not endpoint.endswith("/v1") and not re.search(r"/v1(/|$)", endpoint):
-        endpoint += "/v1"
-    return endpoint
+def dtrouter_tts_engines(cfg: Dict[str, Any] | None = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Legacy stub returning empty DTRouter engines."""
+    return [], {"reachable": False, "models_count": 0}
 
 
-def _key_from_cfg(cfg: Dict[str, Any]) -> str:
-    nr = dict(cfg.get("dtrouter") or {})
-    api_key = str(os.getenv("NINEROUTER_KEY") or nr.get("api_key") or "").strip()
-    
-    if not api_key or "machineId" in api_key:
-        try:
-            from templates.pages.chat.route import _cli_token, _local_dashboard_get
-            token = _cli_token()
-            if token:
-                endpoint = _endpoint_from_cfg(cfg)
-                status_code, body = _local_dashboard_get("/api/keys", endpoint=endpoint)
-                if status_code == 200 and isinstance(body, dict):
-                    keys = body.get("keys") or []
-                    active_key = next((k.get("key") for k in keys if k.get("isActive") and k.get("key")), None)
-                    if not active_key and keys:
-                        active_key = keys[0].get("key")
-                    if active_key:
-                        nr["api_key"] = active_key
-                        cfg["dtrouter"] = nr
-                        from core_app import save_cfg
-                        save_cfg(cfg)
-                        api_key = active_key
-        except Exception:
-            pass
-            
-    return api_key
-
-
-def _origin(endpoint: str) -> str:
-    return re.sub(r"/v1$", "", endpoint.rstrip("/"))
-
-
-def _http_json(url: str, api_key: str = "", timeout: int = 8) -> Tuple[int, Any]:
-    headers = {"Accept": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    req = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
-            try:
-                return resp.status, json.loads(raw) if raw else {}
-            except ValueError:
-                return resp.status, raw.decode("utf-8", "replace")
-    except urllib.error.HTTPError as exc:
-        raw = exc.read() if exc.fp else b""
-        try:
-            return exc.code, json.loads(raw) if raw else {}
-        except ValueError:
-            return exc.code, raw.decode("utf-8", "replace")
-
-
-def _voice_label(item: Dict[str, Any], fallback: str) -> str:
-    for key in ("label", "name", "displayName", "display_name", "voice", "id"):
-        val = str(item.get(key) or "").strip()
-        if val:
-            return val
-    return fallback
-
-
-def _voices_from_router(
-    endpoint: str,
-    api_key: str,
-    provider: str,
-    langs: Tuple[str, ...] = _LANGS,
-) -> Dict[str, List[Tuple[str, str]]]:
-    voices: Dict[str, List[Tuple[str, str]]] = {}
-    for lang in langs:
-        qs = urllib.parse.urlencode({"provider": provider, "lang": lang})
-        try:
-            status, body = _http_json(
-                f"{endpoint}/audio/voices?{qs}",
-                api_key=api_key,
-                timeout=3,
-            )
-        except Exception:
-            continue
-        if status >= 400 or not isinstance(body, dict):
-            continue
-        rows = []
-        for item in body.get("data") or []:
-            if not isinstance(item, dict):
-                continue
-            model = str(item.get("model") or item.get("id") or "").strip()
-            if not model:
-                continue
-            rows.append((model, _voice_label(item, model)))
-        if rows:
-            voices[lang] = rows
-    return voices
-
-
-def _has_model(models: List[str], *patterns: str) -> str:
-    for pat in patterns:
-        rx = re.compile(pat, re.I)
-        for mid in models:
-            if rx.search(mid):
-                return mid
-    return ""
-
-
-# Voice presets per DTRouter provider. Mirrors the Chat Bot tab — each model's
-# provider decides which voices apply. Providers not listed here (edge-tts,
-# google-tts, deepgram, ...) use the model's own default voice, so the UI
-# just offers a "default" entry for them.
-_PROVIDER_TTS_VOICES: Dict[str, List[Tuple[str, str]]] = {
-    "openai": [
-        ("nova", "Nova (multilingual)"),
-        ("shimmer", "Shimmer (multilingual)"),
-        ("alloy", "Alloy (neutral)"),
-        ("echo", "Echo (male)"),
-        ("onyx", "Onyx (male)"),
-        ("fable", "Fable (storyteller)"),
-    ],
-    "gemini": _GEMINI_TTS_VOICES,
-    "google-tts": [
-        row
-        for rows in _GOOGLE_CLOUD_SAMPLE_VOICES.values()
-        for row in rows
-    ],
-    "elevenlabs": [
-        ("21m00Tcm4TlvDq8ikWAM", "Rachel (female)"),
-        ("EXAVITQu4vr4xnSDxMaL", "Bella (female, soft)"),
-        ("AZnzlk1XvdvUeBnXmlld", "Domi (female)"),
-        ("ErXwobaYiN019PkySvjV", "Antoni (male)"),
-        ("pNInz6obpgDQGcFmaJgB", "Adam (male)"),
-    ],
-    "minimax": [
-        ("English_expressive_narrator", "Expressive Narrator (EN)"),
-        ("English_radiant_girl", "Radiant Girl (EN, female)"),
-        ("English_PassionateWarrior", "Passionate Warrior (EN, male)"),
-        ("Chinese_audiobook_male", "Chinese audiobook male"),
-        ("Chinese_audiobook_female", "Chinese audiobook female"),
-    ],
-}
-
-
-def _provider_of(model_id: str) -> str:
-    """Top-level provider for a DTRouter model id.
-
-    "openai/tts-1" -> "openai"; "openrouter/openai/tts-1" -> "openai";
-    "el/eleven_multilingual_v2" -> "elevenlabs"; "gemini/...-tts" -> "gemini".
-    """
-    parts = [p for p in str(model_id or "").split("/") if p]
-    if not parts:
-        return ""
-    p = parts[0].lower()
-    if p == "openrouter" and len(parts) > 1:
-        p = parts[1].lower()
-    if p == "el":
-        return "elevenlabs"
-    return p
-
-
-def _consolidated_dtrouter_engine(models: List[str]) -> Dict[str, Any] | None:
-    """Build ONE "DTRouter TTS" engine carrying the live model list (grouped by
-    provider) plus a per-provider voice map — mirroring the Chat Bot tab's
-    Text-to-Speech panel (Model + Voice dropdowns). Returns None when DTRouter
-    exposes no TTS models, so the UI shows nothing rather than a fake entry.
-    """
-    if not models:
-        return None
-
-    model_items: List[Dict[str, str]] = []
-    for m in models:
-        grp = (m.split("/", 1)[0] or "dtrouter").lower()
-        model_items.append({
-            "id": m,
-            "label": m,
-            "group": grp,
-            "provider": _provider_of(m),
-        })
-
-    default_model = _has_model(models, r"^openai/(?:tts|gpt-4o.*tts)") or models[0]
-    voices_by_provider = {
-        prov: [list(v) for v in rows]
-        for prov, rows in _PROVIDER_TTS_VOICES.items()
-    }
-    default_voices = voices_by_provider.get(_provider_of(default_model)) \
-        or voices_by_provider["openai"]
-
-    return {
-        "id": "dtrouter",
-        "label": "DTRouter TTS",
-        "default": default_voices[0][0] if default_voices else "",
-        "defaultModel": default_model,
-        "backend": "dtrouter",
-        "provider": "dtrouter",
-        "models": model_items,
-        "voicesByProvider": voices_by_provider,
-        # `multi` keeps _engineSupportsLang() happy for every target language.
-        "voices": {"multi": default_voices},
-    }
-
-
-def _static_dtrouter_engines(models: List[str]) -> List[Dict[str, Any]]:
-    engine = _consolidated_dtrouter_engine(models)
-    return [engine] if engine else []
-
-
-def _shortcut_dtrouter_engines(models: List[str]) -> List[Dict[str, Any]]:
-    """Provider-specific shortcuts for the Transcribe/TTS UI.
-
-    The consolidated DTRouter selector is still the most flexible option. These
-    shortcuts expose common provider groups directly as normal engine entries.
-    """
-    engines: List[Dict[str, Any]] = []
-
-    gemini_model = _has_model(
-        models,
-        r"^gemini/(?:gemini-3\.1.*tts|gemini-2\.5.*tts)",
-        r"gemini.*tts",
-    )
-    if gemini_model:
-        engines.append({
-            "id": "dtr:gemini",
-            "label": "Google Gemini",
-            "default": "Kore",
-            "defaultModel": gemini_model,
-            "backend": "dtrouter",
-            "provider": "gemini",
-            "voices": {"multi": _GEMINI_TTS_VOICES},
-        })
-
-    google_model = _has_model(models, r"^(?:google-tts|google/.+tts|gcp/.+tts)")
-    if google_model:
-        voices = {
-            lang: rows
-            for lang, rows in _GOOGLE_CLOUD_SAMPLE_VOICES.items()
-            if rows
-        }
-        voices.setdefault("multi", _PROVIDER_TTS_VOICES["google-tts"])
-        engines.append({
-            "id": "dtr:google-tts",
-            "label": "Google Cloud",
-            "default": _PROVIDER_TTS_VOICES["google-tts"][0][0],
-            "defaultModel": google_model,
-            "backend": "dtrouter",
-            "provider": "google-tts",
-            "voices": voices,
-        })
-
-    edge_model = _has_model(models, r"^edge-tts(?:/|$)", r"microsoft.*tts", r"azure.*tts")
-    if edge_model:
-        edge = _local_engine_by_id("edge-tts") or {}
-        engines.append({
-            "id": "dtr:edge-tts",
-            "label": "Microsoft Edge",
-            "default": "vi-VN-HoaiMyNeural",
-            "defaultModel": edge_model,
-            "backend": "dtrouter",
-            "provider": "edge-tts",
-            "voices": edge.get("voices") or {},
-        })
-
-    return engines
-
-
-def _dynamic_provider_engine(
-    endpoint: str,
-    api_key: str,
-    provider: str,
-    engine_id: str,
-    label: str,
-) -> Dict[str, Any] | None:
-    voices = _voices_from_router(endpoint, api_key, provider)
-    if not voices:
-        return None
-    first_lang = next(iter(voices))
-    default_voice = voices[first_lang][0][0]
-    return {
-        "id": engine_id,
-        "label": label,
-        "default": default_voice,
-        "defaultModel": default_voice,
-        "backend": "dtrouter",
-        "provider": provider,
-        "voices": voices,
-    }
-
-
-def dtrouter_tts_engines(cfg: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    endpoint = _endpoint_from_cfg(cfg)
-    api_key = _key_from_cfg(cfg)
-    now = time.time()
-    if (
-        _CACHE["engines"] is not None
-        and _CACHE["endpoint"] == endpoint
-        and now - float(_CACHE["ts"] or 0.0) < _CACHE_TTL
-    ):
-        return list(_CACHE["engines"]), dict(_CACHE["status"] or {})
-
-    status: Dict[str, Any] = {
-        "reachable": False,
-        "endpoint": endpoint,
-        "has_key": bool(api_key),
-        "models_count": 0,
-        "error": "",
-    }
-    engines: List[Dict[str, Any]] = []
-
-    try:
-        health_status, _ = _http_json(f"{_origin(endpoint)}/api/health", timeout=4)
-        status["reachable"] = health_status < 500
-    except Exception as exc:
-        status["error"] = str(exc)
-
-    models: List[str] = []
-    if status["reachable"]:
-        try:
-            m_status, body = _http_json(f"{endpoint}/models/tts", api_key=api_key, timeout=5)
-            if m_status < 400 and isinstance(body, dict):
-                for item in body.get("data") or []:
-                    mid = str((item or {}).get("id") or "").strip()
-                    if mid:
-                        models.append(mid)
-        except Exception as exc:
-            status["error"] = str(exc)
-
-        if not models:
-            try:
-                m_status, body = _http_json(f"{endpoint}/models", api_key=api_key, timeout=5)
-                if m_status < 400 and isinstance(body, dict):
-                    for item in body.get("data") or []:
-                        mid = str((item or {}).get("id") or "").strip()
-                        mid_lower = mid.lower()
-                        if mid and ("tts" in mid_lower or "speech" in mid_lower or "voice" in mid_lower or "eleven" in mid_lower or "fastpitch" in mid_lower or "tacotron" in mid_lower):
-                            models.append(mid)
-            except Exception as exc:
-                status["error"] = str(exc)
-
-    status["models_count"] = len(models)
-    if models:
-        engines.extend(_static_dtrouter_engines(models))
-        engines.extend(_shortcut_dtrouter_engines(models))
-
-    seen = set()
-    deduped = []
-    for eng in engines:
-        eid = eng.get("id")
-        if eid in seen:
-            continue
-        seen.add(eid)
-        deduped.append(eng)
-
-    _CACHE.update({
-        "ts": now,
-        "endpoint": endpoint,
-        "engines": list(deduped),
-        "status": dict(status),
-    })
-    return deduped, status
-
-
-def all_tts_engines(cfg: Dict[str, Any], include_dtrouter: bool = True) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    local = local_tts_engines()
-    if not include_dtrouter:
-        return local, {"reachable": False, "enabled": False}
-    nine, status = dtrouter_tts_engines(cfg)
-    return local + nine, status
+def all_tts_engines(cfg: Dict[str, Any] | None = None, include_dtrouter: bool = False) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    return local_tts_engines(), {"reachable": False, "enabled": False}
 
 
 def clear_tts_catalog_cache():

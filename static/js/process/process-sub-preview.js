@@ -66,45 +66,47 @@ async function onTranscribeProviderChanged(restoreValue) {
       if (restoreValue && opts.some(o => o.value === currentVal)) {
         modelSel.value = currentVal;
       }
-    } else if (provider === 'dtrouter' || provider === 'antigravity' || provider === 'gemini') {
+    } else if (provider === 'antigravity' || provider === 'gemini') {
       const optLoading = document.createElement('option');
-      optLoading.value = 'gemini-2.0-flash';
+      optLoading.value = 'gemini-3.6-flash';
       optLoading.textContent = '⏳ Đang tải danh sách mô hình từ Antigravity...';
       modelSel.appendChild(optLoading);
 
       try {
-        const [resAg, resGem] = await Promise.all([
-          _procAiFetchJson('/api/providers/models?provider=antigravity', 4000).catch(() => null),
-          _procAiFetchJson('/api/providers/models?provider=gemini', 4000).catch(() => null)
-        ]);
+        const resAg = await _procAiFetchJson('/api/providers/models?provider=antigravity', 4000).catch(() => null);
 
         modelSel.innerHTML = '';
         let items = [
-          { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Nhanh & Tối Ưu Audio)' },
-          { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Tiêu Chuẩn)' },
-          { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash (Cao Cấp)' },
-          { id: 'gemini-1.5-pro',   name: 'Gemini 1.5 Pro (Chính Xác Cao)' },
-          { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' }
+          { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash (High)' },
+          { id: 'gemini-3.6-flash-medium', name: 'Gemini 3.6 Flash (Medium)' },
+          { id: 'gemini-3.6-flash-low', name: 'Gemini 3.6 Flash (Low)' },
+          { id: 'gemini-3-flash-agent', name: 'Gemini 3.5 Flash (High)' },
+          { id: 'gemini-3.5-flash-medium', name: 'Gemini 3.5 Flash (Medium)' },
+          { id: 'gemini-3.5-flash-low', name: 'Gemini 3.5 Flash (Low)' },
+          { id: 'gemini-pro-agent', name: 'Gemini 3.1 Pro (High)' },
+          { id: 'gemini-3.1-pro-low', name: 'Gemini 3.1 Pro (Low)' },
+          { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)' },
+          { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)' },
+          { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)' }
         ];
 
-        [resAg, resGem].forEach(res => {
-          if (res && res.ok && Array.isArray(res.models)) {
-            res.models.filter(m => m && m.enabled !== false).forEach(m => {
-              const mId = m.id || m;
-              if (mId && !items.some(it => it.id === mId)) {
-                items.push({ id: mId, name: m.name || mId });
-              }
-            });
-          }
-        });
+        if (resAg && resAg.ok && Array.isArray(resAg.models)) {
+          resAg.models.filter(m => m && m.enabled !== false).forEach(m => {
+            const mId = m.id || m;
+            const mName = m.name || mId;
+            if (mId && !items.some(it => it.id === mId)) {
+              items.push({ id: mId, name: mName });
+            }
+          });
+        }
 
         const grp = document.createElement('optgroup');
-        grp.label = '🌌 Mô Hình Antigravity / Gemini Multimodal (Audio STT)';
+        grp.label = '🌌 Antigravity AI';
         items.forEach(m => {
           const opt = document.createElement('option');
           opt.value = m.id;
-          opt.textContent = m.name ? `${m.id} (${m.name})` : m.id;
-          if (m.id === 'gemini-2.0-flash' && !restoreValue) opt.selected = true;
+          opt.textContent = m.name || m.id;
+          if (m.id === 'gemini-3.6-flash' && !restoreValue) opt.selected = true;
           grp.appendChild(opt);
         });
         modelSel.appendChild(grp);
@@ -114,7 +116,7 @@ async function onTranscribeProviderChanged(restoreValue) {
           modelSel.value = currentVal;
         }
       } catch (err) {
-        modelSel.innerHTML = '<option value="gemini-2.0-flash">Gemini 2.0 Flash</option>';
+        modelSel.innerHTML = '<option value="gemini-3.6-flash">gemini-3.6-flash</option>';
       }
     }
   }
@@ -338,7 +340,26 @@ async function onTranscribeProviderChanged(restoreValue) {
     // Remove old extra blur elements
     wrap.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
     if (window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
+      let curTs = 0;
+      try {
+        const tsInput = document.getElementById('sub-preview-ts');
+        if (tsInput && tsInput.value !== '') {
+          curTs = parseFloat(tsInput.value) || 0;
+        }
+      } catch (_) {}
+
       window._procExtraBlurZones.forEach(zone => {
+        const isExtraSelected = window._pe2Sel && window._pe2Sel.type === 'extra' && String(window._pe2Sel.id) === String(zone.id);
+
+        if (!isExtraSelected) {
+          if (zone.start !== '' && zone.start !== null && zone.start !== undefined && !isNaN(parseFloat(zone.start))) {
+            if (curTs < parseFloat(zone.start)) return;
+          }
+          if (zone.end !== '' && zone.end !== null && zone.end !== undefined && !isNaN(parseFloat(zone.end))) {
+            if (curTs > parseFloat(zone.end)) return;
+          }
+        }
+
         const zH = (zone.height || 12) / 100;
         const zY = (zone.position || 50) / 100 - zH / 2;
         const zW = (zone.width || 80) / 100;
@@ -352,7 +373,6 @@ async function onTranscribeProviderChanged(restoreValue) {
         div.className = 'extra-blur-zone';
         div.dataset.zoneId = zone.id;
         
-        const isExtraSelected = window._pe2Sel && window._pe2Sel.type === 'extra' && String(window._pe2Sel.id) === String(zone.id);
         const zIndex = isExtraSelected ? 10 : 4;
         div.style.cssText = `position:absolute;left:${imgOffX + ezLeft}px;top:${imgOffY + ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);z-index:${zIndex};border:1px dashed rgba(255,255,255,0.35);`;
         ['nw','n','ne','e','se','s','sw','w'].forEach(function(edge){

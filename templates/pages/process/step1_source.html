@@ -1,8 +1,15 @@
 <!-- ═════════════════ STEP 1: Nguồn video ═════════════════ -->
 <section class="proc-step" data-proc-step="1">
-  <div class="proc-step-head">
-    <h2 class="proc-step-title">📥 Nguồn video</h2>
-    <p class="proc-step-sub">Dán link video hoặc chọn file từ máy, rồi thêm vào hàng chờ. Tải video gốc tự động và chuẩn bị preview.</p>
+  <div class="proc-step-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 class="proc-step-title">📥 Nguồn video</h2>
+      <p class="proc-step-sub">Dán link video hoặc chọn file từ máy, rồi thêm vào hàng chờ. Tải video gốc tự động và chuẩn bị preview.</p>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(1)" title="Lưu cấu hình Bước 1 (Ngôn ngữ, Dịch, Tự động hóa...)" style="display:inline-flex;align-items:center;gap:4px">
+        💾 Lưu cấu hình Bước 1
+      </button>
+    </div>
   </div>
 
   <div class="proc-step5-grid">
@@ -94,9 +101,8 @@
           </div>
           <div class="field" id="proc-ai-video-nine-model-row">
             <label>Đọc ảnh/video</label>
-            <select id="proc-ai-video-nine-model" onfocus="loadProcAiVideoModels()">
+            <select id="proc-ai-video-nine-model" onfocus="loadProcAiVideoModels()" onchange="if(typeof _syncAiVideoModel==='function')_syncAiVideoModel(this.value)">
               <option value="none">Tắt (Không đọc)</option>
-              <option value="" selected>🌌 Antigravity / Provider (Tự động)</option>
             </select>
             <input type="checkbox" id="proc-ai-video-auto" style="display:none" checked>
           </div>

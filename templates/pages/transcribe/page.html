@@ -79,41 +79,49 @@
       <!-- Card 1: Chọn Tệp & Phiên âm -->
       <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-5">
         <div class="flex items-center gap-2 mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
-          <span class="text-lg">🎙️</span>
+          <span class="text-indigo-500 flex items-center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </span>
           <h3 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Phiên âm video / audio</h3>
         </div>
         
         <div class="flex flex-col gap-3.5">
           <!-- File selection -->
           <div class="field mb-0">
-            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Tệp tin nguồn (Video/Audio/.ass)</label>
+            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Tệp tin nguồn (Video/Audio/.ass)</label>
             <div class="flex gap-2">
-              <input type="text" id="tr-file" placeholder="Đường dẫn file hoặc nhấn Chọn..." class="flex-1 text-xs">
-              <button class="btn btn-secondary btn-sm px-3" onclick="document.getElementById('tr-import-file').click()">📂</button>
+              <input type="text" id="tr-file" placeholder="Đường dẫn file hoặc nhấn Chọn..." class="flex-1 text-xs h-[38px] rounded-lg">
+              <button type="button" class="btn btn-secondary btn-sm px-3 h-[38px] flex items-center justify-center gap-1" onclick="document.getElementById('tr-import-file').click()" title="Chọn tệp">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </button>
               <input type="file" id="tr-import-file" accept="video/*,audio/*,.ass" style="display:none" onchange="trOnFilePicked(this)">
             </div>
-            <div class="text-[11px] text-slate-400 mt-1 italic" id="tr-file-name">Chưa chọn tệp</div>
+            <div class="text-[11px] text-slate-400 mt-1 italic truncate" id="tr-file-name">Chưa chọn tệp</div>
           </div>
           
-          <!-- Out dir -->
-          <div class="field mb-0">
-            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Thư mục xuất</label>
-            <input type="text" id="tr-out" placeholder="Mặc định: cùng thư mục file nguồn" class="w-full text-xs">
-          </div>
-
-          <!-- Whisper configuration -->
-          <div class="grid grid-cols-2 gap-3">
-            <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Engine Phiên Âm (STT)</label>
-              <select id="tr-provider" class="w-full text-xs">
-                <option value="antigravity" selected>🌌 Antigravity / Gemini AI (Multimodal Audio)</option>
-                <option value="groq">Groq Whisper API (Nhanh)</option>
+          <!-- STT Engine & Models configuration (Equal label height & perfect vertical alignment) -->
+          <div class="grid grid-cols-2 gap-3 items-start">
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4" title="Engine Phiên Âm (STT)">Engine Phiên Âm (STT)</label>
+              <select id="tr-provider" class="w-full text-xs h-[38px] rounded-lg" onchange="window.trSyncProviderOptions && window.trSyncProviderOptions()">
+                <option value="antigravity" selected>Antigravity / Gemini AI</option>
+                <option value="groq">Groq Whisper API</option>
                 <option value="model">Whisper Local</option>
               </select>
             </div>
-            <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Ngôn ngữ gốc</label>
-              <select id="tr-lang" class="w-full text-xs">
+            <div class="field mb-0 flex flex-col" id="tr-model-row">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4" id="tr-model-label" title="Mô hình AI (Model)">Mô hình AI (Model)</label>
+              <select id="tr-model" class="w-full text-xs h-[38px] rounded-lg">
+                <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (Khuyên dùng)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Language & Out dir (Equal label height & perfect vertical alignment) -->
+          <div class="grid grid-cols-2 gap-3 items-start">
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Ngôn ngữ gốc</label>
+              <select id="tr-lang" class="w-full text-xs h-[38px] rounded-lg">
                 <option value="zh" selected>Tiếng Trung</option>
                 <option value="en">Tiếng Anh</option>
                 <option value="ja">Tiếng Nhật</option>
@@ -121,16 +129,10 @@
                 <option value="vi">Tiếng Việt</option>
               </select>
             </div>
-          </div>
-          
-          <div class="field mb-0" id="tr-model-row" style="display:none">
-            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Mô hình local</label>
-            <select id="tr-model" class="w-full text-xs">
-              <option value="base" selected>Base (Nhẹ nhất)</option>
-              <option value="small">Small (Trung bình)</option>
-              <option value="medium">Medium (Tốt)</option>
-              <option value="large-v3">Large V3 (Chính xác)</option>
-            </select>
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Thư mục xuất</label>
+              <input type="text" id="tr-out" placeholder="Mặc định: cùng thư mục file nguồn" class="w-full text-xs h-[38px] rounded-lg">
+            </div>
           </div>
 
           <!-- Options -->
@@ -147,11 +149,13 @@
 
           <!-- Action buttons -->
           <div class="flex gap-2 mt-2">
-            <button class="btn btn-primary flex-1 py-2 font-semibold text-xs flex justify-center items-center gap-1.5" id="btn-tr" onclick="trStartTranscribe()">
-              <span>🚀 Bắt đầu phiên âm</span>
+            <button type="button" class="btn btn-primary flex-1 py-2 font-semibold text-xs flex justify-center items-center gap-1.5 h-[38px]" id="btn-tr" onclick="trStartTranscribe()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span>Bắt đầu phiên âm</span>
             </button>
-            <button class="btn btn-secondary py-2 text-xs flex justify-center items-center gap-1.5" id="btn-tr-extract" onclick="trExtractAudio()" title="Chỉ tách lấy nhạc MP3 từ video">
-              <span>🎵 Tách MP3</span>
+            <button type="button" class="btn btn-secondary py-2 text-xs flex justify-center items-center gap-1.5 h-[38px] px-4" id="btn-tr-extract" onclick="trExtractAudio()" title="Chỉ tách lấy nhạc MP3 từ video">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              <span>Tách MP3</span>
             </button>
           </div>
         </div>
@@ -160,15 +164,17 @@
       <!-- Card 2: Cấu hình Lồng tiếng (TTS) -->
       <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-5">
         <div class="flex items-center gap-2 mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
-          <span class="text-lg">🔊</span>
+          <span class="text-indigo-500 flex items-center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          </span>
           <h3 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Cấu hình lồng tiếng (TTS)</h3>
         </div>
         
         <div class="flex flex-col gap-3.5">
-          <div class="grid grid-cols-2 gap-3">
-            <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Engine TTS</label>
-              <select id="tr-tts-engine" class="w-full text-xs" onchange="trSyncVoiceOptions()">
+          <div class="grid grid-cols-2 gap-3 items-start">
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Engine TTS</label>
+              <select id="tr-tts-engine" class="w-full text-xs h-[38px] rounded-lg" onchange="trSyncVoiceOptions()">
                 <option value="vieneu" selected>VieNeu local</option>
                 <option value="edge-tts">Microsoft Edge</option>
                 <option value="gtts">Google gTTS</option>
@@ -177,9 +183,9 @@
                 <option value="fish-audio">Fish Audio</option>
               </select>
             </div>
-            <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Ngôn ngữ lồng</label>
-              <select id="tr-tts-lang" class="w-full text-xs" onchange="trSyncVoiceOptions()">
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Ngôn ngữ lồng</label>
+              <select id="tr-tts-lang" class="w-full text-xs h-[38px] rounded-lg" onchange="trSyncVoiceOptions()">
                 <option value="vi" selected>Tiếng Việt</option>
                 <option value="en">Tiếng Anh</option>
                 <option value="zh">Tiếng Trung</option>
@@ -197,48 +203,37 @@
             </div>
           </div>
 
-          <!-- Dynamic DTRouter fields (shown only when selected dtrouter engine) -->
-          <div id="tr-dtr-fields" class="grid grid-cols-1 gap-3" style="display:none">
-            <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Mô hình DTRouter</label>
-              <select id="tr-dtr-model" class="w-full text-xs" onchange="trSyncDTRouterVoices()"></select>
-            </div>
-            <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">DTRouter API Key</label>
-              <div class="flex items-center gap-2">
-                <input type="text" id="tr-dtr-api-key" readonly class="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2" placeholder="Thiếu API Key DTRouter - Vui lòng cấu hình ở Cài đặt" style="flex:1">
-              </div>
-              <span id="tr-dtr-api-key-status" class="text-[10px] mt-1 block"></span>
-            </div>
-          </div>
-
           <div class="field mb-0">
-            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Giọng đọc</label>
-            <select id="tr-tts-voice" class="w-full text-xs"></select>
+            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Giọng đọc</label>
+            <select id="tr-tts-voice" class="w-full text-xs h-[38px] rounded-lg"></select>
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Tốc độ đọc</label>
-              <input type="text" id="tr-tts-rate" value="+0%" placeholder="+0%" class="w-full text-xs">
+          <div class="grid grid-cols-2 gap-3 items-start">
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Tốc độ đọc</label>
+              <input type="text" id="tr-tts-rate" value="+0%" placeholder="+0%" class="w-full text-xs h-[38px] rounded-lg">
             </div>
-            <div class="field mb-0">
-              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Cao độ</label>
-              <input type="text" id="tr-tts-pitch" value="+0Hz" placeholder="+0Hz" class="w-full text-xs">
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Cao độ</label>
+              <input type="text" id="tr-tts-pitch" value="+0Hz" placeholder="+0Hz" class="w-full text-xs h-[38px] rounded-lg">
             </div>
           </div>
           
           <div class="field mb-0">
-            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block">Thử giọng nói</label>
-            <textarea id="tr-preview-text" placeholder="Nhập văn bản thử giọng..." class="w-full text-xs min-h-[50px] p-2 border border-slate-200 dark:border-slate-700 rounded-lg" rows="2"></textarea>
+            <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 block truncate h-4 leading-4">Thử giọng nói</label>
+            <textarea id="tr-preview-text" placeholder="Nhập văn bản thử giọng..." class="w-full text-xs min-h-[50px] p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg" rows="2"></textarea>
             <div class="flex flex-col gap-2 mt-2">
-              <button class="btn btn-secondary text-[11px] py-2 w-full flex justify-center items-center gap-1.5" id="btn-tr-preview" onclick="trPreviewVoice()">▶ Nghe thử giọng</button>
+              <button type="button" class="btn btn-secondary text-[11px] py-2 w-full flex justify-center items-center gap-1.5 h-[36px]" id="btn-tr-preview" onclick="trPreviewVoice()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Nghe thử giọng</span>
+              </button>
               <audio id="tr-preview-audio" class="hidden w-full mt-1" controls style="outline: none;"></audio>
             </div>
           </div>
 
-          <button class="btn btn-primary w-full py-2 font-semibold text-xs flex justify-center items-center gap-1.5 mt-1" id="btn-tr-tts" onclick="trRunTtsFromAss()">
-            <span>🔊 Lồng tiếng &amp; Xuất MP3</span>
+          <button type="button" class="btn btn-primary w-full py-2 font-semibold text-xs flex justify-center items-center gap-1.5 mt-1 h-[40px]" id="btn-tr-tts" onclick="trRunTtsFromAss()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            <span>Lồng tiếng &amp; Xuất MP3</span>
           </button>
         </div>
       </div>
@@ -250,8 +245,16 @@
       <!-- Card 4: Nhật ký & Tiến trình (Đưa lên TRÊN) -->
       <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-5">
         <div class="flex justify-between items-center mb-3">
-          <h3 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Nhật ký hoạt động</h3>
-          <button class="btn btn-secondary text-[10px] py-1 px-2.5" onclick="clearLog('tr-log')">Xoá log</button>
+          <div class="flex items-center gap-2">
+            <span class="text-indigo-500 flex items-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            </span>
+            <h3 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Nhật ký hoạt động</h3>
+          </div>
+          <button type="button" class="btn btn-secondary text-[10px] py-1 px-2.5 flex items-center gap-1" onclick="clearLog('tr-log')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>Xoá log</span>
+          </button>
         </div>
         
         <!-- Progress bars -->
@@ -285,15 +288,19 @@
       <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-5 flex-1 flex flex-col min-h-[500px]">
         <div class="flex justify-between items-center mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
           <div class="flex items-center gap-2">
-            <span class="text-lg">📝</span>
+            <span class="text-indigo-500 flex items-center">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            </span>
             <h3 class="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Biên tập phụ đề &amp; lồng tiếng</h3>
           </div>
           <div class="flex gap-2">
-            <button class="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1" onclick="trLoadSubtitles()">
-              <span>🔄 Tải phụ đề từ file nguồn</span>
+            <button type="button" class="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="trLoadSubtitles()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              <span>Tải phụ đề từ file nguồn</span>
             </button>
-            <button class="btn btn-success text-xs py-1.5 px-3 flex items-center gap-1" onclick="trSaveSubtitles()">
-              <span>💾 Lưu phụ đề</span>
+            <button type="button" class="btn btn-success text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="trSaveSubtitles()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span>Lưu phụ đề</span>
             </button>
           </div>
         </div>
@@ -301,7 +308,8 @@
         <!-- Subtitles Editor Table -->
         <div class="flex-1 overflow-y-auto max-h-[460px] border border-slate-200 dark:border-slate-700 rounded-xl mb-2" id="tr-sub-editor-wrap">
           <div class="p-8 text-center text-slate-400 dark:text-slate-500 text-xs flex flex-col items-center justify-center gap-2 h-full">
-            <span>📭 Chưa có phụ đề để hiển thị.</span>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-300 dark:text-slate-600 mb-1"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="font-semibold text-slate-500 dark:text-slate-400">Chưa có phụ đề để hiển thị</span>
             <span class="text-[11px] text-slate-400">Chọn tệp .ass đã có hoặc chạy Bắt đầu phiên âm.</span>
           </div>
         </div>
@@ -322,15 +330,16 @@
   }
 
   document.addEventListener('DOMContentLoaded', function() {
-    // Sync provider → toggle hiển thị model selector
-    const provEl = document.getElementById('tr-provider');
-    const modelRow = document.getElementById('tr-model-row');
-    function _trSyncProvider() {
-      if (!modelRow || !provEl) return;
-      modelRow.style.display = (provEl.value === 'model') ? '' : 'none';
+    // Sync provider models
+    if (typeof window.trSyncProviderOptions === 'function') {
+      window.trSyncProviderOptions();
     }
-    provEl?.addEventListener('change', _trSyncProvider);
-    _trSyncProvider();
+    const provEl = document.getElementById('tr-provider');
+    provEl?.addEventListener('change', () => {
+      if (typeof window.trSyncProviderOptions === 'function') {
+        window.trSyncProviderOptions();
+      }
+    });
 
     // Khi user gõ/sửa input path bằng tay → invalidate file đã chọn trước đó.
     document.getElementById('tr-file')?.addEventListener('input', function() {

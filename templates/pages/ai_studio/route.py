@@ -83,8 +83,6 @@ def ai_config():
     providers = []
     if key:
         providers.append("gemini")
-    if (nr.get("api_key") or "").strip():
-        providers.append("9router")
     if (tr.get("deepseek_key") or "").strip():
         providers.append("deepseek")
     if (tr.get("openai_key") or "").strip():
@@ -95,7 +93,7 @@ def ai_config():
         "has_gemini_key": bool(key),
         "gemini_key_masked": (key[:8] + "...") if len(key) > 8 else "",
         "video_model": gv.get("model") or "veo-2.0-generate-001",
-        "llm_model": gv.get("llm_model") or "gemini-2.5-flash",
+        "llm_model": gv.get("llm_model") or "gemini-3.6-flash",
         "llm_providers": providers,
         "image_model": gv.get("image_model") or "imagen-3.0-generate-002",
     })
@@ -321,13 +319,13 @@ def idea2video_download(job_id):
 # ══════════════════════════════════════════════════════════════════════════════
 @bp.route("/api/ai/image/generate", methods=["POST"])
 def image_generate():
-    """Tạo ảnh — hỗ trợ 9Router, Gemini Imagen, OpenAI DALL-E."""
+    """Tạo ảnh — hỗ trợ Gemini Imagen, OpenAI DALL-E."""
     data = request.get_json(force=True) or {}
     prompt = (data.get("prompt") or "").strip()
     if not prompt:
         return jsonify({"ok": False, "error": "Prompt trống"}), 400
 
-    model = (data.get("model") or "9router").strip()
+    model = (data.get("model") or "gemini-3.6-flash-image").strip()
     count = min(int(data.get("count") or 1), 4)
     aspect_ratio = data.get("aspect_ratio") or "1:1"
 
@@ -353,72 +351,15 @@ def image_generate():
 
 def _run_image_gen(task_id, model, prompt, count, aspect_ratio):
     """Route tạo ảnh tới backend phù hợp."""
-    if model.startswith(("imagen", "gemini")):
+    if model in ("dall-e-3", "dalle-3"):
+        _run_image_gen_openai(task_id, prompt, count, aspect_ratio)
+    else:
         api_key = _gemini_key()
         if not api_key:
             _update_task(task_id, state="FAILED", error="Thiếu Gemini API Key")
             return
-        _run_image_gen_gemini(task_id, api_key, model, prompt, count, aspect_ratio)
-    elif model in ("dall-e-3", "dalle-3"):
-        # Legacy: gọi thẳng OpenAI DALL-E 3
-        _run_image_gen_openai(task_id, prompt, count, aspect_ratio)
-    else:
-        # "9router" (mặc định cx/gpt-5.5-image) hoặc bất kỳ model id 9Router thật
-        # (vd openai/gpt-image-1, nb/nanobanana-pro, cx/gpt-5.4-image, local…)
-        model_id = "cx/gpt-5.5-image" if model in ("9router", "") else model
-        _run_image_gen_9router(task_id, prompt, count, aspect_ratio, model_id)
-
-
-def _run_image_gen_9router(task_id, prompt, count, aspect_ratio, model_id="cx/gpt-5.5-image"):
-    """Tạo ảnh qua 9Router /v1/images/generations (OpenAI-compatible).
-
-    Codex ``cx/*`` models stream the result as SSE; the shared helper handles
-    both SSE and plain-JSON responses, so this works for every model id.
-    """
-    from utils.niner_image import build_image_payload, generate_images
-
-    cfg = load_cfg()
-    nr = cfg.get("nine_router") or {}
-    api_key = (nr.get("api_key") or "").strip()
-    endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
-
-    if not api_key:
-        _update_task(task_id, state="FAILED", error="Thiếu 9Router API key")
-        return
-
-    # Map aspect_ratio to size
-    size_map = {"1:1": "1024x1024", "16:9": "1792x1024", "9:16": "1024x1792", "4:3": "1024x768", "3:4": "768x1024"}
-    size = size_map.get(aspect_ratio, "1024x1024")
-
-    payload = build_image_payload(
-        (model_id or "cx/gpt-5.5-image"),
-        prompt,
-        n=count,
-        size=size,
-    )
-
-    data_images, error = generate_images(endpoint, api_key, payload)
-    if error:
-        _update_task(task_id, state="FAILED", error=error)
-        return
-
-    images = []
-    for i, item in enumerate(data_images):
-        b64 = item.get("b64_json") or ""
-        img_url = item.get("url") or ""
-        if b64:
-            filename = f"{task_id}_{i+1}.png"
-            filepath = _IMAGE_DIR / filename
-            with open(filepath, "wb") as f:
-                f.write(base64.b64decode(b64))
-            images.append({"url": f"/api/ai/image/download/{filename}", "filename": filename})
-        elif img_url:
-            images.append({"url": img_url, "filename": f"remote_{i+1}.png"})
-
-    if images:
-        _update_task(task_id, state="SUCCEEDED", images=images, message=f"Hoàn thành! {len(images)} ảnh.")
-    else:
-        _update_task(task_id, state="FAILED", error="9Router không trả về ảnh nào")
+        gemini_model = model if model.startswith(("imagen", "gemini")) else "gemini-3.6-flash-image"
+        _run_image_gen_gemini(task_id, api_key, gemini_model, prompt, count, aspect_ratio)
 
 
 def _run_image_gen_openai(task_id, prompt, count, aspect_ratio):
@@ -548,7 +489,7 @@ def _run_image_gen_native(task_id, api_key, prompt, count):
     import urllib.request
     import urllib.error
 
-    model = "gemini-2.5-flash-image"
+    model = "gemini-3.6-flash-image"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],

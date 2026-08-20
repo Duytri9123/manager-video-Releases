@@ -16,17 +16,14 @@ bp = Blueprint("tts", __name__)
 
 @bp.route("/api/tts/engines", methods=["GET"])
 def tts_engines():
-    include_dtrouter = str(request.args.get("include_dtrouter", "1")).lower() not in ("0", "false", "no")
     try:
-        from core.tts_catalog import all_tts_engines
-        engines, dtrouter = all_tts_engines(load_cfg(), include_dtrouter=include_dtrouter)
-        return jsonify({"ok": True, "engines": engines, "dtrouter": dtrouter})
-    except Exception as exc:
         from core.tts_catalog import local_tts_engines
+        return jsonify({"ok": True, "engines": local_tts_engines()})
+    except Exception as exc:
         return jsonify({
-            "ok": True,
-            "engines": local_tts_engines(),
-            "dtrouter": {"reachable": False, "error": str(exc)},
+            "ok": False,
+            "error": str(exc),
+            "engines": [],
         })
 
 
@@ -102,7 +99,7 @@ def tts_preview():
     try:
         from core.video_processor import (
             _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs,
-            _tts_dtrouter, _tts_vieneu,
+            _tts_vieneu,
             FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID,
         )
         cfg = load_cfg()
@@ -154,14 +151,6 @@ def tts_preview():
                         style=tts_emotion,
                         ref_audio=str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip(),
                     )
-                elif tts_engine == "dtrouter" or tts_engine.startswith("dtr:"):
-                    ok = asyncio.run(_tts_dtrouter(
-                        text, tts_voice, out_path,
-                        engine=tts_engine,
-                        language=str(data.get("tts_lang") or data.get("language") or ""),
-                        style=tts_emotion,
-                        persona=tts_persona,
-                    ))
                 elif tts_engine == "gtts":
                     ok = _tts_gtts(
                         text,
@@ -196,12 +185,15 @@ def tts_preview():
                         text, tts_voice, out_path,
                         api_key=fish_key, model=fish_model,
                     ))
-                elif tts_engine == "minimax":
-                    from core.video_processor import _tts_minimax
-                    ok = asyncio.run(_tts_minimax(
-                        text, tts_voice, out_path,
-                        language=str(data.get("tts_lang") or data.get("language") or ""),
-                    ))
+                elif tts_engine == "omnivoice":
+                    from core.video_processor import _tts_omnivoice
+                    ok = _tts_omnivoice(
+                        text,
+                        tts_voice,
+                        out_path,
+                        ref_audio=str(data.get("ref_audio") or data.get("omnivoice_ref_audio") or "").strip(),
+                        lang=str(data.get("tts_lang") or data.get("language") or "vi"),
+                    )
                 elif tts_engine == "huggingface":
                     return jsonify({"ok": False, "error": "HuggingFace TTS not supported in this version"}), 400
                 else:
@@ -514,7 +506,7 @@ def tts_to_mp3():
     """
     import asyncio as _asyncio
     from core.video_processor import (
-        _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs, _tts_dtrouter,
+        _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs,
         FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID,
         find_ffmpeg, _run_ffmpeg,
     )
@@ -569,8 +561,6 @@ def tts_to_mp3():
         max_chars = 2500  # ElevenLabs supports up to 5000 chars
     elif tts_engine == "fish-audio":
         max_chars = 1500
-    elif tts_engine == "dtrouter" or tts_engine.startswith("dtr:"):
-        max_chars = 1500
     elif tts_engine == "vieneu":
         max_chars = 240
     else:
@@ -600,14 +590,6 @@ def tts_to_mp3():
                             style=tts_emotion,
                             ref_audio=str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip(),
                         )
-                    elif tts_engine == "dtrouter" or tts_engine.startswith("dtr:"):
-                        ok = _asyncio.run(_tts_dtrouter(
-                            chunk, tts_voice, clip_path,
-                            engine=tts_engine,
-                            language=str(data.get("tts_lang") or data.get("language") or ""),
-                            style=tts_emotion,
-                            persona=tts_persona,
-                        ))
                     elif tts_engine == "gtts":
                         ok = _tts_gtts(
                             chunk,
@@ -646,6 +628,15 @@ def tts_to_mp3():
                             chunk, tts_voice, clip_path,
                             language=str(data.get("tts_lang") or data.get("language") or ""),
                         ))
+                    elif tts_engine == "omnivoice":
+                        from core.video_processor import _tts_omnivoice
+                        ok = _tts_omnivoice(
+                            chunk,
+                            tts_voice,
+                            clip_path,
+                            ref_audio=str(data.get("ref_audio") or data.get("omnivoice_ref_audio") or "").strip(),
+                            lang=str(data.get("tts_lang") or data.get("language") or "vi"),
+                        )
                     else:
                         # edge-tts (default)
                         ok = _asyncio.run(_tts_edge(

@@ -77,13 +77,20 @@ window._batchQueue = window._batchQueue || [];
       localQueue.forEach(localItem => {
         const existing = window._batchQueue.find(item => item.val === localItem.val);
         if (existing) {
+          if (existing.status === 'processing' && !window._procRunning) {
+            existing.status = 'ready';
+          }
           newQueue.push(existing);
         } else {
+          let st = localItem.status || 'pending';
+          if (st === 'processing' && !window._procRunning) {
+            st = 'ready';
+          }
           newQueue.push({
             id: localItem.id || 'bt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
             type: localItem.type || 'file',
             val: localItem.val,
-            status: localItem.status || 'pending',
+            status: st,
             desc: localItem.desc || localItem.val,
             added: localItem.added || Date.now(),
             auto_flow: localItem.auto_flow !== undefined ? localItem.auto_flow : (document.getElementById('proc-auto-flow')?.checked ?? true),
@@ -94,6 +101,9 @@ window._batchQueue = window._batchQueue || [];
       });
       window._batchQueue.forEach(item => {
         if (!newQueue.some(ni => ni.val === item.val)) {
+          if (item.status === 'processing' && !window._procRunning) {
+            item.status = 'ready';
+          }
           newQueue.push(item);
         }
       });
@@ -289,19 +299,46 @@ window._batchQueue = window._batchQueue || [];
     const card = document.getElementById('step3-start-card');
     if (!card) return;
 
-    // A ready item exists (downloaded or local file, not yet kicked off)
-    const hasReady = (window._batchQueue || []).some(t => t.status === 'ready');
+    // Reset dangling processing state if pipeline not actually running
+    if (!window._procRunning) {
+      (window._batchQueue || []).forEach(t => {
+        if (t.status === 'processing') t.status = 'ready';
+      });
+    }
 
-    // Pipeline already running or waiting for user (ASS review panel visible)
-    const isRunning = window._procRunning || window._step3Started;
+    // Has items waiting to be processed or ready
+    const hasItems = (window._batchQueue || []).some(t => t.status === 'ready' || t.status === 'pending');
+
+    // Pipeline already running
+    const isRunning = !!window._procRunning;
 
     // ASS review panel is open — pipeline is mid-flight, don't show start button
-    const assOpen   = document.getElementById('proc-ass-review-card')?.style.display !== 'none';
+    const assOpen = document.getElementById('proc-ass-review-card')?.style.display !== 'none';
 
     const onStep3 = window._procWizStep === 3;
-    const shouldShow = hasReady && !isRunning && !assOpen && onStep3;
+    const shouldShow = (hasItems || (window._batchQueue || []).length > 0) && !isRunning && !assOpen && onStep3;
     card.style.display = shouldShow ? 'block' : 'none';
   }
+
+  window._resetQueueItemStatus = function(taskId) {
+    const t = (window._batchQueue || []).find(x => x.id === taskId);
+    if (t) {
+      t.status = 'ready';
+      window._procRunning = false;
+      window._step3Started = false;
+      _renderBatchQueue();
+      if (typeof toast === 'function') toast('✅ Đã đặt lại trạng thái sẵn sàng', 'success');
+    }
+  };
+
+  window._deleteQueueItem = function(taskId) {
+    const idx = (window._batchQueue || []).findIndex(x => x.id === taskId);
+    if (idx !== -1) {
+      window._batchQueue.splice(idx, 1);
+      _renderBatchQueue();
+      if (typeof toast === 'function') toast('🗑 Đã xóa video khỏi hàng chờ', 'info');
+    }
+  };
 
   /** Called when user clicks "Bắt đầu xử lý" in step 3 */
   window._step3StartProc = function() {
@@ -361,7 +398,8 @@ window._batchQueue = window._batchQueue || [];
     };
     list.innerHTML = q.map(t => {
       const labelCfg = getTaskConfigLabel(t);
-      const isReadyOrPending = t.status === 'ready' || t.status === 'pending';
+      const isRunningNow = t.status === 'processing' && window._procRunning;
+      const isReadyOrPending = t.status === 'ready' || t.status === 'pending' || !window._procRunning;
       const cfgBtnHtml = isReadyOrPending ? `
         <div style="position:relative;display:inline-block">
           <button data-cfg-btn class="btn btn-outline btn-xs" onclick="window._toggleItemCfgDropdown('${t.id}', event)" style="font-size:10px;padding:2px 6px;height:24px;line-height:20px;border-color:var(--border);border-radius:4px;display:flex;align-items:center;gap:3px;white-space:nowrap">
@@ -385,12 +423,22 @@ window._batchQueue = window._batchQueue || [];
         </div>
       ` : '';
 
+      const resetBtnHtml = (!isRunningNow && (t.status === 'done' || t.status === 'error' || t.status === 'processing')) ? `
+        <button onclick="window._resetQueueItemStatus('${t.id}')" class="btn-icon text-accent" title="Đặt lại trạng thái Sẵn sàng" style="font-size:12px;padding:2px 4px;border:none;background:transparent;cursor:pointer">🔄</button>
+      ` : '';
+
+      const deleteBtnHtml = !isRunningNow ? `
+        <button onclick="window._deleteQueueItem('${t.id}')" class="btn-icon text-red" title="Xóa video" style="font-size:14px;padding:2px 4px;border:none;background:transparent;cursor:pointer">✕</button>
+      ` : '';
+
       return `
       <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
         <span style="color:var(--text-muted)">${t.type === 'url' ? '🔗' : '📄'}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
         <span class="badge ${badgeClass[t.status] || 'badge-gray'}">${statusLabel[t.status] || t.status}</span>
         ${cfgBtnHtml}
+        ${resetBtnHtml}
+        ${deleteBtnHtml}
       </div>`;
     }).join('');
     const done    = q.filter(t => t.status === 'done').length;
@@ -415,7 +463,12 @@ window._batchQueue = window._batchQueue || [];
   }
 
   function _pickNextPendingTask() {
-    return window._batchQueue.find(t => t.status !== 'done' && t.status !== 'error' && t.status !== 'processing');
+    if (!window._procRunning) {
+      (window._batchQueue || []).forEach(t => {
+        if (t.status === 'processing') t.status = 'ready';
+      });
+    }
+    return window._batchQueue.find(t => t.status !== 'done' && t.status !== 'error');
   }
 
   function _runBatchQueueFlow() {
@@ -1091,53 +1144,9 @@ window._batchQueue = window._batchQueue || [];
   }
 
 
-  // Nạp danh sách mô hình AI tạo ảnh THẬT từ 9Router (/v1/models/image) vào
-  // dropdown Thumbnail, nhóm theo provider (openai / cx / nb / google …).
-  // Giữ option "auto" + Gemini (gọi trực tiếp) ở đầu.
   window._thumbAiModelsLoaded = false;
   async function loadThumbAiModels() {
-    if (window._thumbAiModelsLoaded) return;
-    const sel = document.getElementById('thumb-ai-model');
-    if (!sel) return;
     window._thumbAiModelsLoaded = true;
-    try {
-      const r = await fetch('/api/chatbot/media_models?kind=image').then(res => res.json());
-      if (!r || !r.ok || !Array.isArray(r.models) || !r.models.length) {
-        window._thumbAiModelsLoaded = false; // chưa có dữ liệu → cho thử lại
-        return;
-      }
-      // Xoá các optgroup 9Router cũ (nếu nạp lại), giữ 2 option tĩnh đầu tiên
-      sel.querySelectorAll('optgroup[data-nr="1"]').forEach(g => g.remove());
-
-      const existing = new Set(Array.from(sel.options).map(o => o.value));
-      // Gom theo provider prefix trước dấu '/'
-      const groups = {};
-      r.models.forEach(function(m) {
-        const id = (m && (m.id || m)) || '';
-        if (!id || existing.has(id)) return;
-        const prefix = id.includes('/') ? id.split('/')[0] : (m.owned_by || 'khác');
-        (groups[prefix] = groups[prefix] || []).push(id);
-      });
-      const labelMap = {
-        openai: '🟢 OpenAI', cx: '⭐ Codex (SSE)', nb: '🍌 NanoBanana',
-        google: '🔷 Google', sdwebui: '🖥 Local (SD WebUI)', flux: '⚡ FLUX',
-      };
-      Object.keys(groups).forEach(function(prefix) {
-        const grp = document.createElement('optgroup');
-        grp.setAttribute('data-nr', '1');
-        grp.label = labelMap[prefix] || ('9Router · ' + prefix);
-        groups[prefix].forEach(function(id) {
-          const opt = document.createElement('option');
-          opt.value = id;
-          opt.textContent = id;
-          grp.appendChild(opt);
-          existing.add(id);
-        });
-        sel.appendChild(grp);
-      });
-    } catch (_) {
-      window._thumbAiModelsLoaded = false; // cho phép thử lại lần sau
-    }
   }
   // Thumbnail flow disabled by request.
 

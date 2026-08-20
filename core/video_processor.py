@@ -146,9 +146,7 @@ def _gen_ai_thumbnail_for_pipeline(
     title: str = "",
     subtitle_text: str = "",
 ) -> Optional[Path]:
-    """Generate AI thumbnail. Priority order:
-    1. DTRouter (cx/gpt-5.5-image) — uses extracted frame as reference image
-    2. Gemini 2.5 Flash Image — fallback when DTRouter not configured
+    """Generate AI thumbnail using Gemini 2.5 Flash Image.
 
     Returns Path to saved thumbnail, or None on failure.
     Used by the parallel thumbnail task in process_video_full pipeline.
@@ -167,20 +165,15 @@ def _gen_ai_thumbnail_for_pipeline(
     except Exception:
         cfg = {}
 
-    nr_cfg = cfg.get("dtrouter") or {}
-    nr_endpoint = (nr_cfg.get("endpoint") or "").strip().rstrip("/")
-    nr_key = (nr_cfg.get("api_key") or "").strip()
-    use_dtrouter = bool(nr_endpoint and nr_key)
-
     gemini_key = (
         (cfg.get("gemini_video") or {}).get("api_key", "").strip()
         or os.environ.get("GEMINI_API_KEY", "").strip()
     )
 
-    if not use_dtrouter and not gemini_key:
+    if not gemini_key:
         return None
 
-    # Step 1: extract frame from video (used as reference for both providers)
+    # Step 1: extract frame from video (used as reference)
     try:
         with tempfile.TemporaryDirectory(prefix="ai_thumb_pipe_") as tmpdir:
             tmp_video = Path(tmpdir) / f"input{video_path.suffix}"
@@ -199,50 +192,6 @@ def _gen_ai_thumbnail_for_pipeline(
 
             frame_b64 = base64.b64encode(tmp_jpg.read_bytes()).decode()
 
-            # Build prompt (chung cho cả 2 provider)
-            gen_prompt = (
-                f"Eye-catching YouTube thumbnail in 16:9. "
-                f"Title: {title or 'video'}. "
-                f"Content: {subtitle_text or title or 'video'}. "
-                f"Vibrant colors, high contrast, professional, sharp focus, dramatic lighting."
-            )
-
-            # ── PRIORITY 1: DTRouter (cx/gpt-5.5-image) ──────────────────────
-            if use_dtrouter:
-                model_id = (nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
-                try:
-                    from utils.niner_image import build_image_payload, generate_images
-
-                    # Pass the extracted frame as a multimodal reference. Codex
-                    # (cx/*) models stream SSE, which generate_images() handles.
-                    payload = build_image_payload(
-                        model_id,
-                        gen_prompt[:2000],
-                        n=1,
-                        size="1792x1024",  # 16:9
-                        extra={"images": [frame_b64], "image": frame_b64},
-                    )
-                    images, _err = generate_images(nr_endpoint, nr_key, payload)
-                    img_data = images[0] if images else {}
-                    img_b64_data = img_data.get("b64_json")
-                    img_url_remote = img_data.get("url")
-                    if img_b64_data:
-                        output_path.write_bytes(base64.b64decode(img_b64_data))
-                        if output_path.exists() and output_path.stat().st_size > 1024:
-                            return output_path
-                    elif img_url_remote:
-                        with urllib.request.urlopen(img_url_remote, timeout=180) as dl:
-                            output_path.write_bytes(dl.read())
-                        if output_path.exists() and output_path.stat().st_size > 1024:
-                            return output_path
-                except Exception:
-                    # Fall through to Gemini
-                    pass
-
-            # ── PRIORITY 2: Gemini fallback ─────────────────────────────────
-            if not gemini_key:
-                return None
-
             # Step 2: ask Gemini Vision to refine prompt based on frame
             prompt_text = (
                 f"You are a YouTube thumbnail designer. Analyze this video frame and write a concise "
@@ -251,7 +200,7 @@ def _gen_ai_thumbnail_for_pipeline(
                 f"Output ONLY the prompt text."
             )
             try:
-                vision_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+                vision_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={gemini_key}"
                 vision_payload = {
                     "contents": [{
                         "parts": [
@@ -282,7 +231,7 @@ def _gen_ai_thumbnail_for_pipeline(
                 pass
 
             # Step 3: generate image with Gemini native image generation
-            img_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key={gemini_key}"
+            img_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash-image:generateContent?key={gemini_key}"
             img_payload = {
                 "contents": [{
                     "parts": [
@@ -1124,29 +1073,67 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return out_path
 
 
-def _parse_srt(srt_path: Path) -> list[dict]:
-    """Parse SRT → list of {index, start, end, text}"""
+def _parse_time_smart(t_str: str, video_dur: float | None = None) -> float:
+    """Parse time string with robust format detection (HH:MM:SS.mmm, MM:SS:CC, MM:SS.mmm)."""
+    t_str = str(t_str or "").strip().replace(",", ".")
+    parts = t_str.split(":")
+    try:
+        if len(parts) == 3:
+            p0, p1, p2 = float(parts[0]), float(parts[1]), float(parts[2])
+            val = p0 * 3600.0 + p1 * 60.0 + p2
+            # If time exceeds video length, AI likely wrote MM:SS:CC or MM:SS.centisec
+            if video_dur and video_dur > 0 and val > video_dur:
+                alt1 = p0 * 60.0 + p1 + p2 / 100.0
+                if alt1 <= video_dur + 5.0:
+                    return alt1
+                alt2 = p1 + p2 / 60.0
+                if alt2 <= video_dur + 5.0:
+                    return alt2
+            return val
+        elif len(parts) == 2:
+            p0, p1 = float(parts[0]), float(parts[1])
+            val = p0 * 60.0 + p1
+            if video_dur and video_dur > 0 and val > video_dur:
+                alt = p0 + p1 / 100.0
+                if alt <= video_dur + 5.0:
+                    return alt
+            return val
+        elif len(parts) == 1:
+            return float(parts[0])
+    except Exception:
+        pass
+    return 0.0
+
+
+def _get_media_duration(file_path: Path, ffmpeg_bin: str = "ffmpeg") -> float:
+    """Get media duration in seconds via ffmpeg."""
+    import subprocess, re
+    try:
+        cmd = [ffmpeg_bin, "-i", str(file_path)]
+        res = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=15)
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", res.stderr or "")
+        if m:
+            h, mi, s = float(m.group(1)), float(m.group(2)), float(m.group(3))
+            return h * 3600.0 + mi * 60.0 + s
+    except Exception:
+        pass
+    return 0.0
+
+
+def _parse_srt(srt_path: Path, video_dur: float | None = None) -> list[dict]:
+    """Parse SRT → list of {index, start, end, text} with robust timestamp handling."""
     segments = []
-    content = srt_path.read_text(encoding="utf-8", errors="replace")
-    blocks = re.split(r'\n\s*\n', content.strip())
-    for block in blocks:
-        lines = block.strip().splitlines()
-        if len(lines) < 3:
-            continue
-        try:
-            idx = int(lines[0].strip())
-            times = lines[1].strip()
-            m = re.match(r'(\d+:\d+:\d+[,\.]\d+)\s*-->\s*(\d+:\d+:\d+[,\.]\d+)', times)
-            if not m:
-                continue
-            def to_sec(t):
-                t = t.replace(',', '.')
-                parts = t.split(':')
-                return int(parts[0])*3600 + int(parts[1])*60 + float(parts[2])
-            text = '\n'.join(lines[2:]).strip()
-            segments.append({'index': idx, 'start': to_sec(m.group(1)), 'end': to_sec(m.group(2)), 'text': text})
-        except Exception:
-            continue
+    if not Path(srt_path).exists():
+        return segments
+    content = Path(srt_path).read_text(encoding="utf-8", errors="replace")
+    raw_segs = _parse_srt_text_to_segments(content, video_dur=video_dur)
+    for i, s in enumerate(raw_segs, 1):
+        segments.append({
+            'index': i,
+            'start': s['start'],
+            'end': s['end'],
+            'text': s['text']
+        })
     return segments
 
 
@@ -1337,66 +1324,96 @@ class GroqWhisperTranscriber:
 # ══════════════════════════════════════════════════════════════════════════════
 # AntigravityTranscriber (STT via Antigravity / Gemini Multimodal AI)
 # ══════════════════════════════════════════════════════════════════════════════
-def _parse_srt_text_to_segments(srt_text: str) -> list[dict]:
+def _parse_srt_text_to_segments(srt_text: str, video_dur: float | None = None) -> list[dict]:
+    import re
+    if not srt_text:
+        return []
+    srt_text = re.sub(r"^```[a-zA-Z]*\n?", "", srt_text.strip(), flags=re.MULTILINE)
+    srt_text = re.sub(r"```$", "", srt_text.strip())
+
     segments = []
-    blocks = srt_text.strip().split("\n\n")
+    blocks = re.split(r"\n\s*\n", srt_text.strip())
     for block in blocks:
         lines = [l.strip() for l in block.splitlines() if l.strip()]
-        if len(lines) >= 3:
-            time_line = lines[1]
-            if "-->" in time_line:
-                parts = time_line.split("-->")
-                def parse_sec(t_str):
-                    t_str = t_str.strip().replace(",", ".")
-                    sub = t_str.split(":")
-                    if len(sub) == 3:
-                        return float(sub[0])*3600 + float(sub[1])*60 + float(sub[2])
-                    return 0.0
-                start_sec = parse_sec(parts[0])
-                end_sec = parse_sec(parts[1])
-                text = " ".join(lines[2:])
-                segments.append({"start": start_sec, "end": end_sec, "text": text})
+        time_idx = -1
+        for idx, line in enumerate(lines):
+            if "-->" in line:
+                time_idx = idx
+                break
+        if time_idx != -1 and time_idx + 1 < len(lines):
+            time_line = lines[time_idx]
+            parts = time_line.split("-->")
+            if len(parts) == 2:
+                try:
+                    start_sec = _parse_time_smart(parts[0], video_dur=video_dur)
+                    end_sec = _parse_time_smart(parts[1], video_dur=video_dur)
+                    text = " ".join(lines[time_idx + 1:]).strip()
+                    if text:
+                        if end_sec <= start_sec:
+                            dur_est = max(1.8, min(7.0, len(text) * 0.22))
+                            end_sec = start_sec + dur_est
+                        segments.append({"start": round(start_sec, 3), "end": round(end_sec, 3), "text": text})
+                except Exception:
+                    pass
+
+    # Sort segments by start time
+    segments.sort(key=lambda s: s["start"])
+
+    # Fix overlapping or inverted timestamps across consecutive lines
+    for i in range(len(segments)):
+        if i + 1 < len(segments):
+            next_start = segments[i + 1]["start"]
+            if segments[i]["end"] > next_start and next_start > segments[i]["start"]:
+                segments[i]["end"] = max(segments[i]["start"] + 1.0, next_start - 0.05)
     return segments
 
 
 class AntigravityTranscriber:
-    """Speech-to-text via Antigravity / Gemini Multimodal AI."""
+    """Speech-to-text via Antigravity provider connection with multi-key and model fallbacks."""
 
-    def __init__(self, language: str = "zh", api_key: str = "", model_name: str = "gemini-2.0-flash"):
+    def __init__(self, language: str = "zh", api_key: str = "", model_name: str = "gemini-3.6-flash"):
         self.language = language
         self.api_key = (api_key or "").strip()
-        self.model_name = (model_name or "gemini-2.0-flash").strip()
-        if "/" in self.model_name:
-            self.model_name = self.model_name.split("/")[-1]
+        m = (model_name or "gemini-3.6-flash").strip()
+        if m in ["tiny", "base", "small", "medium", "large", "auto", "model", ""]:
+            m = "gemini-3.6-flash"
+        if "/" in m:
+            m = m.split("/")[-1]
+        self.model_name = m
 
     def transcribe(self, video_path: Path, ffmpeg: str, out_srt: Path):
-        import subprocess, base64, urllib.request, urllib.error, json, tempfile
+        import subprocess, base64, urllib.request, urllib.error, json, tempfile, re
         video_path = Path(video_path)
         out_srt = Path(out_srt)
+        video_dur = _get_media_duration(video_path, ffmpeg)
 
-        # Handle AQ.Ab8... session tokens or resolve valid key from database if needed
-        key = self.api_key
-        if not key or key.startswith("AQ.Ab"):
-            try:
-                from templates.pages.config.route import load_providers_from_db
-                all_provs = load_providers_from_db()
-                for p_id in ["gemini", "antigravity"]:
-                    conns = (all_provs.get(p_id) or {}).get("connections") or []
-                    for c in conns:
-                        k = (c.get("api_key") or "").strip()
-                        if k and not k.startswith("AQ.Ab"):
-                            key = k
-                            break
-                    if key and not key.startswith("AQ.Ab"):
-                        break
-            except Exception:
-                pass
+        # Collect candidate keys & connections
+        candidates_keys = []
+        if self.api_key:
+            candidates_keys.append({"key": self.api_key, "base_url": ""})
 
-        if not key or key.startswith("AQ.Ab"):
-            yield ("log", "ℹ Tự động chuyển sang FasterWhisper Local phiên âm (miễn phí & chính xác)...", "info")
-            fw = FasterWhisperTranscriber(model_name="base", language=self.language, use_vad=True)
-            for step in fw.transcribe(video_path, ffmpeg, out_srt):
-                yield step
+        try:
+            from templates.pages.config.route import load_providers_from_db
+            all_provs = load_providers_from_db()
+            ag_data = all_provs.get("antigravity") or {}
+            conns = [c for c in ag_data.get("connections", []) if c.get("enabled")] or ag_data.get("connections", [])
+            for conn in conns:
+                k = (conn.get("api_key") or "").strip()
+                b = (conn.get("base_url") or "").strip()
+                if k and not any(ck["key"] == k for ck in candidates_keys):
+                    candidates_keys.append({"key": k, "base_url": b})
+        except Exception:
+            pass
+
+        # Fallback to env variable
+        env_key = os.getenv("ANTIGRAVITY_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
+        if env_key and not any(ck["key"] == env_key for ck in candidates_keys):
+            candidates_keys.append({"key": env_key, "base_url": ""})
+
+        if not candidates_keys:
+            yield ("log", "❌ Chưa cấu hình khóa kết nối Antigravity. Vui lòng mở trang Nhà cung cấp để thêm kết nối Antigravity.", "error")
+            yield ("log", "⏭ Bỏ qua phiên âm tự động.", "warning")
+            yield ("result", [])
             return
 
         with tempfile.TemporaryDirectory(prefix="ag_stt_") as tmpdir:
@@ -1408,172 +1425,116 @@ class AntigravityTranscriber:
                 str(audio_path), "-y", "-loglevel", "error"
             ])
             if not ok or not audio_path.exists():
-                raise RuntimeError(f"Trích xuất âm thanh thất bại: {err}")
+                yield ("log", f"❌ Trích xuất âm thanh thất bại: {err}", "error")
+                yield ("result", [])
+                return
 
-            yield ("log", f"[Bước 2/5] 📡 Đang gửi âm thanh tới Antigravity / Gemini AI (model={self.model_name})...", "info")
             audio_bytes = audio_path.read_bytes()
             b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
 
-            lang_names = {"zh": "Tiếng Trung", "en": "Tiếng Anh", "vi": "Tiếng Việt", "ja": "Tiếng Nhật", "ko": "Tiếng Hàn"}
+            lang_names = {"zh": "Tiếng Trung", "en": "Tiếng Anh", "vi": "Tiếng Việt", "ja": "Tiếng Nhật", "ko": "Tiếng Hàn", "th": "Tiếng Thái"}
             target_lang = lang_names.get(self.language, self.language)
 
             prompt = (
-                f"Hãy phiên âm toàn bộ giọng nói trong tệp âm thanh này sang {target_lang}.\n"
-                "Yêu cầu xuất ra định dạng SRT phụ đề chuẩn 100% gồm số thứ tự, mốc thời gian dạng 00:00:00,000 --> 00:00:05,000 và nội dung lời thoại.\n"
-                "Không thêm bất kỳ văn bản chào hỏi hay giải thích nào khác ngoài khối SRT."
+                f"Hãy nghe âm thanh và phiên âm toàn bộ lời nói sang {target_lang}.\n"
+                "QUY TẮC MỐC THỜI GIAN SRT:\n"
+                "- BẮT BUỘC định dạng SRT chuẩn: 00:MM:SS,mmm --> 00:MM:SS,mmm (Giờ:Phút:Giây,Miligiây).\n"
+                "- Ví dụ: 5 giây đầu là 00:00:00,000 --> 00:00:05,000. 1 phút 12 giây là 00:01:12,000 --> 00:01:15,000 (TUYỆT ĐỐI KHÔNG viết thành 01:12:00,000).\n"
+                "- Thời gian bắt đầu luôn nhỏ hơn thời gian kết thúc, các mốc thời gian tăng dần liên tục theo video.\n"
+                "- Chỉ xuất ra nội dung khối SRT hoàn chỉnh, không thêm bất kỳ văn bản chào hỏi hay giải thích nào khác."
             )
 
-            payload = json.dumps({
-                "contents": [{
-                    "parts": [
-                        {"text": prompt},
-                        {
-                            "inline_data": {
-                                "mime_type": "audio/mp3",
-                                "data": b64_audio
-                            }
-                        }
-                    ]
-                }]
-            }).encode("utf-8")
+            models_to_try = []
+            if self.model_name:
+                models_to_try.append(self.model_name)
 
-            if key.startswith("AIza"):
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={key}"
-                headers = {"Content-Type": "application/json"}
-            else:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent"
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {key}"
-                }
-
+            # Load active enabled models from Antigravity provider in DB
             try:
-                req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-                with urllib.request.urlopen(req, timeout=120) as resp:
-                    r_json = json.loads(resp.read().decode("utf-8"))
-                    srt_text = r_json["candidates"][0]["content"]["parts"][0]["text"]
-                    segs = _parse_srt_text_to_segments(srt_text)
-                    if segs:
-                        srt_blocks = []
-                        for i, s in enumerate(segs, 1):
-                            start_str = _fmt_srt_time(s["start"])
-                            end_str = _fmt_srt_time(s["end"])
-                            srt_blocks.append(f"{i}\n{start_str} --> {end_str}\n{s['text']}\n")
-                        with open(_winlong(out_srt), "w", encoding="utf-8") as _f:
-                            _f.write("\n".join(srt_blocks))
-                    yield ("result", segs)
-            except urllib.error.HTTPError as he:
-                if he.code == 401:
-                    raise RuntimeError("Mã xác thực API Key hoặc Access Token Antigravity / Gemini không hợp lệ hoặc đã hết hạn (HTTP 401 Unauthorized). Vui lòng mở trang Nhà cung cấp để cập nhật khóa mới.")
-                raise RuntimeError(f"HTTP Error {he.code}: {he.reason}")
+                from templates.pages.config.route import load_models_from_db
+                db_models = load_models_from_db("antigravity").get("antigravity", [])
+                for dm in db_models:
+                    if dm.get("enabled") and dm.get("id") and dm.get("id") not in models_to_try:
+                        models_to_try.append(dm.get("id"))
+            except Exception:
+                pass
 
+            # Standard modern Antigravity fallbacks (all >= 3.1)
+            for m_fallback in ["gemini-3.6-flash", "gemini-3.6-flash-medium", "gemini-3-flash-agent", "gemini-3.5-flash-medium", "gemini-pro-agent"]:
+                if m_fallback not in models_to_try:
+                    models_to_try.append(m_fallback)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# DTRouterTranscriber (STT via DTRouter API)
-# ══════════════════════════════════════════════════════════════════════════════
-class DTRouterTranscriber:
-    """Speech-to-text via DTRouter STT API (tương thích OpenAI Audio Transcription)."""
+            seen_models = set()
+            models_to_try = [m for m in models_to_try if m and not (m in seen_models or seen_models.add(m))]
 
-    def __init__(self, language: str = "zh", api_key: str = "", endpoint: str = "", model: str = ""):
-        self.language = language
-        self.api_key = (api_key or "").strip()
-        self.endpoint = (endpoint or "").strip() or "http://localhost:20128/v1"
-        self.model = (model or "").strip() or "whisper-1"
+            srt_text = ""
+            stt_error = ""
 
-    def transcribe(self, video_path: Path, ffmpeg: str, out_srt: Path):
-        import httpx
-        import time
+            for conn_item in candidates_keys:
+                k = conn_item["key"]
+                b_url = conn_item["base_url"]
+                base_endpoint = (b_url or "https://generativelanguage.googleapis.com").rstrip("/")
 
-        video_path = Path(video_path)
-        out_srt    = Path(out_srt)
+                for model in models_to_try:
+                    yield ("log", f"[Bước 2/5] 📡 Đang gửi âm thanh tới Antigravity / Gemini (model={model})...", "info")
 
-        with tempfile.TemporaryDirectory(prefix="nine_whisper_") as tmpdir:
-            audio_path = Path(tmpdir) / "audio.mp3"
-            yield ("log", "[Bước 2/5] 🔊 Đang trích xuất âm thanh từ video...", "info")
-            # Extract audio
-            ok, err = run_ffmpeg([
-                ffmpeg, "-i", str(video_path),
-                "-vn", "-acodec", "libmp3lame", "-ar", "16000", "-ac", "1", "-q:a", "5",
-                str(audio_path), "-y", "-loglevel", "error"
-            ])
-            if not ok or not audio_path.exists():
-                raise RuntimeError(f"Audio extraction failed: {err}")
+                    if k.startswith("AIza"):
+                        url = f"{base_endpoint}/v1beta/models/{model}:generateContent?key={k}"
+                        headers = {"Content-Type": "application/json"}
+                    else:
+                        url = f"{base_endpoint}/v1beta/models/{model}:generateContent"
+                        headers = {
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {k}"
+                        }
 
-            if not self.api_key:
-                try:
-                    import yaml as _yaml
-                    from templates.pages.config.route import _sync_dtrouter_key_if_needed
-                    _cfg_file = Path(__file__).parent.parent / "config.yml"
-                    _cfg = _yaml.safe_load(_cfg_file.read_text(encoding="utf-8")) if _cfg_file.exists() else {}
-                    _sync_dtrouter_key_if_needed(_cfg)
-                    self.api_key = str((_cfg.get("dtrouter") or {}).get("api_key") or "").strip()
-                except Exception:
-                    pass
+                    payload = json.dumps({
+                        "contents": [{
+                            "parts": [
+                                {"text": prompt},
+                                {"inline_data": {"mime_type": "audio/mp3", "data": b64_audio}}
+                            ]
+                        }]
+                    }).encode("utf-8")
 
-            if not self.api_key:
-                raise RuntimeError("Missing DTRouter API Key (cấu hình trong manager hoặc config.yml)")
+                    try:
+                        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                        with urllib.request.urlopen(req, timeout=30) as resp:
+                            r_json = json.loads(resp.read().decode("utf-8"))
+                            candidates = r_json.get("candidates") or []
+                            if candidates and "content" in candidates[0]:
+                                parts = candidates[0]["content"].get("parts") or []
+                                if parts and "text" in parts[0]:
+                                    srt_text = parts[0]["text"]
+                                    if srt_text:
+                                        break
+                    except urllib.error.HTTPError as he:
+                        err_body = he.read().decode("utf-8", "replace") if hasattr(he, "read") else ""
+                        stt_error = f"HTTP Error {he.code}: {err_body[:150]}"
+                        if he.code in (401, 403):
+                            # Try next key
+                            break
+                    except Exception as exc:
+                        stt_error = str(exc)
 
-            url = f"{self.endpoint.rstrip('/')}/audio/transcriptions"
-            yield ("log", f"[Bước 2/5] 🔌 Kết nối DTRouter STT: {url} (Model: {self.model})", "info")
-            yield ("log", "[Bước 2/5] 📡 Đang gửi file âm thanh tới DTRouter STT và chờ phiên âm...", "info")
+                if srt_text:
+                    break
 
-            t0 = time.time()
-            with open(audio_path, "rb") as f:
-                response = httpx.post(
-                    url,
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    files={"file": ("audio.mp3", f, "audio/mpeg")},
-                    data={
-                        "model": self.model,
-                        "language": self.language,
-                        "response_format": "verbose_json",
-                        "timestamp_granularities[]": "segment",
-                    },
-                    timeout=180,
-                )
-            dt = time.time() - t0
+            if srt_text:
+                segs = _parse_srt_text_to_segments(srt_text, video_dur=video_dur)
+                if segs:
+                    srt_blocks = []
+                    for i, s in enumerate(segs, 1):
+                        start_str = _fmt_srt_time(s["start"])
+                        end_str = _fmt_srt_time(s["end"])
+                        srt_blocks.append(f"{i}\n{start_str} --> {end_str}\n{s['text']}\n")
+                    with open(_winlong(out_srt), "w", encoding="utf-8") as _f:
+                        _f.write("\n".join(srt_blocks))
+                yield ("result", segs)
+                return
 
-            if response.status_code != 200:
-                yield ("log", f"[Bước 2/5] ❌ Lỗi phản hồi từ DTRouter STT (status={response.status_code}): {response.text}", "error")
-                raise RuntimeError(f"DTRouter STT API error {response.status_code}: {response.text}")
-
-            yield ("log", f"[Bước 2/5] 📥 Nhận kết quả phiên âm từ DTRouter thành công (Thời gian: {dt:.1f}s)", "success")
-            result = response.json()
-            raw_segments = result.get("segments") or []
-            if raw_segments:
-                segments = [
-                    {"start": seg["start"], "end": seg["end"], "text": seg["text"].strip()}
-                    for seg in raw_segments
-                    if seg.get("text", "").strip()
-                ]
-            elif result.get("text"):
-                full_text = str(result.get("text")).strip()
-                duration = get_media_duration_seconds(ffmpeg, audio_path)
-                if duration <= 0:
-                    duration = 60.0
-                import re
-                parts = [p.strip() for p in re.split(r'(?<=[.!?\n。！？])\s+', full_text) if p.strip()]
-                if not parts:
-                    parts = [full_text]
-                total_len = sum(len(p) for p in parts) or 1
-                curr_t = 0.0
-                segments = []
-                for p in parts:
-                    seg_dur = max(1.5, (len(p) / total_len) * duration)
-                    end_t = min(duration, curr_t + seg_dur)
-                    segments.append({"start": round(curr_t, 2), "end": round(end_t, 2), "text": p})
-                    curr_t = end_t
-            else:
-                segments = []
-
-        srt_lines = []
-        for i, seg in enumerate(segments, 1):
-            srt_lines.append(
-                f"{i}\n{_fmt_srt_time(seg['start'])} --> {_fmt_srt_time(seg['end'])}\n{seg['text']}\n"
-            )
-        with open(_winlong(out_srt), "w", encoding="utf-8") as _f:
-            _f.write("".join(srt_lines))
-        yield ("result", segments)
+            yield ("log", f"⚠️ Antigravity STT thất bại ({stt_error or 'Không có dữ liệu'}).", "error")
+            yield ("log", "💡 Vui lòng mở Cấu hình -> Nhà cung cấp -> Antigravity để kiểm tra Token / Gemini API Key.", "warning")
+            yield ("result", [])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2929,7 +2890,6 @@ def generate_frame_title(
     preferred_provider: str = "deepseek",
     video_title: str = "",
     target_lang: str = "vi",
-    dtrouter_cfg: dict | None = None,
 ) -> str:
     """
     Use AI to generate a short, catchy title for the frame bar in the target language.
@@ -2950,7 +2910,6 @@ def generate_frame_title(
         return video_title[:30] if video_title else ""
 
     cfg = trans_cfg or {}
-    nr = dtrouter_cfg or {}
     # Pick the best available API key
     api_key = ""
     api_url = ""
@@ -2959,15 +2918,8 @@ def generate_frame_title(
     deepseek_key = cfg.get("deepseek_key", "")
     groq_key = cfg.get("groq_key", "")
     openai_key = cfg.get("openai_key", "")
-    nine_key = (nr.get("api_key") or "").strip() if isinstance(nr, dict) else ""
-    nine_endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/") if isinstance(nr, dict) else "http://localhost:20128/v1"
-    nine_model = (nr.get("default_model") or "duytris").strip() if isinstance(nr, dict) else "duytris"
 
-    if preferred_provider == "dtrouter" and nine_key:
-        api_key = nine_key
-        api_url = f"{nine_endpoint}/chat/completions"
-        model = nine_model
-    elif preferred_provider == "deepseek" and deepseek_key:
+    if preferred_provider == "deepseek" and deepseek_key:
         api_key = deepseek_key
         api_url = "https://api.deepseek.com/v1/chat/completions"
         model = "deepseek-chat"
@@ -2987,11 +2939,6 @@ def generate_frame_title(
         api_key = openai_key
         api_url = "https://api.openai.com/v1/chat/completions"
         model = "gpt-4o-mini"
-    elif nine_key:
-        # Last-resort fallback: use DTRouter if it's the only thing available.
-        api_key = nine_key
-        api_url = f"{nine_endpoint}/chat/completions"
-        model = nine_model
 
     if not api_key:
         # Fallback: use first 30 chars of first translated text
@@ -3461,8 +3408,6 @@ def _max_tts_chars_for_engine(engine: str) -> int:
         return 2500
     if engine == "fish-audio":
         return 1500
-    if engine == "dtrouter" or engine.startswith("dtr:"):
-        return 1500
     # edge-tts, openai-tts, and others
     return 1500
 
@@ -3586,28 +3531,6 @@ class MultiProviderTTS:
                     style=self.tts_emotion,
                     ref_audio=self.vieneu_ref_audio,
                 )
-                if ok:
-                    return True
-            except Exception:
-                pass
-
-        elif engine == "dtrouter" or engine.startswith("dtr:"):
-            try:
-                ok = await _tts_dtrouter(
-                    text, self.voice, out_path,
-                    engine=engine,
-                    language=self.tts_lang,
-                    style=self.tts_emotion,
-                    persona=self.tts_persona,
-                )
-                if ok:
-                    return True
-            except Exception:
-                pass
-
-        elif engine == "minimax":
-            try:
-                ok = await _tts_minimax(text, self.voice, out_path, language=self.tts_lang)
                 if ok:
                     return True
             except Exception:
@@ -4107,129 +4030,6 @@ async def _tts_openai(
             return out_path.exists() and out_path.stat().st_size > 0
 
 
-def _dtrouter_cfg_for_tts() -> tuple[str, str, dict]:
-    cfg = {}
-    try:
-        from core_app import load_cfg as _load_cfg
-        cfg = _load_cfg() or {}
-    except Exception:
-        cfg = {}
-    nr = cfg.get("dtrouter") or {}
-    endpoint = (
-        os.getenv("NINEROUTER_URL")
-        or nr.get("endpoint")
-        or "http://localhost:20128/v1"
-    )
-    endpoint = str(endpoint).strip().rstrip("/")
-    if not endpoint.endswith("/v1") and not re.search(r"/v1(/|$)", endpoint):
-        endpoint += "/v1"
-    api_key = str(os.getenv("NINEROUTER_KEY") or nr.get("api_key") or "").strip()
-    return endpoint, api_key, cfg
-
-
-def _provider_of_model(model_id: str) -> str:
-    """Top-level provider for a DTRouter model id.
-    "openai/tts-1" -> "openai"; "openrouter/openai/tts-1" -> "openai";
-    "el/eleven_multilingual_v2" -> "elevenlabs".
-    """
-    parts = [p for p in str(model_id or "").split("/") if p]
-    if not parts:
-        return ""
-    p = parts[0].lower()
-    if p == "openrouter" and len(parts) > 1:
-        p = parts[1].lower()
-    if p == "el":
-        return "elevenlabs"
-    return p
-
-
-def _dtrouter_model_for_engine(engine: str, voice: str, cfg: dict) -> tuple[str, str, list[tuple[str, str]]]:
-    """Return (model, voice_param, fallback_candidates) for DTRouter TTS.
-
-    The consolidated "dtrouter" engine passes model via the voice field as
-    "model_id|voice_name" when the frontend supplies both. Legacy per-provider
-    engine ids (dtr:openai, dtr:gemini, ...) are kept working for backward compat.
-    """
-    eng = (engine or "dtrouter").strip().lower()
-    selected = (voice or "").strip()
-    fallbacks: list[tuple[str, str]] = []
-
-    # Pipe-separated "model|voice" — used by consolidated dtrouter engine UI.
-    # Build the provider-specific final model id per the DTRouter TTS spec:
-    #   openai      -> model id + separate `voice` field (alloy, nova, ...)
-    #   elevenlabs  -> "<model_id>/<voice_id>"  (voice in the path)
-    #   edge-tts    -> "edge-tts/<voice>"       (voice in the path)
-    #   others      -> "<model>/<voice>" when a voice is given
-    if "|" in selected:
-        model, voice_param = selected.split("|", 1)
-        model = model.strip()
-        voice_param = voice_param.strip()
-        if not voice_param:
-            return model, "", fallbacks
-        prov = _provider_of_model(model)
-        if prov == "openai":
-            # OpenAI accepts a dedicated voice field.
-            return model, voice_param, fallbacks
-        # elevenlabs / edge-tts / deepgram / inworld / google-tts: voice lives
-        # in the model path. Avoid double-appending if already present.
-        if voice_param.startswith(model.rstrip("/") + "/") or "/" + voice_param in model:
-            return model, "", fallbacks
-        return f"{model.rstrip('/')}/{voice_param}", "", fallbacks
-
-    # For the consolidated "dtrouter" engine, `selected` is pure voice (nova,
-    # shimmer, etc.) and model comes from a separate field injected by the UI.
-    # At the video_processor layer we receive model as part of the voice string
-    # (pipe-separated above) OR as the default from the catalog.
-    default_model = ""
-    provider = ""
-    try:
-        from core.tts_catalog import dtrouter_tts_engines
-        engines, _ = dtrouter_tts_engines(cfg)
-        found = next((e for e in engines if str(e.get("id") or "").lower() == eng), None)
-        if found:
-            default_model = str(found.get("defaultModel") or "").strip()
-            provider = str(found.get("provider") or "").strip().lower()
-    except Exception:
-        pass
-
-    # Consolidated "dtrouter" — model is defaultModel, voice is `selected`.
-    if eng == "dtrouter":
-        model = default_model or "openai/tts-1"
-        return model, selected or "nova", fallbacks
-
-    if selected and "/" in selected and eng not in ("dtr:openai", "dtr:gemini"):
-        return selected, "", fallbacks
-
-    if eng in ("dtr:openai", "dtrouter-openai"):
-        return default_model or "openai/tts-1", selected or "nova", fallbacks
-
-    if eng in ("dtr:gemini", "dtrouter-gemini"):
-        return default_model or "gemini/gemini-2.5-flash-preview-tts", selected or "Kore", fallbacks
-
-    if eng in ("dtr:elevenlabs", "dtr:el", "dtrouter-elevenlabs") or provider == "elevenlabs":
-        if selected:
-            if default_model:
-                fallbacks.append((default_model, selected))
-            return f"el/{selected}", "", fallbacks
-        return default_model or "el/eleven_multilingual_v2", "", fallbacks
-
-    if eng in ("dtr:edge-tts", "dtrouter-edge") or provider == "edge-tts":
-        if selected:
-            if selected.startswith("edge-tts/"):
-                return selected, "", fallbacks
-            fallbacks.append((selected, ""))
-            return f"edge-tts/{selected}", "", fallbacks
-        return default_model or "edge-tts/vi-VN-HoaiMyNeural", "", fallbacks
-
-    if eng in ("dtr:google-tts", "dtrouter-google") or provider == "google-tts":
-        return selected or default_model or "vi", "", fallbacks
-
-    if eng in ("minimax", "dtr:minimax", "dtrouter-minimax") or provider == "minimax":
-        return default_model or "minimax/speech-02-hd", selected or "English_expressive_narrator", fallbacks
-
-    if selected:
-        return selected, "", fallbacks
-    return default_model or "openai/tts-1", "", fallbacks
 
 
 _GEMINI_TTS_STYLE_PREFIX = {
@@ -4360,101 +4160,89 @@ def _tts_vieneu(
     return out_path.exists() and out_path.stat().st_size > 0
 
 
-def _is_gemini_tts_selection(engine: str, voice: str) -> bool:
-    eng = str(engine or "").strip().lower()
-    selected = str(voice or "").strip().lower()
-    return eng in ("dtr:gemini", "dtrouter-gemini") or (
-        eng == "dtrouter" and selected.startswith("gemini/")
-    )
+_OMNIVOICE_MODEL = None
 
 
-def _decorate_gemini_tts_text(
+def _get_omnivoice_model():
+    global _OMNIVOICE_MODEL
+    if _OMNIVOICE_MODEL is not None:
+        return _OMNIVOICE_MODEL
+    try:
+        from omnivoice import OmniVoice
+        import torch
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        LOGGER.info(f"[OmniVoice] Loading model on device={device}, dtype={dtype}...")
+        _OMNIVOICE_MODEL = OmniVoice.from_pretrained("k2-fsa/OmniVoice", device_map=device, dtype=dtype)
+        return _OMNIVOICE_MODEL
+    except Exception as e:
+        LOGGER.error(f"[OmniVoice] Failed to load OmniVoice model: {e}")
+        raise
+
+
+def _tts_omnivoice(
     text: str,
-    engine: str,
-    voice: str,
-    style: str = "default",
-    persona: str = "",
-) -> str:
-    if not _is_gemini_tts_selection(engine, voice):
-        return text
-    key = str(style or "").strip().lower().replace("_", "-")
-    clean = str(text or "").lstrip()
-    if key and key != "default" and not (clean.startswith("[") or clean.lower().startswith("say ")):
-        prefix = _GEMINI_TTS_STYLE_PREFIX.get(key)
-        if not prefix:
-            prefix = f"Say with a {key.replace('-', ' ')} tone: "
-        clean = prefix + clean
-    persona = str(persona or "").strip()
-    if persona:
-        return f"Read with this voice/persona: {persona}. {clean}"
-    return clean
-
-
-async def _tts_dtrouter(
-    text: str,
-    voice: str,
-    out_path: Path,
-    engine: str = "dtrouter",
-    api_key: str = "",
-    endpoint: str = "",
-    response_format: str = "mp3",
-    language: str = "",
-    style: str = "default",
-    persona: str = "",
+    voice: str = "default",
+    out_path: Path = None,
+    ref_audio: str = "",
+    speed: float = 1.0,
+    lang: str = "vi",
 ) -> bool:
-    """Generate TTS through DTRouter /v1/audio/speech."""
-    import aiohttp
-    import urllib.parse as _urlparse
-
-    payload_text = _decorate_gemini_tts_text(str(text or "").strip(), engine, voice, style, persona)
+    """Synthesize speech using k2-fsa/OmniVoice zero-shot TTS model."""
+    payload_text = str(text or "").strip()
     if not payload_text:
         return False
-
-    cfg_endpoint, cfg_key, cfg = _dtrouter_cfg_for_tts()
-    endpoint = (endpoint or cfg_endpoint).strip().rstrip("/")
-    api_key = (api_key or cfg_key).strip()
-    if not endpoint.endswith("/v1") and not re.search(r"/v1(/|$)", endpoint):
-        endpoint += "/v1"
-
-    model, voice_param, fallbacks = _dtrouter_model_for_engine(engine, voice, cfg)
-    candidates = [(model, voice_param)] + fallbacks
+    if out_path is None:
+        return False
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    headers = {"Content-Type": "application/json", "Accept": "audio/mpeg"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        import soundfile as sf
+        model = _get_omnivoice_model()
 
-    fmt = (response_format or "mp3").strip().lower()
-    url = f"{endpoint}/audio/speech?{_urlparse.urlencode({'response_format': fmt})}"
-    timeout = aiohttp.ClientTimeout(total=120)
-    last_error = ""
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        for cand_model, cand_voice in candidates:
-            payload = {"model": cand_model, "input": payload_text}
-            if cand_voice:
-                payload["voice"] = cand_voice
-            if language:
-                payload["language"] = str(language)
-            async with session.post(url, json=payload, headers=headers) as resp:
-                blob = await resp.read()
-                if resp.status < 400 and blob and len(blob) > 100:
-                    out_path.write_bytes(blob)
-                    return out_path.exists() and out_path.stat().st_size > 0
-                body = blob.decode("utf-8", "replace")[:300] if blob else ""
-                last_error = f"DTRouter TTS error {resp.status}: {body}"
-    raise RuntimeError(last_error or "DTRouter TTS returned empty audio")
+        gen_kwargs = {
+            "text": payload_text,
+        }
+        ref = (ref_audio or "").strip()
+        if ref and os.path.exists(ref):
+            gen_kwargs["ref_audio"] = ref
+        elif voice and os.path.exists(voice):
+            gen_kwargs["ref_audio"] = voice
 
+        audio = model.generate(**gen_kwargs)
+        if audio is None or len(audio) == 0:
+            return False
 
-async def _tts_minimax(text: str, voice: str, out_path: Path, language: str = "") -> bool:
-    """Generate MiniMax TTS through DTRouter when a MiniMax TTS model is configured."""
-    return await _tts_dtrouter(
-        text,
-        voice or "English_expressive_narrator",
-        out_path,
-        engine="minimax",
-        language=language,
-    )
+        import tempfile as _tmp
+        with _tmp.TemporaryDirectory(prefix="omnivoice_tts_") as _td:
+            wav_path = Path(_td) / "omnivoice.wav"
+            sr = getattr(model, "sample_rate", 24000)
+            audio_data = audio[0] if isinstance(audio, (list, tuple)) else audio
+            if hasattr(audio_data, "cpu"):
+                audio_data = audio_data.cpu().numpy()
+            sf.write(str(wav_path), audio_data, sr)
+
+            suffix = out_path.suffix.lower()
+            if suffix == ".wav":
+                shutil.copyfile(wav_path, out_path)
+                return out_path.exists() and out_path.stat().st_size > 0
+
+            ffmpeg_bin = find_ffmpeg()
+            if not ffmpeg_bin:
+                raise RuntimeError("FFmpeg required to convert OmniVoice WAV to MP3")
+            ok, err = run_ffmpeg([
+                ffmpeg_bin, "-y", "-i", str(wav_path),
+                "-c:a", "libmp3lame", "-b:a", "192k",
+                str(out_path), "-loglevel", "error",
+            ], "omnivoice_to_mp3", timeout=300)
+            if not ok:
+                raise RuntimeError(f"OmniVoice convert MP3 failed: {err}")
+        return out_path.exists() and out_path.stat().st_size > 0
+    except Exception as e:
+        LOGGER.error(f"[OmniVoice] TTS generation error: {e}")
+        raise
+
 
 
 def _tts_gtts(text: str, lang: str, out_path: Path, voice: str = "") -> bool:
@@ -5192,14 +4980,19 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
       voice_convert, tts_voice, tts_engine, keep_bg_music, bg_volume,
       translate_provider (for ZH→VI translation)
     """
-    import json as _j
+    import json as _j, sys
 
     def send(**kw):
+        try:
+            import eventlet
+            eventlet.sleep(0.01)
+        except Exception:
+            pass
         return _j.dumps(kw, ensure_ascii=False) + "\n"
 
     video_path = Path(data.get("video_path", "")).expanduser()
-    import sys
-    print("=== [DEBUG] process_video_full: checked video_path ===", file=sys.stderr, flush=True)
+    yield send(log=f"🚀 Khởi tạo tiến trình xử lý: {video_path.name}...", level="info")
+    
     if not video_path.exists():
         yield send(log=f"File not found: {video_path}", level="error")
         return
@@ -5291,7 +5084,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     target_lang_name = _LANG_NAMES.get(target_language, target_language)
     process_mode = str(data.get("process_mode", "ai") or "ai").strip().lower()
     transcribe_provider = str(data.get("transcribe_provider", "") or "").strip().lower()
-    if not transcribe_provider or transcribe_provider == "dtrouter":
+    if not transcribe_provider:
         transcribe_provider = "antigravity"
 
     subtitle_pos = str(data.get("subtitle_position", "bottom")).lower()
@@ -5419,11 +5212,6 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     import yaml as _yaml
     _cfg_file = Path(__file__).parent.parent / "config.yml"
     cfg_raw = _yaml.safe_load(_cfg_file.read_text(encoding="utf-8")) if _cfg_file.exists() else {}
-    try:
-        from templates.pages.config.route import _sync_dtrouter_key_if_needed
-        _sync_dtrouter_key_if_needed(cfg_raw)
-    except Exception:
-        pass
     tr_cfg = cfg_raw.get("transcript", {}) or {}
 
     # Nếu cả hai tuỳ chọn dịch/ghi phụ đề & giọng đọc đều tắt → Bỏ qua toàn bộ bước transcribe
@@ -5439,15 +5227,12 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             yield send(log=f"[Bước 2/5] ⚠ Video không có audio track", level="warning")
         
         if transcribe_provider in ("antigravity", "gemini"):
-            yield send(log="[Bước 2/5] 🎙 Đang phiên âm bằng Antigravity / Gemini Multimodal AI (model=gemini-2.0-flash)...", level="info")
+            ag_model = str(model_name).strip()
+            if ag_model in ["tiny", "base", "small", "medium", "large"]:
+                ag_model = "gemini-3.6-flash"
+            yield send(log=f"[Bước 2/5] 🎙 Đang phiên âm bằng Antigravity (model={ag_model})...", level="info")
         elif transcribe_provider == "model":
             yield send(log=f"[Bước 2/5] 🎙 Đang phiên âm bằng Whisper local (model={model_name})...", level="info")
-        elif transcribe_provider == "dtrouter":
-            nine_endpoint = str(cfg_raw.get("dtrouter", {}).get("endpoint") or "http://localhost:20128/v1").strip()
-            nine_model = str(model_name).strip()
-            if nine_model in ["tiny", "base", "small", "medium", "large"]:
-                nine_model = str(cfg_raw.get("dtrouter", {}).get("default_model") or "whisper-1").strip()
-            yield send(log=f"[Bước 2/5] 🎙 Đang phiên âm bằng DTRouter STT API (model={nine_model}, endpoint={nine_endpoint})...", level="info")
         else:
             groq_model = str(model_name).strip()
             if groq_model in ["tiny", "base", "small", "medium", "large"]:
@@ -5473,18 +5258,15 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             if transcribe_provider in ("antigravity", "gemini"):
                 from templates.pages.config.route import load_providers_from_db
                 all_provs = load_providers_from_db()
-                ag_data = all_provs.get("antigravity") or all_provs.get("gemini") or {}
+                ag_data = all_provs.get("antigravity") or {}
                 ag_conns = [c for c in ag_data.get("connections", []) if c.get("enabled")] or ag_data.get("connections", [])
                 ag_key = ag_conns[0].get("api_key", "").strip() if ag_conns else ""
-                if not ag_key:
-                    raise RuntimeError("Chưa có kết nối Antigravity / Gemini API Key. Mở trang Nhà cung cấp -> Thêm kết nối trước.")
-                transcriber = AntigravityTranscriber(language=language, api_key=ag_key, model_name=model_name)
+                ag_model = str(model_name).strip()
+                if ag_model in ["tiny", "base", "small", "medium", "large", "auto", "model", ""]:
+                    ag_model = "gemini-3.6-flash"
+                transcriber = AntigravityTranscriber(language=language, api_key=ag_key, model_name=ag_model)
             elif transcribe_provider == "model":
                 transcriber = FasterWhisperTranscriber(model_name, language, use_vad=True)
-            elif transcribe_provider == "dtrouter":
-                ag_data = all_provs.get("antigravity") or all_provs.get("gemini") or {}
-                ag_conns = [c for c in ag_data.get("connections", []) if c.get("enabled")] or ag_data.get("connections", [])
-                ag_key = ag_conns[0].get("api_key", "").strip() if ag_conns else ""
                 transcriber = AntigravityTranscriber(language=language, api_key=ag_key, model_name=model_name)
             else:
                 groq_key = (
@@ -5601,10 +5383,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 texts = [seg.get("text", "").strip() for seg in segments]
                 has_ds = bool(trans_cfg.get("deepseek_key"))
                 has_groq = bool(trans_cfg.get("groq_key"))
-                nr_cfg = cfg_raw.get("dtrouter") or {}
-                has_9r = bool((nr_cfg.get("api_key") or "").strip())
-                yield send(log=f"[Bước 3/5] Provider: {provider} | deepseek={'✓' if has_ds else '✗'} | groq={'✓' if has_groq else '✗'} | dtrouter={'✓' if has_9r else '✗'}", level="info")
-                translator = BatchTranslator(trans_cfg, dtrouter_cfg=nr_cfg)
+                yield send(log=f"[Bước 3/5] Provider: {provider} | deepseek={'✓' if has_ds else '✗'} | groq={'✓' if has_groq else '✗'}", level="info")
+                translator = BatchTranslator(trans_cfg)
                 translated_texts, used = translator.translate(texts, provider, context=stem_source, target_lang=target_language)
                 yield send(log=f"[Bước 3/5] ✓ Dịch xong {len(translated_texts)} đoạn (provider: {used})", level="success")
                 yield send(overall=55, overall_lbl="Dịch xong")
@@ -5647,7 +5427,6 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                     preferred_provider=provider,
                                     video_title=stem_source,
                                     target_lang=target_language,
-                                    dtrouter_cfg=cfg_raw.get("dtrouter") or {},
                                 )
                                 yield send(log=f"[Bước 3/5] ✓ Tiêu đề AI: \"{_frame_title}\"", level="success")
                             except Exception as _e:

@@ -140,11 +140,14 @@ function subPreviewUpdate() {
     const titleSplit  = document.getElementById('frame-title-split-color')?.checked ?? true;
     const blurWPct    = parseFloat(document.getElementById('frame-blur-w')?.value || 15) / 100;
     const blurOpacity = parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100;
-    const logoSizePct = parseFloat(document.getElementById('frame-logo-size')?.value || 12) / 100;
+    const logoSizeRaw = parseFloat(document.getElementById('frame-logo-size')?.value);
+    const logoSizePct = (isNaN(logoSizeRaw) || logoSizeRaw <= 0 ? (document.getElementById('frame-logo-path')?.value ? 12 : 0) : logoSizeRaw) / 100;
     const logoTopPct  = parseFloat(document.getElementById('frame-logo-top')?.value || 3) / 100;
     const logoLeftPct = parseFloat(document.getElementById('frame-logo-left')?.value || 3) / 100;
     const logoRadiusPct = parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50) / 100;
     const blurMode    = document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay';
+    const blurTopPct    = parseFloat(document.getElementById('frame-blur-top')?.value || 0) / 100;
+    const blurBottomPct = parseFloat(document.getElementById('frame-blur-bottom')?.value || 0) / 100;
 
     const srcNW = srcImg.naturalWidth  || 640;
     const srcNH = srcImg.naturalHeight || 360;
@@ -162,13 +165,9 @@ function subPreviewUpdate() {
     // Side blur width in preview pixels
     const sideW = Math.round(wrapW * blurWPct);
 
-    // ── Mode: overlay — blur overlaps video, canvas = wrapW × (titleBarH + vidH) ──
-    // ── Mode: expand  — blur outside video, canvas = wrapW × (titleBarH + vidH),
-    //                    video shrinks to fit center ──
     let cW, cH, vidX, vidY, vidW, vidH;
 
     if (blurMode === 'expand') {
-      // Video area = wrapW - 2*sideW, keep AR
       vidW = Math.max(10, wrapW - 2 * sideW);
       vidH = Math.round(vidW * srcNH / srcNW);
       vidX = sideW;
@@ -176,7 +175,6 @@ function subPreviewUpdate() {
       cW   = wrapW;
       cH   = titleBarH + vidH;
     } else {
-      // overlay: video fills full width, blur overlaps
       vidW = wrapW;
       vidH = Math.round(wrapW * srcNH / srcNW);
       vidX = 0;
@@ -192,228 +190,232 @@ function subPreviewUpdate() {
     ctx.clearRect(0, 0, cW, cH);
     let frameInteractiveSource = {};
 
-    // ── Draw main video ──
-    ctx.drawImage(srcImg, vidX, vidY, vidW, vidH);
-
-    // ── Draw blur panels ──
-    if (sideW > 0 && blurOpacity > 0) {
-      if (blurMode === 'expand') {
-        // Blur fills the side strips (outside video)
-        // Left: stretch left edge of video
-        ctx.save();
-        ctx.filter = 'blur(12px)';
-        // Draw a stretched slice of the video's left edge
-        ctx.drawImage(srcImg, 0, 0, Math.min(20, srcNW), srcNH,
-          0, vidY, sideW + 16, vidH);
-        ctx.restore();
-        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
-        ctx.fillRect(0, vidY, sideW, vidH);
-
-        // Right
-        ctx.save();
-        ctx.filter = 'blur(12px)';
-        ctx.drawImage(srcImg, Math.max(0, srcNW - 20), 0, Math.min(20, srcNW), srcNH,
-          cW - sideW - 16, vidY, sideW + 16, vidH);
-        ctx.restore();
-        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
-        ctx.fillRect(cW - sideW, vidY, sideW, vidH);
-      } else {
-        // overlay: blur overlaps left/right of video
-        // Left panel: draw blurred portion of video
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, vidY, sideW, vidH);
-        ctx.clip();
-        ctx.filter = 'blur(12px)';
-        ctx.drawImage(srcImg, vidX - 8, vidY, vidW + 16, vidH);
-        ctx.restore();
-        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
-        ctx.fillRect(0, vidY, sideW, vidH);
-
-        // Right panel
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(cW - sideW, vidY, sideW, vidH);
-        ctx.clip();
-        ctx.filter = 'blur(12px)';
-        ctx.drawImage(srcImg, vidX - 8, vidY, vidW + 16, vidH);
-        ctx.restore();
-        ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
-        ctx.fillRect(cW - sideW, vidY, sideW, vidH);
-      }
+    function _drawLayerVideo(c) {
+      c.drawImage(srcImg, vidX, vidY, vidW, vidH);
     }
 
-    // ── Draw top/bottom blur strips ──
-    const blurTopPct    = parseFloat(document.getElementById('frame-blur-top')?.value || 0) / 100;
-    const blurBottomPct = parseFloat(document.getElementById('frame-blur-bottom')?.value || 0) / 100;
+    function _drawLayerFrame(c) {
+      if (sideW > 0 && blurOpacity > 0) {
+        if (blurMode === 'expand') {
+          c.save();
+          c.filter = 'blur(12px)';
+          c.drawImage(srcImg, 0, 0, Math.min(20, srcNW), srcNH, 0, vidY, sideW + 16, vidH);
+          c.restore();
+          c.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+          c.fillRect(0, vidY, sideW, vidH);
 
-    if (blurTopPct > 0 && blurOpacity > 0) {
-      const topH = Math.round(vidH * blurTopPct);
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(vidX, vidY, vidW, topH);
-      ctx.clip();
-      ctx.filter = 'blur(12px)';
-      ctx.drawImage(srcImg, vidX - 8, vidY - 8, vidW + 16, topH + 16);
-      ctx.restore();
-      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
-      ctx.fillRect(vidX, vidY, vidW, topH);
-    }
-
-    if (blurBottomPct > 0 && blurOpacity > 0) {
-      const bottomH = Math.round(vidH * blurBottomPct);
-      const bottomY = vidY + vidH - bottomH;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(vidX, bottomY, vidW, bottomH);
-      ctx.clip();
-      ctx.filter = 'blur(12px)';
-      ctx.drawImage(srcImg, vidX - 8, bottomY - 8, vidW + 16, bottomH + 16);
-      ctx.restore();
-      ctx.fillStyle = `rgba(0,0,0,${blurOpacity})`;
-      ctx.fillRect(vidX, bottomY, vidW, bottomH);
-    }
-
-    // ── Title bar (chỉ vẽ nếu titleEnabled) ──
-    if (hasTitle && titleBarH > 0) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, cW, titleBarH);
-      frameInteractiveSource.titleBar = { x: 0, y: 0, w: cW, h: titleBarH };
-    }
-
-    if (hasTitle) {
-      ctx.font = `${titleWeight} ${titleFontPx}px Arial, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const titleMarginX = cW * Math.max(0, Math.min(40, titleMarginXPct)) / 100;
-      const maxW = Math.max(titleFontPx, cW - titleMarginX * 2);
-      const upper = title.toUpperCase();
-      let titleCenterX = Math.max(titleMarginX, Math.min(cW - titleMarginX, cW * Math.max(0, Math.min(1, titleXPct))));
-      const titleCenterY = Math.max(titleFontPx / 2, Math.min(titleBarH - titleFontPx / 2, titleBarH * Math.max(0, Math.min(1, titleYPct))));
-
-      // Build lines with word wrap
-      const words = upper.split(' ');
-      let lines = [], line = '';
-      for (const w of words) {
-        const test = line ? line + ' ' + w : w;
-        if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
-        else line = test;
-      }
-      if (line) lines.push(line);
-      const lH = titleFontPx * 1.3;
-      const titleBlockH = lines.length * lH;
-      const startY = titleCenterY - titleBlockH / 2 + lH / 2;
-      const lineWidths = lines.map(l => ctx.measureText(l).width);
-      const titleBlockW = Math.min(maxW, Math.max(...lineWidths, titleFontPx));
-      titleCenterX = Math.max(titleMarginX + titleBlockW / 2, Math.min(cW - titleMarginX - titleBlockW / 2, titleCenterX));
-
-      if (titleSplit && upper.length > 1) {
-        // Split-color rendering: split at "|" or at word midpoint across the full title
-        let part1, part2;
-        if (upper.includes('|')) {
-          const p = upper.split('|');
-          part1 = p[0].trim();
-          part2 = p.slice(1).join('|').trim();
+          c.save();
+          c.filter = 'blur(12px)';
+          c.drawImage(srcImg, Math.max(0, srcNW - 20), 0, Math.min(20, srcNW), srcNH, cW - sideW - 16, vidY, sideW + 16, vidH);
+          c.restore();
+          c.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+          c.fillRect(cW - sideW, vidY, sideW, vidH);
         } else {
-          const ws = upper.split(/\s+/).filter(Boolean);
-          if (ws.length >= 2) {
-            const mid = Math.floor(ws.length / 2);
-            part1 = ws.slice(0, mid).join(' ');
-            part2 = ws.slice(mid).join(' ');
+          c.save();
+          c.beginPath();
+          c.rect(0, vidY, sideW, vidH);
+          c.clip();
+          c.filter = 'blur(12px)';
+          c.drawImage(srcImg, vidX - 8, vidY, vidW + 16, vidH);
+          c.restore();
+          c.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+          c.fillRect(0, vidY, sideW, vidH);
+
+          c.save();
+          c.beginPath();
+          c.rect(cW - sideW, vidY, sideW, vidH);
+          c.clip();
+          c.filter = 'blur(12px)';
+          c.drawImage(srcImg, vidX - 8, vidY, vidW + 16, vidH);
+          c.restore();
+          c.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+          c.fillRect(cW - sideW, vidY, sideW, vidH);
+        }
+      }
+
+      if (blurTopPct > 0 && blurOpacity > 0) {
+        const topH = Math.round(vidH * blurTopPct);
+        c.save();
+        c.beginPath();
+        c.rect(vidX, vidY, vidW, topH);
+        c.clip();
+        c.filter = 'blur(12px)';
+        c.drawImage(srcImg, vidX - 8, vidY - 8, vidW + 16, topH + 16);
+        c.restore();
+        c.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        c.fillRect(vidX, vidY, vidW, topH);
+      }
+
+      if (blurBottomPct > 0 && blurOpacity > 0) {
+        const bottomH = Math.round(vidH * blurBottomPct);
+        const bottomY = vidY + vidH - bottomH;
+        c.save();
+        c.beginPath();
+        c.rect(vidX, bottomY, vidW, bottomH);
+        c.clip();
+        c.filter = 'blur(12px)';
+        c.drawImage(srcImg, vidX - 8, bottomY - 8, vidW + 16, bottomH + 16);
+        c.restore();
+        c.fillStyle = `rgba(0,0,0,${blurOpacity})`;
+        c.fillRect(vidX, bottomY, vidW, bottomH);
+      }
+
+      if (hasTitle && titleBarH > 0) {
+        c.fillStyle = '#ffffff';
+        c.fillRect(0, 0, cW, titleBarH);
+        frameInteractiveSource.titleBar = { x: 0, y: 0, w: cW, h: titleBarH };
+      }
+
+      if (hasTitle) {
+        c.font = `${titleWeight} ${titleFontPx}px Arial, sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        const titleMarginX = cW * Math.max(0, Math.min(40, titleMarginXPct)) / 100;
+        const maxW = Math.max(titleFontPx, cW - titleMarginX * 2);
+        const upper = title.toUpperCase();
+        let titleCenterX = Math.max(titleMarginX, Math.min(cW - titleMarginX, cW * Math.max(0, Math.min(1, titleXPct))));
+        const titleCenterY = Math.max(titleFontPx / 2, Math.min(titleBarH - titleFontPx / 2, titleBarH * Math.max(0, Math.min(1, titleYPct))));
+
+        const words = upper.split(' ');
+        let lines = [], line = '';
+        for (const w of words) {
+          const test = line ? line + ' ' + w : w;
+          if (c.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+          else line = test;
+        }
+        if (line) lines.push(line);
+        const lH = titleFontPx * 1.3;
+        const titleBlockH = lines.length * lH;
+        const startY = titleCenterY - titleBlockH / 2 + lH / 2;
+        const lineWidths = lines.map(l => c.measureText(l).width);
+        const titleBlockW = Math.min(maxW, Math.max(...lineWidths, titleFontPx));
+        titleCenterX = Math.max(titleMarginX + titleBlockW / 2, Math.min(cW - titleMarginX - titleBlockW / 2, titleCenterX));
+
+        if (titleSplit && upper.length > 1) {
+          let part1, part2;
+          if (upper.includes('|')) {
+            const p = upper.split('|');
+            part1 = p[0].trim();
+            part2 = p.slice(1).join('|').trim();
           } else {
-            part1 = upper; part2 = '';
+            const ws = upper.split(/\s+/).filter(Boolean);
+            if (ws.length >= 2) {
+              const mid = Math.floor(ws.length / 2);
+              part1 = ws.slice(0, mid).join(' ');
+              part2 = ws.slice(mid).join(' ');
+            } else {
+              part1 = upper; part2 = '';
+            }
           }
-        }
-        const fullText = part2 ? part1 + ' ' + part2 : part1;
+          const fullText = part2 ? part1 + ' ' + part2 : part1;
+          const rwWords = fullText.split(' ');
+          const rwLines = [];
+          let rl = '';
+          for (const w of rwWords) {
+            const test = rl ? rl + ' ' + w : w;
+            if (c.measureText(test).width > maxW && rl) { rwLines.push(rl); rl = w; }
+            else rl = test;
+          }
+          if (rl) rwLines.push(rl);
+          const sY = titleCenterY - (rwLines.length * lH) / 2 + lH / 2;
+          const part1Words = part1.split(' ').length;
+          let wordIdx = 0;
 
-        // Re-wrap fullText (without "|") for rendering
-        const rwWords = fullText.split(' ');
-        const rwLines = [];
-        let rl = '';
-        for (const w of rwWords) {
-          const test = rl ? rl + ' ' + w : w;
-          if (ctx.measureText(test).width > maxW && rl) { rwLines.push(rl); rl = w; }
-          else rl = test;
-        }
-        if (rl) rwLines.push(rl);
-        const sY = titleCenterY - (rwLines.length * lH) / 2 + lH / 2;
-
-        // Render: walk through words; switch color when we pass part1's length
-        const part1Words = part1.split(' ').length;
-        let wordIdx = 0;
-
-        rwLines.forEach((l, i) => {
-          const lineWords = l.split(' ');
-          // Compute widths per word
-          const widths = lineWords.map(w => ctx.measureText(w).width);
-          const spaceW = ctx.measureText(' ').width;
-          const totalW = widths.reduce((a, b) => a + b, 0) + spaceW * (lineWords.length - 1);
-          let x = titleCenterX - totalW / 2;
-          const y = sY + i * lH;
-          lineWords.forEach((w, j) => {
-            ctx.fillStyle = (wordIdx < part1Words) ? titleColor : titleColor2;
-            ctx.textAlign = 'left';
-            ctx.fillText(w, x, y);
-            x += widths[j] + spaceW;
-            wordIdx++;
+          rwLines.forEach((l, i) => {
+            const lineWords = l.split(' ');
+            const widths = lineWords.map(w => c.measureText(w).width);
+            const spaceW = c.measureText(' ').width;
+            const totalW = widths.reduce((a, b) => a + b, 0) + spaceW * (lineWords.length - 1);
+            let x = titleCenterX - totalW / 2;
+            const y = sY + i * lH;
+            lineWords.forEach((w, j) => {
+              c.fillStyle = (wordIdx < part1Words) ? titleColor : titleColor2;
+              c.textAlign = 'left';
+              c.fillText(w, x, y);
+              x += widths[j] + spaceW;
+              wordIdx++;
+            });
           });
-        });
-        ctx.textAlign = 'center';
-      } else {
-        ctx.fillStyle = titleColor;
-        lines.forEach((l, i) => ctx.fillText(l, titleCenterX, startY + i * lH));
-      }
-      const titleBounds = {
-        x: titleCenterX - titleBlockW / 2 - titleFontPx * 0.25,
-        y: titleCenterY - titleBlockH / 2 - titleFontPx * 0.15,
-        w: titleBlockW + titleFontPx * 0.5,
-        h: titleBlockH + titleFontPx * 0.3
-      };
-      frameInteractiveSource.title = titleBounds;
-      if (window._pe2Sel && window._pe2Sel.type === 'frame-title') {
-        _drawCanvasSelection(ctx, titleBounds.x, titleBounds.y, titleBounds.w, titleBounds.h, true, true);
-      }
-    }
-
-    // ── Logo: % of video height, keep original aspect ratio, position by % ──
-    if (window._frameLogoImg && logoSizePct > 0) {
-      const logoNW = window._frameLogoImg.naturalWidth  || window._frameLogoImg.width;
-      const logoNH = window._frameLogoImg.naturalHeight || window._frameLogoImg.height;
-      const logoAR = logoNW / (logoNH || 1);
-      const lH = Math.max(8, Math.round(vidH * logoSizePct));
-      const lW = Math.round(lH * logoAR);
-      const lX = vidX + Math.round(vidW * logoLeftPct);
-      const titleOffset = (blurMode === 'overlay' && hasTitle) ? titleBarH : 0;
-      const lY = vidY + titleOffset + Math.round(vidH * logoTopPct);
-      // Border radius: % of shorter side (0%=square, 50%=circle)
-      const r  = Math.round(Math.min(lW, lH) * logoRadiusPct);
-      ctx.save();
-      ctx.beginPath();
-      _roundRect(ctx, lX, lY, lW, lH, r);
-      ctx.clip();
-      ctx.drawImage(window._frameLogoImg, lX, lY, lW, lH);
-      ctx.restore();
-      frameInteractiveSource.logo = { x: lX, y: lY, w: lW, h: lH };
-      if (window._pe2Sel && window._pe2Sel.type === 'frame-logo') {
-        _drawCanvasSelection(ctx, lX, lY, lW, lH, true, false);
+          c.textAlign = 'center';
+        } else {
+          c.fillStyle = titleColor;
+          lines.forEach((l, i) => c.fillText(l, titleCenterX, startY + i * lH));
+        }
+        const titleBounds = {
+          x: titleCenterX - titleBlockW / 2 - titleFontPx * 0.25,
+          y: titleCenterY - titleBlockH / 2 - titleFontPx * 0.15,
+          w: titleBlockW + titleFontPx * 0.5,
+          h: titleBlockH + titleFontPx * 0.3
+        };
+        frameInteractiveSource.title = titleBounds;
+        if (window._pe2Sel && window._pe2Sel.type === 'frame-title') {
+          _drawCanvasSelection(c, titleBounds.x, titleBounds.y, titleBounds.w, titleBounds.h, true, true);
+        }
       }
     }
 
-    // ── Text/shape overlays, then subtitle overlay on top ──
-    _drawVideoOverlaysOnCanvas(ctx, vidX, vidY, vidW, vidH);
-    const subBounds = _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
-    if (subBounds) frameInteractiveSource.sub = subBounds;
+    function _drawLayerLogo(c) {
+      if (window._frameLogoImg && logoSizePct > 0) {
+        const logoNW = window._frameLogoImg.naturalWidth  || window._frameLogoImg.width;
+        const logoNH = window._frameLogoImg.naturalHeight || window._frameLogoImg.height;
+        const logoAR = logoNW / (logoNH || 1);
+        const lH = Math.max(8, Math.round(vidH * logoSizePct));
+        const lW = Math.round(lH * logoAR);
+        const lX = vidX + Math.round(vidW * logoLeftPct);
+        const titleOffset = (blurMode === 'overlay' && hasTitle) ? titleBarH : 0;
+        const lY = vidY + titleOffset + Math.round(vidH * logoTopPct);
+        const r  = Math.round(Math.min(lW, lH) * logoRadiusPct);
+        c.save();
+        c.beginPath();
+        _roundRect(c, lX, lY, lW, lH, r);
+        c.clip();
+        c.drawImage(window._frameLogoImg, lX, lY, lW, lH);
+        c.restore();
+        frameInteractiveSource.logo = { x: lX, y: lY, w: lW, h: lH };
+        if (window._pe2Sel && window._pe2Sel.type === 'frame-logo') {
+          _drawCanvasSelection(c, lX, lY, lW, lH, true, false);
+        }
+      }
+    }
 
+    // ── Execute layer drawing in configured order (bottom to top) ──
+    const layerOrder = window._pe2LayerOrder || ['video', 'frame', 'blur', 'logo', 'overlays', 'subs'];
+    const trackVis = window._pe2TrackVisibility || {};
+
+    layerOrder.forEach(layerId => {
+      if (trackVis[layerId] === false) return;
+      if (layerId === 'video') {
+        _drawLayerVideo(ctx);
+      } else if (layerId === 'frame') {
+        _drawLayerFrame(ctx);
+      } else if (layerId === 'blur') {
+        if (typeof _drawBlurZonesOnCanvas === 'function') {
+          _drawBlurZonesOnCanvas(ctx, vidX, vidY, vidW, vidH);
+        }
+      } else if (layerId === 'logo') {
+        _drawLayerLogo(ctx);
+      } else if (layerId === 'overlays') {
+        if (typeof _drawVideoOverlaysOnCanvas === 'function') {
+          _drawVideoOverlaysOnCanvas(ctx, vidX, vidY, vidW, vidH);
+        }
+      } else if (layerId === 'subs') {
+        if (typeof _drawSubtitleOnlyOnCanvas === 'function') {
+          const subBounds = _drawSubtitleOnlyOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
+          if (subBounds) frameInteractiveSource.sub = subBounds;
+        }
+      }
+    });
+
+    // Compose in source space first, then place the complete foreground into
     // Compose in source space first, then place the complete foreground into
     // the selected output aspect. This is the same order used by FFmpeg.
     const aspectValue = document.getElementById('proc-preview-aspect')?.value || 'auto';
     const sourceIsVertical = srcNH > srcNW;
-    const targetAspect = aspectValue === 'auto'
-      ? (sourceIsVertical ? '9x16' : '16x9')
-      : aspectValue;
-    const shouldConvert = (
-      (targetAspect === '9x16' && !sourceIsVertical) ||
-      (targetAspect === '16x9' && sourceIsVertical)
+    const isForced = (aspectValue === '16x9' || aspectValue === '9x16');
+    const targetAspect = isForced ? aspectValue : (sourceIsVertical ? '9x16' : '16x9');
+    const shouldConvert = isForced && (
+      (aspectValue === '9x16' && !sourceIsVertical) ||
+      (aspectValue === '16x9' && sourceIsVertical)
     );
 
     let finalCW = cW;
@@ -658,5 +660,153 @@ function subPreviewUpdate() {
   }
 
 
+  // ── Track & Layer Management System ──
+  const TRACK_DEFINITIONS = {
+    subs:     { name: 'Phụ đề video', icon: '📝', desc: 'Phụ đề dịch và phụ đề gốc', tab: 'subs' },
+    overlays: { name: 'Chữ / Khối / Ảnh', icon: '🔤', desc: 'Các text, khối nền, sticker và ảnh chèn', tab: 'overlay' },
+    blur:     { name: 'Vùng che mờ', icon: '🌫', desc: 'Khối làm mờ chữ gốc và vùng che bổ sung', tab: 'overlay' },
+    logo:     { name: 'Logo & Watermark', icon: '🖼', desc: 'Ảnh logo / watermark nhận diện thương hiệu', tab: 'frame' },
+    frame:    { name: 'Khung & Tiêu đề', icon: '🔲', desc: 'Thanh tiêu đề và hiệu ứng mờ viền', tab: 'frame' },
+    video:    { name: 'Video gốc', icon: '🎬', desc: 'Khung hình gốc của video (nền dưới cùng)', tab: 'subs' }
+  };
+
+  window.TRACK_DEFINITIONS = TRACK_DEFINITIONS;
+  window._pe2LayerOrder = window._pe2LayerOrder || ['video', 'frame', 'blur', 'logo', 'overlays', 'subs'];
+  window._pe2TrackVisibility = window._pe2TrackVisibility || {
+    video: true,
+    frame: true,
+    blur: true,
+    logo: true,
+    overlays: true,
+    subs: true
+  };
+
+  function _saveTrackSettings() {
+    try {
+      localStorage.setItem('pe2_layer_order', JSON.stringify(window._pe2LayerOrder));
+      localStorage.setItem('pe2_track_visibility', JSON.stringify(window._pe2TrackVisibility));
+    } catch (_) {}
+  }
+
+  function _loadTrackSettings() {
+    try {
+      const savedOrder = JSON.parse(localStorage.getItem('pe2_layer_order') || 'null');
+      if (Array.isArray(savedOrder) && savedOrder.length >= 4) {
+        window._pe2LayerOrder = savedOrder;
+      }
+      const savedVis = JSON.parse(localStorage.getItem('pe2_track_visibility') || 'null');
+      if (savedVis && typeof savedVis === 'object') {
+        window._pe2TrackVisibility = savedVis;
+      }
+    } catch (_) {}
+  }
+  _loadTrackSettings();
+
+  window.pe2MoveTrackUp = function(layerId) {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
+    const arr = window._pe2LayerOrder || ['video', 'frame', 'blur', 'logo', 'overlays', 'subs'];
+    const idx = arr.indexOf(layerId);
+    if (idx < arr.length - 1 && idx >= 0) {
+      const temp = arr[idx];
+      arr[idx] = arr[idx + 1];
+      arr[idx + 1] = temp;
+      window._pe2LayerOrder = arr;
+      _saveTrackSettings();
+      if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
+      if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+      if (window.pe2RenderRanges) window.pe2RenderRanges();
+      if (typeof toast === 'function') toast('✓ Đã đưa lớp [' + (TRACK_DEFINITIONS[layerId]?.name || layerId) + '] lên trên', 'info', { duration: 1500 });
+    }
+  };
+
+  window.pe2MoveTrackDown = function(layerId) {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
+    const arr = window._pe2LayerOrder || ['video', 'frame', 'blur', 'logo', 'overlays', 'subs'];
+    const idx = arr.indexOf(layerId);
+    if (idx > 0) {
+      const temp = arr[idx];
+      arr[idx] = arr[idx - 1];
+      arr[idx - 1] = temp;
+      window._pe2LayerOrder = arr;
+      _saveTrackSettings();
+      if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
+      if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+      if (window.pe2RenderRanges) window.pe2RenderRanges();
+      if (typeof toast === 'function') toast('✓ Đã đưa lớp [' + (TRACK_DEFINITIONS[layerId]?.name || layerId) + '] xuống dưới', 'info', { duration: 1500 });
+    }
+  };
+
+  window.pe2ToggleTrack = function(layerId) {
+    window._pe2TrackVisibility = window._pe2TrackVisibility || {};
+    window._pe2TrackVisibility[layerId] = window._pe2TrackVisibility[layerId] === false ? true : false;
+    _saveTrackSettings();
+    if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+    if (window.pe2RenderRanges) window.pe2RenderRanges();
+  };
+
+  window.pe2RenderTracksUI = function() {
+    const container = document.getElementById('pe2-tracks-list');
+    if (!container) return;
+    const arr = [...(window._pe2LayerOrder || ['video', 'frame', 'blur', 'logo', 'overlays', 'subs'])].reverse(); // Display top layer first
+    const vis = window._pe2TrackVisibility || {};
+
+    container.innerHTML = arr.map((layerId, displayIdx) => {
+      const def = TRACK_DEFINITIONS[layerId] || { name: layerId, icon: '📦', desc: '', tab: 'subs' };
+      const isVisible = vis[layerId] !== false;
+      const actualIdx = (window._pe2LayerOrder || []).indexOf(layerId);
+      const isTop = actualIdx === (window._pe2LayerOrder || []).length - 1;
+      const isBottom = actualIdx === 0;
+
+      let extraInfo = '';
+      if (layerId === 'overlays') {
+        const count = (window._videoOverlays || []).length;
+        extraInfo = `<span style="font-size:10px;background:rgba(99,102,241,0.15);color:#818cf8;padding:2px 6px;border-radius:4px">${count} phần tử</span>`;
+      } else if (layerId === 'logo') {
+        const hasLogo = !!(document.getElementById('frame-logo-path')?.value);
+        extraInfo = hasLogo ? `<span style="font-size:10px;background:rgba(34,197,94,0.15);color:#22c55e;padding:2px 6px;border-radius:4px">Đã chọn</span>` : `<span style="font-size:10px;color:var(--text-muted)">Chưa có</span>`;
+      } else if (layerId === 'subs') {
+        const hasSample = !!(document.getElementById('sub-preview-sample')?.value);
+        extraInfo = hasSample ? `<span style="font-size:10px;background:rgba(34,197,94,0.15);color:#22c55e;padding:2px 6px;border-radius:4px">Bật</span>` : '';
+      }
+
+      return `
+        <div class="pe2-track-card ${isVisible ? '' : 'disabled'}" data-track-id="${layerId}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid ${isVisible ? 'var(--border)' : 'rgba(255,255,255,0.04)'};border-radius:8px;margin-bottom:8px;transition:all 0.2s">
+          <span style="font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:var(--bg);border-radius:6px">${def.icon}</span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px">
+              <strong style="font-size:13px;color:var(--text)">${def.name}</strong>
+              ${extraInfo}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${def.desc}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 6px;height:28px;line-height:1;border-radius:4px" 
+              onclick="pe2MoveTrackUp('${layerId}')" title="Đưa lên trên (ưu tiên hiển thị trên)" ${isTop ? 'disabled style="opacity:0.3;padding:0 6px;height:28px"' : ''}>
+              ▲
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 6px;height:28px;line-height:1;border-radius:4px" 
+              onclick="pe2MoveTrackDown('${layerId}')" title="Đưa xuống dưới (hiển thị dưới)" ${isBottom ? 'disabled style="opacity:0.3;padding:0 6px;height:28px"' : ''}>
+              ▼
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 8px;height:28px;font-size:14px" 
+              onclick="pe2ToggleTrack('${layerId}')" title="${isVisible ? 'Ẩn lớp này' : 'Hiện lớp này'}">
+              ${isVisible ? '👁' : '🚫'}
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 8px;height:28px;font-size:11px" 
+              onclick="pe2Tool('${def.tab}')" title="Mở cài đặt của lớp này">
+              ⚙
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
 if (typeof subPreviewUpdate !== "undefined") window.subPreviewUpdate = subPreviewUpdate;
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { if (window.pe2RenderTracksUI) window.pe2RenderTracksUI(); });
+} else {
+  if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
+}
 

@@ -1,4 +1,4 @@
-// Script for DTRouter-like AI Providers view in Video Tool client
+// Script for AI Providers view in Video Tool client
 (function() {
     let localConfig = {};
     let activeProviderId = null;
@@ -601,7 +601,7 @@
         window.open(authUrl, "antigravity_oauth", "width=600,height=720,menubar=no,toolbar=no,location=no,status=no");
     };
 
-    // Auto-receive OAuth callback data from popup window (9router style)
+    // Auto-receive OAuth callback data from popup window
     async function _handleOAuthCallbackData(data) {
         if (!data || (!data.code && !data.fullUrl)) return;
         const codeOrUrl = data.fullUrl || data.code;
@@ -1595,7 +1595,7 @@
             const providerColor = pInfo.color || '#6B7280';
             const providerLogo = pInfo.logo ? `/static/Images/providers/${pInfo.logo}` : '';
 
-            // 9Router Card classes and header layout
+            // Card classes and header layout
             let html = `
                 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-2xl overflow-hidden shadow-xs flex flex-col">
                     <!-- Header -->

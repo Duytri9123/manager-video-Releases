@@ -1,16 +1,10 @@
-"""Web search + page-fetch helpers used by the chatbot for realtime
+"""Web search + page-fetch helpers used for realtime
 questions ("tin tức mới nhất", "giá vàng hôm nay", ...).
 
-Primary path: call DTRouter's `/v1/search` endpoint (Tavily / Brave / Exa /
-SearXNG / Google PSE / ... — provider-agnostic). DTRouter runs locally and
-the user already has API keys configured there, so we don't need any extra
-keys on the toolvideo side.
+Primary path: Gemini grounding search.
+Fallback path: a no-deps Google News RSS scrape.
 
-Fallback path: a no-deps Google News RSS scrape, used when DTRouter doesn't
-have any search provider configured. This keeps the chat usable in a fresh
-install where the user hasn't set up Tavily/Brave keys yet.
-
-Both paths return the same shape:
+Returns shape:
   [{title, url, snippet, published, source}]
 """
 from __future__ import annotations
@@ -34,150 +28,6 @@ _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 )
-_NINER_TIMEOUT = 12
-
-# DTRouter search providers we'll try in order if no specific one is
-# configured. `search-combo` is DTRouter's auto-fallback chain — first
-# choice if the user enabled it. Otherwise we try Tavily (most polished),
-# then Brave (good free tier), Serper (Google-backed), Exa (LLM-friendly),
-# Linkup (deep search), and finally SearXNG (self-hosted).
-_NINER_PROVIDER_FALLBACK = (
-    "search-combo", "tavily", "brave-search", "serper",
-    "linkup", "exa", "google-pse", "searxng", "perplexity", "youcom",
-)
-
-
-# ── DTRouter primary path ──────────────────────────────────────────────────
-def _niner_endpoint(endpoint: Optional[str], api_key: Optional[str]) -> Tuple[str, Dict[str, str]]:
-    base = (endpoint or "http://localhost:20128/v1").rstrip("/")
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    return base, headers
-
-
-def _niner_post(path: str, payload: Dict[str, Any], *,
-                endpoint: Optional[str], api_key: Optional[str],
-                timeout: int = _NINER_TIMEOUT) -> Tuple[int, Any]:
-    base, headers = _niner_endpoint(endpoint, api_key)
-    req = urllib.request.Request(
-        base + path,
-        data=json.dumps(payload).encode("utf-8"),
-        method="POST",
-        headers=headers,
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = resp.read()
-            try:
-                return resp.status, json.loads(body) if body else {}
-            except ValueError:
-                return resp.status, body.decode("utf-8", "replace")
-    except urllib.error.HTTPError as exc:
-        body = exc.read() if exc.fp else b""
-        try:
-            return exc.code, json.loads(body) if body else {}
-        except ValueError:
-            return exc.code, body.decode("utf-8", "replace")
-
-
-def _niner_list_search_providers(endpoint: Optional[str], api_key: Optional[str]) -> List[str]:
-    """Hit /v1/models/web and return only webSearch-capable provider ids."""
-    base, headers = _niner_endpoint(endpoint, api_key)
-    req = urllib.request.Request(base + "/models/web", headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=_NINER_TIMEOUT) as resp:
-            body = json.loads(resp.read() or b"{}")
-    except Exception:
-        return []
-    out = []
-    for it in (body.get("data") or []):
-        if (it or {}).get("kind") == "webSearch":
-            mid = (it or {}).get("id")
-            if mid:
-                # IDs are like "tavily/search" — DTRouter accepts both the
-                # full id and the bare provider name.
-                out.append(mid.split("/", 1)[0])
-    return out
-
-
-_niner_provider_cache: Dict[str, Tuple[float, List[str]]] = {}
-
-
-def _niner_pick_provider(endpoint: Optional[str], api_key: Optional[str]) -> Optional[str]:
-    key = endpoint or "default"
-    cached = _niner_provider_cache.get(key)
-    if cached and (time.time() - cached[0]) < 60.0:
-        avail = cached[1]
-    else:
-        avail = _niner_list_search_providers(endpoint, api_key)
-        _niner_provider_cache[key] = (time.time(), avail)
-    if not avail:
-        return None
-    avail_set = set(avail)
-    for cand in _NINER_PROVIDER_FALLBACK:
-        if cand in avail_set:
-            return cand
-    return avail[0]
-
-
-def search_via_dtrouter(
-    query: str, *, kind: str = "auto", lang: str = "vi", region: str = "VN",
-    limit: int = 6, endpoint: Optional[str] = None, api_key: Optional[str] = None,
-) -> List[Dict[str, str]]:
-    """Search via DTRouter's `/v1/search`. Returns [] on any failure so the
-    caller can fall through to the RSS scraper."""
-    provider = _niner_pick_provider(endpoint, api_key)
-    if not provider:
-        return []
-    payload: Dict[str, Any] = {
-        "model": provider,
-        "query": query,
-        "max_results": limit,
-        "search_type": "news" if (kind == "news" or _looks_like_news(query)) else "web",
-    }
-    if region:
-        payload["country"] = region.lower()
-    if lang:
-        payload["language"] = lang
-    status, body = _niner_post("/search", payload, endpoint=endpoint, api_key=api_key)
-    if status >= 400 or not isinstance(body, dict):
-        return []
-    out: List[Dict[str, str]] = []
-    for r in (body.get("results") or [])[:limit]:
-        if not isinstance(r, dict):
-            continue
-        out.append({
-            "title": (r.get("title") or "").strip(),
-            "url": (r.get("url") or "").strip(),
-            "snippet": (r.get("snippet") or r.get("content") or "").strip()[:280],
-            "published": (r.get("published_at") or "").strip(),
-            "source": (r.get("display_url") or _hostname(r.get("url") or "")),
-        })
-    return [r for r in out if r["title"] and r["url"]]
-
-
-def fetch_via_dtrouter(
-    url: str, *, fmt: str = "markdown", max_chars: int = 4000,
-    endpoint: Optional[str] = None, api_key: Optional[str] = None,
-) -> str:
-    """Fetch a URL → readable text via DTRouter /v1/web/fetch. Empty string
-    on any failure."""
-    # DTRouter expects a full provider id. Try common ones in order — the
-    # first one available will succeed. We don't bother enumerating /v1/models/web
-    # for every fetch; instead call jina-reader (free, fastest) first.
-    for provider in ("fetch-combo", "jina-reader", "firecrawl", "tavily", "exa"):
-        payload = {"model": provider, "url": url, "format": fmt}
-        if max_chars:
-            payload["max_characters"] = max_chars
-        status, body = _niner_post("/web/fetch", payload, endpoint=endpoint, api_key=api_key)
-        if status < 400 and isinstance(body, dict):
-            data = body.get("data") or body
-            content = (data.get("content") or {}) if isinstance(data, dict) else {}
-            text = content.get("text") if isinstance(content, dict) else None
-            if text:
-                return text[:max_chars] if max_chars else text
-    return ""
 
 
 # ── HTTP helper for the RSS fallback ──────────────────────────────────────
@@ -296,7 +146,7 @@ def search_via_gemini(
 
     # Dùng model nhẹ nhất cho search (ít bị rate limit hơn)
     if not model:
-        model = "gemini-2.5-flash"
+        model = "gemini-3.6-flash"
 
     url = (
         f"https://generativelanguage.googleapis.com/v1beta"
@@ -402,32 +252,21 @@ def search(
     query: str, *, kind: str = "auto", lang: str = "vi", region: str = "VN",
     limit: int = 6, endpoint: Optional[str] = None, api_key: Optional[str] = None,
 ) -> List[Dict[str, str]]:
-    """Top-level helper: try DTRouter first (best snippets), fall back to
-    Gemini grounding, then Google News RSS.
+    """Top-level helper: try Gemini grounding first, fall back to Google News RSS.
 
     `kind` ∈ {auto, news, web}.
     """
     q = (query or "").strip()
     if not q:
         return []
-    # 1. DTRouter /v1/search — best quality (Tavily/Brave/SearXNG snippets)
-    try:
-        results = search_via_dtrouter(
-            q, kind=kind, lang=lang, region=region, limit=limit,
-            endpoint=endpoint, api_key=api_key,
-        )
-        if results:
-            return results
-    except Exception:
-        pass
-    # 2. Gemini + Google Search grounding (free, nhưng snippet ít chi tiết hơn)
+    # 1. Gemini + Google Search grounding (free, trực tiếp)
     try:
         results = search_via_gemini(q, lang=lang, limit=limit)
         if results:
             return results
     except Exception:
         pass
-    # 3. Google News RSS (fallback cuối, chỉ tin tức)
+    # 2. Google News RSS (fallback cuối, chỉ tin tức)
     if kind == "news" or (kind == "auto" and _looks_like_news(q)):
         results = google_news(q, lang=lang, region=region, limit=limit)
         if results:

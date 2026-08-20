@@ -34,9 +34,14 @@
       }
       if (n === 3) {
         // Step 3: Show/hide the "Start processing" card based on queue readiness
-        _step3RefreshStartCard();
+        if (!window._procRunning) {
+          (window._batchQueue || []).forEach(t => {
+            if (t.status === 'processing') t.status = 'ready';
+          });
+        }
+        if (typeof _step3RefreshStartCard === 'function') _step3RefreshStartCard();
         // Refresh queue panel when entering step 3
-        _step3RenderQueue();
+        if (typeof _step3RenderQueue === 'function') _step3RenderQueue();
 
         // Sync checkboxes from Step 1 to Step 3
         const autoFlow1 = document.getElementById('proc-auto-flow');
@@ -54,6 +59,11 @@
     }
 
     window.procWizGo = function(n, _forceForward){
+      // Auto-save previous step configuration silently before moving
+      if (typeof procSaveDefaults === 'function') {
+        try { procSaveDefaults(true); } catch (_) {}
+      }
+
       n = Math.max(1, Math.min(MAX, n));
       window._procWizStep = n;
       var root = document.getElementById('page-process');

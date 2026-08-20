@@ -276,9 +276,16 @@
           // Update display to show filename only (not full path)
           document.getElementById('frame-logo-path').value = filename;
           
+          // Ensure size is visible
+          const szInp = document.getElementById('frame-logo-size');
+          if (szInp && (!szInp.value || parseFloat(szInp.value) <= 0)) {
+            szInp.value = '12';
+          }
+
           if (typeof toast === 'function') {
             toast('✓ Logo đã lưu: ' + file.name, 'success');
           }
+          if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
           
           // Load the new logo image for preview
           const img = new Image();
@@ -304,6 +311,10 @@
     );
 
     // Also show preview immediately from file (before upload completes)
+    const szInpQuick = document.getElementById('frame-logo-size');
+    if (szInpQuick && (!szInpQuick.value || parseFloat(szInpQuick.value) <= 0)) {
+      szInpQuick.value = '12';
+    }
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
@@ -331,10 +342,16 @@
         pathInput.value = filename;
         pathInput.dataset.serverPath = savedPath;
         
+        const szInp = document.getElementById('frame-logo-size');
+        if (szInp && (!szInp.value || parseFloat(szInp.value) <= 0)) {
+          szInp.value = '12';
+        }
+        
         // Load the image for preview using URL
         const img = new Image();
         img.onload = () => {
           _setFrameLogo(img, _isGifSrc(savedUrl) || _isGifSrc(savedPath));
+          if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
         };
         img.onerror = () => {
           // If saved path no longer exists, clear localStorage and leave logo empty.

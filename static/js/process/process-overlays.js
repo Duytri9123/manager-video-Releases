@@ -224,7 +224,8 @@ function _ovClamp(v, min, max) {
       return;
     }
     const sel = window._pe2Sel;
-    list.innerHTML = layers.map(ov => {
+    const totalLayers = layers.length;
+    list.innerHTML = layers.map((ov, idx) => {
       const selected = sel && sel.type === 'overlay' && String(sel.id) === String(ov.id);
       return `
         <div class="ov-layer-card type-${ov.type} ${ov.open ? 'open' : ''} ${selected ? 'pe2-selected' : ''}" data-ov-id="${_ovEsc(ov.id)}">
@@ -237,6 +238,16 @@ function _ovClamp(v, min, max) {
               <span class="ov-layer-meta">${_ovEsc(_ovTimeLabel(ov))} · X ${_ovRoundPct(ov.x_pct)}% · Y ${_ovRoundPct(ov.y_pct)}%</span>
             </span>
             <span class="ov-layer-actions" onclick="event.stopPropagation()">
+              <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 5px;height:24px;line-height:1;border-radius:4px" 
+                onclick="ovMoveLayerUp('${_ovEsc(ov.id)}')" 
+                title="Đưa lên trên (ưu tiên hiển thị)" ${idx === 0 ? 'disabled style="opacity:0.3;padding:2px 5px;height:24px"' : ''}>
+                ▲
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 5px;height:24px;line-height:1;border-radius:4px" 
+                onclick="ovMoveLayerDown('${_ovEsc(ov.id)}')" 
+                title="Đưa xuống dưới" ${idx === totalLayers - 1 ? 'disabled style="opacity:0.3;padding:2px 5px;height:24px"' : ''}>
+                ▼
+              </button>
               <label class="pe2-switch" title="${ov.enabled ? 'Ẩn' : 'Hiện'}" onclick="event.stopPropagation();">
                 <input type="checkbox" ${ov.enabled ? 'checked' : ''} onchange="ovUpdateLayer('${_ovEsc(ov.id)}','enabled',this.checked)">
                 <span class="pe2-slider"></span>
@@ -256,6 +267,34 @@ function _ovClamp(v, min, max) {
     _ovSyncHidden();
     if (window.pe2RenderRanges) window.pe2RenderRanges();
   }
+
+  function ovMoveLayerUp(id) {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
+    const idx = (window._videoOverlays || []).findIndex(x => String(x.id) === String(id));
+    if (idx > 0) {
+      const temp = window._videoOverlays[idx];
+      window._videoOverlays[idx] = window._videoOverlays[idx - 1];
+      window._videoOverlays[idx - 1] = temp;
+      ovRenderLayerList();
+      if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+      else if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    }
+  }
+
+  function ovMoveLayerDown(id) {
+    if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
+    const idx = (window._videoOverlays || []).findIndex(x => String(x.id) === String(id));
+    if (idx >= 0 && idx < (window._videoOverlays || []).length - 1) {
+      const temp = window._videoOverlays[idx];
+      window._videoOverlays[idx] = window._videoOverlays[idx + 1];
+      window._videoOverlays[idx + 1] = temp;
+      ovRenderLayerList();
+      if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+      else if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    }
+  }
+  window.ovMoveLayerUp = ovMoveLayerUp;
+  window.ovMoveLayerDown = ovMoveLayerDown;
   function ovAddText() {
     if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
     window._videoOverlays.forEach(x => { x.open = false; });
@@ -465,25 +504,49 @@ function _ovClamp(v, min, max) {
         if (window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id)) {
           _drawCanvasSelection(ctx, rx, ry, rw, rh, true, false);
         }
-      } else if (ov.type === 'text') {
-        const box = _drawOverlayText(ctx, ov, vidX, vidY, vidW, vidH);
-        if (box) {
-          window._lastCanvasOverlayBoxes[ov.id] = {
-            left: (box.x - vidX) / vidW,
-            right: (box.x + box.w - vidX) / vidW,
-            top: (box.y - vidY) / vidH,
-            bottom: (box.y + box.h - vidY) / vidH,
-            x: (box.x + box.w/2 - vidX) / vidW,
-            y: (box.y + box.h/2 - vidY) / vidH,
-            w: box.w / vidW,
-            h: box.h / vidH
-          };
-          if (window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id)) {
-            _drawCanvasSelection(ctx, box.x, box.y, box.w, box.h, true, true);
-          }
+      } else if (ov.type === 'image' && ov.path) {
+        const url = _ovResolveUrl(ov.path);
+        const img = _getOvCachedImage(url);
+        const rw = vidW * Math.max(0.01, Math.min(1, ov.width_pct || 0.20));
+        const rh = vidH * Math.max(0.01, Math.min(1, ov.height_pct || 0.20));
+        const rx = vidX + vidW * Math.max(0, Math.min(1, ov.x_pct ?? 0.5)) - rw / 2;
+        const ry = vidY + vidH * Math.max(0, Math.min(1, ov.y_pct ?? 0.5)) - rh / 2;
+        if (img && img.complete && img.naturalWidth) {
+          ctx.save();
+          ctx.globalAlpha = ov.opacity ?? 1.0;
+          ctx.drawImage(img, rx, ry, rw, rh);
+          ctx.restore();
+        }
+        window._lastCanvasOverlayBoxes[ov.id] = {
+          left: (rx - vidX) / vidW,
+          right: (rx + rw - vidX) / vidW,
+          top: (ry - vidY) / vidH,
+          bottom: (ry + rh - vidY) / vidH,
+          x: (rx + rw/2 - vidX) / vidW,
+          y: (ry + rh/2 - vidY) / vidH,
+          w: rw / vidW,
+          h: rh / vidH
+        };
+        if (window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id)) {
+          _drawCanvasSelection(ctx, rx, ry, rw, rh, true, false);
         }
       }
     });
+  }
+
+  const _ovImgCache = {};
+  function _getOvCachedImage(url) {
+    if (!url) return null;
+    if (_ovImgCache[url]) return _ovImgCache[url];
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+    img.onload = () => {
+      if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+      else if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+    };
+    _ovImgCache[url] = img;
+    return img;
   }
   function _renderVideoOverlayDom(wrap, imgOffX, imgOffY, dispW, dispH) {
     if (!wrap) return;

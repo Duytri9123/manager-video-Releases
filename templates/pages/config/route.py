@@ -25,6 +25,191 @@ def get_db_connection():
     return conn
 
 
+def _seed_provider_models(conn):
+    initial_models = {
+        "antigravity": [
+            ("gemini-3.7-flash", "Antigravity 3.7 Flash", "llm", 1),
+            ("gemini-3.6-flash", "Antigravity 3.6 Flash (High)", "llm", 2),
+            ("gemini-3.6-flash-medium", "Antigravity 3.6 Flash (Medium)", "llm", 3),
+            ("gemini-3.6-flash-low", "Antigravity 3.6 Flash (Low)", "llm", 4),
+            ("gemini-3-flash-agent", "Antigravity 3.5 Flash (High)", "llm", 5),
+            ("gemini-3.5-flash-medium", "Antigravity 3.5 Flash (Medium)", "llm", 6),
+            ("gemini-3.5-flash-low", "Antigravity 3.5 Flash (Low)", "llm", 7),
+            ("gemini-pro-agent", "Antigravity 3.1 Pro (High)", "llm", 8),
+            ("gemini-3.1-pro-low", "Antigravity 3.1 Pro (Low)", "llm", 9),
+            ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)", "llm", 10),
+            ("claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)", "llm", 11),
+            ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)", "llm", 12),
+            ("gemini-3-flash", "Antigravity 3 Flash", "llm", 13),
+        ],
+
+        "openai": [
+            ("gpt-4o-mini", "GPT-4o Mini", "llm", 1),
+            ("gpt-4o", "GPT-4o", "llm", 2),
+            ("o1-mini", "O1 Mini", "llm", 3),
+            ("o1-preview", "O1 Preview", "llm", 4),
+        ],
+        "deepseek": [
+            ("deepseek-chat", "DeepSeek Chat (V3)", "llm", 1),
+            ("deepseek-coder", "DeepSeek Coder", "llm", 2),
+            ("deepseek-reasoner", "DeepSeek Reasoner (R1)", "llm", 3),
+        ],
+        "groq": [
+            ("llama3-8b-8192", "Llama 3 8B", "llm", 1),
+            ("llama3-70b-8192", "Llama 3 70B", "llm", 2),
+            ("mixtral-8x7b-32768", "Mixtral 8x7B", "llm", 3),
+            ("gemma2-9b-it", "Gemma 2 9B", "llm", 4),
+        ],
+        "nvidia": [
+            ("meta/llama3-70b-instruct", "Llama 3 70B Instruct", "llm", 1),
+            ("nvidia/llama-3.1-nemotron-70b-instruct", "Nemotron 70B Instruct", "llm", 2),
+        ],
+        "xai": [
+            ("grok-2", "Grok 2", "llm", 1),
+            ("grok-2-1212", "Grok 2 1212", "llm", 2),
+            ("grok-beta", "Grok Beta", "llm", 3),
+        ],
+        "kimi": [
+            ("moonshot-v1-8k", "Moonshot v1 8K", "llm", 1),
+            ("moonshot-v1-32k", "Moonshot v1 32K", "llm", 2),
+            ("moonshot-v1-128k", "Moonshot v1 128K", "llm", 3),
+        ],
+        "codex": [
+            ("gpt-5.6-sol", "GPT 5.6 Sol", "llm", 1),
+            ("gpt-5.6-sol-review", "GPT 5.6 Sol Review", "llm", 2),
+            ("gpt-5.6-terra", "GPT 5.6 Terra", "llm", 3),
+            ("gpt-5.6-terra-review", "GPT 5.6 Terra Review", "llm", 4),
+            ("gpt-5.6-luna", "GPT 5.6 Luna", "llm", 5),
+            ("gpt-5.6-luna-review", "GPT 5.6 Luna Review", "llm", 6),
+            ("gpt-5.5", "GPT 5.5", "llm", 7),
+            ("gpt-5.4", "GPT 5.4", "llm", 8),
+            ("gpt-5.4-mini", "GPT 5.4 Mini", "llm", 9),
+            ("gpt-5.3-codex", "GPT 5.3 Codex", "llm", 10),
+            ("gpt-5.3-codex-xhigh", "GPT 5.3 Codex (xHigh)", "llm", 11),
+            ("gpt-5.3-codex-high", "GPT 5.3 Codex (High)", "llm", 12),
+            ("gpt-5.3-codex-low", "GPT 5.3 Codex (Low)", "llm", 13),
+            ("gpt-5.3-codex-none", "GPT 5.3 Codex (None)", "llm", 14),
+            ("gpt-5.3-codex-spark", "GPT 5.3 Codex Spark", "llm", 15),
+            ("gpt-5.5-image", "GPT 5.5 Image", "image", 16),
+            ("gpt-5.4-image", "GPT 5.4 Image", "image", 17),
+            ("gpt-5.3-image", "GPT 5.3 Image", "image", 18),
+        ],
+        "nanobanana": [
+            ("gemini-1.5-flash", "Gemini 1.5 Flash", "llm", 1),
+            ("gemini-1.5-pro", "Gemini 1.5 Pro", "llm", 2),
+        ],
+        "ollama": [
+            ("llama3", "Llama 3", "llm", 1),
+            ("qwen2", "Qwen 2", "llm", 2),
+            ("mistral", "Mistral", "llm", 3),
+            ("phi3", "Phi 3", "llm", 4),
+        ],
+        "kiro": [("kiro-llm", "Kiro AI LLM", "llm", 1)],
+        "qoder": [("qoder-llm", "Qoder LLM", "llm", 1)],
+        "deepgram": [
+            ("nova-2", "Nova 2 (Speech)", "tts", 1),
+            ("whisper-large", "Whisper Large (ASR)", "stt", 2),
+        ],
+        "elevenlabs": [
+            ("eleven_multilingual_v2", "Eleven Multilingual v2", "tts", 1),
+            ("eleven_turbo_v2_5", "Eleven Turbo v2.5", "tts", 2),
+        ],
+        "cartesia": [
+            ("sonic-2", "Sonic 2", "tts", 1),
+            ("sonic-3", "Sonic 3", "tts", 2),
+        ],
+        "playht": [
+            ("PlayDialog", "PlayDialog", "tts", 1),
+            ("Play3.0-mini", "Play 3.0 Mini", "tts", 2),
+        ],
+        "inworld": [
+            ("inworld-tts-1.5-mini", "Inworld TTS 1.5 Mini", "tts", 1),
+            ("inworld-tts-1.5-max", "Inworld TTS 1.5 Max", "tts", 2),
+        ],
+        "minimax": [
+            ("speech-2.8-hd", "Speech 2.8 HD", "tts", 1),
+            ("speech-2.8-turbo", "Speech 2.8 Turbo", "tts", 2),
+        ],
+        "minimax-cn": [
+            ("speech-2.8-hd", "Speech 2.8 HD (CN)", "tts", 1),
+            ("speech-2.8-turbo", "Speech 2.8 Turbo (CN)", "tts", 2),
+        ],
+        "hyperbolic": [("melo-tts", "Melo TTS", "tts", 1)],
+        "assemblyai": [
+            ("universal-3-pro", "Universal 3 Pro", "stt", 1),
+            ("universal-2", "Universal 2", "stt", 2),
+        ],
+        "perplexity": [("sonar", "Sonar Search", "llm", 1)],
+        "tavily": [("tavily-search", "Tavily Search Engine", "llm", 1)],
+        "brave-search": [("brave-search", "Brave Web Search", "llm", 1)],
+        "serper": [("google-search", "Google Search (Serper)", "llm", 1)],
+        "exa": [("exa-search", "Exa Neural Search", "llm", 1)],
+        "google-pse": [("google-pse", "Google PSE Engine", "llm", 1)],
+        "linkup": [("linkup-search", "Linkup Search Tool", "llm", 1)],
+        "searchapi": [("searchapi-search", "SearchAPI Index", "llm", 1)],
+        "youcom": [("youcom-search", "You.com Search Engine", "llm", 1)],
+        "firecrawl": [("firecrawl-scrape", "Firecrawl Scrape API", "llm", 1)],
+    }
+    for prov, m_list in initial_models.items():
+        for m_id, m_name, m_type, order in m_list:
+            pk = f"{prov}_{m_id}"
+            conn.execute(
+                """INSERT OR REPLACE INTO provider_models 
+                   (id, provider, model_id, name, type, enabled, sort_order) 
+                   VALUES (?, ?, ?, ?, ?, 1, ?)""",
+                (pk, prov, m_id, m_name, m_type, order),
+            )
+    conn.commit()
+
+
+def load_models_from_db(provider: str = "") -> dict[str, list[dict]]:
+    conn = get_db_connection()
+    result = {}
+    try:
+        if provider:
+            cursor = conn.execute(
+                """SELECT model_id, name, type, enabled 
+                   FROM provider_models 
+                   WHERE provider = ? 
+                   ORDER BY sort_order ASC, rowid ASC""",
+                (provider,),
+            )
+            rows = cursor.fetchall()
+            result[provider] = [
+                {
+                    "id": r["model_id"],
+                    "name": r["name"],
+                    "type": r["type"],
+                    "enabled": bool(r["enabled"]),
+                }
+                for r in rows
+            ]
+        else:
+            cursor = conn.execute(
+                """SELECT model_id, provider, name, type, enabled 
+                   FROM provider_models 
+                   ORDER BY provider ASC, sort_order ASC, rowid ASC"""
+            )
+            rows = cursor.fetchall()
+            for r in rows:
+                p = r["provider"]
+                if p not in result:
+                    result[p] = []
+                result[p].append(
+                    {
+                        "id": r["model_id"],
+                        "name": r["name"],
+                        "type": r["type"],
+                        "enabled": bool(r["enabled"]),
+                    }
+                )
+    except Exception as e:
+        print("[Providers DB] Load models failed:", e)
+    finally:
+        conn.close()
+    return result
+
+
 def init_providers_db():
     conn = get_db_connection()
     try:
@@ -43,6 +228,18 @@ def init_providers_db():
             CREATE TABLE IF NOT EXISTS provider_settings (
                 provider TEXT PRIMARY KEY,
                 strategy TEXT DEFAULT 'fallback'
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS provider_models (
+                id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL,
+                model_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                type TEXT DEFAULT 'llm',
+                enabled INTEGER DEFAULT 1,
+                sort_order INTEGER DEFAULT 0,
+                UNIQUE(provider, model_id)
             )
         """)
         conn.commit()
@@ -76,6 +273,11 @@ def init_providers_db():
                             c.get("status") or "active"
                         ))
                 conn.commit()
+
+        # Seed provider models if database table is empty or missing antigravity models
+        cursor = conn.execute("SELECT count(*) FROM provider_models")
+        if cursor.fetchone()[0] == 0:
+            _seed_provider_models(conn)
     except Exception as e:
         print("[Providers DB] Init failed:", e)
     finally:
@@ -155,33 +357,10 @@ def save_providers_to_db(providers):
         conn.close()
 
 
-def _sync_dtrouter_key_if_needed(cfg):
-    nr = cfg.get("dtrouter") or {}
-    api_key = str(nr.get("api_key") or "").strip()
-    if not api_key or "machineId" in api_key:
-        try:
-            from templates.pages.chat.route import _cli_token, _local_dashboard_get
-            token = _cli_token()
-            if token:
-                endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").strip().rstrip("/")
-                status, body = _local_dashboard_get("/api/keys", endpoint=endpoint)
-                if status == 200 and isinstance(body, dict):
-                    keys = body.get("keys") or []
-                    active_key = next((k.get("key") for k in keys if k.get("isActive") and k.get("key")), None)
-                    if not active_key and keys:
-                        active_key = keys[0].get("key")
-                    if active_key:
-                        nr["api_key"] = active_key
-                        cfg["dtrouter"] = nr
-                        save_cfg(cfg)
-        except Exception:
-            pass
-
 # ── /api/config ───────────────────────────────────────────────────────────────
 @bp.route("/api/config", methods=["GET"])
 def get_config():
     cfg = load_cfg()
-    _sync_dtrouter_key_if_needed(cfg)
     cfg["providers"] = load_providers_from_db()
     return jsonify(cfg)
 
@@ -910,41 +1089,6 @@ def _test_api_key_impl():
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)})
 
-    # ── DTRouter (AI Gateway) ──────────────────────────────────────────────────
-    elif provider == "dtrouter":
-        try:
-            cfg = load_cfg()
-            nr = cfg.get("dtrouter", {})
-            endpoint = (nr.get("endpoint") or "http://localhost:20128/v1").rstrip("/")
-            
-            # Try STT models list first
-            try:
-                models_req = urllib.request.Request(
-                    f"{endpoint}/models/stt",
-                    headers={"Authorization": f"Bearer {key}"},
-                )
-                with urllib.request.urlopen(models_req, timeout=10) as mr:
-                    models_data = _json.loads(mr.read())
-                model_ids = [m.get("id", "") for m in models_data.get("data", [])]
-                if model_ids:
-                    return jsonify({"ok": True, "model": model_ids[0], "quota": f"{len(model_ids)} STT models"})
-            except Exception:
-                pass
-
-            # Fallback to general models
-            models_req = urllib.request.Request(
-                f"{endpoint}/models",
-                headers={"Authorization": f"Bearer {key}"},
-            )
-            with urllib.request.urlopen(models_req, timeout=10) as mr:
-                models_data = _json.loads(mr.read())
-            model_ids = [m.get("id", "") for m in models_data.get("data", [])]
-            return jsonify({"ok": True, "model": model_ids[0] if model_ids else "N/A", "quota": f"{len(model_ids)} models"})
-        except urllib.error.HTTPError as e:
-            return jsonify({"ok": False, "error": f"HTTP {e.code}: Không thể kết nối DTRouter"})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)})
-
     # ── Gemini (Video gen / Image gen) ───────────────────────────────────────
     elif provider == "gemini":
         try:
@@ -1202,243 +1346,35 @@ def upload_client_secrets():
 # ── /api/providers/sync_from_dtrouter ──────────────────────────────────────────
 @bp.route("/api/providers/sync_from_dtrouter", methods=["POST", "GET"])
 def sync_from_dtrouter():
-    import sqlite3
-    import os
-    import json
-    
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    
-    if not os.path.exists(db_path):
-        return jsonify({"ok": False, "error": "Không tìm thấy cơ sở dữ liệu DTRouter"})
-        
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, provider, authType, name, email, isActive, data FROM providerConnections")
-        rows = cursor.fetchall()
-        conn.close()
-        
-        cfg = load_cfg()
-        if "providers" not in cfg:
-            cfg["providers"] = {}
-            
-        synced_count = 0
-        for row in rows:
-            conn_id, provider, auth_type, name, email, is_active, data_json = row
-            try:
-                data = json.loads(data_json)
-            except Exception:
-                data = {}
-                
-            api_key = data.get("apiKey") or data.get("accessToken") or ""
-            base_url = data.get("baseUrl") or ""
-            
-            # Default URLs if blank
-            if not base_url:
-                if provider == "gemini": base_url = "https://generativelanguage.googleapis.com"
-                elif provider == "antigravity": base_url = "https://cloudcode-pa.googleapis.com"
-                elif provider == "opencodefree" or provider == "opencode": base_url = "https://opencode.ai/zen/v1"
-                elif provider == "nvidia": base_url = "https://integrate.api.nvidia.com/v1"
-                elif provider == "openrouter": base_url = "https://openrouter.ai"
-                
-            if not api_key:
-                continue
-                
-            if provider not in cfg["providers"]:
-                cfg["providers"][provider] = {"connections": [], "strategy": "fallback"}
-                
-            p_data = cfg["providers"][provider]
-            if "connections" not in p_data:
-                p_data["connections"] = []
-                
-            # Check if this connection ID already exists
-            existing = next((c for c in p_data["connections"] if c.get("id") == conn_id), None)
-            if existing:
-                existing["name"] = name or email or provider
-                existing["api_key"] = api_key
-                existing["base_url"] = base_url
-                existing["enabled"] = bool(is_active)
-            else:
-                p_data["connections"].append({
-                    "id": conn_id,
-                    "name": name or email or provider,
-                    "api_key": api_key,
-                    "base_url": base_url,
-                    "enabled": bool(is_active),
-                    "status": "active"
-                })
-            synced_count += 1
-            
-        save_cfg(cfg)
-        return jsonify({"ok": True, "count": synced_count})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)})
+    return jsonify({"ok": True, "count": 0})
 
 
-DEFAULT_PROVIDER_MODELS = {
-    "gemini": [
-        {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash", "type": "llm"},
-        {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "type": "llm"},
-        {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "type": "llm"},
-        {"id": "gemini-2.0-flash-exp", "name": "Gemini 2.0 Flash Exp", "type": "llm"}
-    ],
-    "openai": [
-        {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "type": "llm"},
-        {"id": "gpt-4o", "name": "GPT-4o", "type": "llm"},
-        {"id": "o1-mini", "name": "O1 Mini", "type": "llm"},
-        {"id": "o1-preview", "name": "O1 Preview", "type": "llm"}
-    ],
-    "deepseek": [
-        {"id": "deepseek-chat", "name": "DeepSeek Chat (V3)", "type": "llm"},
-        {"id": "deepseek-coder", "name": "DeepSeek Coder", "type": "llm"},
-        {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner (R1)", "type": "llm"}
-    ],
-    "groq": [
-        {"id": "llama3-8b-8192", "name": "Llama 3 8B", "type": "llm"},
-        {"id": "llama3-70b-8192", "name": "Llama 3 70B", "type": "llm"},
-        {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B", "type": "llm"},
-        {"id": "gemma2-9b-it", "name": "Gemma 2 9B", "type": "llm"}
-    ],
-    "huggingface": [
-        {"id": "meta-llama/Meta-Llama-3-8B-Instruct", "name": "Llama 3 8B Instruct", "type": "llm"},
-        {"id": "mistralai/Mistral-7B-Instruct-v0.2", "name": "Mistral 7B Instruct", "type": "llm"}
-    ],
-    "openrouter": [
-        {"id": "google/gemma-2-9b-it:free", "name": "Gemma 2 9B (Free)", "type": "llm"},
-        {"id": "meta-llama/llama-3-8b-instruct:free", "name": "Llama 3 8B (Free)", "type": "llm"},
-        {"id": "mistralai/mistral-7b-instruct:free", "name": "Mistral 7B (Free)", "type": "llm"}
-    ],
-    "antigravity": [
-        {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash", "type": "llm"},
-        {"id": "gemini-3-flash-agent", "name": "Gemini 3.5 Flash (High)", "type": "llm"},
-        {"id": "gemini-3.5-flash-low", "name": "Gemini 3.5 Flash (Medium)", "type": "llm"},
-        {"id": "gemini-3.5-flash-extra-low", "name": "Gemini 3.5 Flash (Low)", "type": "llm"},
-        {"id": "gemini-pro-agent", "name": "Gemini 3.1 Pro (High)", "type": "llm"},
-        {"id": "gemini-3.1-pro-low", "name": "Gemini 3.1 Pro (Low)", "type": "llm"},
-        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (Thinking)", "type": "llm"},
-        {"id": "claude-opus-4-6-thinking", "name": "Claude Opus 4.6 (Thinking)", "type": "llm"},
-        {"id": "gpt-oss-120b-medium", "name": "GPT-OSS 120B (Medium)", "type": "llm"},
-        {"id": "gemini-3-flash", "name": "Gemini 3 Flash", "type": "llm"}
-    ],
-    "nvidia": [
-        {"id": "meta/llama3-70b-instruct", "name": "Llama 3 70B Instruct", "type": "llm"},
-        {"id": "nvidia/llama-3.1-nemotron-70b-instruct", "name": "Nemotron 70B Instruct", "type": "llm"}
-    ],
-    "xai": [
-        {"id": "grok-2", "name": "Grok 2", "type": "llm"},
-        {"id": "grok-2-1212", "name": "Grok 2 1212", "type": "llm"},
-        {"id": "grok-beta", "name": "Grok Beta", "type": "llm"}
-    ],
-    "kimi": [
-        {"id": "moonshot-v1-8k", "name": "Moonshot v1 8K", "type": "llm"},
-        {"id": "moonshot-v1-32k", "name": "Moonshot v1 32K", "type": "llm"},
-        {"id": "moonshot-v1-128k", "name": "Moonshot v1 128K", "type": "llm"}
-    ],
-    "codex": [
-        {"id": "gpt-5.6-sol", "name": "GPT 5.6 Sol", "type": "llm"},
-        {"id": "gpt-5.6-sol-review", "name": "GPT 5.6 Sol Review", "type": "llm"},
-        {"id": "gpt-5.6-terra", "name": "GPT 5.6 Terra", "type": "llm"},
-        {"id": "gpt-5.6-terra-review", "name": "GPT 5.6 Terra Review", "type": "llm"},
-        {"id": "gpt-5.6-luna", "name": "GPT 5.6 Luna", "type": "llm"},
-        {"id": "gpt-5.6-luna-review", "name": "GPT 5.6 Luna Review", "type": "llm"},
-        {"id": "gpt-5.5", "name": "GPT 5.5", "type": "llm"},
-        {"id": "gpt-5.4", "name": "GPT 5.4", "type": "llm"},
-        {"id": "gpt-5.4-mini", "name": "GPT 5.4 Mini", "type": "llm"},
-        {"id": "gpt-5.3-codex", "name": "GPT 5.3 Codex", "type": "llm"},
-        {"id": "gpt-5.3-codex-xhigh", "name": "GPT 5.3 Codex (xHigh)", "type": "llm"},
-        {"id": "gpt-5.3-codex-high", "name": "GPT 5.3 Codex (High)", "type": "llm"},
-        {"id": "gpt-5.3-codex-low", "name": "GPT 5.3 Codex (Low)", "type": "llm"},
-        {"id": "gpt-5.3-codex-none", "name": "GPT 5.3 Codex (None)", "type": "llm"},
-        {"id": "gpt-5.3-codex-spark", "name": "GPT 5.3 Codex Spark", "type": "llm"},
-        {"id": "gpt-5.5-image", "name": "GPT 5.5 Image", "type": "image"},
-        {"id": "gpt-5.4-image", "name": "GPT 5.4 Image", "type": "image"},
-        {"id": "gpt-5.3-image", "name": "GPT 5.3 Image", "type": "image"},
-    ],
-    "nanobanana": [
-        {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "type": "llm"},
-        {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "type": "llm"}
-    ],
-    "ollama": [
-        {"id": "llama3", "name": "Llama 3", "type": "llm"},
-        {"id": "qwen2", "name": "Qwen 2", "type": "llm"},
-        {"id": "mistral", "name": "Mistral", "type": "llm"},
-        {"id": "phi3", "name": "Phi 3", "type": "llm"}
-    ],
-    "opencode": [],
-    "opencodefree": [],
-    "kiro": [
-        {"id": "kiro-llm", "name": "Kiro AI LLM", "type": "llm"}
-    ],
-    "qoder": [
-        {"id": "qoder-llm", "name": "Qoder LLM", "type": "llm"}
-    ],
-    "deepgram": [
-        {"id": "nova-2", "name": "Nova 2 (Speech)", "type": "tts"},
-        {"id": "whisper-large", "name": "Whisper Large (ASR)", "type": "stt"}
-    ],
-    "elevenlabs": [
-        {"id": "eleven_multilingual_v2", "name": "Eleven Multilingual v2", "type": "tts"},
-        {"id": "eleven_turbo_v2_5", "name": "Eleven Turbo v2.5", "type": "tts"}
-    ],
-    "cartesia": [
-        {"id": "sonic-2", "name": "Sonic 2", "type": "tts"},
-        {"id": "sonic-3", "name": "Sonic 3", "type": "tts"}
-    ],
-    "playht": [
-        {"id": "PlayDialog", "name": "PlayDialog", "type": "tts"},
-        {"id": "Play3.0-mini", "name": "Play 3.0 Mini", "type": "tts"}
-    ],
-    "inworld": [
-        {"id": "inworld-tts-1.5-mini", "name": "Inworld TTS 1.5 Mini", "type": "tts"},
-        {"id": "inworld-tts-1.5-max", "name": "Inworld TTS 1.5 Max", "type": "tts"}
-    ],
-    "minimax": [
-        {"id": "speech-2.8-hd", "name": "Speech 2.8 HD", "type": "tts"},
-        {"id": "speech-2.8-turbo", "name": "Speech 2.8 Turbo", "type": "tts"}
-    ],
-    "minimax-cn": [
-        {"id": "speech-2.8-hd", "name": "Speech 2.8 HD (CN)", "type": "tts"},
-        {"id": "speech-2.8-turbo", "name": "Speech 2.8 Turbo (CN)", "type": "tts"}
-    ],
-    "hyperbolic": [
-        {"id": "melo-tts", "name": "Melo TTS", "type": "tts"}
-    ],
-    "assemblyai": [
-        {"id": "universal-3-pro", "name": "Universal 3 Pro", "type": "stt"},
-        {"id": "universal-2", "name": "Universal 2", "type": "stt"}
-    ],
-    "perplexity": [
-        {"id": "sonar", "name": "Sonar Search", "type": "llm"}
-    ],
-    "tavily": [
-        {"id": "tavily-search", "name": "Tavily Search Engine", "type": "llm"}
-    ],
-    "brave-search": [
-        {"id": "brave-search", "name": "Brave Web Search", "type": "llm"}
-    ],
-    "serper": [
-        {"id": "google-search", "name": "Google Search (Serper)", "type": "llm"}
-    ],
-    "exa": [
-        {"id": "exa-search", "name": "Exa Neural Search", "type": "llm"}
-    ],
-    "google-pse": [
-        {"id": "google-pse", "name": "Google PSE Engine", "type": "llm"}
-    ],
-    "linkup": [
-        {"id": "linkup-search", "name": "Linkup Search Tool", "type": "llm"}
-    ],
-    "searchapi": [
-        {"id": "searchapi-search", "name": "SearchAPI Index", "type": "llm"}
-    ],
-    "youcom": [
-        {"id": "youcom-search", "name": "You.com Search Engine", "type": "llm"}
-    ],
-    "firecrawl": [
-        {"id": "firecrawl-scrape", "name": "Firecrawl Scrape API", "type": "llm"}
-    ]
-}
+class _DynamicProviderModels(dict):
+    """Dynamic dict adapter backed by SQLite database (provider_models table in .state/providers.db)."""
+
+    def get(self, key, default=None):
+        db_models = load_models_from_db(key).get(key)
+        if db_models:
+            return db_models
+        return default if default is not None else []
+
+    def __getitem__(self, key):
+        res = self.get(key, None)
+        if res is None:
+            raise KeyError(key)
+        return res
+
+    def items(self):
+        return load_models_from_db().items()
+
+    def keys(self):
+        return load_models_from_db().keys()
+
+    def values(self):
+        return load_models_from_db().values()
+
+
+DEFAULT_PROVIDER_MODELS = _DynamicProviderModels()
 
 
 @bp.route("/api/providers/models", methods=["GET"])
@@ -1449,82 +1385,10 @@ def get_provider_models():
         
     models = list(DEFAULT_PROVIDER_MODELS.get(provider, []))
     
-    # Map client-side provider ID to SQLite database alias
-    alias = provider
-    if provider == "opencodefree" or provider == "opencode":
-        alias = "oc"
-    elif provider == "antigravity":
-        alias = "ag"
-    elif provider == "kiro":
-        alias = "kr"
-    elif provider == "qoder":
-        alias = "qd"
-    elif provider == "gemini":
-        alias = "gc"
-    elif provider == "xiaomi-mimo":
-        alias = "mimo"
-    elif provider == "codex":
-        alias = "cx"
-        
-    import sqlite3
-    import os
-    import json
-    
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-    
-    disabled_models = []
-    thinking_mode = "auto"
-    
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            
-            # Fetch custom models
-            cursor.execute("SELECT key, value FROM kv WHERE scope='customModels'")
-            rows = cursor.fetchall()
-            for row in rows:
-                key, val_json = row
-                try:
-                    val = json.loads(val_json)
-                    if val.get("providerAlias") == alias or val.get("providerAlias") == provider:
-                        models.append({
-                            "id": val.get("id"),
-                            "name": val.get("name") or val.get("id"),
-                            "type": val.get("type") or "llm",
-                            "custom": True
-                        })
-                except Exception:
-                    pass
-                    
-            # Fetch disabled models
-            cursor.execute("SELECT value FROM kv WHERE scope='disabledModels' AND key=?", (alias,))
-            dis_row = cursor.fetchone()
-            if not dis_row and alias != provider:
-                cursor.execute("SELECT value FROM kv WHERE scope='disabledModels' AND key=?", (provider,))
-                dis_row = cursor.fetchone()
-            if dis_row:
-                try:
-                    disabled_models = json.loads(dis_row[0])
-                except Exception:
-                    pass
-                    
-            # Fetch thinking mode
-            cursor.execute("SELECT data FROM settings")
-            settings_row = cursor.fetchone()
-            if settings_row:
-                try:
-                    settings_data = json.loads(settings_row[0])
-                    thinking_mode = settings_data.get("providerThinking", {}).get(alias, settings_data.get("providerThinking", {}).get(provider, "auto"))
-                except Exception:
-                    pass
-                    
-            conn.close()
-        except Exception:
-            pass
+    cfg = load_cfg()
+    p_cfg = (cfg.get("providers") or {}).get(provider) or {}
+    disabled_models = p_cfg.get("disabled_models") or []
+    thinking_mode = p_cfg.get("thinking_mode") or "auto"
             
     for m in models:
         m["enabled"] = m["id"] not in disabled_models
@@ -1541,22 +1405,6 @@ def toggle_provider_model():
     
     if not provider or not model_id:
         return jsonify({"ok": False, "error": "Missing parameters"}), 400
-        
-    alias = provider
-    if provider == "opencodefree" or provider == "opencode":
-        alias = "oc"
-    elif provider == "antigravity":
-        alias = "ag"
-    elif provider == "kiro":
-        alias = "kr"
-    elif provider == "qoder":
-        alias = "qd"
-    elif provider == "gemini":
-        alias = "gc"
-    elif provider == "xiaomi-mimo":
-        alias = "mimo"
-    elif provider == "codex":
-        alias = "cx"
         
     cfg = load_cfg()
     if "providers" not in cfg:
@@ -1576,44 +1424,6 @@ def toggle_provider_model():
             p_cfg["disabled_models"].append(model_id)
             
     save_cfg(cfg)
-    
-    import sqlite3
-    import os
-    import json
-    
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-    
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT value FROM kv WHERE scope='disabledModels' AND key=?", (alias,))
-            row = cursor.fetchone()
-            disabled_list = []
-            if row:
-                try:
-                    disabled_list = json.loads(row[0])
-                except Exception:
-                    pass
-                    
-            if enabled:
-                if model_id in disabled_list:
-                    disabled_list.remove(model_id)
-            else:
-                if model_id not in disabled_list:
-                    disabled_list.append(model_id)
-                    
-            cursor.execute("INSERT OR REPLACE INTO kv (scope, key, value) VALUES ('disabledModels', ?, ?)", 
-                           (alias, json.dumps(disabled_list)))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            return jsonify({"ok": False, "error": f"Sqlite error: {e}"})
-            
     return jsonify({"ok": True})
 
 
@@ -1625,52 +1435,8 @@ def disable_all_provider_models():
     if not provider:
         return jsonify({"ok": False, "error": "Missing provider parameter"}), 400
         
-    alias = provider
-    if provider == "opencodefree" or provider == "opencode":
-        alias = "oc"
-    elif provider == "antigravity":
-        alias = "ag"
-    elif provider == "kiro":
-        alias = "kr"
-    elif provider == "qoder":
-        alias = "qd"
-    elif provider == "gemini":
-        alias = "gc"
-    elif provider == "xiaomi-mimo":
-        alias = "mimo"
-    elif provider == "codex":
-        alias = "cx"
-        
     all_models = list(DEFAULT_PROVIDER_MODELS.get(provider, []))
-    
-    import sqlite3
-    import os
-    import json
-    
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-    
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT key, value FROM kv WHERE scope='customModels'")
-            rows = cursor.fetchall()
-            for row in rows:
-                key, val_json = row
-                try:
-                    val = json.loads(val_json)
-                    if val.get("providerAlias") == alias or val.get("providerAlias") == provider:
-                        all_models.append({"id": val.get("id")})
-                except Exception:
-                    pass
-            conn.close()
-        except Exception:
-            pass
-            
-    model_ids = [m["id"] for m in all_models]
+    model_ids = [m["id"] for m in all_models if isinstance(m, dict) and "id" in m]
     
     cfg = load_cfg()
     if "providers" not in cfg:
@@ -1681,18 +1447,6 @@ def disable_all_provider_models():
     p_cfg = cfg["providers"][provider]
     p_cfg["disabled_models"] = list(model_ids)
     save_cfg(cfg)
-    
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("INSERT OR REPLACE INTO kv (scope, key, value) VALUES ('disabledModels', ?, ?)", 
-                           (alias, json.dumps(model_ids)))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            return jsonify({"ok": False, "error": f"Sqlite error: {e}"})
-            
     return jsonify({"ok": True})
 
 
@@ -1704,22 +1458,6 @@ def enable_all_provider_models():
     if not provider:
         return jsonify({"ok": False, "error": "Missing provider parameter"}), 400
         
-    alias = provider
-    if provider == "opencodefree" or provider == "opencode":
-        alias = "oc"
-    elif provider == "antigravity":
-        alias = "ag"
-    elif provider == "kiro":
-        alias = "kr"
-    elif provider == "qoder":
-        alias = "qd"
-    elif provider == "gemini":
-        alias = "gc"
-    elif provider == "xiaomi-mimo":
-        alias = "mimo"
-    elif provider == "codex":
-        alias = "cx"
-        
     cfg = load_cfg()
     if "providers" not in cfg:
         cfg["providers"] = {}
@@ -1729,25 +1467,6 @@ def enable_all_provider_models():
     p_cfg = cfg["providers"][provider]
     p_cfg["disabled_models"] = []
     save_cfg(cfg)
-    
-    import sqlite3
-    import os
-    
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-    
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM kv WHERE scope='disabledModels' AND key=?", (alias,))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            return jsonify({"ok": False, "error": f"Sqlite error: {e}"})
-            
     return jsonify({"ok": True})
 
 
@@ -1760,22 +1479,6 @@ def set_provider_thinking_mode():
     if not provider:
         return jsonify({"ok": False, "error": "Missing parameters"}), 400
         
-    alias = provider
-    if provider == "opencodefree" or provider == "opencode":
-        alias = "oc"
-    elif provider == "antigravity":
-        alias = "ag"
-    elif provider == "kiro":
-        alias = "kr"
-    elif provider == "qoder":
-        alias = "qd"
-    elif provider == "gemini":
-        alias = "gc"
-    elif provider == "xiaomi-mimo":
-        alias = "mimo"
-    elif provider == "codex":
-        alias = "cx"
-        
     cfg = load_cfg()
     if "providers" not in cfg:
         cfg["providers"] = {}
@@ -1783,40 +1486,6 @@ def set_provider_thinking_mode():
         cfg["providers"][provider] = {"connections": [], "strategy": "fallback"}
     cfg["providers"][provider]["thinking_mode"] = mode
     save_cfg(cfg)
-    
-    import sqlite3
-    import os
-    import json
-    
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-    
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT data FROM settings")
-            row = cursor.fetchone()
-            settings_data = {}
-            if row:
-                try:
-                    settings_data = json.loads(row[0])
-                except Exception:
-                    pass
-            
-            if "providerThinking" not in settings_data:
-                settings_data["providerThinking"] = {}
-                
-            settings_data["providerThinking"][alias] = mode
-            
-            cursor.execute("UPDATE settings SET data = ?", (json.dumps(settings_data),))
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            return jsonify({"ok": False, "error": f"Sqlite error: {e}"})
-            
     return jsonify({"ok": True})
 
 
@@ -1831,51 +1500,12 @@ def test_provider_model():
     if "/" in model_id:
         p_part, m_part = model_id.split("/", 1)
         raw_provider = p_part
-        alias = p_part
-        if p_part == "opencodefree" or p_part == "opencode":
-            alias = "oc"
-        elif p_part == "antigravity":
-            alias = "ag"
-        elif p_part == "kiro":
-            alias = "kr"
-        elif p_part == "qoder":
-            alias = "qd"
-        elif p_part == "gemini":
-            alias = "gc"
-        elif p_part == "xiaomi-mimo":
-            alias = "mimo"
-        elif p_part == "codex":
-            alias = "cx"
-        model_id = f"{alias}/{m_part}"
 
-    import sqlite3
-    import os
     import json
     import urllib.request
     import ssl
-    
-    appdata = os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming")
-    db_path = os.path.join(appdata, "dtrouter", "db", "data.sqlite")
-    if not os.path.exists(db_path):
-        db_path = os.path.join(appdata, "9router", "db", "data.sqlite")
-    
-    api_key = None
-    if os.path.exists(db_path):
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT key FROM apiKeys WHERE isActive != 0 LIMIT 1")
-            row = cursor.fetchone()
-            if row:
-                api_key = row[0]
-            conn.close()
-        except Exception:
-            pass
 
     headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
     body = {
         "model": model_id,
         "max_tokens": 1,
@@ -1885,7 +1515,6 @@ def test_provider_model():
 
     ssl_ctx = ssl._create_unverified_context()
     endpoints_to_try = [
-        "http://localhost:20128/v1/chat/completions",
         "http://localhost:9123/v1/chat/completions",
         "http://127.0.0.1:9123/v1/chat/completions",
     ]
@@ -2019,11 +1648,11 @@ def get_connection_usage(connection_id):
                         "antigravity-preview",
                     ]
                     KEEP_MODELS = {
-                        "gemini-2.5-flash", "gemini-2.5-pro",
                         "gemini-3-pro-preview", "gemini-3-flash-preview",
                         "gemini-3.1-pro-preview", "gemini-3.1-flash-lite",
                         "gemini-3.5-flash", "gemini-3.5-flash-lite",
-                        "gemini-3.6-flash",
+                        "gemini-3.5-flash-medium",
+                        "gemini-3.6-flash", "gemini-3.6-flash-medium",
                     }
                     for m in models_data["models"]:
                         model_id = m.get("name", "").replace("models/", "")
@@ -2086,39 +1715,142 @@ def get_connection_usage(connection_id):
 
 
 
-# ── Chatbot Compatibility Fallback Endpoints ────────────────────────────────
+# ── Chatbot Compatibility Endpoints (backed by Providers DB) ─────────────────
 @bp.route("/api/chatbot/config", methods=["GET"])
 def get_chatbot_config():
+    default_model = "gemini-3.6-flash"
+    try:
+        cfg = load_cfg()
+        default_model = cfg.get("chatbot", {}).get("default_model") or cfg.get("default_model") or "gemini-3.6-flash"
+    except Exception:
+        pass
     return jsonify({
         "ok": True,
         "has_key": True,
-        "default_model": "gemini-2.0-flash",
+        "default_model": default_model,
         "provider": "antigravity"
     })
 
 @bp.route("/api/chatbot/models", methods=["GET"])
 def get_chatbot_models():
-    return jsonify({
-        "ok": True,
-        "models": [
-            {"id": "gemini-2.0-flash", "owned_by": "google", "name": "Gemini 2.0 Flash"},
-            {"id": "gemini-1.5-flash", "owned_by": "google", "name": "Gemini 1.5 Flash"},
-            {"id": "opencode", "owned_by": "opencode", "name": "OpenCode Free"}
+    models = []
+    seen = set()
+    try:
+        all_db = load_models_from_db()
+        order = ["antigravity", "codex", "deepseek", "openai", "groq", "xai", "qwen"]
+        for p in order:
+            if p == "gemini":
+                continue
+            for m in all_db.get(p, []):
+                if m.get("enabled") and m.get("id") and m.get("id") not in seen:
+                    seen.add(m.get("id"))
+                    models.append({
+                        "id": m.get("id"),
+                        "owned_by": p,
+                        "name": m.get("name") or m.get("id")
+                    })
+        for p, mlist in all_db.items():
+            if p not in order and p != "gemini":
+                for m in mlist:
+                    if m.get("enabled") and m.get("id") and m.get("id") not in seen:
+                        seen.add(m.get("id"))
+                        models.append({
+                            "id": m.get("id"),
+                            "owned_by": p,
+                            "name": m.get("name") or m.get("id")
+                        })
+    except Exception as e:
+        print("[Chatbot API] Error loading models:", e)
+
+    if not models:
+        models = [
+            {"id": "gemini-3.7-flash", "owned_by": "antigravity", "name": "Antigravity 3.7 Flash"},
+            {"id": "gemini-3.6-flash", "owned_by": "antigravity", "name": "Antigravity 3.6 Flash (High)"},
+            {"id": "gemini-3.6-flash-medium", "owned_by": "antigravity", "name": "Antigravity 3.6 Flash (Medium)"},
+            {"id": "gemini-3-flash-agent", "owned_by": "antigravity", "name": "Antigravity 3.5 Flash (High)"},
+            {"id": "gemini-pro-agent", "owned_by": "antigravity", "name": "Antigravity 3.1 Pro (High)"},
+            {"id": "claude-sonnet-4-6", "owned_by": "antigravity", "name": "Claude Sonnet 4.6 (Thinking)"},
+            {"id": "gpt-oss-120b-medium", "owned_by": "antigravity", "name": "GPT-OSS 120B (Medium)"}
         ]
-    })
+    return jsonify({"ok": True, "models": models})
 
 @bp.route("/api/chatbot/media_models", methods=["GET"])
 def get_chatbot_media_models():
     kind = request.args.get("kind", "")
-    if kind == "stt":
+    models = []
+    seen = set()
+    try:
+        all_db = load_models_from_db()
+        if kind in ("stt", "audio-to-text"):
+            for p in ["antigravity", "deepgram", "assemblyai", "groq", "openai"]:
+                for m in all_db.get(p, []):
+                    if m.get("enabled") and m.get("id") and m.get("id") not in seen:
+                        seen.add(m.get("id"))
+                        models.append({
+                            "id": m.get("id"),
+                            "owned_by": p,
+                            "name": m.get("name") or m.get("id")
+                        })
+        elif kind in ("vision", "image-to-text", "video"):
+            for p in ["antigravity"]:
+                for m in all_db.get(p, []):
+                    if m.get("enabled") and m.get("id") and m.get("id") not in seen:
+                        seen.add(m.get("id"))
+                        models.append({
+                            "id": m.get("id"),
+                            "owned_by": p,
+                            "name": m.get("name") or m.get("id")
+                        })
+        else:
+            for p in ["antigravity", "codex", "openai", "deepseek"]:
+                for m in all_db.get(p, []):
+                    if m.get("enabled") and m.get("id") and m.get("id") not in seen:
+                        seen.add(m.get("id"))
+                        models.append({
+                            "id": m.get("id"),
+                            "owned_by": p,
+                            "name": m.get("name") or m.get("id")
+                        })
+    except Exception:
+        pass
+
+    if not models:
         models = [
-            {"id": "whisper-1", "owned_by": "openai", "name": "Whisper 1"},
-            {"id": "deepgram", "owned_by": "deepgram", "name": "Deepgram STT"}
-        ]
-    else:
-        models = [
-            {"id": "gemini-2.0-flash", "owned_by": "google", "name": "Gemini 2.0 Flash"},
-            {"id": "opencode", "owned_by": "opencode", "name": "OpenCode Free"}
+            {"id": "gemini-3.7-flash", "owned_by": "antigravity", "name": "Antigravity 3.7 Flash"},
+            {"id": "gemini-3.6-flash", "owned_by": "antigravity", "name": "Antigravity 3.6 Flash (High)"},
+            {"id": "gemini-3.6-flash-medium", "owned_by": "antigravity", "name": "Antigravity 3.6 Flash (Medium)"},
+            {"id": "gemini-3-flash-agent", "owned_by": "antigravity", "name": "Antigravity 3.5 Flash (High)"},
+            {"id": "claude-sonnet-4-6", "owned_by": "antigravity", "name": "Claude Sonnet 4.6 (Thinking)"},
+            {"id": "gpt-oss-120b-medium", "owned_by": "antigravity", "name": "GPT-OSS 120B (Medium)"}
         ]
     return jsonify({"ok": True, "models": models})
+
+
+@bp.route("/api/update_antigravity_key", methods=["POST"])
+def update_antigravity_key():
+    import time, sqlite3
+    data = request.json or {}
+    new_key = (data.get("key") or "").strip()
+    if not new_key:
+        return jsonify({"ok": False, "error": "Khóa API key trống"}), 400
+
+    try:
+        conn = sqlite3.connect(".state/providers.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM provider_connections WHERE provider = 'antigravity' AND enabled = 1")
+        row = cursor.fetchone()
+        if row:
+            cursor.execute("UPDATE provider_connections SET api_key = ? WHERE id = ?", (new_key, row[0]))
+        else:
+            conn_id = f"conn_{int(time.time()*1000)}"
+            cursor.execute(
+                "INSERT INTO provider_connections (id, provider, name, api_key, base_url, enabled, status) VALUES (?, ?, ?, ?, ?, 1, 'OK')",
+                (conn_id, "antigravity", "Antigravity Active Key", new_key, "https://generativelanguage.googleapis.com")
+            )
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "message": "Đã cập nhật API key Antigravity thành công"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 

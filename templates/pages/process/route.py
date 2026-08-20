@@ -183,6 +183,35 @@ def proc_save_ass():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def _resolve_video_path(video_path_str: str) -> Path | None:
+    if not video_path_str:
+        return None
+    raw = str(video_path_str).strip().strip('"').strip("'")
+    if not raw:
+        return None
+    # 1. Try directly as Path
+    vp = Path(raw).expanduser()
+    if vp.exists():
+        return vp
+    # 2. Try relative to ROOT
+    if not vp.is_absolute():
+        p = ROOT / vp
+        if p.exists():
+            return p
+    # 3. Clean up backslashes and duplicated ROOT paths
+    clean_str = raw.replace("\\", "/").strip()
+    for marker in ("Downloaded/", "temp_uploads/", "Process_video/"):
+        if marker in clean_str:
+            sub = clean_str[clean_str.index(marker):]
+            p = ROOT / sub
+            if p.exists():
+                return p
+            if marker == "Process_video/":
+                p2 = ROOT / "Downloaded" / sub
+                if p2.exists():
+                    return p2
+    return None
+
 _PROBE_CACHE = {}
 
 @bp.route("/api/video_frame", methods=["POST"])
@@ -202,11 +231,9 @@ def video_frame():
     if not video_path_str:
         return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
 
-    vp = Path(video_path_str).expanduser()
-    if not vp.is_absolute():
-        vp = ROOT / vp
-    if not vp.exists():
-        return jsonify({"ok": False, "error": f"Video không tồn tại: {vp}"}), 404
+    vp = _resolve_video_path(video_path_str)
+    if not vp or not vp.exists():
+        return jsonify({"ok": False, "error": f"Video không tồn tại: {video_path_str}"}), 404
 
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
@@ -295,11 +322,9 @@ def video_filmstrip():
     if not video_path_str:
         return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
 
-    vp = Path(video_path_str).expanduser()
-    if not vp.is_absolute():
-        vp = ROOT / vp
-    if not vp.exists():
-        return jsonify({"ok": False, "error": f"Video không tồn tại: {vp}"}), 404
+    vp = _resolve_video_path(video_path_str)
+    if not vp or not vp.exists():
+        return jsonify({"ok": False, "error": f"Video không tồn tại: {video_path_str}"}), 404
 
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
@@ -424,15 +449,29 @@ def analyze_video_ai():
 
     def _json_from_text(text: str) -> dict:
         raw = (text or "").strip()
-        raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.I).strip()
-        raw = re.sub(r"\s*```$", "", raw).strip()
+        if not raw:
+            return {}
         try:
             return _j.loads(raw)
         except Exception:
-            m = re.search(r"\{.*\}", raw, flags=re.S)
-            if not m:
-                raise
-            return _j.loads(m.group(0))
+            pass
+        m_block = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw, flags=re.I)
+        if m_block:
+            try:
+                return _j.loads(m_block.group(1).strip())
+            except Exception:
+                pass
+        start_idx = raw.find("{")
+        if start_idx != -1:
+            end_idx = raw.rfind("}")
+            if end_idx > start_idx:
+                for i in range(end_idx, start_idx, -1):
+                    if raw[i] == "}":
+                        try:
+                            return _j.loads(raw[start_idx:i + 1].strip())
+                        except Exception:
+                            pass
+        return {}
 
     def _clean_result(result: dict) -> dict:
         if not isinstance(result, dict):
@@ -442,27 +481,30 @@ def analyze_video_ai():
         for idx, z in enumerate(zones if isinstance(zones, list) else []):
             if not isinstance(z, dict):
                 continue
+            conf = _clamp(z.get("confidence", 0.8), 0, 1, 0.8)
+            if conf < 0.6:
+                continue
             box = z.get("box_pct") if isinstance(z.get("box_pct"), dict) else {}
-            height = z.get("height_pct", box.get("h", 12))
-            position = z.get("position_pct", (float(box.get("y", 44) or 44) + float(box.get("h", 12) or 12) / 2))
-            width = z.get("width_pct", box.get("w", 85))
-            x = z.get("x_pct", (float(box.get("x", 7.5) or 7.5) + float(box.get("w", 85) or 85) / 2))
+            height = z.get("height_pct", box.get("h", 10))
+            position = z.get("position_pct", (float(box.get("y", 44) or 44) + float(box.get("h", 10) or 10) / 2))
+            width = z.get("width_pct", box.get("w", 70))
+            x = z.get("x_pct", (float(box.get("x", 15) or 15) + float(box.get("w", 70) or 70) / 2))
             clean_zones.append({
                 "id": z.get("id") or f"ai-{idx + 1}",
                 "label": str(z.get("label") or z.get("type") or f"AI zone {idx + 1}")[:80],
                 "reason": str(z.get("reason") or "")[:300],
-                "height_pct": _clamp(height, 3, 45, 12),
+                "height_pct": _clamp(height, 2, 35, 10),
                 "position_pct": _clamp(position, 0, 100, 50),
-                "width_pct": _clamp(width, 20, 100, 85),
+                "width_pct": _clamp(width, 10, 100, 75),
                 "x_pct": _clamp(x, 0, 100, 50),
                 "start_sec": None if z.get("start_sec") in ("", None) else _clamp(z.get("start_sec"), 0, 999999, 0),
                 "end_sec": None if z.get("end_sec") in ("", None) else _clamp(z.get("end_sec"), 0, 999999, 0),
-                "confidence": _clamp(z.get("confidence", 0.7), 0, 1, 0.7),
+                "confidence": conf,
                 "source": "ai",
             })
-        result["suggested_blur_zones"] = clean_zones[:8]
+        result["suggested_blur_zones"] = clean_zones[:6]
         items = result.get("needs_cover") or []
-        result["needs_cover"] = items[:12] if isinstance(items, list) else []
+        result["needs_cover"] = items[:10] if isinstance(items, list) else []
         titles = result.get("title_suggestions") or {}
         result["title_suggestions"] = titles if isinstance(titles, dict) else {}
         for key in ("summary", "visual_style", "source_language", "analysis_notes"):
@@ -485,9 +527,9 @@ def analyze_video_ai():
         duration = float(duration or 0.0)
 
         if count <= 0:
-            count = 12
+            count = 6
             if duration > 0:
-                count = max(8, min(40, int(duration / 3) + 1))
+                count = max(4, min(8, int(duration / 4) + 1))
 
         if duration > 0:
             if count <= 1:
@@ -508,9 +550,9 @@ def analyze_video_ai():
                 out_jpg = Path(tmpdir) / f"frame_{idx}.jpg"
                 subprocess.run([
                     ffmpeg, "-ss", f"{ts:.3f}", "-i", str(tmp_video),
-                    "-vframes", "1", "-q:v", "4", "-vf", "scale=640:-1",
+                    "-vframes", "1", "-q:v", "5", "-vf", "scale=512:-1",
                     str(out_jpg), "-y", "-loglevel", "error",
-                ], capture_output=True, timeout=35)
+                ], capture_output=True, timeout=25)
                 if out_jpg.exists() and out_jpg.stat().st_size > 0:
                     frames.append({
                         "timestamp": round(ts, 2),
@@ -522,54 +564,84 @@ def analyze_video_ai():
         lang_hint = language or "auto"
         target_hint = target_language or "vi"
         return f"""
-You are a video editing assistant. Analyze these sampled video frames as a single video.
-The original/source language hint is: {lang_hint}. Output language for summaries and title ideas: {target_hint}.
-Duration: {duration:.2f}s. Frame timestamps: {timestamps}.
+You are an expert video editing AI specializing in detecting unwanted hardcoded subtitles, watermarks, platform logos, and text overlays.
+Source language: {lang_hint}. Output language for summary & titles: {target_hint}.
+Video duration: {duration:.2f}s. Analyzed frame timestamps: {timestamps}.
 
-Find visible text, subtitles, watermarks, brand logos, platform marks, usernames, QR codes, or UI elements that should be covered before reposting.
-When detecting text, prioritize text in the original/source language ({lang_hint}) and persistent logos/watermarks. Do not mark normal objects or faces as text/logo.
-Return only strict JSON with this shape:
+CRITICAL RULES:
+1. ONLY detect REAL visible text characters, hardcoded subtitles (especially in {lang_hint}), platform logos (Douyin, TikTok, Kuaishou, Xiaohongshu), author usernames, or QR codes.
+2. DO NOT hallucinate or mark normal scene objects (such as beds, blankets, pillows, clothing, furniture, floors, walls, human bodies, faces) as text/logos! If a frame has NO subtitles or logos, return empty arrays.
+3. PRECISE TIMECODES: If subtitles only appear during a portion of the video (e.g. only in the last frames), specify the exact "start_sec" and "end_sec" timestamps where they are visible. Do NOT set a global mask if subtitles are only present at the end or beginning.
+4. TIGHT BOXES: Bounding boxes must tightly cover the text area only.
+
+Return strict JSON only:
 {{
-  "summary": "short content summary",
-  "visual_style": "scene, aspect, camera, color, notable movement",
-  "source_language": "detected source language",
-  "analysis_notes": "what can/cannot be read confidently",
+  "summary": "concise summary of video content",
+  "visual_style": "camera style, lighting, setting",
+  "source_language": "detected language",
+  "analysis_notes": "details about text/logos found",
   "needs_cover": [
     {{
-      "type": "subtitle|logo|watermark|text|qr|ui",
-      "label": "what to cover",
-      "reason": "why",
-      "confidence": 0.0,
-      "box_pct": {{"x": 0, "y": 0, "w": 100, "h": 10}},
-      "start_sec": null,
-      "end_sec": null
+      "type": "subtitle|logo|watermark|qr",
+      "label": "description of text/logo",
+      "reason": "why cover",
+      "confidence": 0.9,
+      "box_pct": {{"x": 15, "y": 75, "w": 70, "h": 10}},
+      "start_sec": 60.0,
+      "end_sec": 120.0
     }}
   ],
   "suggested_blur_zones": [
     {{
-      "label": "bottom original subtitle",
-      "reason": "source-language subtitle",
-      "height_pct": 12,
-      "position_pct": 88,
-      "width_pct": 92,
+      "label": "phụ đề gốc",
+      "reason": "che phụ đề gốc tiếng Trung",
+      "height_pct": 10,
+      "position_pct": 80,
+      "width_pct": 75,
       "x_pct": 50,
-      "start_sec": null,
-      "end_sec": null,
-      "confidence": 0.8
+      "start_sec": 60.0,
+      "end_sec": 120.0,
+      "confidence": 0.9
     }}
   ],
   "title_suggestions": {{
-    "short": "concise title",
-    "youtube": "title under 100 chars",
-    "tiktok": "caption title under 120 chars",
-    "facebook": "friendly post title"
+    "short": "tiêu đề ngắn gọn",
+    "youtube": "tiêu đề YouTube hấp dẫn",
+    "tiktok": "caption TikTok thu hút",
+    "facebook": "tiêu đề Facebook"
   }}
 }}
-Coordinates are percentages relative to the visible video frame: x/y top-left, w/h size; suggested zones use center x/y.
-If no text/logo should be covered, return empty arrays.
+If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones": [].
 """.strip()
 
-    def _call_gemini(api_key: str, model: str, prompt: str, frames: list[dict]) -> dict:
+    def _call_gemini(api_key: str, model: str, prompt: str, frames: list[dict], base_url: str = "") -> dict:
+        import ssl
+        base_endpoint = (base_url or "https://generativelanguage.googleapis.com").rstrip("/")
+        if base_endpoint.endswith("/v1beta") or base_endpoint.endswith("/v1"):
+            base_endpoint = base_endpoint.rsplit("/", 1)[0]
+        
+        m_clean = str(model or "").split("/")[-1].lower().strip()
+        GEMINI_MAP = {
+            "gemini-3.7-flash": "gemini-3.7-flash",
+            "gemini-3.6-flash": "gemini-3.7-flash",
+            "gemini-3.6-flash-high": "gemini-3.7-flash",
+            "gemini-3.6-flash-medium": "gemini-3.5-flash",
+            "gemini-3.6-flash-low": "gemini-3.5-flash",
+            "gemini-3-flash-agent": "gemini-3.5-flash",
+            "gemini-3.5-flash-medium": "gemini-3.5-flash",
+            "gemini-3.5-flash-low": "gemini-3.5-flash",
+            "gemini-3.5-flash": "gemini-3.5-flash",
+            "gemini-3-flash": "gemini-3-flash-preview",
+            "gemini-3-flash-preview": "gemini-3-flash-preview",
+            "gemini-2.5-flash": "gemini-2.5-flash",
+            "gemini-flash-latest": "gemini-flash-latest",
+            "gemini-pro-agent": "gemini-2.5-flash",
+            "gemini-3.1-pro-low": "gemini-2.5-flash",
+            "gemini-3.1-pro-preview": "gemini-2.5-flash",
+            "gemini-2.5-pro": "gemini-2.5-flash",
+        }
+        actual_model = GEMINI_MAP.get(m_clean, m_clean if (m_clean.startswith("gemini-") and not m_clean.startswith("gemini-3.6")) else "gemini-3.7-flash")
+
         parts = [{"text": prompt}]
         for f in frames:
             parts.append({"text": f"Frame at {f['timestamp']} seconds"})
@@ -577,175 +649,70 @@ If no text/logo should be covered, return empty arrays.
         payload = {
             "contents": [{"parts": parts}],
             "generationConfig": {
-                "temperature": 0.2,
+                "temperature": 0.1,
                 "maxOutputTokens": 1800,
                 "responseMimeType": "application/json",
             },
         }
-        req = urllib.request.Request(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-            data=_j.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            data = _j.loads(resp.read().decode("utf-8", "replace") or "{}")
-        parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
-        text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text")).strip()
-        if not text:
-            raise RuntimeError("Gemini khong tra ve noi dung phan tich")
-        return _json_from_text(text)
+        models_to_try = [actual_model]
+        for fb in ("gemini-3.5-flash", "gemini-2.5-flash", "gemini-flash-latest"):
+            if fb not in models_to_try:
+                models_to_try.append(fb)
 
-    def _call_openai(api_key: str, model: str, prompt: str, frames: list[dict]) -> dict:
-        content = [{"type": "text", "text": prompt}]
-        for f in frames:
-            content.append({"type": "text", "text": f"Frame at {f['timestamp']} seconds"})
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{f['b64']}", "detail": "low"},
-            })
-        payload = {
-            "model": model,
-            "messages": [{"role": "user", "content": content}],
-            "temperature": 0.2,
-            "max_tokens": 1800,
-            "response_format": {"type": "json_object"},
-        }
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
-            data=_j.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=90) as resp:
-            data = _j.loads(resp.read().decode("utf-8", "replace") or "{}")
-        text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
-        if not text:
-            raise RuntimeError("OpenAI khong tra ve noi dung phan tich")
-        return _json_from_text(text)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
 
-    def _call_dtrouter(api_key: str, endpoint: str, model: str, prompt: str, frames: list[dict]) -> dict:
-        content = [{"type": "text", "text": prompt}]
-        for f in frames:
-            content.append({"type": "text", "text": f"Frame at {f['timestamp']} seconds"})
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{f['b64']}", "detail": "low"},
-            })
-        payload = {
-            "model": model,
-            "messages": [{"role": "user", "content": content}],
-            "temperature": 0.2,
-            "max_tokens": 1800,
-            "response_format": {"type": "json_object"},
-            "stream": False,
-        }
-        req = urllib.request.Request(
-            f"{endpoint.rstrip('/')}/chat/completions",
-            data=_j.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            raw_bytes = resp.read()
-            if not raw_bytes or not raw_bytes.strip():
-                raise RuntimeError(f"DTRouter tra ve phan hoi rong (HTTP {resp.status})")
-            
-            # Use robust parsing logic that supports SSE stream fallback
-            text = ""
+        last_err = None
+        for m_candidate in models_to_try:
+            if api_key.startswith("AIza"):
+                url = f"{base_endpoint}/v1beta/models/{m_candidate}:generateContent?key={api_key}"
+                headers = {"Content-Type": "application/json"}
+            else:
+                url = f"{base_endpoint}/v1beta/models/{m_candidate}:generateContent"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}"
+                }
+            req = urllib.request.Request(
+                url,
+                data=_j.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
             try:
-                # Try plain JSON first
-                data = _j.loads(raw_bytes.decode("utf-8", "replace"))
-                text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
-            except Exception as json_err:
-                # SSE fallback: concatenate delta content from chunk lines
-                text_content = raw_bytes.decode("utf-8", "replace")
-                pieces = []
-                for line in text_content.split("\n"):
-                    line = line.strip()
-                    if not line.startswith("data:"):
-                        continue
-                    payload_str = line[5:].strip()
-                    if not payload_str or payload_str == "[DONE]":
-                        continue
-                    try:
-                        chunk = _j.loads(payload_str)
-                        choice = (chunk.get("choices") or [{}])[0]
-                        delta = choice.get("delta") or {}
-                        if isinstance(delta.get("content"), str):
-                            pieces.append(delta["content"])
-                        elif isinstance((choice.get("message") or {}).get("content"), str):
-                            pieces.append(choice["message"]["content"])
-                    except Exception:
-                        continue
-                text = "".join(pieces).strip()
-                
-                if not text:
-                    preview = text_content[:500].replace("\n", " ").strip()
-                    LOGGER.error("DTRouter non-JSON response (HTTP %s): %s", resp.status, preview)
-                    raise RuntimeError(f"DTRouter tra ve phan hoi khong phai JSON (HTTP {resp.status}): {preview}") from json_err
+                with urllib.request.urlopen(req, timeout=35, context=ctx) as resp:
+                    data = _j.loads(resp.read().decode("utf-8", "replace") or "{}")
+                parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
+                text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text")).strip()
+                if text:
+                    res_json = _json_from_text(text)
+                    if res_json:
+                        return res_json
+            except urllib.error.HTTPError as e:
+                LOGGER.warning("Antigravity model %s HTTP error %s, trying next candidate", m_candidate, e.code)
+                last_err = e
+                time.sleep(0.5)
+                continue
+            except Exception as e:
+                LOGGER.warning("Antigravity model %s failed: %s, trying next candidate", m_candidate, e)
+                last_err = e
+                continue
 
-        if not text:
-            # Check if there's an error message from the API in data (if loaded successfully)
-            try:
-                data = _j.loads(raw_bytes.decode("utf-8", "replace"))
-                api_error = (data.get("error") or {}).get("message") or data.get("message") or ""
-                if api_error:
-                    raise RuntimeError(f"DTRouter API error: {str(api_error)[:300]}")
-            except Exception:
-                pass
-            raise RuntimeError("DTRouter khong tra ve noi dung phan tich")
-        return _json_from_text(text)
-
-    def _call_gemini_video(api_key: str, model: str, prompt: str, video_path: Path) -> dict:
-        size_mb = video_path.stat().st_size / (1024 * 1024)
-        if size_mb > 90:
-            raise RuntimeError("Video qua lon de gui truc tiep cho Gemini (>90MB), se dung che do quet frame")
-        mime = mimetypes.guess_type(str(video_path))[0] or "video/mp4"
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt + "\nAnalyze the complete uploaded video, not only selected frames."},
-                    {"inlineData": {
-                        "mimeType": mime,
-                        "data": base64.b64encode(video_path.read_bytes()).decode("ascii"),
-                    }},
-                ]
-            }],
-            "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 1800,
-                "responseMimeType": "application/json",
-            },
-        }
-        req = urllib.request.Request(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
-            data=_j.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            data = _j.loads(resp.read().decode("utf-8", "replace") or "{}")
-        parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
-        text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text")).strip()
-        if not text:
-            raise RuntimeError("Gemini khong tra ve noi dung phan tich video")
-        return _json_from_text(text)
+        if last_err:
+            raise last_err
+        raise RuntimeError("Antigravity khong tra ve noi dung phan tich")
 
     data = request.json or {}
     video_path_str = str(data.get("video_path") or "").strip()
     if not video_path_str:
         return jsonify({"ok": False, "error": "Thieu duong dan video"}), 400
 
-    vp = Path(video_path_str).expanduser()
-    if not vp.is_absolute():
-        vp = ROOT / vp
-    if not vp.exists():
-        return jsonify({"ok": False, "error": f"Video khong ton tai: {vp}"}), 404
+    vp = _resolve_video_path(video_path_str)
+    if not vp or not vp.exists():
+        return jsonify({"ok": False, "error": f"Video khong ton tai: {video_path_str}"}), 404
 
     cfg = load_cfg()
-    nr_cfg = cfg.get("dtrouter") or {}
-    nine_key = (nr_cfg.get("api_key") or os.environ.get("DTROUTER_API_KEY") or os.environ.get("NINER_API_KEY") or "").strip()
     requested_nine_model = str(data.get("nine_model") or "").strip()
     language = str(data.get("language") or "").strip()
     target_language = str(data.get("target_language") or "vi").strip()
@@ -760,8 +727,33 @@ If no text/logo should be covered, return empty arrays.
     if not full_video:
         sample_count = max(2, min(40, sample_count))
 
-    if not nine_key:
-        return jsonify({"ok": False, "code": "missing_api_key", "error": "Chua co API key DTRouter de doc video"}), 400
+    # Resolve Antigravity connection from DB
+    ag_conns = []
+    try:
+        from templates.pages.config.route import load_providers_from_db
+        all_provs = load_providers_from_db()
+        ag_data = all_provs.get("antigravity") or {}
+        ag_conns = [c for c in ag_data.get("connections", []) if c.get("enabled")] or ag_data.get("connections", [])
+    except Exception:
+        pass
+
+    gemini_key = ""
+    gemini_base_url = ""
+    for c in ag_conns:
+        if c.get("api_key"):
+            gemini_key = c.get("api_key").strip()
+            gemini_base_url = (c.get("base_url") or "").strip()
+            break
+
+    if not gemini_key:
+        gemini_key = (
+            (cfg.get("gemini_video") or {}).get("api_key", "").strip()
+            or os.environ.get("GEMINI_API_KEY", "").strip()
+            or os.environ.get("ANTIGRAVITY_API_KEY", "").strip()
+        )
+
+    if not gemini_key:
+        return jsonify({"ok": False, "code": "missing_api_key", "error": "Chưa cấu hình API key Antigravity để đọc video"}), 400
 
     try:
         frames, duration = _extract_frames(vp, sample_count)
@@ -772,82 +764,26 @@ If no text/logo should be covered, return empty arrays.
 
     prompt = _build_prompt(language, target_language, duration, [f["timestamp"] for f in frames])
 
-    errors: list[str] = []
+    # ── Antigravity direct only ──────────────────────────────────
     try:
-        endpoint = str(nr_cfg.get("endpoint") or "http://localhost:20128/v1").strip().rstrip("/")
-        model = str(requested_nine_model or nr_cfg.get("vision_model") or nr_cfg.get("default_model") or "duytris").strip()
-        LOGGER.info("analyze_video_ai: trying dtrouter model=%s endpoint=%s", model, endpoint)
-        result = _call_dtrouter(nine_key, endpoint, model, prompt, frames)
+        m_target = requested_nine_model.split("/")[-1] if "/" in requested_nine_model else requested_nine_model
+        gemini_model = m_target if (m_target and m_target not in ("none", "auto", "duytris", "")) else str((cfg.get("gemini_video") or {}).get("llm_model") or "gemini-3.7-flash").strip()
+        LOGGER.info("analyze_video_ai: using Antigravity model=%s", gemini_model)
+        result = _call_gemini(gemini_key, gemini_model, prompt, frames, base_url=gemini_base_url)
         return jsonify({
             "ok": True,
-            "provider": "dtrouter",
-            "model": model,
+            "provider": "antigravity",
+            "model": gemini_model,
             "frame_count": len(frames),
             "duration": round(duration, 3),
             "result": _clean_result(result),
         })
     except urllib.error.HTTPError as e:
-        try:
-            body = e.read().decode("utf-8", "replace")
-            err_json = _j.loads(body)
-            msg = (err_json.get("error") or {}).get("message") or body[:300]
-        except Exception:
-            msg = f"HTTP {e.code}"
-        LOGGER.warning("analyze_video_ai dtrouter HTTPError: %s", msg)
-        errors.append(f"DTRouter: {msg}")
+        LOGGER.warning("analyze_video_ai Antigravity HTTPError: %s", e)
+        return jsonify({"ok": False, "error": f"Antigravity: HTTP {e.code}"}), 502
     except Exception as e:
-        LOGGER.warning("analyze_video_ai dtrouter failed: %s", e)
-        errors.append(f"DTRouter: {str(e)[:200]}")
-
-    # ── Try 2: Gemini direct (fallback) ──────────────────────────────────
-    gemini_key = (
-        (cfg.get("gemini_video") or {}).get("api_key", "").strip()
-        or os.environ.get("GEMINI_API_KEY", "").strip()
-    )
-    if gemini_key:
-        try:
-            gemini_model = str((cfg.get("gemini_video") or {}).get("llm_model") or "gemini-2.5-flash").strip()
-            LOGGER.info("analyze_video_ai: falling back to Gemini model=%s", gemini_model)
-            result = _call_gemini(gemini_key, gemini_model, prompt, frames)
-            return jsonify({
-                "ok": True,
-                "provider": "gemini",
-                "model": gemini_model,
-                "frame_count": len(frames),
-                "duration": round(duration, 3),
-                "result": _clean_result(result),
-            })
-        except urllib.error.HTTPError as e:
-            LOGGER.warning("analyze_video_ai Gemini HTTPError: %s", e)
-            errors.append(f"Gemini: HTTP {e.code}")
-        except Exception as e:
-            LOGGER.warning("analyze_video_ai Gemini failed: %s", e)
-            errors.append(f"Gemini: {str(e)[:200]}")
-
-    # ── Try 3: OpenAI direct (last resort fallback) ──────────────────────
-    trans_cfg = cfg.get("translation") or {}
-    openai_key = str(trans_cfg.get("openai_key") or "").strip()
-    if openai_key:
-        try:
-            openai_model = "gpt-4o-mini"
-            LOGGER.info("analyze_video_ai: falling back to OpenAI model=%s", openai_model)
-            result = _call_openai(openai_key, openai_model, prompt, frames)
-            return jsonify({
-                "ok": True,
-                "provider": "openai",
-                "model": openai_model,
-                "frame_count": len(frames),
-                "duration": round(duration, 3),
-                "result": _clean_result(result),
-            })
-        except urllib.error.HTTPError as e:
-            LOGGER.warning("analyze_video_ai OpenAI HTTPError: %s", e)
-            errors.append(f"OpenAI: HTTP {e.code}")
-        except Exception as e:
-            LOGGER.warning("analyze_video_ai OpenAI failed: %s", e)
-            errors.append(f"OpenAI: {str(e)[:200]}")
-
-    return jsonify({"ok": False, "error": f"AI khong doc duoc video: {' | '.join(errors)}"}), 502
+        LOGGER.warning("analyze_video_ai Antigravity failed: %s", e)
+        return jsonify({"ok": False, "error": f"Antigravity: {str(e)[:200]}"}), 502
 
 
 @bp.route("/api/video_frame_from_url", methods=["POST"])
@@ -1413,6 +1349,7 @@ def process_video():
             req.setdefault("cleanup_outputs", True)
             req.setdefault("delete_source_after_process", False)
             import sys
+            yield _j.dumps({"log": f"🚀 Kết nối server backend thành công, bắt đầu xử lý...", "level": "info"}, ensure_ascii=False) + "\n"
             print(f"=== [BACKEND] generate() started, video_path={video_path}, video_url={video_url} ===", file=sys.stderr, flush=True)
 
 
@@ -1443,7 +1380,11 @@ def process_video():
             yield _j.dumps({"log": f"Fatal error: {e}", "level": "error"}, ensure_ascii=False) + "\n"
             yield _j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=False) + "\n"
 
-    return Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+    resp = Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+    resp.headers["Cache-Control"] = "no-cache, no-transform"
+    resp.headers["X-Accel-Buffering"] = "no"
+    resp.headers["Connection"] = "keep-alive"
+    return resp
 
 
 @require_valid_license
@@ -2032,22 +1973,17 @@ def generate_thumbnail_ai():
 
     subtitle_text = str(data.get("subtitle_text") or "").strip()
 
-    # Mô hình AI tạo ảnh do người dùng chọn ở UI Thumbnail trước khi bấm 🤖.
-    #   "auto"               → DTRouter (nếu cấu hình) rồi fallback Gemini
-    #   "gemini*"/"imagen*"  → ép dùng Gemini native image
-    #   còn lại (vd cx/...)  → ép dùng DTRouter với đúng model đó
-    image_model = str(data.get("image_model") or "auto").strip() or "auto"
+    # Mô hình AI tạo ảnh do người dùng chọn ở UI Thumbnail
+    image_model = str(data.get("image_model") or "gemini-3.6-flash-image").strip()
 
-    # Get API keys (need at least 1 of: DTRouter or Gemini)
+    # Get API key
     cfg = load_cfg()
     api_key = (
         (cfg.get("gemini_video") or {}).get("api_key", "").strip()
         or os.environ.get("GEMINI_API_KEY", "").strip()
     )
-    nr_check = cfg.get("dtrouter") or {}
-    has_dtrouter = bool((nr_check.get("endpoint") or "").strip() and (nr_check.get("api_key") or "").strip())
-    if not api_key and not has_dtrouter:
-        return jsonify({"ok": False, "error": "Chưa cấu hình DTRouter (dtrouter) hoặc Gemini API key (gemini_video.api_key)"}), 400
+    if not api_key:
+        return jsonify({"ok": False, "error": "Chưa cấu hình Gemini API key (gemini_video.api_key)"}), 400
 
     # ── Step 1: Extract frame from video ──────────────────────────────────────
     frame_b64 = data.get("frame_b64") or None
@@ -2090,8 +2026,7 @@ def generate_thumbnail_ai():
     if custom_prompt:
         gen_prompt = custom_prompt
     else:
-        # Use Gemini Vision to analyze frame và viết prompt — chỉ khi có Gemini key.
-        # Nếu không có (chỉ có DTRouter) thì dùng prompt mặc định dựa trên title/subtitle.
+        # Use Gemini Vision to analyze frame và viết prompt
         if frame_b64 and api_key:
             gen_prompt = _ai_thumbnail_prompt_from_frame(api_key, frame_b64, title, subtitle_text, style, aspect_ratio, is_editing_existing_thumb)
         else:
@@ -2113,97 +2048,15 @@ def generate_thumbnail_ai():
                     f"Make it click-worthy and engaging."
                 )
 
-    # ── Step 3: Generate thumbnail — ưu tiên DTRouter, fallback Gemini ─────────
-    cfg_full = load_cfg()
-    nr_cfg = cfg_full.get("dtrouter") or {}
-    nr_endpoint = (nr_cfg.get("endpoint") or "").strip().rstrip("/")
-    nr_key = (nr_cfg.get("api_key") or "").strip()
-
-    img_b64_data = None
-    used_provider = None
-
-    nr_error = None  # lỗi thật từ DTRouter (nếu có) để báo cho người dùng
-
-    # Phân loại lựa chọn model của người dùng
-    _model_lc = image_model.lower()
-    explicit_choice = bool(image_model and image_model != "auto")
-    force_gemini = _model_lc.startswith(("gemini", "imagen"))
-    # User chọn 1 model DTRouter cụ thể (vd: nb/nanobanana-flash, cx/gpt-5.5-image)
-    forced_dtrouter_model = image_model if (explicit_choice and not force_gemini) else None
-
-    # Priority 1: DTRouter — dùng khi auto hoặc user chọn 1 model DTRouter (bỏ qua nếu ép Gemini)
-    if nr_endpoint and nr_key and not force_gemini:
-        model_id = (forced_dtrouter_model or nr_cfg.get("default_image_model") or "cx/gpt-5.5-image").strip() or "cx/gpt-5.5-image"
-        try:
-            size_map = {"9:16": "1024x1792", "16:9": "1792x1024", "1:1": "1024x1024"}
-            size_str = size_map.get(aspect_ratio, "1024x1792")
-            payload = {
-                "model": model_id,
-                "prompt": gen_prompt[:2000],
-                "n": 1,
-                "size": size_str,
-                "quality": "auto",
-                "response_format": "b64_json",
-            }
-            if frame_b64:
-                payload["images"] = [frame_b64]
-                payload["image"] = frame_b64
-            body = _json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                f"{nr_endpoint}/images/generations",
-                data=body,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {nr_key}",
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=240) as resp:
-                rdata = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
-            img_data = (rdata.get("data") or [{}])[0]
-            if img_data.get("b64_json"):
-                img_b64_data = img_data["b64_json"]
-                used_provider = f"DTRouter ({model_id})"
-            elif img_data.get("url"):
-                with urllib.request.urlopen(img_data["url"], timeout=180) as dl:
-                    img_b64_data = base64.b64encode(dl.read()).decode("ascii")
-                used_provider = f"DTRouter ({model_id})"
-            else:
-                nr_error = ((rdata.get("error") or {}).get("message")
-                            if isinstance(rdata.get("error"), dict) else rdata.get("error")) \
-                           or "DTRouter không trả về ảnh"
-        except urllib.error.HTTPError as e:
-            try:
-                ebody = e.read().decode("utf-8", "replace")
-                ej = _json.loads(ebody)
-                nr_error = (ej.get("error") or {}).get("message") or ebody[:300]
-            except Exception:
-                nr_error = f"HTTP {e.code}"
-        except Exception as e:
-            nr_error = str(e)[:300]
-
-    # Nếu user CHỌN model DTRouter cụ thể mà thất bại → báo đúng lỗi, KHÔNG fallback Gemini
-    # (tránh hiện lỗi quota Gemini gây hiểu lầm khi user đã chọn nanobanana/codex…)
-    if forced_dtrouter_model and not img_b64_data:
-        return jsonify({
-            "ok": False,
-            "error": f"Model '{forced_dtrouter_model}' (DTRouter) lỗi: {nr_error or 'không tạo được ảnh'}",
-        }), 502
-
-    # Priority 2: Gemini — chỉ khi auto fallback, hoặc user chọn model Gemini
-    if not img_b64_data:
-        if not api_key:
-            return jsonify({"ok": False, "error": nr_error or "Chưa có DTRouter cũng như Gemini API key"}), 400
-        gemini_model = image_model if (force_gemini and _model_lc.startswith("gemini")) else "gemini-2.5-flash-image"
-        result = _ai_generate_thumbnail_image(api_key, gen_prompt, frame_b64, aspect_ratio, gemini_model)
-        if result.get("ok"):
-            img_b64_data = result["image_b64"]
-            used_provider = f"Gemini ({gemini_model})"
-        else:
-            msg = result.get("error", "AI thumbnail generation failed")
-            if nr_error:
-                msg = f"DTRouter lỗi: {nr_error} · Gemini lỗi: {msg}"
-            return jsonify({"ok": False, "error": msg}), 500
+    # ── Step 3: Generate thumbnail via Gemini ─────────────────────────────────
+    gemini_model = image_model if image_model.lower().startswith("gemini") else "gemini-3.6-flash-image"
+    result = _ai_generate_thumbnail_image(api_key, gen_prompt, frame_b64, aspect_ratio, gemini_model)
+    if result.get("ok"):
+        img_b64_data = result["image_b64"]
+        used_provider = f"Gemini ({gemini_model})"
+    else:
+        msg = result.get("error", "AI thumbnail generation failed")
+        return jsonify({"ok": False, "error": msg}), 500
 
     # Save to file
     img_data = base64.b64decode(img_b64_data)
@@ -2236,7 +2089,7 @@ def _ai_thumbnail_prompt_from_frame(api_key: str, frame_b64: str, title: str, su
     import urllib.request
     import urllib.error
 
-    model = "gemini-2.5-flash"
+    model = "gemini-3.6-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     if is_editing_existing_thumb:
@@ -2301,13 +2154,13 @@ Content hint: {subtitle or 'N/A'}"""
     )
 
 
-def _ai_generate_thumbnail_image(api_key: str, prompt: str, reference_frame_b64: str | None, aspect_ratio: str, model: str = "gemini-2.5-flash-image") -> dict:
+def _ai_generate_thumbnail_image(api_key: str, prompt: str, reference_frame_b64: str | None, aspect_ratio: str, model: str = "gemini-3.6-flash-image") -> dict:
     """Generate thumbnail image using Gemini native image generation."""
     import json as _json
     import urllib.request
     import urllib.error
 
-    model = (model or "gemini-2.5-flash-image").strip() or "gemini-2.5-flash-image"
+    model = (model or "gemini-3.6-flash-image").strip() or "gemini-3.6-flash-image"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     # Build parts — include reference frame if available
@@ -2374,7 +2227,7 @@ def check_gemini_api():
         return jsonify({"ok": False, "error": "Chưa cấu hình Gemini API key trong config.yml (gemini_video.api_key)"}), 400
 
     # Test with a small generateContent call
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [{"text": "ping"}]}],
         "generationConfig": {"maxOutputTokens": 5},
@@ -2386,7 +2239,7 @@ def check_gemini_api():
             data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
         # If we get here without exception, API is valid
         if data.get("candidates"):
-            return jsonify({"ok": True, "model": "gemini-2.5-flash"})
+            return jsonify({"ok": True, "model": "gemini-3.6-flash"})
         return jsonify({"ok": False, "error": "API trả về kết quả rỗng"}), 400
     except urllib.error.HTTPError as e:
         err_body = ""
@@ -2432,7 +2285,7 @@ def check_gemini_api():
         return jsonify({"ok": False, "error": "Chưa cấu hình Gemini API key trong config.yml (gemini_video.api_key)"}), 400
 
     # Test with a small generateContent call
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [{"text": "ping"}]}],
         "generationConfig": {"maxOutputTokens": 5},
@@ -2444,7 +2297,7 @@ def check_gemini_api():
             data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
         # If we get here without exception, API is valid
         if data.get("candidates"):
-            return jsonify({"ok": True, "model": "gemini-2.5-flash"})
+            return jsonify({"ok": True, "model": "gemini-3.6-flash"})
         return jsonify({"ok": False, "error": "API trả về kết quả rỗng"}), 400
     except urllib.error.HTTPError as e:
         err_body = ""

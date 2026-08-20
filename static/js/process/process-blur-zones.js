@@ -32,16 +32,8 @@ function procRemoveAiZones() {
     if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
     if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
   }
-  function _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH) {
-    const sample    = document.getElementById('sub-preview-sample')?.value || '';
-    const burnOn    = document.getElementById('proc-burn')?.checked ?? true;
-    const burnViOn  = document.getElementById('proc-burn-vi')?.checked ?? true;
-
-    const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
-    const marginPct = parseFloat(document.getElementById('proc-margin-v')?.value  || 3);
-    const pos       = document.getElementById('proc-sub-pos')?.value || 'bottom';
-    const cssColor  = (typeof _getSubtitleColor === 'function') ? _getSubtitleColor() : '#ffffff';
-    const blurOn    = document.getElementById('proc-blur-original')?.checked || false;
+  function _drawBlurZonesOnCanvas(ctx, vidX, vidY, vidW, vidH) {
+    const blurOn = document.getElementById('proc-blur-original')?.checked || false;
 
     // ── Draw blur zone (che phụ đề gốc) ──
     if (blurOn) {
@@ -97,7 +89,28 @@ function procRemoveAiZones() {
 
     // Draw extra blur zones independently from the main "che phụ đề gốc" toggle.
     if (window._procExtraBlurZones && window._procExtraBlurZones.length > 0) {
+      let curTs = 0;
+      try {
+        const tsInput = document.getElementById('sub-preview-ts');
+        if (tsInput && tsInput.value !== '') {
+          curTs = parseFloat(tsInput.value) || 0;
+        }
+      } catch (_) {}
+
       window._procExtraBlurZones.forEach(zone => {
+        const sel = window._pe2Sel;
+        const isSelected = sel && sel.type === 'extra' && String(sel.id) === String(zone.id);
+
+        // Timecode check: hide if outside [start, end] unless currently selected for editing
+        if (!isSelected) {
+          if (zone.start !== '' && zone.start !== null && zone.start !== undefined && !isNaN(parseFloat(zone.start))) {
+            if (curTs < parseFloat(zone.start)) return;
+          }
+          if (zone.end !== '' && zone.end !== null && zone.end !== undefined && !isNaN(parseFloat(zone.end))) {
+            if (curTs > parseFloat(zone.end)) return;
+          }
+        }
+
         const zH = (zone.height || 12) / 100;
         const zY = (zone.position || 50) / 100 - zH / 2;
         const zW = (zone.width || 80) / 100;
@@ -117,14 +130,24 @@ function procRemoveAiZones() {
         ctx.fillRect(ezX, ezY, ezW, ezH);
 
         // Draw selection outline + handles if this zone is selected
-        const sel = window._pe2Sel;
-        if (sel && sel.type === 'extra' && sel.id === zone.id) {
+        if (isSelected) {
           _drawCanvasSelection(ctx, ezX, ezY, ezW, ezH, true, false);
         }
       });
     }
+  }
+
+  function _drawSubtitleOnlyOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH) {
+    const sample    = document.getElementById('sub-preview-sample')?.value || '';
+    const burnOn    = document.getElementById('proc-burn')?.checked ?? true;
+    const burnViOn  = document.getElementById('proc-burn-vi')?.checked ?? true;
 
     if (!sample || !burnOn || !burnViOn) return null;
+
+    const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
+    const marginPct = parseFloat(document.getElementById('proc-margin-v')?.value  || 3);
+    const pos       = document.getElementById('proc-sub-pos')?.value || 'bottom';
+    const cssColor  = (typeof _getSubtitleColor === 'function') ? _getSubtitleColor() : '#ffffff';
 
     // Scale relative to video area height (same formula as _renderSubOverlay)
     const scaledFont   = Math.max(6, Math.round(vidH * fontPct   / 100));
@@ -192,6 +215,14 @@ function procRemoveAiZones() {
     }
     return textBounds;
   }
+
+  function _drawSubtitleOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH) {
+    _drawBlurZonesOnCanvas(ctx, vidX, vidY, vidW, vidH);
+    return _drawSubtitleOnlyOnCanvas(ctx, cW, cH, vidX, vidY, vidW, vidH);
+  }
+  window._drawBlurZonesOnCanvas = _drawBlurZonesOnCanvas;
+  window._drawSubtitleOnlyOnCanvas = _drawSubtitleOnlyOnCanvas;
+  window._drawSubtitleOnCanvas = _drawSubtitleOnCanvas;
   async function generateThumbnailPreview() {
     const source = _getPreviewVideoPath();
     if (!source) {

@@ -1,4 +1,46 @@
-document.addEventListener('DOMContentLoaded', () => {
+  function _getSavedAiVideoModel() {
+    try {
+      const saved = localStorage.getItem('proc_ai_video_nine_model');
+      if (saved && saved !== 'none') return saved;
+      if (saved === 'none') return 'none';
+      const presets = JSON.parse(localStorage.getItem('proc_settings_defaults_v2') || '{}');
+      const cur = presets[window._procActiveAspect || '16x9'] || presets['16x9'] || presets['9x16'] || {};
+      if (cur['proc-ai-video-nine-model']) return cur['proc-ai-video-nine-model'];
+    } catch (_) {}
+    return 'gemini-3.7-flash';
+  }
+
+  function _syncAiVideoModel(val) {
+    val = (val === undefined || val === null) ? '' : String(val);
+    const sel1 = document.getElementById('proc-ai-video-nine-model');
+    const sel2 = document.getElementById('proc-ai-video-nine-model-step2');
+    const autoChk = document.getElementById('proc-ai-video-auto');
+
+    if (sel1 && sel1.value !== val) {
+      if (Array.from(sel1.options).some(o => o.value === val)) sel1.value = val;
+    }
+    if (sel2 && sel2.value !== val) {
+      if (Array.from(sel2.options).some(o => o.value === val)) sel2.value = val;
+    }
+    if (autoChk) {
+      autoChk.checked = (val !== 'none');
+    }
+
+    try {
+      localStorage.setItem('proc_ai_video_nine_model', val);
+      const presets = JSON.parse(localStorage.getItem('proc_settings_defaults_v2') || '{}');
+      const aspect = window._procActiveAspect || '16x9';
+      if (!presets[aspect]) presets[aspect] = {};
+      presets[aspect]['proc-ai-video-nine-model'] = val;
+      if (presets['16x9']) presets['16x9']['proc-ai-video-nine-model'] = val;
+      if (presets['9x16']) presets['9x16']['proc-ai-video-nine-model'] = val;
+      localStorage.setItem('proc_settings_defaults_v2', JSON.stringify(presets));
+      if (typeof procSaveStep === 'function') procSaveStep(1, true);
+    } catch (_) {}
+  }
+  window._syncAiVideoModel = _syncAiVideoModel;
+
+  document.addEventListener('DOMContentLoaded', () => {
     if (typeof _syncColorPicker === 'function') _syncColorPicker();
     if (typeof _ovLoadFromHidden === 'function') _ovLoadFromHidden();
     if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
@@ -6,21 +48,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Sync proc-ai-video-nine-model with proc-ai-video-auto
     const selectModel = document.getElementById('proc-ai-video-nine-model');
+    const selectModel2 = document.getElementById('proc-ai-video-nine-model-step2');
     const autoChk = document.getElementById('proc-ai-video-auto');
-    if (selectModel && autoChk) {
+
+    if (selectModel) {
       selectModel.addEventListener('change', function() {
-        autoChk.checked = (this.value !== 'none');
-        autoChk.dispatchEvent(new Event('change'));
+        _syncAiVideoModel(this.value);
       });
+    }
+    if (selectModel2) {
+      selectModel2.addEventListener('change', function() {
+        _syncAiVideoModel(this.value);
+      });
+    }
+    if (autoChk) {
       autoChk.addEventListener('change', function() {
-        if (!this.checked && selectModel.value !== 'none') {
-          selectModel.value = 'none';
-        } else if (this.checked && selectModel.value === 'none') {
-          selectModel.value = '';
+        if (!this.checked) {
+          _syncAiVideoModel('none');
+        } else {
+          _syncAiVideoModel(_getSavedAiVideoModel() || 'gemini-3.6-flash');
         }
       });
-      // Initial sync on load
-      autoChk.checked = (selectModel.value !== 'none');
     }
   });
   window._procAiAnalyzing = false;
@@ -38,11 +86,17 @@ document.addEventListener('DOMContentLoaded', () => {
     el.style.color = kind === 'ok' ? '#15803d' : (kind === 'error' ? '#b91c1c' : 'var(--text-muted)');
   }
   function _procAiVideoGroupLabel(prefix) {
+    prefix = (prefix || '').toLowerCase().trim();
     const map = {
-      cx: 'cx',
+      cx: 'codex',
+      codex: 'codex',
       openai: 'openai',
-      gemini: 'gemini',
-      google: 'google',
+      gpt: 'openai',
+      o1: 'openai',
+      antigravity: 'antigravity',
+      ag: 'antigravity',
+      gemini: 'antigravity',
+      google: 'antigravity',
       anthropic: 'anthropic',
       claude: 'anthropic',
       kr: 'kr',
@@ -65,61 +119,106 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   async function loadProcAiVideoModels(force) {
-    const sel = document.getElementById('proc-ai-video-nine-model');
-    if (!sel) return;
+    const sel1 = document.getElementById('proc-ai-video-nine-model');
+    const sel2 = document.getElementById('proc-ai-video-nine-model-step2');
+    const selects = [sel1, sel2].filter(Boolean);
+    if (!selects.length) return;
     if (window._procAiVideoModelsLoaded && !force) return;
-    const current = sel.value;
 
-    // Fetch default model name from config to display in "Tự động theo 9Router" option
-    _procAiFetchJson('/api/chatbot/config', 3000).then(cfg => {
-      const autoOpt = Array.from(sel.options).find(o => o.value === "");
-      if (autoOpt) {
-        if (cfg && cfg.ok && cfg.has_key && cfg.default_model) {
-          autoOpt.textContent = `Tự động theo 9Router (${cfg.default_model})`;
-        } else {
-          autoOpt.textContent = `Tự động theo 9Router`;
-        }
-      }
-    }).catch(() => null);
+    const savedTarget = _getSavedAiVideoModel();
 
     try {
       let items = [];
-      const first = await _procAiFetchJson('/api/chatbot/media_models?kind=image-to-text', 5000).catch(() => null);
+      const first = await _procAiFetchJson('/api/chatbot/media_models?kind=video', 5000).catch(() => null);
       if (first && first.ok && Array.isArray(first.models) && first.models.length) {
         items = first.models;
       } else {
         const fallback = await _procAiFetchJson('/api/chatbot/models', 5000).catch(() => null);
         if (fallback && fallback.ok && Array.isArray(fallback.models)) items = fallback.models;
       }
-      if (!items.length) return;
+      if (!items.length) {
+        items = [
+          { id: 'gemini-3.7-flash', name: 'Antigravity 3.7 Flash', owned_by: 'antigravity' },
+          { id: 'gemini-3.6-flash', name: 'Antigravity 3.6 Flash (High)', owned_by: 'antigravity' },
+          { id: 'gemini-3.6-flash-medium', name: 'Antigravity 3.6 Flash (Medium)', owned_by: 'antigravity' },
+          { id: 'gemini-3.6-flash-low', name: 'Antigravity 3.6 Flash (Low)', owned_by: 'antigravity' },
+          { id: 'gemini-3-flash-agent', name: 'Antigravity 3.5 Flash (High)', owned_by: 'antigravity' },
+          { id: 'gemini-3.5-flash-medium', name: 'Antigravity 3.5 Flash (Medium)', owned_by: 'antigravity' },
+          { id: 'gemini-3.5-flash-low', name: 'Antigravity 3.5 Flash (Low)', owned_by: 'antigravity' },
+          { id: 'gemini-pro-agent', name: 'Antigravity 3.1 Pro (High)', owned_by: 'antigravity' },
+          { id: 'gemini-3.1-pro-low', name: 'Antigravity 3.1 Pro (Low)', owned_by: 'antigravity' },
+          { id: 'gemini-3-flash', name: 'Antigravity 3 Flash', owned_by: 'antigravity' },
+          { id: 'gemini-2.5-flash', name: 'Antigravity 2.5 Flash', owned_by: 'antigravity' },
+          { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)', owned_by: 'antigravity' },
+          { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)', owned_by: 'antigravity' },
+          { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)', owned_by: 'antigravity' }
+        ];
+      }
       window._procAiVideoModelsLoaded = true;
-      sel.querySelectorAll('optgroup[data-nr="1"]').forEach(g => g.remove());
-      const existing = new Set(Array.from(sel.options).map(o => o.value));
-      const visionHints = /(gpt|gemini|claude|sonnet|opus|vision|image|multimodal|cx\/gpt-5\.5|duytris)/i;
-      const groups = {};
-      items
-        .map(m => ({ id: String((m && (m.id || m)) || '').trim(), owned_by: String((m && m.owned_by) || '').trim() }))
-        .filter(m => m.id && !existing.has(m.id))
-        .sort((a, b) => (visionHints.test(b.id) ? 1 : 0) - (visionHints.test(a.id) ? 1 : 0) || a.id.localeCompare(b.id))
-        .forEach(m => {
-          const prefix = m.id.includes('/') ? m.id.split('/')[0] : (m.owned_by || 'others');
-          const label = _procAiVideoGroupLabel(prefix);
-          (groups[label] = groups[label] || []).push(m.id);
-        });
-      Object.keys(groups).sort().forEach(label => {
+
+      // Filter to strictly antigravity models for video analyzer
+      const agModels = items
+        .filter(m => {
+          const p = (m.owned_by || '').toLowerCase();
+          return p === 'antigravity' || !p;
+        })
+        .map(m => ({
+          id: String((m && (m.id || m)) || '').trim(),
+          name: (m && m.name) ? m.name : String((m && (m.id || m)) || '').trim(),
+          owned_by: 'antigravity'
+        }))
+        .filter(m => m.id && m.id !== 'none');
+
+      const priorityOrder = [
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+        'gemini-3.6-flash-medium',
+        'gemini-3.6-flash-low',
+        'gemini-3-flash-agent',
+        'gemini-3.5-flash-medium',
+        'gemini-3.5-flash-low',
+        'gemini-pro-agent',
+        'gemini-3.1-pro-low',
+        'gemini-3-flash',
+        'gemini-2.5-flash',
+        'claude-sonnet-4-6',
+        'claude-opus-4-6-thinking',
+        'gpt-oss-120b-medium'
+      ];
+
+      agModels.sort((a, b) => {
+        const ia = priorityOrder.indexOf(a.id);
+        const ib = priorityOrder.indexOf(b.id);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      selects.forEach(sel => {
+        sel.innerHTML = '<option value="none">Tắt (Không đọc)</option>';
         const grp = document.createElement('optgroup');
         grp.setAttribute('data-nr', '1');
-        grp.label = label;
-        groups[label].forEach(id => {
-          const opt = document.createElement('option');
-          opt.value = id;
-          opt.textContent = id;
-          grp.appendChild(opt);
-          existing.add(id);
+        grp.label = 'antigravity';
+
+        const added = new Set();
+        agModels.forEach(item => {
+          if (!added.has(item.id)) {
+            const opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.name;
+            grp.appendChild(opt);
+            added.add(item.id);
+          }
         });
         sel.appendChild(grp);
+
+        if (savedTarget && Array.from(sel.options).some(o => o.value === savedTarget)) {
+          sel.value = savedTarget;
+        } else {
+          sel.value = 'gemini-3.7-flash';
+        }
       });
-      if (current && Array.from(sel.options).some(o => o.value === current)) sel.value = current;
     } catch (_) {
       window._procAiVideoModelsLoaded = false;
     }
@@ -234,8 +333,11 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           video_path: path,
-          provider: '9router',
-          nine_model: document.getElementById('proc-ai-video-nine-model')?.value || '',
+          provider: 'gemini',
+          model: document.getElementById('proc-ai-video-nine-model-step2')?.value
+            || document.getElementById('proc-ai-video-nine-model')?.value
+            || localStorage.getItem('proc_ai_video_nine_model')
+            || 'gemini-3.6-flash',
           sample_count: sampleValue === 'full' ? 0 : parseInt(sampleValue || '5', 10),
           language: document.getElementById('proc-lang')?.value || '',
           target_language: document.getElementById('proc-target-lang')?.value || 'vi'
@@ -265,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (useToggle) { useToggle.checked = false; }
       procRemoveAiZones();
       procRenderAiAnalysis();
-      _procAiSetStatus((e.message || '').includes('API key') ? 'Chưa có API key 9Router để đọc video.' : ('Không đọc được video: ' + e.message), 'error');
+      _procAiSetStatus((e.message || '').includes('API key') ? 'Chưa có API key Gemini để đọc video.' : ('Không đọc được video: ' + e.message), 'error');
       if (typeof toast === 'function') toast('AI không đọc được video: ' + e.message, 'warning');
       return null;
     } finally {

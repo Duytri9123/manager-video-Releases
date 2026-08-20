@@ -85,7 +85,6 @@ function _getTtsApiProvider(engine) {
   if (engine === 'fpt-ai') return 'fpt';
   if (engine === 'elevenlabs') return 'elevenlabs';
   if (engine === 'fish-audio') return 'fish-audio';
-  if (engine === 'dtrouter') return 'dtrouter';
   return '';
 }
 
@@ -575,7 +574,7 @@ function switchPage(name) {
   const titles = {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
     publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
-    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot · DTRouter', providers:'AI Providers',
+    movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot', providers:'AI Providers',
     videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng', ads:'Video quảng cáo',
     quota: 'Quota Tracker',
     'media-embedding': 'Embedding Providers',

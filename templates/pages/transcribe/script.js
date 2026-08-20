@@ -10,6 +10,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     trLoadTtsCatalog();
+    trSyncProviderOptions();
     
     // Auto-save TTS settings on change
     document.getElementById('tr-tts-engine')?.addEventListener('change', trSaveTtsSettings);
@@ -18,12 +19,13 @@
     document.getElementById('tr-dtr-model')?.addEventListener('change', trSaveTtsSettings);
     document.getElementById('tr-tts-rate')?.addEventListener('change', trSaveTtsSettings);
     document.getElementById('tr-tts-pitch')?.addEventListener('change', trSaveTtsSettings);
+    document.getElementById('tr-provider')?.addEventListener('change', () => trSyncProviderOptions());
   });
 
   // Export functions to global scope
   window.trLoadTtsCatalog = trLoadTtsCatalog;
   window.trSyncVoiceOptions = trSyncVoiceOptions;
-  window.trSyncDTRouterVoices = trSyncDTRouterVoices;
+  window.trSyncProviderOptions = trSyncProviderOptions;
   window.trStartTranscribe = trStartTranscribe;
   window.trExtractAudio = trExtractAudio;
   window.trPreviewVoice = trPreviewVoice;
@@ -32,91 +34,199 @@
   window.trSaveSubtitles = trSaveSubtitles;
   window.trSaveTtsSettings = trSaveTtsSettings;
 
+  // ── STT PROVIDER & MODEL SYNC ─────────────────────────────────────────
+  const TR_GROQ_MODELS = [
+    { id: 'whisper-large-v3-turbo', name: 'Whisper Large V3 Turbo (Mặc định - Siêu nhanh)' },
+    { id: 'whisper-large-v3', name: 'Whisper Large V3' },
+    { id: 'distil-whisper-large-v3-en', name: 'Distil Whisper Large V3 (Tiếng Anh)' }
+  ];
+
+  const TR_LOCAL_MODELS = [
+    { id: 'base', name: 'Base (Khuyên dùng - Nhẹ & Nhanh)' },
+    { id: 'small', name: 'Small (Trung bình)' },
+    { id: 'medium', name: 'Medium (Tốt)' },
+    { id: 'large-v3', name: 'Large V3 (Chính xác cao)' },
+    { id: 'tiny', name: 'Tiny (Nhẹ nhất)' }
+  ];
+
+  function _trGroupLabel(prefix) {
+    prefix = (prefix || '').toLowerCase().trim();
+    const map = {
+      cx: 'codex',
+      codex: 'codex',
+      duytris: 'duytris',
+      oc: 'opencode',
+      opencode: 'opencode',
+      ag: 'antigravity',
+      antigravity: 'antigravity',
+      gemini: 'antigravity',
+      google: 'antigravity',
+      openai: 'openai',
+      gpt: 'openai',
+      o1: 'openai',
+      claude: 'anthropic',
+      anthropic: 'anthropic',
+      qwen: 'qwen',
+      deepseek: 'deepseek',
+      meta: 'meta',
+      groq: 'groq',
+    };
+    return map[prefix] || prefix || 'others';
+  }
+
+  async function trSyncProviderOptions(restoreValue) {
+    const provEl = document.getElementById('tr-provider');
+    const modelEl = document.getElementById('tr-model');
+    const labelEl = document.getElementById('tr-model-label');
+    if (!provEl || !modelEl) return;
+
+    const provider = provEl.value || 'antigravity';
+    const currentVal = restoreValue || modelEl.value;
+    modelEl.innerHTML = '';
+
+    if (provider === 'antigravity' || provider === 'gemini') {
+      if (labelEl) {
+        labelEl.textContent = 'Mô hình AI (Model)';
+        labelEl.title = 'Mô hình từ Provider';
+      }
+
+      // Option mặc định tự động theo Provider
+      const autoOpt = document.createElement('option');
+      autoOpt.value = '';
+      autoOpt.textContent = 'Tự động theo Provider';
+      modelEl.appendChild(autoOpt);
+
+      try {
+        // Lấy tên default model từ config nếu có
+        fetch('/api/chatbot/config').then(r => r.json()).then(cfg => {
+          if (cfg && cfg.ok && cfg.default_model) {
+            autoOpt.textContent = `Tự động theo Provider (${cfg.default_model})`;
+          }
+        }).catch(() => null);
+
+        let items = [];
+        const resMedia = await fetch('/api/chatbot/media_models?kind=audio-to-text').then(r => r.json()).catch(() => null);
+        if (resMedia && resMedia.ok && Array.isArray(resMedia.models) && resMedia.models.length) {
+          items = resMedia.models;
+        } else {
+          const resChat = await fetch('/api/chatbot/models').then(r => r.json()).catch(() => null);
+          if (resChat && resChat.ok && Array.isArray(resChat.models) && resChat.models.length) {
+            items = resChat.models;
+          }
+        }
+
+        if (!items.length) {
+          const resAg = await fetch('/api/providers/models?provider=antigravity').then(r => r.json()).catch(() => null);
+          if (resAg && resAg.ok && Array.isArray(resAg.models)) {
+            items = resAg.models;
+          }
+        }
+
+        const groups = {};
+        const existing = new Set();
+
+        items.forEach(m => {
+          const mId = String((m && (m.id || m)) || '').trim();
+          if (!mId || existing.has(mId)) return;
+          existing.add(mId);
+
+          const owned = String((m && m.owned_by) || '').trim();
+          const prefix = mId.includes('/') ? mId.split('/')[0] : (owned || 'google');
+          const groupName = _trGroupLabel(prefix);
+          groups[groupName] = groups[groupName] || [];
+          groups[groupName].push({
+            id: mId,
+            name: (m && m.name) ? m.name : mId
+          });
+        });
+
+        Object.keys(groups).sort().forEach(grpLabel => {
+          const grp = document.createElement('optgroup');
+          grp.label = grpLabel;
+          groups[grpLabel].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.name || m.id;
+            grp.appendChild(opt);
+          });
+          modelEl.appendChild(grp);
+        });
+
+      } catch (err) {
+        console.warn('[Transcribe] Error loading models:', err);
+      }
+
+      if (currentVal && Array.from(modelEl.options).some(o => o.value === currentVal)) {
+        modelEl.value = currentVal;
+      }
+    } else if (provider === 'groq') {
+      if (labelEl) {
+        labelEl.textContent = 'Mô hình Groq';
+        labelEl.title = 'Mô hình Groq Whisper API';
+      }
+      TR_GROQ_MODELS.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.name;
+        if (item.id === 'whisper-large-v3-turbo' && !currentVal) opt.selected = true;
+        modelEl.appendChild(opt);
+      });
+    } else if (provider === 'model') {
+      if (labelEl) {
+        labelEl.textContent = 'Mô hình Whisper';
+        labelEl.title = 'Mô hình Whisper Local';
+      }
+      TR_LOCAL_MODELS.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.name;
+        if (item.id === 'base' && !currentVal) opt.selected = true;
+        modelEl.appendChild(opt);
+      });
+    }
+
+    if (currentVal && Array.from(modelEl.options).some(o => o.value === currentVal)) {
+      modelEl.value = currentVal;
+    }
+  }
+
   // ── CATALOG LOADING ──────────────────────────────────────────────────
   async function trLoadTtsCatalog() {
     try {
-      const res = await fetch('/api/tts/engines?include_dtrouter=1');
+      const res = await fetch('/api/tts/engines');
       const data = await res.json();
       if (data && data.ok) {
         enginesCatalog = data.engines || [];
         trPopulateEngines();
       }
       
-      // Load DTRouter API Key to display
       try {
         const cfgRes = await fetch('/api/config');
         const cfgData = await cfgRes.json();
-        const nrKey = cfgData?.dtrouter?.api_key || '';
-        const keyEl = document.getElementById('tr-dtr-api-key');
-        const statusEl = document.getElementById('tr-dtr-api-key-status');
-        if (keyEl) {
-          if (nrKey) {
-            keyEl.value = nrKey.slice(0, 8) + '•'.repeat(Math.max(10, nrKey.length - 8));
-            if (statusEl) {
-              statusEl.innerHTML = '<span style="color:#888">⏳ Đang kiểm tra key...</span>';
-              try {
-                const checkRes = await fetch('/api/test_api_key', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ provider: 'dtrouter', key: nrKey })
-                });
-                const checkData = await checkRes.json();
-                if (checkData.ok) {
-                  statusEl.innerHTML = '<span style="color:#10b981; font-weight:600">● DTRouter API Key hoạt động tốt (Còn hạn)</span>';
-                } else {
-                  statusEl.innerHTML = `<span style="color:#ef4444; font-weight:600">⚠️ DTRouter API Key lỗi: ${checkData.error || 'Không hợp lệ'}</span>`;
-                }
-              } catch (checkErr) {
-                statusEl.innerHTML = '<span style="color:#f59e0b; font-weight:600">⚠️ Không thể kiểm tra thời hạn key (Lỗi kết nối)</span>';
-              }
-            }
-          } else {
-            keyEl.value = '';
-            if (statusEl) {
-              statusEl.innerHTML = '<span style="color:#ef4444; font-weight:600">⚠️ Thiếu API Key DTRouter. Vui lòng vào mục Cài đặt hoặc Chat Bot để thêm key.</span>';
-            }
-          }
-        }
-        // Sync engine dropdown
         const vp = cfgData?.video_process || {};
         const engineSel = document.getElementById('tr-tts-engine');
         if (engineSel && vp.tts_engine) {
           engineSel.value = vp.tts_engine;
         }
         
-        // Sync language dropdown
         const langSel = document.getElementById('tr-tts-lang');
         if (langSel && (vp.tts_lang || vp.language)) {
           langSel.value = vp.tts_lang || vp.language;
         }
         
-        // Populate and sync voice
         trSyncVoiceOptions();
         
         const voiceSel = document.getElementById('tr-tts-voice');
         if (voiceSel && vp.tts_voice) {
-          if (vp.tts_voice.includes('|')) {
-            const parts = vp.tts_voice.split('|');
-            const modelSel = document.getElementById('tr-dtr-model');
-            if (modelSel) {
-              modelSel.value = parts[0];
-              trSyncDTRouterVoices();
-            }
-            if (voiceSel) {
-              voiceSel.value = parts[1];
-            }
-          } else {
-            voiceSel.value = vp.tts_voice;
-          }
+          voiceSel.value = vp.tts_voice;
         }
         
-        // Sync rate and pitch
         const rateEl = document.getElementById('tr-tts-rate');
         if (rateEl && vp.tts_rate) rateEl.value = vp.tts_rate;
         const pitchEl = document.getElementById('tr-tts-pitch');
         if (pitchEl && vp.tts_pitch) pitchEl.value = vp.tts_pitch;
       } catch (cfgErr) {
-        console.error('Error loading config for API key display:', cfgErr);
+        console.error('Error loading config:', cfgErr);
       }
     } catch (e) {
       console.error('Error loading TTS catalog:', e);
@@ -131,30 +241,12 @@
     const curVal = engineSel.value;
     engineSel.innerHTML = '';
     
-    // Split into Local and DTRouter engines
-    const locals = enginesCatalog.filter(e => e.backend !== 'dtrouter');
-    const nineR = enginesCatalog.filter(e => e.backend === 'dtrouter');
-    
-    const addOpt = (parent, eng) => {
+    enginesCatalog.forEach(eng => {
       const opt = document.createElement('option');
       opt.value = eng.id;
       opt.textContent = eng.label || eng.id;
-      parent.appendChild(opt);
-    };
-
-    if (nineR.length) {
-      const grpLocal = document.createElement('optgroup');
-      grpLocal.label = 'Local / Tích hợp';
-      locals.forEach(e => addOpt(grpLocal, e));
-      engineSel.appendChild(grpLocal);
-      
-      const grp9R = document.createElement('optgroup');
-      grp9R.label = 'DTRouter Cloud';
-      nineR.forEach(e => addOpt(grp9R, e));
-      engineSel.appendChild(grp9R);
-    } else {
-      locals.forEach(e => addOpt(engineSel, e));
-    }
+      engineSel.appendChild(opt);
+    });
     
     if (curVal && Array.from(engineSel.options).some(o => o.value === curVal)) {
       engineSel.value = curVal;
@@ -168,7 +260,6 @@
     const engineSel = document.getElementById('tr-tts-engine');
     const langSel = document.getElementById('tr-tts-lang');
     const voiceSel = document.getElementById('tr-tts-voice');
-    const field9R = document.getElementById('tr-dtr-fields');
     
     if (!engineSel || !voiceSel || !enginesCatalog) return;
     
@@ -177,15 +268,6 @@
     
     const engine = enginesCatalog.find(e => e.id === engineId);
     if (!engine) return;
-    
-    // Toggle DTRouter specific model fields
-    if (engineId === 'dtrouter') {
-      if (field9R) field9R.style.display = '';
-      trPopulateDTRouterModels(engine);
-      return;
-    } else {
-      if (field9R) field9R.style.display = 'none';
-    }
     
     // Populate normal voices
     voiceSel.innerHTML = '';
@@ -214,68 +296,6 @@
       voiceSel.value = engine.default;
     }
   }
-
-  function trPopulateDTRouterModels(engine) {
-    const modelSel = document.getElementById('tr-dtr-model');
-    if (!modelSel) return;
-    
-    const curVal = modelSel.value;
-    modelSel.innerHTML = '';
-    
-    const models = engine.models || [];
-    const groups = {};
-    models.forEach(m => {
-      const g = m.group || m.provider || 'dtrouter';
-      (groups[g] = groups[g] || []).push(m);
-    });
-    
-    Object.keys(groups).forEach(g => {
-      const og = document.createElement('optgroup');
-      og.label = g.toUpperCase();
-      groups[g].forEach(m => {
-        const o = document.createElement('option');
-        o.value = m.id;
-        o.textContent = m.label || m.id;
-        og.appendChild(o);
-      });
-      modelSel.appendChild(og);
-    });
-    
-    if (curVal && Array.from(modelSel.options).some(o => o.value === curVal)) {
-      modelSel.value = curVal;
-    } else {
-      modelSel.value = engine.defaultModel || (models[0] && models[0].id) || '';
-    }
-    
-    trSyncDTRouterVoices();
-  }
-
-  function trSyncDTRouterVoices() {
-    const engineSel = document.getElementById('tr-tts-engine');
-    const modelSel = document.getElementById('tr-dtr-model');
-    const voiceSel = document.getElementById('tr-tts-voice');
-    
-    if (!engineSel || !modelSel || !voiceSel || !enginesCatalog) return;
-    
-    const engine = enginesCatalog.find(e => e.id === engineSel.value);
-    if (!engine || engine.backend !== 'dtrouter') return;
-    
-    const modelId = modelSel.value;
-    const model = (engine.models || []).find(m => m.id === modelId);
-    const provider = model ? model.provider : 'openai';
-    
-    voiceSel.innerHTML = '';
-    const voicesByProvider = engine.voicesByProvider || {};
-    const voices = voicesByProvider[provider] || voicesByProvider['openai'] || [];
-    
-    voices.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = Array.isArray(v) ? v[0] : v;
-      opt.textContent = Array.isArray(v) ? (v[1] || v[0]) : v;
-      voiceSel.appendChild(opt);
-    });
-    
-    if (engine.default && Array.from(voiceSel.options).some(o => o.value === engine.default)) {
       voiceSel.value = engine.default;
     }
   }
@@ -301,8 +321,8 @@
     const payload = {
       single: window._trSelectedFile ? '' : trFile,
       out_dir: document.getElementById('tr-out')?.value?.trim() || '',
-      provider: document.getElementById('tr-provider')?.value || 'groq',
-      model: document.getElementById('tr-model')?.value || 'base',
+      provider: document.getElementById('tr-provider')?.value || 'antigravity',
+      model: document.getElementById('tr-model')?.value || 'gemini-3.6-flash',
       lang: document.getElementById('tr-lang')?.value || 'zh',
       srt: document.getElementById('tr-srt')?.checked ?? true,
       sc: document.getElementById('tr-sc')?.checked ?? false,
@@ -456,14 +476,7 @@
     let engine = engineSel?.value || 'edge-tts';
     let voice = voiceSel?.value || '';
     
-    const cat = enginesCatalog?.find(e => e.id === engine);
-    if (cat && cat.backend === 'dtrouter') {
-      const model = document.getElementById('tr-dtr-model')?.value || '';
-      voice = model + '|' + voice;
-      engine = 'dtrouter';
-    }
-    
-    trAppendLog(`⏳ Đang tạo giọng nói thử nghiệm (${engine} / ${voice.split('|')[0] || voice})...`, 'info');
+    trAppendLog(`⏳ Đang tạo giọng nói thử nghiệm (${engine} / ${voice})...`, 'info');
     
     try {
       const res = await fetch('/api/tts_preview', {
@@ -498,9 +511,6 @@
       trAppendLog('✅ Đã tạo giọng nói thử nghiệm thành công.', 'success');
     } catch (e) {
       let errMsg = e.message;
-      if (engine === 'dtrouter' && (errMsg.includes('401') || errMsg.includes('403') || errMsg.toLowerCase().includes('api key'))) {
-        errMsg = 'Thiếu hoặc sai DTRouter API Key. Vui lòng kiểm tra lại cấu hình API Key trong mục Cài đặt.';
-      }
       toast('Nghe thử thất bại: ' + errMsg, 'error');
       trAppendLog('❌ Nghe thử thất bại: ' + errMsg, 'error');
     } finally {
@@ -541,13 +551,6 @@
     
     let engine = document.getElementById('tr-tts-engine')?.value || 'edge-tts';
     let voice = document.getElementById('tr-tts-voice')?.value || '';
-    
-    const cat = enginesCatalog?.find(e => e.id === engine);
-    if (cat && cat.backend === 'dtrouter') {
-      const model = document.getElementById('tr-dtr-model')?.value || '';
-      voice = model + '|' + voice;
-      engine = 'dtrouter';
-    }
     
     const payload = {
       ass_path: window._trSelectedFile ? '' : assPath,
@@ -866,13 +869,6 @@
     const lang = document.getElementById('tr-tts-lang')?.value || 'vi';
     const rate = document.getElementById('tr-tts-rate')?.value || '+0%';
     const pitch = document.getElementById('tr-tts-pitch')?.value || '+0Hz';
-    
-    const cat = enginesCatalog.find(e => e.id === engine);
-    if (cat && cat.backend === 'dtrouter') {
-      const model = document.getElementById('tr-dtr-model')?.value || '';
-      voice = model + '|' + voice;
-      engine = 'dtrouter';
-    }
     
     const payload = {
       video_process: {

@@ -110,8 +110,6 @@ async function loadConfig() {
   set('cfg-elevenlabs-key', cfg.video_process?.elevenlabs_api_key || '');
   // Fish Audio key (stored in video_process)
   set('cfg-fish-key', cfg.video_process?.fish_api_key || '');
-  // DTRouter API key
-  set('cfg-dtrouter-key', cfg.dtrouter?.api_key || '');
   // Gemini Video key
   set('cfg-gemini-key', cfg.gemini_video?.api_key || '');
   // TMDb keys
@@ -354,10 +352,7 @@ async function saveConfig() {
     }
   };
 
-  // DTRouter, Gemini, TMDb keys
-  data.dtrouter = {
-    api_key: get('cfg-dtrouter-key'),
-  };
+  // Gemini, TMDb keys
   data.gemini_video = {
     api_key: get('cfg-gemini-key'),
   };
@@ -388,7 +383,6 @@ async function saveConfig() {
 
 /* ── API Key Test ─────────────────────────────────────────────────────────── */
 const _API_KEY_IDS = {
-  'dtrouter':    { inputId: 'cfg-dtrouter-key',    statusId: 'cfg-dtrouter-status' },
   deepseek:    { inputId: 'cfg-deepseek-key',    statusId: 'cfg-deepseek-status' },
   groq:        { inputId: 'cfg-groq-key',         statusId: 'cfg-groq-status' },
   openai:      { inputId: 'cfg-openai-key',       statusId: 'cfg-openai-status' },
@@ -887,7 +881,7 @@ function fillDirFromConfig() {
 
 /**
  * Kiểm tra API key đang dùng trước khi thực hiện tác vụ dịch/TTS.
- * @param {string} provider  - 'deepseek' | 'groq' | 'fpt' | 'elevenlabs' | 'fish-audio' | 'dtrouter' | 'openai'
+ * @param {string} provider  - 'deepseek' | 'groq' | 'fpt' | 'elevenlabs' | 'fish-audio' | 'openai'
  * @param {string} keyValue  - giá trị key cần test
  * @param {Function} onOk    - callback khi test thành công, sẽ tiếp tục tác vụ
  * @param {Function} onCancel - callback khi người dùng hủy
@@ -934,7 +928,7 @@ function _showApiCheckModal(provider, currentKey, errorMsg, onOk, onCancel) {
   const LABELS = {
     deepseek: 'DeepSeek', groq: 'Groq', fpt: 'FPT AI TTS',
     elevenlabs: 'ElevenLabs TTS', 'fish-audio': 'Fish Audio TTS',
-    'dtrouter': 'DTRouter', openai: 'OpenAI', gemini: 'Gemini'
+    openai: 'OpenAI', gemini: 'Gemini'
   };
 
   const providerLabel = LABELS[provider] || provider;
@@ -1002,7 +996,6 @@ function _apiCheckSaveKeyToConfig(provider, key) {
   else if (provider === 'fpt') updates.video_process = { ...(cfg.video_process || {}), fpt_api_key: key };
   else if (provider === 'elevenlabs') updates.video_process = { ...(cfg.video_process || {}), elevenlabs_api_key: key };
   else if (provider === 'fish-audio') updates.video_process = { ...(cfg.video_process || {}), fish_api_key: key };
-  else if (provider === 'dtrouter') updates.dtrouter = { ...(cfg.dtrouter || {}), api_key: key };
   else if (provider === 'gemini') updates.gemini_video = { ...(cfg.gemini_video || {}), api_key: key };
 
   if (Object.keys(updates).length) {
@@ -1017,7 +1010,7 @@ function _apiCheckSaveKeyToConfig(provider, key) {
     const inputMap = {
       deepseek: 'cfg-deepseek-key', groq: 'cfg-groq-key', openai: 'cfg-openai-key',
       fpt: 'cfg-fpt-key', elevenlabs: 'cfg-elevenlabs-key', 'fish-audio': 'cfg-fish-key',
-      'dtrouter': 'cfg-dtrouter-key', gemini: 'cfg-gemini-key'
+      gemini: 'cfg-gemini-key'
     };
     const inputEl = document.getElementById(inputMap[provider]);
     if (inputEl) inputEl.value = key;
@@ -1058,7 +1051,6 @@ function getApiKeyForProvider(provider) {
     fpt: vp.fpt_api_key,
     elevenlabs: vp.elevenlabs_api_key,
     'fish-audio': vp.fish_api_key,
-    'dtrouter': (cfg.dtrouter || {}).api_key,
     gemini: (cfg.gemini_video || {}).api_key,
   };
   return map[provider] || '';
@@ -1160,7 +1152,7 @@ window.filterActiveProviders = async function() {
 
       // Show '-----' separator and fallback warning trigger if there are inactive providers
       const activeProviders = status.providers || [];
-      const allProviders = ['dtrouter', 'deepseek', 'openai', 'huggingface', 'groq', 'gemini'];
+      const allProviders = ['deepseek', 'openai', 'huggingface', 'groq', 'gemini'];
       const hasInactive = allProviders.some(p => !activeProviders.includes(p));
       if (hasInactive) {
         const optPrompt = document.createElement('option');
@@ -1208,7 +1200,7 @@ window.filterActiveProviders = async function() {
         const groqKey = cfg.translation?.groq_key;
         return groqKey && String(groqKey).trim().length > 0;
       }
-      return true; // model (local) and dtrouter are always active
+      return true; // model (local) and antigravity are always active
     });
     transcEl.innerHTML = '';
     activeOpts.forEach(opt => {
