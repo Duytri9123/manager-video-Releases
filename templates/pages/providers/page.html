@@ -4,6 +4,25 @@
   <!-- ════════════════ VIEW 1: PROVIDERS LIST ════════════════ -->
   <div id="providers-list-view" class="max-w-6xl mx-auto space-y-8">
 
+    <!-- Local media engines consolidated from the former sidebar submenu -->
+    <div class="space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-850">
+        <h2 class="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-200">Media Providers cục bộ</h2>
+        <span class="text-[11px] text-slate-400">Không cần API key</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-850 p-4 shadow-xs">
+          <div class="flex items-center justify-between gap-3"><div><div class="font-bold text-sm flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg> VieNeu Text To Speech</div><div class="text-[11px] text-slate-500 mt-1">Tạo và clone giọng Việt hoàn toàn local</div></div><span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">Sẵn sàng</span></div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-850 p-4 shadow-xs">
+          <div class="flex items-center justify-between gap-3"><div><div class="font-bold text-sm flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg> Whisper Speech To Text</div><div class="text-[11px] text-slate-500 mt-1">Phiên âm local, không cần đăng nhập</div></div><span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">Sẵn sàng</span></div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-850 p-4 shadow-xs">
+          <div class="flex items-center justify-between gap-3"><div><div class="font-bold text-sm flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg> Video / FFmpeg</div><div class="text-[11px] text-slate-500 mt-1">Xử lý và xuất video trực tiếp trên máy</div></div><span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">Sẵn sàng</span></div>
+        </div>
+      </div>
+    </div>
+
     <!-- OAuth Providers section -->
     <div class="space-y-4">
       <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-850">
@@ -251,7 +270,7 @@
     </div>
 
     <!-- Actions -->
-    <div class="flex justify-between gap-4 mt-6 pt-4 border-t border-slate-150 dark:border-slate-700/50">
+    <div id="modal-actions" class="flex justify-between gap-4 mt-6 pt-4 border-t border-slate-150 dark:border-slate-700/50">
       <button type="button" id="btn-modal-test" onclick="testConnection()" class="flex-1 py-2.5 px-4 text-xs font-bold rounded-2xl border border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer">
         <span>🧪 Kiểm tra</span>
       </button>

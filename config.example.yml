@@ -79,14 +79,10 @@ video_process:
   enabled: false
   model: small
   language: zh
-  fpt_api_key: ''   # đặt trong env FPT_TTS_API_KEY
-  elevenlabs_api_key: ''   # env ELEVENLABS_API_KEY
-  elevenlabs_voice_id: '21m00Tcm4TlvDq8ikWAM'
-  fish_api_key: ''         # env FISH_API_KEY — Fish Audio (đa ngôn ngữ: ja, zh, ko, vi...)
-  fish_model: 's2-pro'    # backbone: s2-pro (mới nhất) hoặc s1
-  fish_reference_id: ''   # voice model ID từ fish.audio — để trống = giọng mặc định
-  tts_engine: edge-tts
-  tts_voice: vi-VN-HoaiMyNeural
+  # TTS chạy hoàn toàn local bằng VieNeu v3 Turbo; không cần API key web.
+  tts_engine: vieneu
+  tts_voice: 'Minh Quân Pro'
+  vieneu_ref_audio: ''     # WAV/MP3 3-8 giây để clone giọng; trống = preset
   tts_concurrency: 4
   tts_retries: 2
   bg_volume: 0.15

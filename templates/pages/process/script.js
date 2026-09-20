@@ -617,6 +617,674 @@ function _onProcFileSelected(input) {
   })();
 }
 
+function _escapeDownloadedText(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function addDownloadedVideo(path) {
+  if (!path) return;
+  const videoInput = document.getElementById('proc-video');
+  if (videoInput) videoInput.value = path;
+  if (Array.isArray(window._batchQueue) && typeof buildNewTask === 'function') {
+    const exists = window._batchQueue.some(item => item?.val === path || item?.path === path);
+    if (!exists) window._batchQueue.push(buildNewTask('file', path));
+    if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
+    if (typeof _step1UpdateDownloadArea === 'function') _step1UpdateDownloadArea();
+  }
+  if (typeof toast === 'function') toast('Đã thêm video tải xuống vào hàng chờ', 'success');
+}
+window.addDownloadedVideo = addDownloadedVideo;
+
+window._procFilesDir = window._procFilesDir || '';
+
+function _processSvgIcon(name, className = '', size = 14) {
+  const paths = {
+    video: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m10 9 5 3-5 3Z"></path><path d="m7 3 2 2m4-2 2 2m4-2 2 2"></path>',
+    audio: '<path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="m21 15-5-5L5 20"></path>',
+    subtitle: '<path d="M4 5h16v12H7l-3 3Z"></path><path d="M8 10h3m2 0h3M8 14h8"></path>',
+    document: '<path d="M6 2h8l4 4v16H6Z"></path><path d="M14 2v5h5M9 12h6m-6 4h6"></path>',
+    folder: '<path d="M3 6h7l2 2h9l-2 11H3Z"></path>',
+    eye: '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6Z"></path><circle cx="12" cy="12" r="2.5"></circle>',
+    upload: '<path d="M12 16V4m0 0-4 4m4-4 4 4"></path><path d="M5 14v5h14v-5"></path>',
+    plus: '<path d="M12 5v14M5 12h14"></path>',
+    trash: '<path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"></path>',
+    arrowUp: '<path d="m6 10 6-6 6 6M12 4v16"></path>',
+    close: '<path d="m6 6 12 12M18 6 6 18"></path>',
+    dotsVertical: '<circle cx="12" cy="5" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="12" cy="19" r="1.75"></circle>',
+    copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>'
+  };
+  const body = paths[name] || paths.document;
+  return `<svg class="proc-svg-icon ${className}" width="${size}" height="${size}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:${size}px;height:${size}px;max-width:${size}px;max-height:${size}px;flex-shrink:0;display:inline-block;vertical-align:middle;">${body}</svg>`;
+}
+
+function _processFileIcon(item) {
+  if (item.is_dir) return `<span style="color:#f59e0b;display:inline-flex;align-items:center">${_processSvgIcon('folder', '', 16)}</span>`;
+  if (item.file_type === 'video') return `<span style="color:#f43f5e;display:inline-flex;align-items:center">${_processSvgIcon('video', '', 16)}</span>`;
+  if (item.file_type === 'subtitle') return `<span style="color:#10b981;display:inline-flex;align-items:center">${_processSvgIcon('subtitle', '', 16)}</span>`;
+  if (item.file_type === 'audio') return `<span style="color:#a855f7;display:inline-flex;align-items:center">${_processSvgIcon('audio', '', 16)}</span>`;
+  if (item.file_type === 'image') return `<span style="color:#3b82f6;display:inline-flex;align-items:center">${_processSvgIcon('image', '', 16)}</span>`;
+  return `<span style="color:#0ea5e9;display:inline-flex;align-items:center">${_processSvgIcon('document', '', 16)}</span>`;
+}
+
+function _processFileGridIcon(item) {
+  if (item.is_dir) return `<span style="color:#f59e0b;display:inline-flex;align-items:center">${_processSvgIcon('folder', '', 28)}</span>`;
+  if (item.file_type === 'video') return `<span style="color:#f43f5e;display:inline-flex;align-items:center">${_processSvgIcon('video', '', 28)}</span>`;
+  if (item.file_type === 'subtitle') return `<span style="color:#10b981;display:inline-flex;align-items:center">${_processSvgIcon('subtitle', '', 28)}</span>`;
+  if (item.file_type === 'audio') return `<span style="color:#a855f7;display:inline-flex;align-items:center">${_processSvgIcon('audio', '', 28)}</span>`;
+  if (item.file_type === 'image') return `<span style="color:#3b82f6;display:inline-flex;align-items:center">${_processSvgIcon('image', '', 28)}</span>`;
+  return `<span style="color:#0ea5e9;display:inline-flex;align-items:center">${_processSvgIcon('document', '', 28)}</span>`;
+}
+
+function closeDownloadedPreviewModal() {
+  const modal = document.getElementById('proc-downloaded-preview-modal');
+  if (modal) {
+    modal.querySelectorAll('video,audio').forEach(media => {
+      try { media.pause(); media.removeAttribute('src'); media.load(); } catch (_) {}
+    });
+    modal.remove();
+  }
+  document.removeEventListener('keydown', _downloadedPreviewEscHandler);
+}
+window.closeDownloadedPreviewModal = closeDownloadedPreviewModal;
+
+function _downloadedPreviewEscHandler(event) {
+  if (event.key === 'Escape') closeDownloadedPreviewModal();
+}
+
+async function openDownloadedPreviewModal(item) {
+  if (!item?.path) return;
+  closeDownloadedPreviewModal();
+  const modal = document.createElement('div');
+  modal.id = 'proc-downloaded-preview-modal';
+  modal.className = 'proc-preview-modal-backdrop';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,0.82);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', `Xem trước ${item.name || 'file'}`);
+  const previewUrl = '/api/files/preview?path=' + encodeURIComponent(item.path);
+
+  let bodyHtml = '';
+  const ftype = item.file_type || '';
+  const ext = (item.ext || '').toLowerCase();
+
+  if (ftype === 'video') {
+    bodyHtml = `
+      <div class="proc-preview-modal-body" style="display:flex;align-items:center;justify-content:center;background:#000;min-height:300px;max-height:calc(90vh - 60px);overflow:hidden">
+        <video src="${previewUrl}" controls autoplay playsinline preload="metadata" style="max-width:100%;max-height:calc(90vh - 60px);width:auto;height:auto;display:block;outline:none;margin:auto"></video>
+      </div>`;
+  } else if (ftype === 'audio') {
+    bodyHtml = `
+      <div class="proc-preview-modal-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg3,#0b0f19);padding:36px 20px;min-height:220px">
+        <div style="color:#a855f7;margin-bottom:12px">${_processSvgIcon('audio', '', 40)}</div>
+        <div style="font-weight:600;font-size:13px;color:var(--text,#f8fafc);margin-bottom:16px;text-align:center;max-width:80%;word-break:break-all">${_escapeDownloadedText(item.name)}</div>
+        <audio src="${previewUrl}" controls autoplay style="width:100%;max-width:440px;outline:none"></audio>
+      </div>`;
+  } else if (ftype === 'image') {
+    bodyHtml = `
+      <div class="proc-preview-modal-body" style="display:flex;align-items:center;justify-content:center;background:#000;min-height:300px;max-height:calc(90vh - 60px);padding:10px">
+        <img src="${previewUrl}" alt="${_escapeDownloadedText(item.name)}" style="max-width:100%;max-height:calc(90vh - 80px);object-fit:contain;display:block;margin:auto" />
+      </div>`;
+  } else {
+    // Subtitles, text, json, log, documents
+    bodyHtml = `
+      <div class="proc-preview-modal-body" style="display:flex;flex-direction:column;background:#0b0f19;min-height:320px;max-height:calc(88vh - 60px);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#111827;border-bottom:1px solid #1f2937">
+          <span style="font-size:11px;color:#94a3b8;font-family:monospace" id="proc-preview-lines-info">Đang tải nội dung...</span>
+          <button type="button" class="btn btn-secondary btn-sm" id="proc-copy-preview-btn" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px">
+            ${_processSvgIcon('copy', '', 12)}<span>Sao chép</span>
+          </button>
+        </div>
+        <pre id="proc-preview-text-box" style="flex:1;margin:0;padding:14px;font-family:Consolas,Monaco,monospace;font-size:12px;line-height:1.6;color:#e2e8f0;overflow:auto;white-space:pre-wrap;word-break:break-word;user-select:text"></pre>
+      </div>`;
+  }
+
+  modal.innerHTML = `
+    <div class="proc-preview-modal-panel" style="background:var(--bg2,#1e293b);border:1px solid var(--border,#334155);border-radius:14px;max-width:860px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5)">
+      <div class="proc-preview-modal-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg3,#0f172a)">
+        <div class="proc-preview-modal-title" style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%">
+          ${_processFileIcon(item)}
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escapeDownloadedText(item.name || 'Xem trước file')}</span>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm proc-preview-modal-close" title="Đóng" aria-label="Đóng cửa sổ xem trước" style="padding:4px 8px;cursor:pointer">${_processSvgIcon('close')}</button>
+      </div>
+      ${bodyHtml}
+    </div>`;
+
+  modal.addEventListener('click', event => {
+    if (event.target === modal) closeDownloadedPreviewModal();
+  });
+  modal.querySelector('.proc-preview-modal-close')?.addEventListener('click', closeDownloadedPreviewModal);
+  document.body.appendChild(modal);
+  document.addEventListener('keydown', _downloadedPreviewEscHandler);
+  modal.querySelector('.proc-preview-modal-close')?.focus();
+
+  // If text/subtitle preview, fetch the text content
+  const textBox = modal.querySelector('#proc-preview-text-box');
+  if (textBox) {
+    try {
+      const res = await fetch(previewUrl);
+      const text = await res.text();
+      textBox.textContent = text || '(File trống)';
+      const linesInfo = modal.querySelector('#proc-preview-lines-info');
+      if (linesInfo) {
+        const lineCount = (text.match(/\n/g) || []).length + 1;
+        linesInfo.textContent = `${lineCount} dòng · ${_escapeDownloadedText(item.size_str || '')}`;
+      }
+      const copyBtn = modal.querySelector('#proc-copy-preview-btn');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(text);
+          if (typeof toast === 'function') toast('Đã sao chép nội dung vào bộ nhớ tạm', 'success');
+        });
+      }
+    } catch (err) {
+      textBox.textContent = 'Lỗi tải file: ' + err.message;
+    }
+  }
+}
+window.openDownloadedPreviewModal = openDownloadedPreviewModal;
+
+window._procFilesViewMode = localStorage.getItem('proc_files_view_mode') || 'list';
+window._procSelectedFiles = window._procSelectedFiles || new Set();
+window._procCurrentFilesData = null;
+
+function setDownloadedViewMode(mode) {
+  window._procFilesViewMode = mode;
+  localStorage.setItem('proc_files_view_mode', mode);
+  _updateViewModeButtons();
+  if (window._procCurrentFilesData) {
+    _renderDownloadedItems(window._procCurrentFilesData);
+  }
+}
+window.setDownloadedViewMode = setDownloadedViewMode;
+
+function _updateViewModeButtons() {
+  const btnList = document.getElementById('proc-view-btn-list');
+  const btnGrid = document.getElementById('proc-view-btn-grid');
+  const isGrid = window._procFilesViewMode === 'grid';
+  if (btnList) {
+    btnList.className = isGrid
+      ? 'px-1.5 py-0.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all'
+      : 'px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 shadow-xs transition-all';
+  }
+  if (btnGrid) {
+    btnGrid.className = isGrid
+      ? 'px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 shadow-xs transition-all'
+      : 'px-1.5 py-0.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all';
+  }
+}
+
+function toggleSelectAllDownloadedFiles(checked) {
+  const items = (window._procCurrentFilesData && window._procCurrentFilesData.items) || [];
+  if (checked) {
+    items.forEach(item => {
+      const p = item.path || item.abs_path;
+      if (p) window._procSelectedFiles.add(p);
+    });
+  } else {
+    window._procSelectedFiles.clear();
+  }
+  document.querySelectorAll('.proc-file-checkbox').forEach(cb => {
+    cb.checked = checked;
+  });
+  document.querySelectorAll('.proc-downloaded-history-row, .proc-file-card').forEach(el => {
+    if (checked) {
+      el.style.background = 'rgba(99,102,241,0.08)';
+      el.style.borderColor = 'var(--accent, #6366f1)';
+    } else {
+      el.style.background = '';
+      el.style.borderColor = 'var(--border)';
+    }
+  });
+  _updateBatchDeleteBtn();
+}
+window.toggleSelectAllDownloadedFiles = toggleSelectAllDownloadedFiles;
+
+function onDownloadedItemCheckChanged(cb) {
+  const path = cb.dataset.path;
+  if (!path) return;
+  if (cb.checked) {
+    window._procSelectedFiles.add(path);
+  } else {
+    window._procSelectedFiles.delete(path);
+  }
+  const parent = cb.closest('.proc-downloaded-history-row, .proc-file-card');
+  if (parent) {
+    if (cb.checked) {
+      parent.style.background = 'rgba(99,102,241,0.08)';
+      parent.style.borderColor = 'var(--accent, #6366f1)';
+    } else {
+      parent.style.background = '';
+      parent.style.borderColor = 'var(--border)';
+    }
+  }
+  _updateBatchDeleteBtn();
+}
+window.onDownloadedItemCheckChanged = onDownloadedItemCheckChanged;
+
+function _updateBatchDeleteBtn() {
+  const count = window._procSelectedFiles.size;
+  const btn = document.getElementById('proc-batch-del-btn');
+  const countSpan = document.getElementById('proc-batch-del-count');
+  if (btn) btn.style.display = count > 0 ? 'inline-flex' : 'none';
+  if (countSpan) countSpan.textContent = `Xóa (${count})`;
+
+  const selectAllCb = document.getElementById('proc-select-all-files');
+  const items = (window._procCurrentFilesData && window._procCurrentFilesData.items) || [];
+  if (selectAllCb) {
+    if (items.length > 0 && count === items.length) {
+      selectAllCb.checked = true;
+      selectAllCb.indeterminate = false;
+    } else if (count > 0 && count < items.length) {
+      selectAllCb.checked = false;
+      selectAllCb.indeterminate = true;
+    } else {
+      selectAllCb.checked = false;
+      selectAllCb.indeterminate = false;
+    }
+  }
+}
+
+async function deleteSelectedDownloadedFiles() {
+  const paths = Array.from(window._procSelectedFiles);
+  if (paths.length === 0) return;
+  if (!confirm(`Bạn có chắc muốn xóa ${paths.length} file / thư mục đã chọn? Thao tác này không thể hoàn tác.`)) return;
+
+  try {
+    const res = await fetch('/api/files/batch_delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths })
+    });
+    const result = await res.json();
+    if (!res.ok || !result.ok) throw new Error(result.error || (result.errors && result.errors.join(', ')) || 'Xóa thất bại');
+    if (typeof toast === 'function') toast(`Đã xóa ${result.deleted || paths.length} mục thành công`, 'success');
+    window._procSelectedFiles.clear();
+    loadDownloadedVideos(window._procFilesDir || '');
+  } catch (err) {
+    if (typeof toast === 'function') toast('Lỗi xóa mục: ' + err.message, 'error');
+  }
+}
+window.deleteSelectedDownloadedFiles = deleteSelectedDownloadedFiles;
+
+function _renderDownloadedItems(data) {
+  const list = document.getElementById('proc-downloaded-list');
+  if (!list) return;
+  window._procCurrentFilesData = data;
+  _updateViewModeButtons();
+
+  const items = Array.isArray(data.items) ? data.items : [];
+  const currentDir = window._procFilesDir || '';
+  const isGrid = window._procFilesViewMode === 'grid';
+
+  // Synchronize selection with existing items
+  const currentPaths = new Set(items.map(i => i.path || i.abs_path));
+  for (const p of window._procSelectedFiles) {
+    if (!currentPaths.has(p)) window._procSelectedFiles.delete(p);
+  }
+  _updateBatchDeleteBtn();
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-state text-xs p-6 text-center text-slate-400">Thư mục trống.</div>';
+    return;
+  }
+
+  // Generate action dropdown HTML for an item
+  const renderAction = (item, index) => `
+    <div class="proc-dropdown-wrapper" style="position:relative;display:inline-block">
+      <button type="button" class="btn btn-secondary btn-sm proc-dropdown-trigger" data-index="${index}" title="Chức năng" aria-label="Tùy chọn cho ${item.name}" style="padding:2px 6px;display:inline-flex;align-items:center;justify-content:center;height:24px;border-radius:6px;border:1px solid var(--border);background:transparent">
+        ${_processSvgIcon('dotsVertical', '', 14)}
+      </button>
+      <div class="proc-dropdown-menu" id="proc-dropdown-${index}" style="display:none;position:fixed;z-index:999999;background:var(--bg2,#ffffff);border:1px solid var(--border,#e2e8f0);border-radius:8px;box-shadow:0 12px 30px -4px rgba(0,0,0,0.25), 0 4px 12px rgba(0,0,0,0.1);min-width:170px;padding:4px 0">
+        ${!item.is_dir ? `
+        <button type="button" class="proc-menu-item proc-preview-downloaded" data-index="${index}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 12px;border:0;background:none;color:var(--text);font-size:12px;text-align:left;cursor:pointer">
+          ${_processSvgIcon('eye')} <span>Xem file</span>
+        </button>` : ''}
+        ${item.file_type === 'video' ? `
+        <button type="button" class="proc-menu-item proc-publish-downloaded" data-index="${index}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 12px;border:0;background:none;color:var(--accent);font-size:12px;text-align:left;cursor:pointer">
+          ${_processSvgIcon('upload')} <span>Đăng video</span>
+        </button>` : ''}
+        ${(item.file_type === 'video' || item.file_type === 'audio') ? `
+        <button type="button" class="proc-menu-item proc-use-downloaded" data-index="${index}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 12px;border:0;background:none;color:#0ea5e9;font-size:12px;text-align:left;cursor:pointer">
+          ${_processSvgIcon('plus')} <span>Thêm hàng chờ</span>
+        </button>` : ''}
+        <button type="button" class="proc-menu-item proc-reveal-downloaded" data-index="${index}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 12px;border:0;background:none;color:var(--text);font-size:12px;text-align:left;cursor:pointer">
+          ${_processSvgIcon('folder')} <span>Mở thư mục</span>
+        </button>
+        <div style="height:1px;background:var(--border,#e2e8f0);margin:4px 0"></div>
+        <button type="button" class="proc-menu-item proc-delete-downloaded" data-index="${index}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 12px;border:0;background:none;color:var(--danger,#ef4444);font-size:12px;text-align:left;cursor:pointer">
+          ${_processSvgIcon('trash')} <span>Xóa</span>
+        </button>
+      </div>
+    </div>`;
+
+  if (isGrid) {
+    // ── GRID VIEW ──
+    const backCard = currentDir
+      ? `<div style="grid-column:1 / -1;margin-bottom:2px">
+           <button type="button" class="proc-file-back" style="width:100%;display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--bg3,#f8fafc);color:var(--accent);font-size:11.5px;font-weight:500;cursor:pointer">
+             ${_processSvgIcon('arrowUp')} <span>Lên thư mục cha</span>
+           </button>
+         </div>`
+      : '';
+
+    const cardsHtml = items.map((item, index) => {
+      const itemKey = item.path || item.abs_path;
+      const safePath = _escapeDownloadedText(itemKey);
+      const isSelected = window._procSelectedFiles.has(itemKey);
+      const meta = item.is_dir ? `${item.child_count ?? 0} mục` : _escapeDownloadedText(item.size_str);
+
+      return `
+        <div class="proc-file-card ${isSelected ? 'proc-item-selected' : ''}" data-index="${index}" style="position:relative;border:1px solid ${isSelected ? 'var(--accent,#6366f1)' : 'var(--border)'};border-radius:10px;background:${isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg2,#ffffff)'};padding:8px 8px 10px;display:flex;flex-direction:column;align-items:center;text-align:center;transition:all 0.15s ease;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,0.03)" title="${safePath}">
+          <div style="width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <input type="checkbox" class="proc-file-checkbox" data-path="${itemKey}" data-index="${index}" ${isSelected ? 'checked' : ''} style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent,#6366f1)">
+            ${renderAction(item, index)}
+          </div>
+          <div class="${item.is_dir ? 'proc-open-folder' : 'proc-file-click'}" data-index="${index}" style="margin:2px 0 6px;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:${item.is_dir ? 'rgba(245,158,11,0.1)' : 'rgba(99,102,241,0.08)'};cursor:pointer" title="${safePath}">
+            ${_processFileGridIcon(item)}
+          </div>
+          <div class="${item.is_dir ? 'proc-open-folder' : 'proc-file-click'}" data-index="${index}" style="width:100%;font-size:11.5px;font-weight:${item.is_dir ? '600' : '500'};color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;cursor:pointer" title="${_escapeDownloadedText(item.name)}">
+            ${_escapeDownloadedText(item.name)}
+          </div>
+          <div style="margin-top:4px;font-size:10px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;gap:3px;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            <span>${meta}</span>
+            <span>·</span>
+            <span>${_escapeDownloadedText(item.mtime)}</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    list.innerHTML = `<div class="proc-files-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:9px;padding:4px;overflow:visible">${backCard}${cardsHtml}</div>`;
+  } else {
+    // ── LIST VIEW ──
+    const backRow = currentDir
+      ? `<div style="padding:9px 12px;border-bottom:1px solid var(--border);background:var(--bg3,#f8fafc)"><button type="button" class="proc-file-back" style="border:0;background:none;padding:0;cursor:pointer;color:var(--accent);font-size:12px;display:inline-flex;align-items:center;gap:5px">${_processSvgIcon('arrowUp')}<span>Lên thư mục cha</span></button></div>`
+      : '';
+
+    list.innerHTML = `<div style="border:1px solid var(--border);border-radius:7px;overflow:visible">${backRow}${items.map((item, index) => {
+      const itemKey = item.path || item.abs_path;
+      const safePath = _escapeDownloadedText(itemKey);
+      const isSelected = window._procSelectedFiles.has(itemKey);
+
+      let typeBadge = '';
+      if (item.file_type === 'video') {
+        typeBadge = `<span class="badge" style="background:rgba(244,63,94,0.12);color:#f43f5e;border:1px solid rgba(244,63,94,0.25);font-size:10px;padding:1px 5px;border-radius:4px">Video</span>`;
+      } else if (item.file_type === 'subtitle') {
+        typeBadge = `<span class="badge" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);font-size:10px;padding:1px 5px;border-radius:4px">Phụ đề</span>`;
+      } else if (item.file_type === 'audio') {
+        typeBadge = `<span class="badge" style="background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);font-size:10px;padding:1px 5px;border-radius:4px">Audio</span>`;
+      }
+
+      const meta = item.is_dir
+        ? `${item.child_count ?? 0} mục · ${_escapeDownloadedText(item.mtime)}`
+        : `${_escapeDownloadedText(item.size_str)} · ${_escapeDownloadedText(item.mtime)}`;
+
+      const fileMeta = item.is_dir
+        ? ''
+        : `<div class="text-xs text-muted" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px">
+            ${typeBadge}
+            ${item.ext ? `<span class="badge" style="font-size:10px;padding:1px 5px">${_escapeDownloadedText(item.ext)}</span>` : ''}
+            <span>${meta}</span>
+          </div>`;
+
+      let nameColor = 'var(--text)';
+      if (item.is_dir) nameColor = 'var(--text, #1e293b)';
+      else if (item.file_type === 'video') nameColor = 'var(--text)';
+      else if (item.file_type === 'subtitle') nameColor = '#059669';
+      else if (item.file_type === 'audio') nameColor = '#7c3aed';
+
+      return `<div class="proc-downloaded-history-row ${isSelected ? 'proc-item-selected' : ''}" data-index="${index}" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);position:relative;background:${isSelected ? 'rgba(99,102,241,0.08)' : 'transparent'}">
+        <input type="checkbox" class="proc-file-checkbox" data-path="${itemKey}" data-index="${index}" ${isSelected ? 'checked' : ''} style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent,#6366f1);margin-right:2px;flex-shrink:0">
+        <div style="min-width:0;flex:1">
+          <button type="button" class="${item.is_dir ? 'proc-open-folder' : 'proc-file-click'}" data-index="${index}" style="display:flex;align-items:center;gap:7px;width:100%;text-align:left;border:0;background:none;padding:0;color:${nameColor};font-size:12.5px;font-weight:${item.is_dir ? '600' : '500'};cursor:pointer" title="${safePath}">
+            ${_processFileIcon(item)}
+            <span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_escapeDownloadedText(item.name)}</span>
+          </button>
+          ${fileMeta}
+        </div>
+        ${item.is_dir ? `<div class="text-xs text-muted" style="white-space:nowrap">${meta}</div>` : ''}
+        ${renderAction(item, index)}
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  // Attach event listeners
+  list.querySelector('.proc-file-back')?.addEventListener('click', () => loadDownloadedVideos(data.parent === '.' ? '' : (data.parent || '')));
+
+  list.querySelectorAll('.proc-file-checkbox').forEach(cb => {
+    cb.addEventListener('change', e => {
+      e.stopPropagation();
+      onDownloadedItemCheckChanged(cb);
+    });
+    cb.addEventListener('click', e => e.stopPropagation());
+  });
+
+  list.querySelectorAll('.proc-open-folder').forEach(button => {
+    button.addEventListener('click', e => {
+      e.stopPropagation();
+      loadDownloadedVideos(items[Number(button.dataset.index)]?.path || '');
+    });
+  });
+
+  list.querySelectorAll('.proc-file-click').forEach(button => {
+    button.addEventListener('click', e => {
+      e.stopPropagation();
+      const item = items[Number(button.dataset.index)];
+      if (item?.path) openDownloadedPreviewModal(item);
+    });
+  });
+
+  // 3-dots dropdown trigger handler with fixed upward/downward floating popup
+  list.querySelectorAll('.proc-dropdown-trigger').forEach(trigger => {
+    trigger.addEventListener('click', e => {
+      e.stopPropagation();
+      const idx = trigger.dataset.index;
+      const menu = document.getElementById(`proc-dropdown-${idx}`);
+      document.querySelectorAll('.proc-dropdown-menu').forEach(m => {
+        if (m !== menu) m.style.display = 'none';
+      });
+      if (menu) {
+        const isOpening = menu.style.display !== 'block';
+        if (isOpening) {
+          const btnRect = trigger.getBoundingClientRect();
+          const spaceBelow = window.innerHeight - btnRect.bottom;
+          const menuHeight = 150;
+
+          menu.style.position = 'fixed';
+          menu.style.right = Math.max(10, window.innerWidth - btnRect.right) + 'px';
+          menu.style.left = 'auto';
+          menu.style.zIndex = '999999';
+
+          if (spaceBelow < menuHeight) {
+            menu.style.top = 'auto';
+            menu.style.bottom = (window.innerHeight - btnRect.top + 4) + 'px';
+          } else {
+            menu.style.bottom = 'auto';
+            menu.style.top = (btnRect.bottom + 4) + 'px';
+          }
+          menu.style.display = 'block';
+        } else {
+          menu.style.display = 'none';
+        }
+      }
+    });
+  });
+
+  list.addEventListener('scroll', () => {
+    document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+  }, { passive: true });
+
+  list.querySelectorAll('.proc-menu-item').forEach(item => {
+    item.addEventListener('mouseenter', () => item.style.background = 'var(--bg3, rgba(125,125,125,0.1))');
+    item.addEventListener('mouseleave', () => item.style.background = 'none');
+  });
+
+  list.querySelectorAll('.proc-preview-downloaded').forEach(button => {
+    button.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+      const item = items[Number(button.dataset.index)];
+      if (item?.path) openDownloadedPreviewModal(item);
+    });
+  });
+
+  list.querySelectorAll('.proc-use-downloaded').forEach(button => {
+    button.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+      addDownloadedVideo(items[Number(button.dataset.index)]?.abs_path || items[Number(button.dataset.index)]?.path);
+    });
+  });
+
+  list.querySelectorAll('.proc-publish-downloaded').forEach(button => {
+    button.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+      const item = items[Number(button.dataset.index)];
+      if (item?.abs_path && typeof sendToPublish === 'function') sendToPublish(item.abs_path);
+    });
+  });
+
+  list.querySelectorAll('.proc-reveal-downloaded').forEach(button => {
+    button.addEventListener('click', async e => {
+      e.stopPropagation();
+      document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+      const item = items[Number(button.dataset.index)];
+      const targetPath = item?.abs_path || item?.path;
+      if (!targetPath) return;
+      try {
+        const res = await fetch('/api/files/open_folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: targetPath })
+        });
+        const result = await res.json();
+        if (!res.ok || !result.ok) throw new Error(result.error || 'Không mở được thư mục');
+      } catch (error) {
+        if (typeof toast === 'function') toast('Không mở được thư mục: ' + error.message, 'error');
+      }
+    });
+  });
+
+  list.querySelectorAll('.proc-delete-downloaded').forEach(button => {
+    button.addEventListener('click', async e => {
+      e.stopPropagation();
+      document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+      const item = items[Number(button.dataset.index)];
+      const targetPath = item?.abs_path || item?.path;
+      if (!targetPath || !confirm(`Xóa "${item.name}"?`)) return;
+      try {
+        const res = await fetch('/api/files/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: targetPath })
+        });
+        const result = await res.json();
+        if (!res.ok || !result.ok) throw new Error(result.error || 'Không xóa được file');
+        if (typeof toast === 'function') toast('Đã xóa', 'success');
+        loadDownloadedVideos(window._procFilesDir || '');
+      } catch (error) {
+        if (typeof toast === 'function') toast('Xóa thất bại: ' + error.message, 'error');
+      }
+    });
+  });
+}
+
+async function loadDownloadedVideos(dir) {
+  const list = document.getElementById('proc-downloaded-list');
+  const crumb = document.getElementById('proc-files-breadcrumb');
+  if (!list) return;
+  if (dir !== undefined) window._procFilesDir = dir || '';
+  const currentDir = window._procFilesDir || '';
+  list.innerHTML = '<div class="empty-state text-xs p-4 text-center text-slate-400">Đang tải thư mục...</div>';
+  try {
+    const query = '/api/files?dir=' + encodeURIComponent(currentDir);
+    const response = await fetch(query);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Không đọc được thư mục');
+
+    if (crumb) {
+      const parts = currentDir.split('/').filter(Boolean);
+      let accumulated = '';
+      crumb.innerHTML = `<button type="button" class="proc-file-crumb" data-dir="" style="border:0;background:none;padding:0;cursor:pointer;color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:5px">${_processSvgIcon('folder')}<span>Downloaded</span></button>` + parts.map(part => {
+        accumulated += (accumulated ? '/' : '') + part;
+        return `<span style="color:var(--text-muted)">/</span><button type="button" class="proc-file-crumb" data-dir="${_escapeDownloadedText(accumulated)}" style="border:0;background:none;padding:0;cursor:pointer;color:var(--accent)">${_escapeDownloadedText(part)}</button>`;
+      }).join('');
+      crumb.querySelectorAll('.proc-file-crumb').forEach(button => button.addEventListener('click', () => loadDownloadedVideos(button.dataset.dir || '')));
+    }
+
+    _renderDownloadedItems(data);
+  } catch (error) {
+    list.innerHTML = `<div class="text-xs p-4" style="color:var(--danger)">Không tải được danh sách: ${_escapeDownloadedText(error.message)}</div>`;
+  }
+}
+window.loadDownloadedVideos = loadDownloadedVideos;
+
+// Global click handler to close open dropdown menus when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.proc-dropdown-wrapper')) {
+    document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+  }
+});
+window.addEventListener('scroll', () => {
+  document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+}, { passive: true });
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
+}, { passive: true });
+
+function addHistoryUrlToQueue(url) {
+  if (!url) return;
+  const urlEl = document.getElementById('proc-url');
+  if (urlEl) urlEl.value = url;
+  if (Array.isArray(window._batchQueue) && typeof buildNewTask === 'function') {
+    const exists = window._batchQueue.some(item => item?.val === url);
+    if (!exists) window._batchQueue.push(buildNewTask('url', url));
+    if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
+    if (typeof _step1UpdateDownloadArea === 'function') _step1UpdateDownloadArea();
+  }
+  if (typeof toast === 'function') toast('Đã lấy URL từ lịch sử vào hàng chờ', 'success');
+}
+window.addHistoryUrlToQueue = addHistoryUrlToQueue;
+
+async function loadProcessDownloadHistory() {
+  const list = document.getElementById('proc-download-history');
+  const count = document.getElementById('proc-history-count');
+  if (!list) return;
+  list.innerHTML = '<div class="text-xs text-muted">Đang tải lịch sử...</div>';
+  try {
+    const response = await fetch('/api/history');
+    const data = await response.json();
+    if (!response.ok || !Array.isArray(data)) throw new Error(data.error || 'Không đọc được lịch sử');
+    if (count) count.textContent = `${data.length} mục gần nhất`;
+    if (!data.length) {
+      list.innerHTML = '<div class="empty-state text-xs">Chưa có lịch sử tải xuống.</div>';
+      return;
+    }
+    list.innerHTML = data.map(item => {
+      let displayUrl = item.url || '';
+      try { displayUrl = decodeURIComponent(displayUrl); } catch (_) {}
+      const safeDisplayUrl = _escapeDownloadedText(displayUrl);
+      const rawUrl = _escapeDownloadedText(item.url || '');
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:7px">
+        <div style="min-width:0;flex:1">
+          <div class="text-xs text-muted">${_escapeDownloadedText(item.time)} · ${_escapeDownloadedText(item.type)} · ${_escapeDownloadedText(item.success)}/${_escapeDownloadedText(item.total)}</div>
+          <div class="text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${safeDisplayUrl}">${safeDisplayUrl}</div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm proc-use-history">＋ Hàng chờ</button>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.proc-use-history').forEach((button, index) => {
+      button.addEventListener('click', () => addHistoryUrlToQueue(data[index].url));
+    });
+  } catch (error) {
+    if (count) count.textContent = '';
+    list.innerHTML = `<div class="text-xs" style="color:var(--danger)">Không tải được lịch sử: ${_escapeDownloadedText(error.message)}</div>`;
+  }
+}
+window.loadProcessDownloadHistory = loadProcessDownloadHistory;
+
 function setProcessMode(mode) {
   window._procMode = mode === 'model' ? 'model' : 'ai';
   localStorage.setItem('proc_mode', window._procMode);
@@ -641,15 +1309,47 @@ function setProcessMode(mode) {
 
 function _getProcessProvider(kind) {
   if (kind === 'transcribe') {
-    return document.getElementById('proc-transcribe-provider-model')?.value || 'model';
+    return document.getElementById('proc-transcribe-provider-model')?.value || 'antigravity';
   }
-  return document.getElementById('proc-trans-provider-model')?.value || 'deepseek';
+  return document.getElementById('proc-translation-provider')?.value || 'antigravity';
+}
+
+function _getProcessModel(kind) {
+  if (kind === 'transcribe') {
+    return document.getElementById('proc-model')?.value || '';
+  }
+  return document.getElementById('proc-trans-provider-model')?.value || '';
 }
 
 function startProcessVideo() {
-  const videoPath = document.getElementById('proc-video')?.value?.trim();
-  const videoUrl = document.getElementById('proc-url')?.value?.trim();
-  const selectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
+  let videoPath = document.getElementById('proc-video')?.value?.trim();
+  let videoUrl = document.getElementById('proc-url')?.value?.trim();
+  let selectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
+
+  // Fallback: If inputs are empty but there are items in batchQueue, auto-populate from queue
+  if (!videoPath && !videoUrl && !selectedFile) {
+    const queueItem = (typeof window._resolveActiveQueueItem === 'function')
+      ? window._resolveActiveQueueItem()
+      : (window._batchQueue || []).find(t => t.status !== 'done' && t.status !== 'error') || (window._batchQueue || [])[0];
+    if (queueItem && queueItem.val) {
+      const isHttp = /^https?:\/\//i.test(queueItem.val);
+      if (isHttp) {
+        const uEl = document.getElementById('proc-url');
+        if (uEl) uEl.value = queueItem.val;
+        videoUrl = queueItem.val;
+      } else {
+        const pEl = document.getElementById('proc-video');
+        if (pEl) pEl.value = queueItem.val;
+        videoPath = queueItem.val;
+      }
+      if (!window._procCurrentTaskId) {
+        window._procCurrentTaskId = queueItem.id;
+      }
+      queueItem.status = 'processing';
+      if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
+    }
+  }
+
   if (!videoPath && !videoUrl && !selectedFile) {
     alert('Vui lòng nhập đường dẫn file video hoặc URL video');
     // Notify batch queue so _procRunning resets and queue can continue
@@ -799,11 +1499,15 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     video_path:       videoPath,
     video_url:        videoUrl || '',
     out_dir:          document.getElementById('proc-out')?.value?.trim() || '',
-    model:            document.getElementById('proc-model')?.value || 'base',
+    model:            _getProcessModel('transcribe') || document.getElementById('proc-model')?.value || 'base',
     language:         document.getElementById('proc-lang')?.value || 'zh',
     target_language:  document.getElementById('proc-target-lang')?.value || 'vi',
     transcribe_provider: _getProcessProvider('transcribe'),
+    transcribe_model:    _getProcessModel('transcribe'),
     translate_provider:  _getProcessProvider('translate'),
+    translate_model:     _getProcessModel('translate'),
+    skip_ass_review:  (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
+    skip_ass:         (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
     burn_subs:        (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn')?.checked ?? true),
     blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
     blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
@@ -935,6 +1639,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     const reader = res.body.getReader();
     window._procReader = reader;
     const decoder = new TextDecoder();
+    let streamBuffer = '';
 
     // Show pause button
     if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(true);
@@ -942,6 +1647,14 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     function read() {
       reader.read().then(({ done, value }) => {
         if (done) {
+          if (streamBuffer.trim()) {
+            try {
+              const d = JSON.parse(streamBuffer.trim());
+              if (d.log) _appendProcLog(d.log, d.level || 'info');
+              if (d.overall !== undefined) _setProcProgress(d.overall, d.overall_lbl || '');
+            } catch (_) {}
+            streamBuffer = '';
+          }
           if (btn) { btn.disabled = false; btn.textContent = 'Xử lý Video'; }
           if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(false);
           const doneActions = document.getElementById('proc-done-actions');
@@ -952,7 +1665,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
 
           // ── Auto-publish after processing ──
           if (document.getElementById('p-autopub-enabled')?.checked) {
-            if (typeof procWizGo === 'function') procWizGo(5);
+            if (typeof procWizGo === 'function') procWizGo(4);
           }
 
           const autoPubPromise = (typeof pPubAutoUploadAll === 'function'
@@ -977,8 +1690,10 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
           });
           return;
         }
-        const text = decoder.decode(value, { stream: true });
-        text.split('\n').filter(l => l.trim()).forEach(line => {
+        streamBuffer += decoder.decode(value, { stream: true });
+        const lines = streamBuffer.split('\n');
+        streamBuffer = lines.pop(); // preserve incomplete trailing chunk
+        lines.filter(l => l.trim()).forEach(line => {
           try {
             const d = JSON.parse(line);
             if (d.log) {
@@ -1092,10 +1807,10 @@ function sendLastProcessedToPublish() {
     toast('Không tìm thấy đường dẫn video vừa xử lý', 'warning');
     return;
   }
-  // Navigate to wizard step 5 (Đăng tự động — embedded in process wizard)
+  // Navigate to wizard step 4 (Đăng tự động — embedded in process wizard)
   if (typeof procWizGo === 'function') {
-    procWizGo(5);
-    toast('✅ Video xử lý xong — hãy cấu hình đăng ở bước 5', 'success');
+    procWizGo(4);
+    toast('✅ Video xử lý xong — hãy cấu hình đăng ở bước 4', 'success');
   } else {
     // Fallback: switch to publish page
     sendToPublish(window._publishLastOutputPath);
@@ -1140,15 +1855,15 @@ async function _procImportAndAICaption() {
     if ((assContent || hasVideoAi) && typeof pPubAnalyzeFromAss === 'function') {
       await pPubAnalyzeFromAss(assContent);
     } else {
-      _appendProcLog('⚠ Không có ASS hoặc phân tích video để AI phân tích — chuyển sang bước 5 để nhập thủ công', 'warning');
+      _appendProcLog('⚠ Không có ASS hoặc phân tích video để AI phân tích — chuyển sang bước 4 để nhập thủ công', 'warning');
     }
   } catch (e) {
     _appendProcLog('❌ AI caption thất bại: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🤖 Import & AI viết Caption → Đăng (Bước 5)'; }
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 Import & AI viết Caption → Đăng (Bước 4)'; }
   }
 
-  // Navigate to step 5
+  // Navigate to step 4
   sendLastProcessedToPublish();
 }
 
@@ -1209,19 +1924,25 @@ async function autoDetectSubtitles(videoPath) {
 
 function _appendProcLog(msg, level) {
   const box = document.getElementById('proc-log');
-  if (!box) return;
-  const div = document.createElement('div');
-  div.className = 'log-line log-' + (level || 'info');
+  const box3 = document.getElementById('step3-log');
+  if (!box && !box3) return;
+
   const now = new Date();
   const ts = now.toTimeString().slice(0, 8); // HH:MM:SS
-  div.textContent = `[${ts}] ${msg}`;
-  box.appendChild(div);
-  box.scrollTop = box.scrollHeight;
+  const text = `[${ts}] ${msg}`;
 
-  // Mirror to step 3 log box if visible
-  const box3 = document.getElementById('step3-log');
+  if (box) {
+    const div = document.createElement('div');
+    div.className = 'log-line log-' + (level || 'info');
+    div.textContent = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
   if (box3) {
-    const div3 = div.cloneNode(true);
+    const div3 = document.createElement('div');
+    div3.className = 'log-line log-' + (level || 'info');
+    div3.textContent = text;
     box3.appendChild(div3);
     box3.scrollTop = box3.scrollHeight;
   }
@@ -1235,11 +1956,13 @@ function _setProcProgress(pct, label) {
   if (pctEl) pctEl.textContent = pct + '%';
   if (lblEl) lblEl.textContent = label || '';
 
-  // Mirror progress to step 3 mini bar
+  // Mirror progress to step 3 mini bar & status label
   const bar3  = document.getElementById('pb-step3-overall');
   const pct3  = document.getElementById('pb-step3-pct');
+  const statusEl = document.getElementById('step3-log-status');
   if (bar3)  bar3.style.width = pct + '%';
   if (pct3)  pct3.textContent = pct + '%';
+  if (statusEl && label) statusEl.textContent = label;
 }
 
 /* ── Transcribe page ─────────────────────────────────────────────────────── */

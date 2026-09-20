@@ -76,7 +76,6 @@ def _gemini_key() -> str:
 def ai_config():
     cfg = load_cfg()
     gv = cfg.get("gemini_video") or {}
-    nr = cfg.get("nine_router") or {}
     tr = cfg.get("translation") or {}
 
     key = _gemini_key()

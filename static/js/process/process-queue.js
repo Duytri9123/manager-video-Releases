@@ -294,7 +294,7 @@ window._batchQueue = window._batchQueue || [];
     if (typeof window._procQueueSaveToLocalStorage === 'function') window._procQueueSaveToLocalStorage();
   }
 
-  /** Show/hide the "Start processing" card in step 3 based on queue readiness */
+  /** Show/hide or update "Start processing" card in step 3 based on queue readiness */
   function _step3RefreshStartCard() {
     const card = document.getElementById('step3-start-card');
     if (!card) return;
@@ -306,18 +306,41 @@ window._batchQueue = window._batchQueue || [];
       });
     }
 
-    // Has items waiting to be processed or ready
-    const hasItems = (window._batchQueue || []).some(t => t.status === 'ready' || t.status === 'pending');
-
     // Pipeline already running
     const isRunning = !!window._procRunning;
 
-    // ASS review panel is open — pipeline is mid-flight, don't show start button
-    const assOpen = document.getElementById('proc-ass-review-card')?.style.display !== 'none';
+    // ALWAYS keep Thao tac & Tuy chon visible
+    card.style.display = 'flex';
 
-    const onStep3 = window._procWizStep === 3;
-    const shouldShow = (hasItems || (window._batchQueue || []).length > 0) && !isRunning && !assOpen && onStep3;
-    card.style.display = shouldShow ? 'block' : 'none';
+    // Update start button appearance/state while running
+    const startBtn = card.querySelector('button.btn-primary');
+    if (startBtn) {
+      if (isRunning) {
+        startBtn.disabled = true;
+        startBtn.classList.add('opacity-70', 'cursor-not-allowed');
+        startBtn.innerHTML = `
+          <svg class="animate-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>
+          <span>Đang xử lý...</span>
+        `;
+      } else {
+        startBtn.disabled = false;
+        startBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+        startBtn.innerHTML = `
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>Bắt đầu xử lý hàng chờ</span>
+        `;
+      }
+    }
+
+    // Toggle disabled state on config card (visible but non-interactive during processing)
+    const cfgCard = document.getElementById('step3-config-card');
+    if (cfgCard) {
+      if (isRunning) {
+        cfgCard.classList.add('step3-config-disabled');
+      } else {
+        cfgCard.classList.remove('step3-config-disabled');
+      }
+    }
   }
 
   window._resetQueueItemStatus = function(taskId) {
@@ -346,20 +369,43 @@ window._batchQueue = window._batchQueue || [];
     window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
     window._procSkipThumbSession  = false;
     
+    // Check if there are tasks in the queue waiting or ready
+    const hasQueueTasks = (window._batchQueue || []).some(t => t.status !== 'done' && t.status !== 'error');
+    if (hasQueueTasks) {
+      window._step3Started = true;
+      window._procRunning = false; // ensure _runBatchQueueFlow can proceed
+      _step3RefreshStartCard();
+      _runBatchQueueFlow();
+      return;
+    }
+
+    // If no pending tasks, ensure active item or first queue item feeds into inputs
+    const activeItem = (typeof window._resolveActiveQueueItem === 'function')
+      ? window._resolveActiveQueueItem()
+      : (window._batchQueue || [])[0];
+
+    if (activeItem && activeItem.val) {
+      activeItem.status = 'processing';
+      window._procCurrentTaskId = activeItem.id;
+      const isHttpUrl = /^https?:\/\//i.test(activeItem.val);
+      const urlEl  = document.getElementById('proc-url');
+      const pathEl = document.getElementById('proc-video');
+      if (isHttpUrl) {
+        if (urlEl) urlEl.value = activeItem.val;
+        if (pathEl) pathEl.value = '';
+      } else {
+        if (pathEl) pathEl.value = activeItem.val;
+        if (urlEl) urlEl.value = '';
+      }
+      _renderBatchQueue();
+    }
+
     // Mark as started and running
     window._step3Started = true;
     window._procRunning = true;
     
-    // Update task status to processing
-    if (window._procCurrentTaskId) {
-      const t = (window._batchQueue || []).find(x => x.id === window._procCurrentTaskId);
-      if (t) t.status = 'processing';
-    }
-    _renderBatchQueue();
-    
-    // Hide the start card immediately
-    const card = document.getElementById('step3-start-card');
-    if (card) card.style.display = 'none';
+    // Refresh card UI (do not hide options card!)
+    _step3RefreshStartCard();
     
     // Start backend process!
     startProcessVideo();
@@ -369,6 +415,22 @@ window._batchQueue = window._batchQueue || [];
   window._onStep3SkipChange = function() {
     window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
     window._procSkipThumbSession  = false;
+  };
+
+  /** Sync skip-transcription checkboxes across steps */
+  window._onSkipTranscriptionChange = function() {
+    const cb1 = document.getElementById('proc-skip-transcription');
+    const cb3 = document.getElementById('step3-skip-transcription-step3');
+    if (cb1 && cb3) {
+      if (typeof event !== 'undefined' && event && event.target === cb3) {
+        cb1.checked = cb3.checked;
+      } else if (typeof event !== 'undefined' && event && event.target === cb1) {
+        cb3.checked = cb1.checked;
+      }
+    }
+    if (typeof procWizUpdateSummary === 'function') {
+      procWizUpdateSummary();
+    }
   };
 
 

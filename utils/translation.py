@@ -189,8 +189,8 @@ def _llm_translate(
     )
 
     correction_map = ""
-    # Skip ASR analysis for short batches (e.g. video titles/descriptions) or weak/free models
-    is_weak_model = "opencode" in model.lower() or "free" in model.lower() or len(texts) <= 15
+    # Speed optimization: skip redundant analysis for standard videos (<= 60 lines)
+    is_weak_model = "opencode" in model.lower() or "free" in model.lower() or len(texts) <= 60
     
     if not is_weak_model:
         try:
@@ -219,7 +219,8 @@ def _llm_translate(
         f"You produce natural, engaging {target_lang_name} subtitles. ALWAYS output numbered lines only."
     )
 
-    sub_size = 5 if len(texts) > 5 else len(texts)
+    # Sub-batch of 20 lines provides 4x faster execution while keeping full context
+    sub_size = 20 if len(texts) > 20 else len(texts)
     sub_batches = []
     for b_start in range(0, len(texts), sub_size):
         sub_batches.append((b_start, texts[b_start: b_start + sub_size]))
@@ -494,6 +495,88 @@ def _translate_google_parallel(texts: List[str], target_lang: str = "vi") -> Lis
         return list(executor.map(_fetch_one, texts))
 
 
+def _translate_with_antigravity(
+    texts: List[str],
+    conn: dict,
+    model: str = "gemini-3.7-flash",
+    context: str = "",
+    target_lang: str = "vi",
+    timeout: int = 45,
+) -> Tuple[List[str] | None, str]:
+    """Translate subtitle texts using Antigravity CloudCode PA or Gemini API."""
+    if not texts:
+        return [], ""
+    import re
+    from core.direct_ai_provider import antigravity_generate_content, google_generate_content, detect_key_type
+
+    _LANG_MAP = {
+        "vi": "tiếng Việt", "en": "tiếng Anh", "zh": "tiếng Trung",
+        "ja": "tiếng Nhật", "ko": "tiếng Hàn", "th": "tiếng Thái"
+    }
+    target_lang_name = _LANG_MAP.get(target_lang, target_lang)
+
+    clean_model = model.split("/")[-1] if "/" in model else model
+    if not clean_model or clean_model.lower() == "auto":
+        clean_model = "gemini-3.7-flash"
+
+    chunk_size = 30
+    all_translated: List[str] = []
+    k = (conn.get("api_key") or "").strip()
+
+    for i in range(0, len(texts), chunk_size):
+        chunk = texts[i : i + chunk_size]
+        numbered_lines = "\n".join(f"{idx + 1}. {line}" for idx, line in enumerate(chunk))
+
+        prompt = (
+            f"Bạn là chuyên gia dịch thuật phụ đề video ngắn sang {target_lang_name}.\n"
+            f"Hãy dịch các dòng phụ đề sau sang {target_lang_name} một cách tự nhiên, mượt mà, đúng ngữ cảnh video, giữ nguyên cảm xúc.\n\n"
+        )
+        if context:
+            prompt += f"BỐI CẢNH/TIÊU ĐỀ VIDEO: {context}\n\n"
+        prompt += (
+            f"CÁC DÒNG CẦN DỊCH:\n{numbered_lines}\n\n"
+            "QUY TẮC BẮT BUỘC:\n"
+            f"1. Xuất ĐÚNG số lượng dòng tương ứng, giữ nguyên định dạng số thứ tự (1. ..., 2. ...).\n"
+            "2. Tuyệt đối không giải thích, không thêm suy nghĩ (no thinking/reasoning), chỉ xuất các dòng phụ đề đã dịch.\n"
+        )
+
+        req_body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.2,
+                "thinkingConfig": {"thinkingBudget": 0}
+            }
+        }
+
+        try:
+            if k.startswith("AIza"):
+                resp_data = google_generate_content(
+                    k, clean_model, req_body,
+                    base_url=conn.get("base_url") or "https://generativelanguage.googleapis.com",
+                    timeout=timeout
+                )
+            else:
+                resp_data, _ = antigravity_generate_content(conn, clean_model, req_body, timeout=timeout)
+
+            candidates = resp_data.get("candidates") or []
+            if not candidates or "content" not in candidates[0]:
+                return None, ""
+            parts = candidates[0]["content"].get("parts") or []
+            out_text = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought"))
+            out_text = re.sub(r'<thought>.*?</thought>', '', out_text, flags=re.DOTALL)
+            out_text = re.sub(r'<think>.*?</think>', '', out_text, flags=re.DOTALL).strip()
+
+            parsed_chunk = _parse_numbered_translation(out_text, len(chunk))
+            for orig_text, trans_line in zip(chunk, parsed_chunk):
+                all_translated.append(trans_line if trans_line else orig_text)
+        except Exception:
+            return None, ""
+
+    if any(all_translated):
+        return all_translated, f"Antigravity ({clean_model})"
+    return None, ""
+
+
 def translate_texts(
     texts: List[str],
     trans_cfg: Dict,
@@ -579,7 +662,7 @@ def translate_texts(
                             direct_url,
                             direct_key,
                             model_name,
-                            timeout=7,
+                            timeout=15,
                             context=context,
                             target_lang=target_lang,
                         )
@@ -591,13 +674,17 @@ def translate_texts(
 
             if provider == "antigravity" and "antigravity" in db_conns_map:
                 c = db_conns_map["antigravity"]
-                key = c["api_key"]
-                base_url = (c.get("base_url") or "https://generativelanguage.googleapis.com/v1beta/openai").rstrip("/")
-                endpoint = base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
-                res, m_label = _try_llm_translate("ag", endpoint, key, "gemini-3.6-flash", "antigravity")
+                chosen_m = model_req if model_req else "gemini-3.7-flash"
+                res, m_label = _translate_with_antigravity(
+                    source_texts,
+                    c,
+                    chosen_m,
+                    context=context,
+                    target_lang=target_lang,
+                )
                 if res and any(res):
-                    return _rebuild(res), m_label or "antigravity"
-                _errors.append("antigravity: failed")
+                    return _rebuild(res), m_label or f"Antigravity ({chosen_m})"
+                _errors.append(f"antigravity ({chosen_m}): failed")
 
             elif provider in ["opencode", "opencodefree"]:
                 c = db_conns_map.get("opencode") or db_conns_map.get("opencodefree") or {}

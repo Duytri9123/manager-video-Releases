@@ -2,126 +2,234 @@ const _colorPresets = { white:'#ffffff', yellow:'#ffff00', cyan:'#00ffff' };
 function _syncColorPicker() {
   const sel = document.getElementById('proc-font-color');
   const picker = document.getElementById('proc-font-color-picker');
+  const hex = document.getElementById('proc-font-color-hex');
   if (!sel || !picker) return;
   if (sel.value !== 'custom') {
     picker.value = _colorPresets[sel.value] || '#ffffff';
   }
+  if (hex && picker) hex.value = picker.value;
   if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
 }
 function _onColorPickerChange() {
   const sel = document.getElementById('proc-font-color');
   if (sel) sel.value = 'custom';
+  const picker = document.getElementById('proc-font-color-picker');
+  const hex = document.getElementById('proc-font-color-hex');
+  if (picker && hex && document.activeElement !== hex) {
+    hex.value = picker.value;
+  }
   if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
 }
 function _getSubtitleColor() {
-  const sel = document.getElementById('proc-font-color');
+  const hex = document.getElementById('proc-font-color-hex');
+  if (hex && hex.value && /^#[0-9a-fA-F]{3,8}$/.test(hex.value.trim())) {
+    return hex.value.trim();
+  }
   const picker = document.getElementById('proc-font-color-picker');
+  if (picker && picker.value) return picker.value;
+  const sel = document.getElementById('proc-font-color');
   if (sel?.value === 'custom' && picker) return picker.value;
   return _colorPresets[sel?.value] || '#ffffff';
 }
 
+async function _procAiFetchJson(url, timeoutMs = 5000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { credentials: 'same-origin', signal: ctrl.signal });
+    return await res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function onTranscribeProviderChanged(restoreValue) {
-    const provSel = document.getElementById('proc-transcribe-provider-model');
-    const modelSel = document.getElementById('proc-model');
-    if (!provSel || !modelSel) return;
+  const provSel = document.getElementById('proc-transcribe-provider-model');
+  const modelSel = document.getElementById('proc-model');
+  if (!provSel || !modelSel) return;
 
-    const provider = provSel.value;
-    const currentVal = restoreValue ? (modelSel.value || 'base') : '';
+  const provider = provSel.value;
+  const currentVal = restoreValue ? (modelSel.value || '') : '';
 
-    // Clear old options
+  modelSel.innerHTML = '';
+
+  if (provider === 'model') {
+    const opts = [
+      { value: 'tiny', text: 'tiny (nhanh nhất)' },
+      { value: 'base', text: 'base (mặc định)' },
+      { value: 'small', text: 'small' },
+      { value: 'medium', text: 'medium' },
+      { value: 'large', text: 'large (tốt nhất)' }
+    ];
+    opts.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.value;
+      opt.textContent = o.text;
+      if (o.value === 'base' && !restoreValue) opt.selected = true;
+      modelSel.appendChild(opt);
+    });
+    if (restoreValue && opts.some(o => o.value === currentVal)) {
+      modelSel.value = currentVal;
+    }
+    return;
+  }
+
+  const optLoading = document.createElement('option');
+  optLoading.value = '';
+  optLoading.textContent = `⏳ Đang tải mô hình từ ${provider}...`;
+  modelSel.appendChild(optLoading);
+
+  try {
+    const res = await _procAiFetchJson(`/api/providers/models?provider=${encodeURIComponent(provider)}`, 5000).catch(() => null);
     modelSel.innerHTML = '';
 
-    if (provider === 'model') {
-      // Local whisper options
-      const opts = [
-        { value: 'tiny', text: 'tiny (nhanh nhất)' },
-        { value: 'base', text: 'base' },
-        { value: 'small', text: 'small' },
-        { value: 'medium', text: 'medium' },
-        { value: 'large', text: 'large (tốt nhất)' }
-      ];
-      opts.forEach(o => {
+    let models = [];
+    if (res && res.ok && Array.isArray(res.models)) {
+      models = res.models.filter(m => {
+        if (!m || m.enabled === false) return false;
+        const mId = String(m.id || m).toLowerCase();
+        const mName = String(m.name || mId).toLowerCase();
+        if (mId.includes('thinking') || mName.includes('thinking')) return false;
+        if (mId.includes('claude') || mId.includes('gpt-oss') || mId.includes('image')) return false;
+        return true;
+      });
+    }
+
+    if (models.length === 0) {
+      if (provider === 'groq') {
+        models = [{ id: 'whisper-large-v3-turbo', name: 'whisper-large-v3-turbo' }, { id: 'whisper-large-v3', name: 'whisper-large-v3' }];
+      } else if (provider === 'antigravity' || provider === 'gemini') {
+        models = [{ id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash (High)' }, { id: 'gemini-3.7-flash-medium', name: 'Gemini 3.7 Flash' }];
+      } else if (provider === 'openai') {
+        models = [{ id: 'whisper-1', name: 'Whisper 1' }];
+      }
+    }
+
+    models.forEach((m, idx) => {
+      const opt = document.createElement('option');
+      const val = m.id || m;
+      opt.value = val;
+      opt.textContent = m.name || val;
+      if ((idx === 0 && !restoreValue) || (restoreValue && val === currentVal)) {
+        opt.selected = true;
+      }
+      modelSel.appendChild(opt);
+    });
+
+    if (restoreValue && Array.from(modelSel.options).some(o => o.value === currentVal)) {
+      modelSel.value = currentVal;
+    }
+  } catch (err) {
+    modelSel.innerHTML = `<option value="${currentVal || 'gemini-3.8-flash-high'}">${currentVal || 'Mặc định'}</option>`;
+  }
+}
+
+async function onTranslationProviderChanged(restoreValue) {
+  const provSel = document.getElementById('proc-translation-provider');
+  const modelSel = document.getElementById('proc-trans-provider-model');
+  if (!provSel || !modelSel) return;
+
+  const provider = provSel.value || 'antigravity';
+  const currentVal = (modelSel.value || '').trim();
+
+  // If select is empty or has only 1 placeholder option, show loading state
+  if (modelSel.options.length <= 1) {
+    modelSel.innerHTML = '<option value="">⏳ Đang tải mô hình...</option>';
+  }
+
+  try {
+    const res = await _procAiFetchJson(`/api/providers/models?provider=${encodeURIComponent(provider)}`, 5000).catch(() => null);
+    if (res && res.ok && Array.isArray(res.models) && res.models.length > 0) {
+      modelSel.innerHTML = '';
+
+      const autoOpt = document.createElement('option');
+      autoOpt.value = '';
+      autoOpt.textContent = 'Tự động theo Provider';
+      modelSel.appendChild(autoOpt);
+
+      // Filter out disabled or image-only models for subtitle translation
+      const models = res.models.filter(m => m && m.enabled !== false && m.type !== 'image');
+
+      models.forEach(m => {
         const opt = document.createElement('option');
-        opt.value = o.value;
-        opt.textContent = o.text;
-        if (o.value === 'base' && !restoreValue) opt.selected = true;
+        const val = m.id || m;
+        opt.value = val;
+        opt.textContent = m.name || val;
+        if (currentVal && val === currentVal) {
+          opt.selected = true;
+        }
         modelSel.appendChild(opt);
       });
-      if (restoreValue && opts.some(o => o.value === currentVal)) {
+
+      if (currentVal && Array.from(modelSel.options).some(o => o.value === currentVal)) {
         modelSel.value = currentVal;
       }
-    } else if (provider === 'groq') {
-      // Groq options
-      const opts = [
-        { value: 'whisper-large-v3-turbo', text: 'whisper-large-v3-turbo (mặc định)' },
-        { value: 'whisper-large-v3', text: 'whisper-large-v3' }
-      ];
-      opts.forEach(o => {
-        const opt = document.createElement('option');
-        opt.value = o.value;
-        opt.textContent = o.text;
-        if (o.value === 'whisper-large-v3-turbo' && !restoreValue) opt.selected = true;
-        modelSel.appendChild(opt);
-      });
-      if (restoreValue && opts.some(o => o.value === currentVal)) {
-        modelSel.value = currentVal;
-      }
-    } else if (provider === 'antigravity' || provider === 'gemini') {
-      const optLoading = document.createElement('option');
-      optLoading.value = 'gemini-3.6-flash';
-      optLoading.textContent = '⏳ Đang tải danh sách mô hình từ Antigravity...';
-      modelSel.appendChild(optLoading);
+    } else if (modelSel.options.length <= 1) {
+      modelSel.innerHTML = '<option value="" selected>Tự động theo Provider</option>';
+    }
+  } catch (err) {
+    console.warn('onTranslationProviderChanged error:', err);
+    if (modelSel.options.length <= 1) {
+      modelSel.innerHTML = '<option value="" selected>Tự động theo Provider</option>';
+    }
+  }
+}
 
-      try {
-        const resAg = await _procAiFetchJson('/api/providers/models?provider=antigravity', 4000).catch(() => null);
-
-        modelSel.innerHTML = '';
-        let items = [
-          { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash (High)' },
-          { id: 'gemini-3.6-flash-medium', name: 'Gemini 3.6 Flash (Medium)' },
-          { id: 'gemini-3.6-flash-low', name: 'Gemini 3.6 Flash (Low)' },
-          { id: 'gemini-3-flash-agent', name: 'Gemini 3.5 Flash (High)' },
-          { id: 'gemini-3.5-flash-medium', name: 'Gemini 3.5 Flash (Medium)' },
-          { id: 'gemini-3.5-flash-low', name: 'Gemini 3.5 Flash (Low)' },
-          { id: 'gemini-pro-agent', name: 'Gemini 3.1 Pro (High)' },
-          { id: 'gemini-3.1-pro-low', name: 'Gemini 3.1 Pro (Low)' },
-          { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)' },
-          { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)' },
-          { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)' }
-        ];
-
-        if (resAg && resAg.ok && Array.isArray(resAg.models)) {
-          resAg.models.filter(m => m && m.enabled !== false).forEach(m => {
-            const mId = m.id || m;
-            const mName = m.name || mId;
-            if (mId && !items.some(it => it.id === mId)) {
-              items.push({ id: mId, name: mName });
-            }
+async function initDynamicAiProviders() {
+  try {
+    const res = await _procAiFetchJson('/api/providers/status', 4000).catch(() => null);
+    if (res && res.ok && Array.isArray(res.providers)) {
+      const enabledProvs = res.providers.filter(p => p.enabled);
+      if (enabledProvs.length > 0) {
+        const transProvSel = document.getElementById('proc-translation-provider');
+        if (transProvSel) {
+          const cur = transProvSel.value;
+          transProvSel.innerHTML = '';
+          enabledProvs.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name || p.id;
+            if (p.id === cur || (p.id === 'antigravity' && !cur)) opt.selected = true;
+            transProvSel.appendChild(opt);
           });
         }
 
-        const grp = document.createElement('optgroup');
-        grp.label = '🌌 Antigravity AI';
-        items.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m.id;
-          opt.textContent = m.name || m.id;
-          if (m.id === 'gemini-3.6-flash' && !restoreValue) opt.selected = true;
-          grp.appendChild(opt);
-        });
-        modelSel.appendChild(grp);
+        const sttProvSel = document.getElementById('proc-transcribe-provider-model');
+        if (sttProvSel) {
+          const cur = sttProvSel.value;
+          sttProvSel.innerHTML = '';
+          enabledProvs.filter(p => ['antigravity', 'gemini', 'groq', 'openai', 'deepgram'].includes(p.id.toLowerCase())).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name || p.id;
+            if (p.id === cur || (p.id === 'antigravity' && !cur)) opt.selected = true;
+            sttProvSel.appendChild(opt);
+          });
+          const optModel = document.createElement('option');
+          optModel.value = 'model';
+          optModel.textContent = 'Whisper local (CPU)';
+          if (cur === 'model' || sttProvSel.options.length === 0) optModel.selected = true;
+          sttProvSel.appendChild(optModel);
 
-        const availableValues = Array.from(modelSel.options).map(o => o.value);
-        if (restoreValue && availableValues.includes(currentVal)) {
-          modelSel.value = currentVal;
+          if (sttProvSel.value) onTranscribeProviderChanged(true);
         }
-      } catch (err) {
-        modelSel.innerHTML = '<option value="gemini-3.6-flash">gemini-3.6-flash</option>';
       }
     }
-  }
+    // Always ensure translation models are initialized
+    const transProvSel = document.getElementById('proc-translation-provider');
+    if (transProvSel && transProvSel.value) {
+      onTranslationProviderChanged(true);
+    }
+  } catch (_) {}
+window.onTranscribeProviderChanged = onTranscribeProviderChanged;
+window.onTranslationProviderChanged = onTranslationProviderChanged;
+window.initDynamicAiProviders = initDynamicAiProviders;
 
-  window.onTranscribeProviderChanged = onTranscribeProviderChanged;
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDynamicAiProviders);
+} else {
+  setTimeout(initDynamicAiProviders, 200);
+}
 
 
   let _renderSubOverlayRaf = null;
@@ -302,7 +410,8 @@ async function onTranscribeProviderChanged(restoreValue) {
     overlay.style.color      = cssColor;
     // Outline via text-shadow (matches FFmpeg outline rendering)
     const outlineW = parseInt(document.getElementById('proc-outline-width')?.value || 2);
-    const boldOn = document.getElementById('proc-font-bold')?.checked ?? true;
+    const wSel = document.getElementById('proc-font-weight');
+    const boldOn = wSel ? (wSel.value === 'bold') : (document.getElementById('proc-font-bold')?.checked ?? true);
     const shadowSteps = [];
     if (outlineW > 0) {
       for (let dx = -outlineW; dx <= outlineW; dx++) {

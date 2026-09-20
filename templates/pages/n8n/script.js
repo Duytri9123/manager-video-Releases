@@ -65,9 +65,9 @@ const N8N_NODE_DEFS = {
     out: r => (r.ok ? `audio ${r.format || 'mp3'} (${Math.round((r.audio_base64 || '').length * 0.75 / 1024)}KB)` : '') },
   'ai.tts_file': { title: 'TTS → File MP3', ic: '💾', endpoint: '/api/tts_to_mp3', method: 'POST', ai: true,
     fields: [{ k: 'text', label: 'Văn bản', type: 'textarea', def: '{{input.content}}' },
-             { k: 'tts_engine', label: 'Engine', type: 'select', opts: ['edge-tts', 'fpt-ai', 'elevenlabs', 'gtts'] },
-             { k: 'tts_voice', label: 'Giọng', ph: 'vi-VN-HoaiMyNeural', def: 'vi-VN-HoaiMyNeural' }],
-    payload: c => ({ text: c.text || '', tts_engine: c.tts_engine || 'edge-tts', tts_voice: c.tts_voice || 'vi-VN-HoaiMyNeural' }),
+             { k: 'tts_engine', label: 'Engine', type: 'select', opts: ['vieneu'] },
+             { k: 'tts_voice', label: 'Giọng', ph: 'Minh Quân Pro', def: 'Minh Quân Pro' }],
+    payload: c => ({ text: c.text || '', tts_engine: 'vieneu', tts_voice: c.tts_voice || 'Minh Quân Pro' }),
     note: 'Trả file MP3 (lưu trên server). Không trả JSON — chỉ xem status.' },
   'ai.stt': { title: 'Giọng nói → Text (STT)', ic: '🎤', endpoint: '/api/chatbot/stt', method: 'POST', ai: true,
     fields: [{ k: 'model', label: 'Model STT', ph: 'openai/whisper-1', def: 'openai/whisper-1' },
@@ -1168,7 +1168,7 @@ const N8N_TEMPLATES = [
         pk: _tpl(2, 0, 'tv.pick_videos', { source: 'videos' }),
         lp: _tpl(3, 0, 'logic.loop', { array: '{{input.items}}', limit: '10', mode: 'Song song', concurrency: '3' }),
         tr: _tpl(4, 0, 'ai.translate', { text: '{{input.desc}}', provider: 'auto' }),
-        ts: _tpl(5, 0, 'ai.tts_file', { text: '{{input.result}}', tts_engine: 'edge-tts', tts_voice: 'vi-VN-HoaiMyNeural' }),
+        ts: _tpl(5, 0, 'ai.tts_file', { text: '{{input.result}}', tts_engine: 'vieneu', tts_voice: 'Minh Quân Pro' }),
         pr: _tpl(6, 0, 'tv.process', { payload: '{{input}}' }),
       };
       return { nodes: n, conns: _chain(['t', 'uv', 'pk', 'lp', 'tr', 'ts', 'pr']) };
@@ -1183,7 +1183,7 @@ const N8N_TEMPLATES = [
       const n = {
         t:  _tpl(0, 0, 'trigger.manual'),
         ch: _tpl(1, 0, 'ai.chat', { system: 'Bạn là người viết kịch bản video ngắn.', prompt: 'Viết kịch bản 60 giây về chủ đề: công nghệ AI' }),
-        ts: _tpl(2, 0, 'ai.tts_file', { text: '{{input.content}}', tts_engine: 'edge-tts', tts_voice: 'vi-VN-HoaiMyNeural' }),
+        ts: _tpl(2, 0, 'ai.tts_file', { text: '{{input.content}}', tts_engine: 'vieneu', tts_voice: 'Minh Quân Pro' }),
         nt: _tpl(3, 0, 'util.notify', { message: 'Đã tạo xong kịch bản & giọng đọc ✅' }),
       };
       return { nodes: n, conns: _chain(['t', 'ch', 'ts', 'nt']) };

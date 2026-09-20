@@ -230,14 +230,6 @@ async function loadConfig() {
 
   // Điền path vào các input thư mục từ config
   fillDirFromConfig();
-
-  // Auto-test all keys that are already saved
-  setTimeout(() => {
-    for (const [provider, cfg] of Object.entries(_API_KEY_IDS)) {
-      const key = document.getElementById(cfg.inputId)?.value?.trim();
-      if (key && key.length > 8) testApiKey(provider);
-    }
-  }, 500);
   } catch (e) {
     console.error('loadConfig error:', e);
     const banner = document.getElementById('cfg-error-banner');
@@ -278,12 +270,12 @@ async function saveConfig() {
     json: getChk('opt-json'),
     folder: getChk('opt-folder'),
     translation: {
-      preferred_provider: get('cfg-preferred-provider'),
-      deepseek_key: get('cfg-deepseek-key'),
-      groq_key: get('cfg-groq-key'),
-      groq_model: get('cfg-groq-model') || 'llama-3.1-8b-instant',
-      openai_key: get('cfg-openai-key'),
-      hf_token: get('cfg-hf-token'),
+      preferred_provider: get('cfg-preferred-provider') || (window._loadedCfg?.translation?.preferred_provider || 'auto'),
+      deepseek_key: get('cfg-deepseek-key') || (window._loadedCfg?.translation?.deepseek_key || ''),
+      groq_key: get('cfg-groq-key') || (window._loadedCfg?.translation?.groq_key || ''),
+      groq_model: get('cfg-groq-model') || (window._loadedCfg?.translation?.groq_model || 'llama-3.1-8b-instant'),
+      openai_key: get('cfg-openai-key') || (window._loadedCfg?.translation?.openai_key || ''),
+      hf_token: get('cfg-hf-token') || (window._loadedCfg?.translation?.hf_token || ''),
       naming_enabled: getChk('cfg-naming-enabled'),
     },
     upload: {
@@ -329,9 +321,9 @@ async function saveConfig() {
       tts_pitch: get('vp-tts-pitch') || '+0Hz',
       tts_rate: get('vp-tts-rate') || '+0%',
       tts_emotion: get('vp-tts-emotion') || 'default',
-      fpt_api_key: get('cfg-fpt-key') || '',
-      elevenlabs_api_key: get('cfg-elevenlabs-key') || '',
-      fish_api_key: get('cfg-fish-key') || '',
+      fpt_api_key: get('cfg-fpt-key') || (window._loadedCfg?.video_process?.fpt_api_key || ''),
+      elevenlabs_api_key: get('cfg-elevenlabs-key') || (window._loadedCfg?.video_process?.elevenlabs_api_key || ''),
+      fish_api_key: get('cfg-fish-key') || (window._loadedCfg?.video_process?.fish_api_key || ''),
       elevenlabs_voice_id: '21m00Tcm4TlvDq8ikWAM',
       elevenlabs_model: 'eleven_multilingual_v2',
       fpt_fallback_elevenlabs: false,
@@ -354,24 +346,33 @@ async function saveConfig() {
 
   // Gemini, TMDb keys
   data.gemini_video = {
-    api_key: get('cfg-gemini-key'),
+    api_key: get('cfg-gemini-key') || (window._loadedCfg?.gemini_video?.api_key || ''),
   };
   data.movie = {
-    tmdb_api_key: get('cfg-tmdb-key'),
-    tmdb_read_token: get('cfg-tmdb-token'),
+    tmdb_api_key: get('cfg-tmdb-key') || (window._loadedCfg?.movie?.tmdb_api_key || ''),
+    tmdb_read_token: get('cfg-tmdb-token') || (window._loadedCfg?.movie?.tmdb_read_token || ''),
   };
 
-  // YouTube & Facebook cookie settings
+  // Persist TTS provider keys
+  data.video_process.fpt_api_key = get('cfg-fpt-key');
+  data.video_process.elevenlabs_api_key = get('cfg-elevenlabs-key');
+  data.video_process.fish_api_key = get('cfg-fish-key');
+
+  // TikTok, YouTube & Facebook cookie settings
   data.facebook_profile = get('ck-fb-profile') || '.facebook_profile';
   data.ytdlp = {
     youtube_cookie_mode: 'custom',
     facebook_cookie_mode: 'custom',
+    tiktok_cookie_mode: 'custom',
     cookies_from_browser: get('ck-yt-browser'),
+    cookies_from_browser_tiktok: get('ck-tiktok-browser'),
     cookie_files: {
+      tiktok: get('ck-tiktok-file'),
       youtube: get('ck-yt-file'),
       facebook: get('ck-fb-file')
     },
     cookie_contents: {
+      tiktok: get('ck-tiktok-content'),
       youtube: get('ck-yt-content'),
       facebook: get('ck-fb-content')
     }
@@ -380,6 +381,39 @@ async function saveConfig() {
   await API.post('/api/config', data);
   toast(t('toast_config_saved'), 'success');
 }
+
+/* ── UI Helpers ───────────────────────────────────────────────────────────── */
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.innerHTML = '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  } else {
+    input.type = 'password';
+    btn.innerHTML = '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="3" r="3"/></svg>';
+  }
+}
+window.togglePasswordVisibility = togglePasswordVisibility;
+
+async function pasteToUrlsInput() {
+  try {
+    const text = await navigator.clipboard.readText();
+    const el = document.getElementById('cfg-urls');
+    if (!el) return;
+    if (el.value.trim()) el.value += '\n' + text.trim();
+    else el.value = text.trim();
+    toast('Đã dán liên kết từ clipboard', 'success');
+  } catch (e) {
+    toast('Không thể đọc clipboard: ' + e.message, 'warn');
+  }
+}
+function clearUrlsInput() {
+  const el = document.getElementById('cfg-urls');
+  if (el) { el.value = ''; el.focus(); }
+}
+window.pasteToUrlsInput = pasteToUrlsInput;
+window.clearUrlsInput = clearUrlsInput;
 
 /* ── API Key Test ─────────────────────────────────────────────────────────── */
 const _API_KEY_IDS = {
@@ -397,10 +431,15 @@ const _API_KEY_IDS = {
 function _setKeyStatus(statusId, state, msg) {
   const el = document.getElementById(statusId);
   if (!el) return;
-  const colors = { ok: '#0d7a4e', error: '#c0392b', loading: '#888', warn: '#b7770d' };
-  const icons  = { ok: '✅', error: '❌', loading: '⏳', warn: '⚠' };
-  el.style.color = colors[state] || '#888';
-  el.textContent = (icons[state] || '') + ' ' + msg;
+  const colors = { ok: '#059669', error: '#dc2626', loading: '#64748b', warn: '#d97706' };
+  const icons = {
+    ok: '<svg class="w-3.5 h-3.5 inline-block text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    error: '<svg class="w-3.5 h-3.5 inline-block text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    loading: '<svg class="w-3.5 h-3.5 inline-block animate-spin text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>',
+    warn: '<svg class="w-3.5 h-3.5 inline-block text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+  };
+  el.style.color = colors[state] || '#64748b';
+  el.innerHTML = (icons[state] || '') + ' <span class="align-middle">' + msg + '</span>';
 }
 
 async function testApiKey(provider) {
@@ -433,12 +472,19 @@ async function testApiKey(provider) {
 
 async function testAllApiKeys() {
   const btn = document.querySelector('[onclick="testAllApiKeys()"]');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang test...'; }
+  const oldHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin inline-block mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg> Đang kiểm tra...';
+  }
   for (const provider of Object.keys(_API_KEY_IDS)) {
     const key = document.getElementById(_API_KEY_IDS[provider].inputId)?.value?.trim();
     if (key) await testApiKey(provider);
   }
-  if (btn) { btn.disabled = false; btn.textContent = '🧪 Test tất cả'; }
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = oldHtml || 'Kiểm tra tất cả khóa API';
+  }
 }
 
 // Auto-test when user finishes typing in a key field (on blur)
@@ -560,7 +606,21 @@ function _parseCookieText(raw) {
     const value = part.slice(pos + 1).trim();
     if (_validCookieName(key)) headerParsed[key] = value;
   });
-  return headerParsed;
+  if (Object.keys(headerParsed).length) return headerParsed;
+
+  // Tự động nhận diện chuỗi rời rạc (cách nhau bởi phẩy hoặc xuống dòng)
+  const inferred = {};
+  const tokens = text.split(/[\r\n,]+/).map(t => t.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+  for (const tok of tokens) {
+    if (tok.startsWith('verify_')) inferred.s_v_web_id = tok;
+    else if (tok.startsWith('_02B4')) inferred.__ac_signature = tok;
+    else if (tok.startsWith('1%7C') || tok.startsWith('1|')) inferred.ttwid = tok;
+    else if (['1', '2', '3'].includes(tok)) inferred.bd_ticket_guard_client_web_domain = tok;
+    else if (/^[0-9a-fA-F]{32}$/.test(tok)) inferred.passport_csrf_token = tok;
+    else if (tok.length >= 200) inferred.UIFID = tok;
+    else if (tok.length >= 100 && tok.length < 200 && /^[0-9a-fA-F]+$/.test(tok)) inferred.odin_tt = tok;
+  }
+  return inferred;
 }
 
 function _fillCookieFields(parsed) {
@@ -604,10 +664,14 @@ async function loadCookieFields() {
     set('ck-UIFID', cookies.UIFID || '');
     set('ck-bd_ticket_guard_client_web_domain', cookies.bd_ticket_guard_client_web_domain || '');
 
-    // Load YouTube & Facebook cookie settings
+    // Load TikTok, YouTube & Facebook cookie settings
     const ytdlp = cfg.ytdlp || {};
     const cookieFiles = ytdlp.cookie_files || {};
     const cookieContents = ytdlp.cookie_contents || {};
+    set('ck-tiktok-browser', ytdlp.cookies_from_browser_tiktok || '');
+    set('ck-tiktok-file', cookieFiles.tiktok || '');
+    set('ck-tiktok-content', cookieContents.tiktok || '');
+
     set('ck-yt-browser', ytdlp.cookies_from_browser || '');
     set('ck-yt-file', cookieFiles.youtube || '');
     set('ck-yt-content', cookieContents.youtube || '');
@@ -625,18 +689,39 @@ function switchCfgCookieTab(platform) {
     p.style.display = on ? 'block' : 'none';
   });
   document.querySelectorAll('.cfg-cookie-tab').forEach(el => {
-    el.classList.toggle('active', el.getAttribute('data-cookie-platform') === platform);
+    const active = el.getAttribute('data-cookie-platform') === platform;
+    el.classList.toggle('active', active);
+    if (active) {
+      el.classList.add('bg-slate-900', 'text-white', 'dark:bg-indigo-600', 'border-transparent', 'shadow-xs');
+      el.classList.remove('border-slate-200', 'dark:border-slate-800', 'text-slate-600', 'dark:text-slate-300');
+    } else {
+      el.classList.remove('bg-slate-900', 'text-white', 'dark:bg-indigo-600', 'border-transparent', 'shadow-xs');
+      el.classList.add('border-slate-200', 'dark:border-slate-800', 'text-slate-600', 'dark:text-slate-300');
+    }
   });
 }
 window.switchCfgCookieTab = switchCfgCookieTab;
 
 async function savePlatformConfig(platform) {
-  if (platform === 'tiktok') {
+  if (platform === 'douyin') {
     await saveCookies();
     return;
   }
   const payload = {};
-  if (platform === 'youtube') {
+  if (platform === 'tiktok') {
+    const browser = document.getElementById('ck-tiktok-browser')?.value || '';
+    const filepath = document.getElementById('ck-tiktok-file')?.value?.trim() || '';
+    const content = document.getElementById('ck-tiktok-content')?.value || '';
+    payload.ytdlp = {
+      cookies_from_browser_tiktok: browser,
+      cookie_files: {
+        tiktok: filepath
+      },
+      cookie_contents: {
+        tiktok: content
+      }
+    };
+  } else if (platform === 'youtube') {
     const browser = document.getElementById('ck-yt-browser')?.value || '';
     const filepath = document.getElementById('ck-yt-file')?.value?.trim() || '';
     const content = document.getElementById('ck-yt-content')?.value || '';
@@ -971,19 +1056,19 @@ async function apiCheckModalTest() {
     });
     const data = await res.json();
     if (data.ok) {
-      if (statusEl) { statusEl.textContent = '✅ Key hợp lệ' + (data.quota ? ' — ' + data.quota : ''); statusEl.className = 'api-check-status ok'; }
+      if (statusEl) { statusEl.textContent = 'Key hợp lệ' + (data.quota ? ' — ' + data.quota : ''); statusEl.className = 'api-check-status ok'; }
       if (btnOk) btnOk.disabled = false;
       // Lưu key mới vào config tự động
       _apiCheckSaveKeyToConfig(provider, key);
     } else {
-      if (statusEl) { statusEl.textContent = '❌ ' + (data.error || 'Key không hợp lệ'); statusEl.className = 'api-check-status err'; }
+      if (statusEl) { statusEl.textContent = (data.error || 'Key không hợp lệ'); statusEl.className = 'api-check-status err'; }
       if (btnOk) btnOk.disabled = true;
     }
   } catch (e) {
-    if (statusEl) { statusEl.textContent = '❌ Lỗi kết nối: ' + e.message; statusEl.className = 'api-check-status err'; }
+    if (statusEl) { statusEl.textContent = 'Lỗi kết nối: ' + e.message; statusEl.className = 'api-check-status err'; }
     if (btnOk) btnOk.disabled = true;
   } finally {
-    if (btnTest) { btnTest.disabled = false; btnTest.textContent = '🧪 Test'; }
+    if (btnTest) { btnTest.disabled = false; btnTest.textContent = 'Test'; }
   }
 }
 
@@ -1067,7 +1152,6 @@ window.filterActiveProviders = async function() {
 
   const selectIds = [
     'cfg-preferred-provider',
-    'proc-trans-provider-model',
     'proc-trans-provider-ai',
     'fb-post-ai-provider',
     'fb-text-ai-provider',
@@ -1105,16 +1189,16 @@ window.filterActiveProviders = async function() {
       });
 
       const providerLabels = {
-        'google': '🌐 Google Translate',
-        'oc': '🎁 OpenCode Free',
-        'ag': '🌌 Google Antigravity',
-        'cx': '⚡ OpenAI Codex',
-        'gc': '🔷 Gemini',
-        'openai': '🧠 OpenAI',
-        'deepseek': '🐳 DeepSeek',
-        'groq': '⚡ Groq',
-        'nvidia': '🟢 NVIDIA NIM',
-        'huggingface': '🤗 HuggingFace'
+        'google': 'Google Translate',
+        'oc': 'OpenCode Free',
+        'ag': 'Antigravity',
+        'cx': 'OpenAI Codex',
+        'gc': 'Gemini',
+        'openai': 'OpenAI',
+        'deepseek': 'DeepSeek',
+        'groq': 'Groq Cloud',
+        'nvidia': 'NVIDIA NIM',
+        'huggingface': 'HuggingFace'
       };
 
       const sortOrder = ['google', 'oc', 'ag', 'cx', 'gc', 'openai', 'deepseek', 'groq', 'nvidia', 'huggingface'];
@@ -1231,20 +1315,20 @@ async function openYoutubeLoginCookie(btn) {
   btn.textContent = '⏳ Đang chờ đóng trình duyệt...';
   
   try {
-    toast('🌐 Trình duyệt đang mở. Vui lòng đăng nhập YouTube và ĐÓNG trình duyệt khi hoàn tất!', 'info');
+    toast('Trình duyệt đang mở. Vui lòng đăng nhập YouTube và ĐÓNG trình duyệt khi hoàn tất!', 'info');
     const res = await fetch('/api/youtube/login_cookie', { method: 'POST' });
     const data = await res.json();
     if (data.ok) {
-      toast('✅ Đã lấy và lưu Cookie YouTube thành công!', 'success');
+      toast('Đã lấy và lưu Cookie YouTube thành công!', 'success');
       const contentEl = document.getElementById('ck-yt-content');
       if (contentEl) {
         contentEl.value = data.cookie;
       }
     } else {
-      toast('❌ Lỗi lấy cookie: ' + (data.error || 'Vui lòng thử lại'), 'error');
+      toast('Lỗi lấy cookie: ' + (data.error || 'Vui lòng thử lại'), 'error');
     }
   } catch (e) {
-    toast('❌ Lỗi: ' + e.message, 'error');
+    toast('Lỗi: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
@@ -1255,20 +1339,20 @@ window.openYoutubeLoginCookie = openYoutubeLoginCookie;
 async function openFacebookLoginProfile(btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '⏳ Đang chờ đóng trình duyệt...';
+  btn.textContent = 'Đang chờ đóng trình duyệt...';
   
   try {
-    toast('🌐 Trình duyệt đang mở. Vui lòng đăng nhập Facebook và ĐÓNG trình duyệt khi hoàn tất!', 'info');
+    toast('Trình duyệt đang mở. Vui lòng đăng nhập Facebook và ĐÓNG trình duyệt khi hoàn tất!', 'info');
     const res = await fetch('/api/facebook/login_profile', { method: 'POST' });
     const data = await res.json();
     if (data.ok) {
-      toast('✅ Đã lưu phiên đăng nhập Facebook và lấy Cookie thành công!', 'success');
+      toast('Đã lưu phiên đăng nhập Facebook và lấy Cookie thành công!', 'success');
       const contentEl = document.getElementById('ck-fb-content');
       if (contentEl) {
         contentEl.value = data.cookie;
       }
     } else {
-      toast('❌ Lỗi đăng nhập: ' + (data.error || 'Vui lòng thử lại'), 'error');
+      toast('Lỗi đăng nhập: ' + (data.error || 'Vui lòng thử lại'), 'error');
     }
   } catch (e) {
     toast('❌ Lỗi: ' + e.message, 'error');
@@ -1504,6 +1588,109 @@ async function importFacebookJsonFile(input) {
 }
 window.importFacebookJsonFile = importFacebookJsonFile;
 
+/* ── TikTok Cookie Helpers ──────────────────────────────────────────────── */
+async function parseTiktokCookie() {
+  const raw = document.getElementById('ck-tiktok-content')?.value?.trim();
+  if (!raw) { toast('Vui lòng dán chuỗi cookie TikTok trước!', 'warning'); return; }
+  
+  let count = 0;
+  if (raw.includes('\t') || raw.startsWith('#')) {
+    count = raw.split('\n').filter(line => line.trim() && !line.startsWith('#') && line.split('\t').length >= 7).length;
+  } else {
+    count = raw.split(';').filter(part => part.trim() && part.includes('=')).length;
+  }
+  
+  if (count > 0) {
+    toast(`Phân tích cookie TikTok thành công! Tìm thấy ${count} trường cookie.`, 'success');
+  } else {
+    toast('Không tìm thấy trường cookie TikTok phù hợp hoặc định dạng chưa đúng.', 'warning');
+  }
+}
+window.parseTiktokCookie = parseTiktokCookie;
 
+async function importTiktokJsonFile(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const netscape = convertJsonToNetscape(raw);
+    if (netscape) {
+      const el = document.getElementById('ck-tiktok-content');
+      if (el) el.value = netscape;
+      toast('Đã nhập cookie TikTok từ JSON và chuyển đổi sang Netscape thành công!', 'success');
+      parseTiktokCookie();
+    } else {
+      toast('File JSON không đúng định dạng danh sách cookie!', 'error');
+    }
+  } catch (e) {
+    toast('Lỗi import JSON: ' + e.message, 'error');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+window.importTiktokJsonFile = importTiktokJsonFile;
 
+async function validateTiktokCookie(btn) {
+  const origText = btn ? btn.innerHTML : '';
+  const statusEl = document.getElementById('ck-tiktok-status');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="inline-block animate-spin mr-1">⏳</span> Đang kiểm tra...';
+  }
+  if (statusEl) {
+    statusEl.innerHTML = '<span class="text-amber-500 font-medium">Đang kiểm tra kết nối TikTok...</span>';
+  }
 
+  const payload = {
+    content: document.getElementById('ck-tiktok-content')?.value || '',
+    filepath: document.getElementById('ck-tiktok-file')?.value?.trim() || '',
+    browser: document.getElementById('ck-tiktok-browser')?.value || ''
+  };
+
+  try {
+    const res = await fetch('/api/tiktok/validate_cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.message || 'Cookie TikTok hợp lệ!', 'success');
+      if (statusEl) {
+        statusEl.innerHTML = '<span class="text-emerald-500 font-bold">Hợp lệ</span>';
+      }
+    } else {
+      toast('Xác thực thất bại: ' + (data.error || 'Cookie không hợp lệ'), 'error');
+      if (statusEl) {
+        statusEl.innerHTML = '<span class="text-rose-500 font-bold">Không hợp lệ</span>';
+      }
+    }
+  } catch (e) {
+    toast('Lỗi kiểm tra cookie: ' + e.message, 'error');
+    if (statusEl) {
+      statusEl.innerHTML = '<span class="text-rose-500 font-bold">Lỗi kết nối</span>';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  }
+}
+window.validateTiktokCookie = validateTiktokCookie;
+
+async function autoFetchTiktokCookie() {
+  try {
+    toast('Đang khởi động trình duyệt để lấy Cookie TikTok...', 'info');
+    const res = await fetch('/api/tiktok/auto_fetch_cookie', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      toast('Đã mở cửa sổ TikTok. Vui lòng hoàn tất xác minh trên trình duyệt!', 'success');
+    } else {
+      toast('Không thể khởi động: ' + (data.error || ''), 'error');
+    }
+  } catch (e) {
+    toast('Lỗi mở trình duyệt TikTok: ' + e.message, 'error');
+  }
+}
+window.autoFetchTiktokCookie = autoFetchTiktokCookie;

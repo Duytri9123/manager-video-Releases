@@ -662,12 +662,12 @@ function subPreviewUpdate() {
 
   // ── Track & Layer Management System ──
   const TRACK_DEFINITIONS = {
-    subs:     { name: 'Phụ đề video', icon: '📝', desc: 'Phụ đề dịch và phụ đề gốc', tab: 'subs' },
-    overlays: { name: 'Chữ / Khối / Ảnh', icon: '🔤', desc: 'Các text, khối nền, sticker và ảnh chèn', tab: 'overlay' },
-    blur:     { name: 'Vùng che mờ', icon: '🌫', desc: 'Khối làm mờ chữ gốc và vùng che bổ sung', tab: 'overlay' },
-    logo:     { name: 'Logo & Watermark', icon: '🖼', desc: 'Ảnh logo / watermark nhận diện thương hiệu', tab: 'frame' },
-    frame:    { name: 'Khung & Tiêu đề', icon: '🔲', desc: 'Thanh tiêu đề và hiệu ứng mờ viền', tab: 'frame' },
-    video:    { name: 'Video gốc', icon: '🎬', desc: 'Khung hình gốc của video (nền dưới cùng)', tab: 'subs' }
+    subs:     { name: 'Phụ đề video', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>', desc: 'Phụ đề dịch và phụ đề gốc', tab: 'subs' },
+    overlays: { name: 'Chữ / Khối / Ảnh', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>', desc: 'Các text, khối nền, sticker và ảnh chèn', tab: 'overlay' },
+    blur:     { name: 'Vùng che mờ', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>', desc: 'Khối làm mờ chữ gốc và vùng che bổ sung', tab: 'overlay' },
+    logo:     { name: 'Logo & Watermark', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>', desc: 'Ảnh logo / watermark nhận diện thương hiệu', tab: 'frame' },
+    frame:    { name: 'Khung & Tiêu đề', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>', desc: 'Thanh tiêu đề và hiệu ứng mờ viền', tab: 'frame' },
+    video:    { name: 'Video gốc', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>', desc: 'Khung hình gốc của video (nền dưới cùng)', tab: 'subs' }
   };
 
   window.TRACK_DEFINITIONS = TRACK_DEFINITIONS;
@@ -752,7 +752,7 @@ function subPreviewUpdate() {
     const vis = window._pe2TrackVisibility || {};
 
     container.innerHTML = arr.map((layerId, displayIdx) => {
-      const def = TRACK_DEFINITIONS[layerId] || { name: layerId, icon: '📦', desc: '', tab: 'subs' };
+      const def = TRACK_DEFINITIONS[layerId] || { name: layerId, icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>', desc: '', tab: 'subs' };
       const isVisible = vis[layerId] !== false;
       const actualIdx = (window._pe2LayerOrder || []).indexOf(layerId);
       const isTop = actualIdx === (window._pe2LayerOrder || []).length - 1;
@@ -761,41 +761,40 @@ function subPreviewUpdate() {
       let extraInfo = '';
       if (layerId === 'overlays') {
         const count = (window._videoOverlays || []).length;
-        extraInfo = `<span style="font-size:10px;background:rgba(99,102,241,0.15);color:#818cf8;padding:2px 6px;border-radius:4px">${count} phần tử</span>`;
+        extraInfo = `<span class="pe2-track-badge" style="background:rgba(99,102,241,0.12);color:var(--accent,#3b82f6)">${count} phần tử</span>`;
       } else if (layerId === 'logo') {
         const hasLogo = !!(document.getElementById('frame-logo-path')?.value);
-        extraInfo = hasLogo ? `<span style="font-size:10px;background:rgba(34,197,94,0.15);color:#22c55e;padding:2px 6px;border-radius:4px">Đã chọn</span>` : `<span style="font-size:10px;color:var(--text-muted)">Chưa có</span>`;
+        extraInfo = hasLogo ? `<span class="pe2-track-badge" style="background:rgba(34,197,94,0.12);color:#22c55e">Đã chọn</span>` : `<span class="pe2-track-badge" style="color:var(--text-muted)">Chưa có</span>`;
       } else if (layerId === 'subs') {
         const hasSample = !!(document.getElementById('sub-preview-sample')?.value);
-        extraInfo = hasSample ? `<span style="font-size:10px;background:rgba(34,197,94,0.15);color:#22c55e;padding:2px 6px;border-radius:4px">Bật</span>` : '';
+        extraInfo = hasSample ? `<span class="pe2-track-badge" style="background:rgba(34,197,94,0.12);color:#22c55e">Bật</span>` : '';
       }
 
       return `
-        <div class="pe2-track-card ${isVisible ? '' : 'disabled'}" data-track-id="${layerId}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid ${isVisible ? 'var(--border)' : 'rgba(255,255,255,0.04)'};border-radius:8px;margin-bottom:8px;transition:all 0.2s">
-          <span style="font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:var(--bg);border-radius:6px">${def.icon}</span>
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:6px">
-              <strong style="font-size:13px;color:var(--text)">${def.name}</strong>
-              ${extraInfo}
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${def.desc}</div>
+        <div class="pe2-track-card ${isVisible ? '' : 'disabled'}" data-track-id="${layerId}">
+          <span class="pe2-track-icon-wrap">${def.icon}</span>
+          <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px">
+            <span class="pe2-track-name">${def.name}</span>
+            ${extraInfo}
           </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 6px;height:28px;line-height:1;border-radius:4px" 
-              onclick="pe2MoveTrackUp('${layerId}')" title="Đưa lên trên (ưu tiên hiển thị trên)" ${isTop ? 'disabled style="opacity:0.3;padding:0 6px;height:28px"' : ''}>
-              ▲
+          <div class="pe2-track-controls">
+            <button type="button" class="pe2-track-btn" 
+              onclick="pe2MoveTrackUp('${layerId}')" title="Đưa lên trên" ${isTop ? 'disabled' : ''}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 6px;height:28px;line-height:1;border-radius:4px" 
-              onclick="pe2MoveTrackDown('${layerId}')" title="Đưa xuống dưới (hiển thị dưới)" ${isBottom ? 'disabled style="opacity:0.3;padding:0 6px;height:28px"' : ''}>
-              ▼
+            <button type="button" class="pe2-track-btn" 
+              onclick="pe2MoveTrackDown('${layerId}')" title="Đưa xuống dưới" ${isBottom ? 'disabled' : ''}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 8px;height:28px;font-size:14px" 
+            <button type="button" class="pe2-track-btn" 
               onclick="pe2ToggleTrack('${layerId}')" title="${isVisible ? 'Ẩn lớp này' : 'Hiện lớp này'}">
-              ${isVisible ? '👁' : '🚫'}
+              ${isVisible 
+                ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' 
+                : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'}
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 8px;height:28px;font-size:11px" 
-              onclick="pe2Tool('${def.tab}')" title="Mở cài đặt của lớp này">
-              ⚙
+            <button type="button" class="pe2-track-btn" 
+              onclick="pe2Tool('${def.tab}')" title="Cài đặt lớp này">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
           </div>
         </div>

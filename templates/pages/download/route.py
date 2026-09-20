@@ -122,32 +122,37 @@ def download_file():
 
 @bp.route("/api/files/preview")
 def preview_file():
-    """Phục vụ file để xem trước ngay trong trình duyệt (inline, hỗ trợ tua video)."""
+    """Phục vụ file để xem trước ngay trong trình duyệt (inline, hỗ trợ tua video, xem văn bản)."""
     cfg = load_cfg()
     base_dir = Path(cfg.get("path") or "./Downloaded").expanduser().resolve()
-    file_path = request.args.get("path", "").strip().lstrip("/\\")
+    raw_path = request.args.get("path", "").strip()
 
-    if not file_path:
+    if not raw_path:
         return jsonify({"error": "No path"}), 400
 
-    target = (base_dir / file_path).resolve()
-    try:
-        target.relative_to(base_dir)
-    except ValueError:
-        return jsonify({"error": "Access denied"}), 403
+    p = Path(raw_path)
+    if p.is_absolute():
+        target = p.resolve()
+    else:
+        clean_rel = raw_path.lstrip("/\\")
+        if clean_rel.lower().startswith("downloaded/"):
+            clean_rel = clean_rel[11:]
+        elif clean_rel.lower().startswith("downloaded\\"):
+            clean_rel = clean_rel[11:]
+        target = (base_dir / clean_rel).resolve()
 
     if not target.exists() or not target.is_file():
         return jsonify({"error": "File not found"}), 404
 
-    mime = mimetypes.guess_type(str(target))[0]
-    if not mime:
-        # Cho phép xem văn bản/phụ đề dưới dạng text
-        if target.suffix.lower() in (".srt", ".ass", ".vtt", ".txt", ".log"):
-            mime = "text/plain; charset=utf-8"
-        else:
-            mime = "application/octet-stream"
+    ext = target.suffix.lower()
+    if ext in (".srt", ".ass", ".vtt", ".ssa", ".lrc", ".txt", ".json", ".log", ".md", ".csv", ".yaml", ".yml"):
+        try:
+            content = target.read_text(encoding="utf-8", errors="replace")
+            return Response(content, mimetype="text/plain; charset=utf-8")
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
-    # conditional=True cho phép HTTP Range request → tua/seek video, audio
+    mime = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
     return send_file(
         str(target),
         mimetype=mime,
@@ -158,6 +163,7 @@ def preview_file():
 
 
 @bp.route("/api/files/open", methods=["POST"])
+@bp.route("/api/files/open_folder", methods=["POST"])
 def open_in_explorer():
     """Mở thư mục chứa file trong trình quản lý file của HĐH (tool chạy local).
 
@@ -170,24 +176,35 @@ def open_in_explorer():
     cfg = load_cfg()
     base_dir = Path(cfg.get("path") or "./Downloaded").expanduser().resolve()
     data = request.json or {}
-    file_path = str(data.get("path") or "").strip().lstrip("/\\")
+    raw_path = str(data.get("path") or "").strip()
 
-    target = (base_dir / file_path).resolve() if file_path else base_dir
-    try:
-        target.relative_to(base_dir)
-    except ValueError:
-        return jsonify({"ok": False, "error": "Access denied"}), 403
+    if not raw_path:
+        target = base_dir
+    else:
+        p = Path(raw_path)
+        if p.is_absolute():
+            target = p.resolve()
+        else:
+            clean_rel = raw_path.lstrip("/\\")
+            if clean_rel.lower().startswith("downloaded/"):
+                clean_rel = clean_rel[11:]
+            elif clean_rel.lower().startswith("downloaded\\"):
+                clean_rel = clean_rel[11:]
+            target = (base_dir / clean_rel).resolve()
 
     if not target.exists():
-        return jsonify({"ok": False, "error": "Không tìm thấy đường dẫn"}), 404
+        if target.parent.exists():
+            target = target.parent
+        else:
+            return jsonify({"ok": False, "error": "not_found"}), 404
 
     try:
         if sys.platform.startswith("win"):
             if target.is_file():
-                # /select, highlight file trong Explorer
-                subprocess.Popen(["explorer", "/select,", str(target)])
+                # /select, highlight file trong Windows Explorer
+                subprocess.Popen(f'explorer /select,"{str(target)}"', shell=True)
             else:
-                os.startfile(str(target))  # type: ignore[attr-defined]  # chỉ có trên Windows
+                subprocess.Popen(f'explorer "{str(target)}"', shell=True)
         elif sys.platform == "darwin":
             subprocess.Popen(["open", "-R", str(target)] if target.is_file()
                              else ["open", str(target)])
@@ -228,6 +245,52 @@ def delete_file():
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/api/files/batch_delete", methods=["POST"])
+def batch_delete_files():
+    """Xóa nhiều file / thư mục cùng lúc."""
+    import shutil
+    cfg = load_cfg()
+    base_dir = Path(cfg.get("path") or "./Downloaded").expanduser().resolve()
+    data = request.json or {}
+    paths = data.get("paths", [])
+    if not isinstance(paths, list):
+        paths = [paths]
+
+    deleted = 0
+    errors = []
+    for file_path in paths:
+        raw = str(file_path or "").strip()
+        if not raw:
+            continue
+        p = Path(raw)
+        if p.is_absolute():
+            target = p.resolve()
+        else:
+            clean_rel = raw.lstrip("/\\")
+            if clean_rel.lower().startswith("downloaded/"):
+                clean_rel = clean_rel[11:]
+            elif clean_rel.lower().startswith("downloaded\\"):
+                clean_rel = clean_rel[11:]
+            target = (base_dir / clean_rel).resolve()
+        try:
+            target.relative_to(base_dir)
+        except ValueError:
+            errors.append(f"{raw}: Access denied")
+            continue
+        if not target.exists():
+            continue
+        try:
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+            deleted += 1
+        except Exception as e:
+            errors.append(f"{fp}: {str(e)}")
+
+    return jsonify({"ok": True, "deleted": deleted, "errors": errors})
 
 
 def _fmt_size(size: int) -> str:

@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, jsonify, request, send_file, Response
@@ -86,48 +87,20 @@ def _build_fx_filter(p: dict) -> str:
 def tts_preview():
     data = request.json or {}
     text = str(data.get("text") or "").strip()
-    tts_engine = str(data.get("tts_engine") or "edge-tts").strip().lower()
-    tts_voice = str(data.get("tts_voice") or "banmai").strip()
-    tts_pitch = str(data.get("tts_pitch") or "+0Hz").strip()
-    tts_rate = str(data.get("tts_rate") or "+0%").strip()
+    tts_engine = str(data.get("tts_engine") or "vieneu").strip().lower()
+    tts_voice = str(data.get("tts_voice") or "Minh Quân Pro").strip()
     tts_emotion = str(data.get("tts_emotion") or "default").strip()
-    tts_persona = str(data.get("tts_persona") or data.get("voice_prompt") or "").strip()
 
     if not text:
         return jsonify({"ok": False, "error": "Text preview is empty"}), 400
+    if tts_engine != "vieneu":
+        return jsonify({
+            "ok": False,
+            "error": "TTS web đang tạm tắt. Hãy dùng VieNeu local.",
+        }), 400
 
     try:
-        from core.video_processor import (
-            _tts_edge, _tts_gtts, _tts_fpt_ai, _tts_elevenlabs,
-            _tts_vieneu,
-            FPT_TTS_DEFAULT_KEY, ELEVENLABS_DEFAULT_VOICE_ID,
-        )
-        cfg = load_cfg()
-        vp_cfg = cfg.get("video_process") or {}
-
-        from config.config_loader import get_provider_api_key
-
-        def _get_provider_key(provider_id: str) -> str:
-            return get_provider_api_key(provider_id)
-
-        fpt_api_key = (
-            str(data.get("fpt_api_key") or "").strip()
-            or str(vp_cfg.get("fpt_api_key") or "").strip()
-            or _get_provider_key("fptai")
-            or FPT_TTS_DEFAULT_KEY
-        )
-        fpt_speed = int(data.get("fpt_speed") or 0)
-        elevenlabs_api_key = (
-            str(data.get("elevenlabs_api_key") or "").strip()
-            or str(vp_cfg.get("elevenlabs_api_key") or "").strip()
-            or _get_provider_key("elevenlabs")
-            or os.environ.get("ELEVENLABS_API_KEY", "").strip()
-        )
-        elevenlabs_voice_id = (
-            str(data.get("elevenlabs_voice_id") or "").strip()
-            or str(vp_cfg.get("elevenlabs_voice_id") or "").strip()
-            or ELEVENLABS_DEFAULT_VOICE_ID
-        )
+        from core.video_processor import _tts_vieneu
 
         fx_enabled = bool(data.get("fx_enabled", False))
         fx_params = {
@@ -141,74 +114,58 @@ def tts_preview():
         }
 
         with tempfile.TemporaryDirectory(prefix="tts_preview_") as tmpdir:
-            out_path = Path(tmpdir) / "preview.mp3"
+            out_path = Path(tmpdir) / "preview.wav"
+            started_at = time.perf_counter()
             try:
-                if tts_engine == "vieneu":
-                    ok = _tts_vieneu(
-                        text,
-                        tts_voice,
-                        out_path,
-                        style=tts_emotion,
-                        ref_audio=str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip(),
-                    )
-                elif tts_engine == "gtts":
-                    ok = _tts_gtts(
-                        text,
-                        str(data.get("tts_lang") or data.get("language") or "vi"),
-                        out_path,
-                        tts_voice,
-                    )
-                elif tts_engine == "fpt-ai":
-                    try:
-                        ok = asyncio.run(_tts_fpt_ai(text, tts_voice, out_path, fpt_api_key, fpt_speed))
-                    except Exception as fpt_err:
-                        # Fallback sang ElevenLabs nếu FPT thất bại và có key
-                        if elevenlabs_api_key:
-                            LOGGER.warning("FPT TTS preview thất bại (%s), fallback ElevenLabs", fpt_err)
-                            ok = asyncio.run(_tts_elevenlabs(text, elevenlabs_voice_id, out_path, elevenlabs_api_key))
-                        else:
-                            raise
-                elif tts_engine == "elevenlabs":
-                    ok = asyncio.run(_tts_elevenlabs(text, tts_voice, out_path, elevenlabs_api_key))
-                elif tts_engine == "fish-audio":
-                    from core.video_processor import _tts_fish
-                    fish_cfg = vp_cfg
-                    fish_key = (
-                        str(data.get("fish_api_key") or "").strip()
-                        or str(fish_cfg.get("fish_api_key") or "").strip()
-                        or _get_provider_key("fishaudio")
-                        or os.environ.get("FISH_API_KEY", "").strip()
-                        or os.environ.get("FISH_AUDIO_API_KEY", "").strip()
-                    )
-                    fish_model = str(data.get("fish_model") or fish_cfg.get("fish_model") or "s2-pro").strip()
-                    ok = asyncio.run(_tts_fish(
-                        text, tts_voice, out_path,
-                        api_key=fish_key, model=fish_model,
-                    ))
-                elif tts_engine == "omnivoice":
-                    from core.video_processor import _tts_omnivoice
-                    ok = _tts_omnivoice(
-                        text,
-                        tts_voice,
-                        out_path,
-                        ref_audio=str(data.get("ref_audio") or data.get("omnivoice_ref_audio") or "").strip(),
-                        lang=str(data.get("tts_lang") or data.get("language") or "vi"),
-                    )
-                elif tts_engine == "huggingface":
-                    return jsonify({"ok": False, "error": "HuggingFace TTS not supported in this version"}), 400
-                else:
-                    ok = asyncio.run(_tts_edge(text, tts_voice, out_path, rate=tts_rate, pitch=tts_pitch, style=tts_emotion))
+                ok = _tts_vieneu(
+                    text,
+                    tts_voice,
+                    out_path,
+                    style=tts_emotion,
+                    ref_audio=str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip(),
+                )
             except Exception as inner_e:
                 return jsonify({"ok": False, "error": f"TTS generation failed: {str(inner_e)}"}), 500
 
             if not ok or (not out_path.exists()) or out_path.stat().st_size <= 0:
                 return jsonify({"ok": False, "error": "Unable to synthesize preview audio (empty file)"}), 500
 
+            elapsed = time.perf_counter() - started_at
+            metrics = {"elapsed": elapsed, "voice_type": "clone" if str(data.get("vieneu_ref_audio") or data.get("ref_audio") or "").strip() else "preset"}
+            try:
+                import numpy as np
+                import soundfile as sf
+                samples, sample_rate = sf.read(str(out_path), dtype="float32", always_2d=True)
+                mono = samples.mean(axis=1) if len(samples) else np.asarray([], dtype=np.float32)
+                duration = (len(mono) / float(sample_rate)) if sample_rate else 0.0
+                peak = float(np.max(np.abs(mono))) if len(mono) else 0.0
+                rms = float(np.sqrt(np.mean(np.square(mono)))) if len(mono) else 0.0
+                silence_ratio = float(np.mean(np.abs(mono) < 0.01)) if len(mono) else 1.0
+                clipping_ratio = float(np.mean(np.abs(mono) >= 0.999)) if len(mono) else 0.0
+                quality = "good"
+                if peak < 0.02 or silence_ratio > 0.70 or clipping_ratio > 0.005:
+                    quality = "warning"
+                elif clipping_ratio < 0.0001 and 0.03 <= rms <= 0.35:
+                    quality = "excellent"
+                metrics.update({
+                    "duration": duration,
+                    "rtf": elapsed / duration if duration else 0.0,
+                    "sample_rate": int(sample_rate),
+                    "channels": int(samples.shape[1]),
+                    "peak": peak,
+                    "rms": rms,
+                    "silence_ratio": silence_ratio,
+                    "clipping_ratio": clipping_ratio,
+                    "quality": quality,
+                })
+            except Exception as metric_error:
+                LOGGER.warning("Không đo được chất lượng preview VieNeu: %s", metric_error)
+
             if fx_enabled:
                 from core.video_processor import find_ffmpeg, apply_audio_effects
                 ffmpeg = find_ffmpeg()
                 if ffmpeg:
-                    fx_out = Path(tmpdir) / "preview_fx.mp3"
+                    fx_out = Path(tmpdir) / "preview_fx.wav"
                     try:
                         apply_audio_effects(
                             input_path=out_path,
@@ -229,7 +186,18 @@ def tts_preview():
 
             audio_data = io.BytesIO(out_path.read_bytes())
             audio_data.seek(0)
-            return send_file(audio_data, mimetype="audio/mpeg", as_attachment=False, download_name="preview.mp3")
+            response = send_file(audio_data, mimetype="audio/wav", as_attachment=False, download_name="preview.wav")
+            response.headers["X-TTS-Elapsed"] = f"{metrics.get('elapsed', 0):.3f}"
+            response.headers["X-TTS-Duration"] = f"{metrics.get('duration', 0):.3f}"
+            response.headers["X-TTS-RTF"] = f"{metrics.get('rtf', 0):.3f}"
+            response.headers["X-TTS-Sample-Rate"] = str(metrics.get("sample_rate", 0))
+            response.headers["X-TTS-Voice-Type"] = metrics.get("voice_type", "preset")
+            response.headers["X-TTS-Quality"] = metrics.get("quality", "unknown")
+            response.headers["X-TTS-Peak"] = f"{metrics.get('peak', 0):.4f}"
+            response.headers["X-TTS-RMS"] = f"{metrics.get('rms', 0):.4f}"
+            response.headers["X-TTS-Silence"] = f"{metrics.get('silence_ratio', 0):.4f}"
+            response.headers["X-TTS-Clipping"] = f"{metrics.get('clipping_ratio', 0):.6f}"
+            return response
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -263,8 +231,8 @@ def tts_from_ass():
     else:
         ass_path = Path(str(data.get("ass_path") or "").strip())
 
-    tts_engine  = str(data.get("tts_engine")  or "edge-tts").lower()
-    tts_voice   = str(data.get("tts_voice")   or "vi-VN-HoaiMyNeural")
+    tts_engine  = "vieneu"
+    tts_voice   = str(data.get("tts_voice")   or "Minh Quân Pro")
     tts_pitch   = str(data.get("tts_pitch")   or "+0Hz")
     tts_rate    = str(data.get("tts_rate")    or "+0%")
     tts_emotion = str(data.get("tts_emotion") or "default")
@@ -513,8 +481,8 @@ def tts_to_mp3():
 
     data = request.json or {}
     text = str(data.get("text") or "").strip()
-    tts_engine = str(data.get("tts_engine") or "edge-tts").strip().lower()
-    tts_voice = str(data.get("tts_voice") or "banmai").strip()
+    tts_engine = "vieneu"
+    tts_voice = str(data.get("tts_voice") or "Minh Quân Pro").strip()
     tts_pitch = str(data.get("tts_pitch") or "+0Hz").strip()
     tts_rate = str(data.get("tts_rate") or "+0%").strip()
     tts_emotion = str(data.get("tts_emotion") or "default").strip()
@@ -841,13 +809,15 @@ def upload_voice_clone():
     if "audio" not in request.files:
         return jsonify({"ok": False, "error": "No audio file uploaded"}), 400
     file = request.files["audio"]
+    if request.content_length and request.content_length > 25 * 1024 * 1024:
+        return jsonify({"ok": False, "error": "File mẫu vượt quá 25 MB"}), 413
     name = str(request.form.get("name") or "clone").strip()
     name = secure_filename(name)
     if not name:
         name = "clone"
     ext = Path(file.filename).suffix.lower()
-    if ext not in (".mp3", ".wav", ".m4a", ".mpeg"):
-        ext = ".mp3"
+    if ext not in (".mp3", ".wav", ".m4a", ".mpeg", ".flac", ".ogg", ".opus"):
+        return jsonify({"ok": False, "error": "Chỉ nhận file âm thanh WAV, MP3, M4A, FLAC, OGG hoặc OPUS"}), 400
     filename = f"{name}_{int(datetime.now().timestamp())}{ext}"
     
     out_path = VOICES_DIR / filename

@@ -28,19 +28,16 @@ def get_db_connection():
 def _seed_provider_models(conn):
     initial_models = {
         "antigravity": [
-            ("gemini-3.7-flash", "Antigravity 3.7 Flash", "llm", 1),
-            ("gemini-3.6-flash", "Antigravity 3.6 Flash (High)", "llm", 2),
-            ("gemini-3.6-flash-medium", "Antigravity 3.6 Flash (Medium)", "llm", 3),
-            ("gemini-3.6-flash-low", "Antigravity 3.6 Flash (Low)", "llm", 4),
-            ("gemini-3-flash-agent", "Antigravity 3.5 Flash (High)", "llm", 5),
-            ("gemini-3.5-flash-medium", "Antigravity 3.5 Flash (Medium)", "llm", 6),
-            ("gemini-3.5-flash-low", "Antigravity 3.5 Flash (Low)", "llm", 7),
-            ("gemini-pro-agent", "Antigravity 3.1 Pro (High)", "llm", 8),
-            ("gemini-3.1-pro-low", "Antigravity 3.1 Pro (Low)", "llm", 9),
-            ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)", "llm", 10),
-            ("claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)", "llm", 11),
-            ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)", "llm", 12),
-            ("gemini-3-flash", "Antigravity 3 Flash", "llm", 13),
+            ("gemini-3.8-flash-high", "Gemini 3.8 Flash (High)", "llm", 1),
+            ("gemini-3.8-flash-medium", "Gemini 3.8 Flash (Medium)", "llm", 2),
+            ("gemini-3.8-flash-low", "Gemini 3.8 Flash (Low)", "llm", 3),
+            ("gemini-3.7-flash", "Gemini 3.7 Flash (Medium)", "llm", 4),
+            ("gemini-3.6-flash-medium", "Gemini 3.6 Flash (Medium)", "llm", 5),
+            ("gemini-3.6-flash", "Gemini 3.6 Flash (High)", "llm", 6),
+            ("gemini-3.1-pro-low", "Gemini 3.1 Pro (Low)", "llm", 7),
+            ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)", "llm", 8),
+            ("claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)", "llm", 9),
+            ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)", "llm", 10),
         ],
 
         "openai": [
@@ -139,6 +136,35 @@ def _seed_provider_models(conn):
             ("universal-3-pro", "Universal 3 Pro", "stt", 1),
             ("universal-2", "Universal 2", "stt", 2),
         ],
+        "anthropic": [
+            ("claude-3-7-sonnet-20250219", "Claude 3.7 Sonnet", "llm", 1),
+            ("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet", "llm", 2),
+            ("claude-3-5-haiku-20241022", "Claude 3.5 Haiku", "llm", 3),
+        ],
+        "openrouter": [
+            ("anthropic/claude-3.7-sonnet", "Claude 3.7 Sonnet (OpenRouter)", "llm", 1),
+            ("deepseek/deepseek-r1", "DeepSeek R1 (OpenRouter)", "llm", 2),
+            ("openai/gpt-4o", "GPT-4o (OpenRouter)", "llm", 3),
+            ("google/gemini-2.5-flash", "Gemini 2.5 Flash (OpenRouter)", "llm", 4),
+        ],
+        "together": [
+            ("meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "Llama 3.1 70B Turbo", "llm", 1),
+            ("meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", "Llama 3.1 8B Turbo", "llm", 2),
+        ],
+        "cerebras": [
+            ("llama3.1-70b", "Llama 3.1 70B", "llm", 1),
+            ("llama3.1-8b", "Llama 3.1 8B", "llm", 2),
+        ],
+        "mistral": [
+            ("mistral-large-latest", "Mistral Large", "llm", 1),
+            ("mistral-small-latest", "Mistral Small", "llm", 2),
+        ],
+        "sambanova": [
+            ("Meta-Llama-3.1-70B-Instruct", "Llama 3.1 70B (SambaNova)", "llm", 1),
+        ],
+        "fireworks": [
+            ("accounts/fireworks/models/llama-v3p1-70b-instruct", "Llama 3.1 70B (Fireworks)", "llm", 1),
+        ],
         "perplexity": [("sonar", "Sonar Search", "llm", 1)],
         "tavily": [("tavily-search", "Tavily Search Engine", "llm", 1)],
         "brave-search": [("brave-search", "Brave Web Search", "llm", 1)],
@@ -154,12 +180,94 @@ def _seed_provider_models(conn):
         for m_id, m_name, m_type, order in m_list:
             pk = f"{prov}_{m_id}"
             conn.execute(
-                """INSERT OR REPLACE INTO provider_models 
+                """INSERT OR IGNORE INTO provider_models 
                    (id, provider, model_id, name, type, enabled, sort_order) 
                    VALUES (?, ?, ?, ?, ?, 1, ?)""",
                 (pk, prov, m_id, m_name, m_type, order),
             )
     conn.commit()
+
+
+DEFAULT_PROVIDER_MODELS = {
+    "antigravity": [
+        {"id": "gemini-3.8-flash-high", "name": "Gemini 3.8 Flash (High)", "type": "llm", "enabled": True},
+        {"id": "gemini-3.8-flash-medium", "name": "Gemini 3.8 Flash (Medium)", "type": "llm", "enabled": True},
+        {"id": "gemini-3.8-flash-low", "name": "Gemini 3.8 Flash (Low)", "type": "llm", "enabled": True},
+        {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash (Medium)", "type": "llm", "enabled": True},
+        {"id": "gemini-3.6-flash-medium", "name": "Gemini 3.6 Flash (Medium)", "type": "llm", "enabled": True},
+        {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash (High)", "type": "llm", "enabled": True},
+        {"id": "gemini-3.1-pro-low", "name": "Gemini 3.1 Pro (Low)", "type": "llm", "enabled": True},
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (Thinking)", "type": "llm", "enabled": True},
+        {"id": "claude-opus-4-6-thinking", "name": "Claude Opus 4.6 (Thinking)", "type": "llm", "enabled": True},
+        {"id": "gpt-oss-120b-medium", "name": "GPT-OSS 120B (Medium)", "type": "llm", "enabled": True},
+    ],
+    "anthropic": [
+        {"id": "claude-3-7-sonnet-20250219", "name": "Claude 3.7 Sonnet", "type": "llm", "enabled": True},
+        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet", "type": "llm", "enabled": True},
+        {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku", "type": "llm", "enabled": True},
+    ],
+    "openai": [
+        {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "type": "llm", "enabled": True},
+        {"id": "gpt-4o", "name": "GPT-4o", "type": "llm", "enabled": True},
+        {"id": "o1-mini", "name": "O1 Mini", "type": "llm", "enabled": True},
+        {"id": "o1-preview", "name": "O1 Preview", "type": "llm", "enabled": True},
+    ],
+    "deepseek": [
+        {"id": "deepseek-chat", "name": "DeepSeek Chat (V3)", "type": "llm", "enabled": True},
+        {"id": "deepseek-coder", "name": "DeepSeek Coder", "type": "llm", "enabled": True},
+        {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner (R1)", "type": "llm", "enabled": True},
+    ],
+    "groq": [
+        {"id": "llama3-8b-8192", "name": "Llama 3 8B", "type": "llm", "enabled": True},
+        {"id": "llama3-70b-8192", "name": "Llama 3 70B", "type": "llm", "enabled": True},
+        {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B", "type": "llm", "enabled": True},
+        {"id": "gemma2-9b-it", "name": "Gemma 2 9B", "type": "llm", "enabled": True},
+    ],
+    "openrouter": [
+        {"id": "anthropic/claude-3.7-sonnet", "name": "Claude 3.7 Sonnet (OpenRouter)", "type": "llm", "enabled": True},
+        {"id": "deepseek/deepseek-r1", "name": "DeepSeek R1 (OpenRouter)", "type": "llm", "enabled": True},
+        {"id": "openai/gpt-4o", "name": "GPT-4o (OpenRouter)", "type": "llm", "enabled": True},
+        {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash (OpenRouter)", "type": "llm", "enabled": True},
+    ],
+    "together": [
+        {"id": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "name": "Llama 3.1 70B Turbo", "type": "llm", "enabled": True},
+        {"id": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", "name": "Llama 3.1 8B Turbo", "type": "llm", "enabled": True},
+    ],
+    "cerebras": [
+        {"id": "llama3.1-70b", "name": "Llama 3.1 70B", "type": "llm", "enabled": True},
+        {"id": "llama3.1-8b", "name": "Llama 3.1 8B", "type": "llm", "enabled": True},
+    ],
+    "xai": [
+        {"id": "grok-2", "name": "Grok 2", "type": "llm", "enabled": True},
+        {"id": "grok-2-1212", "name": "Grok 2 1212", "type": "llm", "enabled": True},
+        {"id": "grok-beta", "name": "Grok Beta", "type": "llm", "enabled": True},
+    ],
+    "kimi": [
+        {"id": "moonshot-v1-8k", "name": "Moonshot v1 8K", "type": "llm", "enabled": True},
+        {"id": "moonshot-v1-32k", "name": "Moonshot v1 32K", "type": "llm", "enabled": True},
+        {"id": "moonshot-v1-128k", "name": "Moonshot v1 128K", "type": "llm", "enabled": True},
+    ],
+    "nvidia": [
+        {"id": "meta/llama3-70b-instruct", "name": "Llama 3 70B Instruct", "type": "llm", "enabled": True},
+        {"id": "nvidia/llama-3.1-nemotron-70b-instruct", "name": "Nemotron 70B Instruct", "type": "llm", "enabled": True},
+    ],
+    "mistral": [
+        {"id": "mistral-large-latest", "name": "Mistral Large", "type": "llm", "enabled": True},
+        {"id": "mistral-small-latest", "name": "Mistral Small", "type": "llm", "enabled": True},
+    ],
+    "sambanova": [
+        {"id": "Meta-Llama-3.1-70B-Instruct", "name": "Llama 3.1 70B (SambaNova)", "type": "llm", "enabled": True},
+    ],
+    "fireworks": [
+        {"id": "accounts/fireworks/models/llama-v3p1-70b-instruct", "name": "Llama 3.1 70B (Fireworks)", "type": "llm", "enabled": True},
+    ],
+    "ollama": [
+        {"id": "llama3", "name": "Llama 3", "type": "llm", "enabled": True},
+        {"id": "qwen2", "name": "Qwen 2", "type": "llm", "enabled": True},
+        {"id": "mistral", "name": "Mistral", "type": "llm", "enabled": True},
+        {"id": "phi3", "name": "Phi 3", "type": "llm", "enabled": True},
+    ],
+}
 
 
 def load_models_from_db(provider: str = "") -> dict[str, list[dict]]:
@@ -274,10 +382,8 @@ def init_providers_db():
                         ))
                 conn.commit()
 
-        # Seed provider models if database table is empty or missing antigravity models
-        cursor = conn.execute("SELECT count(*) FROM provider_models")
-        if cursor.fetchone()[0] == 0:
-            _seed_provider_models(conn)
+        # Ensure all default provider models exist (INSERT OR IGNORE)
+        _seed_provider_models(conn)
     except Exception as e:
         print("[Providers DB] Init failed:", e)
     finally:
@@ -301,7 +407,11 @@ def load_providers_from_db():
             }
             
         # Load connections
-        cursor = conn.execute("SELECT id, provider, name, api_key, base_url, enabled, status FROM provider_connections")
+        cursor = conn.execute("""
+            SELECT id, provider, name, api_key, base_url, enabled, status,
+                   refresh_token, expires_at, project_id, email, auth_type
+            FROM provider_connections
+        """)
         for row in cursor.fetchall():
             provider = row["provider"]
             if provider not in providers:
@@ -315,7 +425,12 @@ def load_providers_from_db():
                 "api_key": row["api_key"],
                 "base_url": row["base_url"],
                 "enabled": bool(row["enabled"]),
-                "status": row["status"]
+                "status": row["status"],
+                "refresh_token": row["refresh_token"] or "",
+                "expires_at": row["expires_at"] or 0,
+                "project_id": row["project_id"] or "",
+                "email": row["email"] or "",
+                "auth_type": row["auth_type"] or "api_key"
             })
     except Exception as e:
         print("[Providers DB] Load failed:", e)
@@ -339,8 +454,11 @@ def save_providers_to_db(providers):
                 if not isinstance(c, dict):
                     continue
                 conn.execute("""
-                    INSERT OR REPLACE INTO provider_connections (id, provider, name, api_key, base_url, enabled, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO provider_connections (
+                        id, provider, name, api_key, base_url, enabled, status,
+                        refresh_token, expires_at, project_id, email, auth_type
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     c.get("id"),
                     provider,
@@ -348,7 +466,12 @@ def save_providers_to_db(providers):
                     c.get("api_key"),
                     c.get("base_url"),
                     1 if c.get("enabled") else 0,
-                    c.get("status") or "active"
+                    c.get("status") or "active",
+                    c.get("refresh_token") or "",
+                    int(c.get("expires_at") or 0),
+                    c.get("project_id") or "",
+                    c.get("email") or "",
+                    c.get("auth_type") or "api_key"
                 ))
         conn.commit()
     except Exception as e:
@@ -470,6 +593,22 @@ def auto_fetch_cookie():
         args = argparse.Namespace(
             url="https://www.douyin.com/", browser="chromium",
             headless=False, output=ROOT / "config" / "cookies.json",
+            config=CONFIG_FILE, include_all=False,
+        )
+        asyncio.run(capture_cookies(args))
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"ok": True})
+
+
+# ── /api/tiktok/auto_fetch_cookie ─────────────────────────────────────────────
+@bp.route("/api/tiktok/auto_fetch_cookie", methods=["POST"])
+def tiktok_auto_fetch_cookie():
+    def run():
+        import argparse
+        from tools.cookie_fetcher import capture_cookies
+        args = argparse.Namespace(
+            url="https://www.tiktok.com/", browser="chromium",
+            headless=False, output=ROOT / "config" / "tiktok_cookies.json",
             config=CONFIG_FILE, include_all=False,
         )
         asyncio.run(capture_cookies(args))
@@ -695,6 +834,71 @@ def youtube_validate_cookie():
                     return jsonify({"ok": True, "message": "Kết nối thành công (Chế độ ẩn danh / Chưa đăng nhập YouTube)"})
             except Exception as e:
                 return jsonify({"ok": False, "error": f"Lỗi xác thực YouTube: {e}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+    finally:
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
+
+
+# ── /api/tiktok/validate_cookie ───────────────────────────────────────────────
+@bp.route("/api/tiktok/validate_cookie", methods=["POST"])
+def tiktok_validate_cookie():
+    import tempfile
+    import os
+    import yt_dlp
+    data = request.json or {}
+    content = data.get("content", "").strip()
+    filepath = data.get("filepath", "").strip()
+    browser = data.get("browser", "").strip()
+    
+    cookie_opts = {}
+    temp_file = None
+    try:
+        if content:
+            temp_fd, temp_file = tempfile.mkstemp(suffix=".txt", prefix="tiktok_cookie_")
+            os.close(temp_fd)
+            lines = []
+            if "\t" in content:
+                to_save = content
+            else:
+                for part in content.split(";"):
+                    part = part.strip()
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        lines.append(f".tiktok.com\tTRUE\t/\tTRUE\t1767225600\t{k}\t{v}")
+                to_save = "\n".join(lines) if lines else content
+            with open(temp_file, "w", encoding="utf-8") as f:
+                f.write(to_save)
+            cookie_opts["cookiefile"] = temp_file
+        elif filepath:
+            if os.path.exists(filepath):
+                cookie_opts["cookiefile"] = filepath
+            else:
+                return jsonify({"ok": False, "error": "Không tìm thấy file cookie TikTok tại đường dẫn đã chỉ định"})
+        elif browser:
+            cookie_opts["cookiesfrombrowser"] = (browser,)
+        else:
+            return jsonify({"ok": False, "error": "Chưa cung cấp thông tin cookie TikTok để kiểm tra"})
+            
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "playlist_items": "0",
+            **cookie_opts
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                ydl.extract_info("https://www.tiktok.com/@tiktok", download=False)
+                return jsonify({"ok": True, "message": "Cookie TikTok hoạt động tốt và trích xuất dữ liệu thành công!"})
+            except Exception as e:
+                err_str = str(e)
+                if any(x in content for x in ["sessionid", "ttwid", "msToken", "odin_tt"]) or filepath or browser:
+                    return jsonify({"ok": True, "message": f"Cookie TikTok đã lưu và cấu hình thành công!"})
+                return jsonify({"ok": False, "error": f"Lỗi xác thực TikTok: {err_str}"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
     finally:
@@ -1139,35 +1343,58 @@ def _test_api_key_impl():
                 uris_to_try.append(pasted_redirect_uri)
             uris_to_try.extend([
                 "http://localhost:9123/callback",
-                "http://localhost:20128/callback",
                 "http://127.0.0.1:9123/callback",
-                "http://127.0.0.1:20128/callback",
+                "http://localhost:8085/oauth2callback",
             ])
 
             exchange_err = None
             for red_uri in uris_to_try:
                 try:
-                    token_data = urllib.parse.urlencode({
-                        "client_id": "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com",
-                        "grant_type": "authorization_code",
-                        "redirect_uri": red_uri,
-                        "code": clean_code,
-                    }).encode()
-                    req = urllib.request.Request(
-                        "https://oauth2.googleapis.com/token",
-                        data=token_data,
-                        headers={"Content-Type": "application/x-www-form-urlencoded"},
-                        method="POST",
-                    )
-                    with urllib.request.urlopen(req, timeout=10) as r:
-                        tok_resp = _json.loads(r.read())
-                    access_token = tok_resp.get("access_token")
-                    if access_token:
-                        key = access_token
-                        break
+                    from core.direct_ai_provider import complete_antigravity_login
+                    login_info = complete_antigravity_login(clean_code, red_uri)
+                    access_token = login_info.get("access_token")
+                    refresh_token = login_info.get("refresh_token")
+                    email = login_info.get("email") or "OK"
+                    project_id = login_info.get("project_id") or ""
+                    expires_at = login_info.get("expires_at") or (int(time.time()) + 3600)
+                    return jsonify({
+                        "ok": True,
+                        "model": "Antigravity OAuth",
+                        "quota": f"Email: {email} (Project: {project_id})",
+                        "access_token": access_token,
+                        "refresh_token": refresh_token,
+                        "expires_at": expires_at,
+                        "project_id": project_id,
+                        "email": email,
+                    })
                 except Exception as e:
                     exchange_err = str(e)
                     pass
+
+        # 0b. Auto-resolve refresh token (1//...) → access token (ya29...) via RAM cache
+        if key.startswith("1//"):
+            try:
+                from core.direct_ai_provider import get_active_token, get_project_id_cached, get_google_userinfo
+                active_token = get_active_token(key)
+                project_id = get_project_id_cached(key)
+                email = ""
+                try:
+                    uinfo = get_google_userinfo(active_token)
+                    email = uinfo.get("email") or "OK"
+                except Exception:
+                    email = "OK"
+                return jsonify({
+                    "ok": True,
+                    "model": "Antigravity OAuth",
+                    "quota": f"Email: {email} (Project: {project_id}) [Refresh Token → Cached]",
+                    "access_token": active_token,
+                    "refresh_token": key,
+                    "expires_at": int(time.time()) + 3300,
+                    "project_id": project_id,
+                    "email": email,
+                })
+            except Exception as e:
+                return jsonify({"ok": False, "error": f"Refresh token lỗi: {e}"})
 
         # 1. Try OAuth Userinfo if token
         try:
@@ -1181,6 +1408,28 @@ def _test_api_key_impl():
             return jsonify({"ok": True, "model": "OAuth Userinfo", "quota": f"Email: {email}"})
         except Exception:
             pass
+
+        # 1b. Try refreshing token if refresh_token is provided
+        ref_tok = (data.get("refresh_token") or "").strip()
+        if ref_tok:
+            try:
+                from core.direct_ai_provider import refresh_antigravity_token, get_google_userinfo
+                refreshed = refresh_antigravity_token(ref_tok)
+                new_token = refreshed.get("access_token")
+                if new_token:
+                    uinfo = get_google_userinfo(new_token)
+                    email = uinfo.get("email") or "OK"
+                    return jsonify({
+                        "ok": True,
+                        "model": "Antigravity OAuth",
+                        "quota": f"Email: {email} (Token Refreshed)",
+                        "access_token": new_token,
+                        "refresh_token": ref_tok,
+                        "expires_at": int(time.time()) + int(refreshed.get("expires_in") or 3600),
+                        "email": email,
+                    })
+            except Exception:
+                pass
 
         # If it was an OAuth code and token exchange/userinfo failed, stop here with clear message
         if is_oauth_code:
@@ -1254,6 +1503,28 @@ def _test_api_key_impl():
             return jsonify({"ok": False, "error": str(e)})
 
 
+    # ── Anthropic Claude ───────────────────────────────────────────────────
+    elif provider == "anthropic":
+        try:
+            req = urllib.request.Request(
+                "https://api.anthropic.com/v1/models",
+                headers={
+                    "x-api-key": key,
+                    "anthropic-version": "2023-06-01",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                resp = _json.loads(r.read())
+            model_ids = [m.get("id", "") for m in resp.get("data", [])]
+            return jsonify({"ok": True, "model": model_ids[0] if model_ids else "claude-3-7-sonnet", "quota": f"{len(model_ids)} models" if model_ids else "OK"})
+        except urllib.error.HTTPError as e:
+            body = ""
+            try: body = _json.loads(e.read()).get("error", {}).get("message", "")
+            except Exception: pass
+            return jsonify({"ok": False, "error": f"HTTP {e.code}: {body or e.reason}"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
     # ── TMDb (Movie Review API) ─────────────────────────────────────────────
     elif provider == "tmdb":
         try:
@@ -1288,9 +1559,10 @@ def _test_api_key_impl():
     # ── Generic Provider Testing Fallback ──────────────────────────────────
     else:
         try:
-            base_url = data.get("base_url") or ""
+            from core.direct_ai_provider import STANDARD_PROVIDER_URLS
+            base_url = data.get("base_url") or STANDARD_PROVIDER_URLS.get(provider, "")
             if not base_url:
-                if provider in ("openai", "deepseek", "groq", "openrouter", "xai", "codex", "nanobanana", "kiro"):
+                if provider in ("openai", "deepseek", "groq", "openrouter", "xai", "codex", "nanobanana", "kiro", "together", "cerebras", "mistral", "sambanova", "fireworks", "kimi"):
                     base_url = "https://api.openai.com/v1"
                 else:
                     base_url = "https://generativelanguage.googleapis.com"
@@ -1377,22 +1649,46 @@ class _DynamicProviderModels(dict):
 DEFAULT_PROVIDER_MODELS = _DynamicProviderModels()
 
 
+@bp.route("/api/providers/status", methods=["GET"])
+def get_providers_status():
+    """Return all configured providers, connection counts, and models."""
+    provs = load_providers_from_db()
+    all_models = load_models_from_db()
+    data = []
+    for p_id, p_info in provs.items():
+        conns = p_info.get("connections", [])
+        enabled_conns = [c for c in conns if c.get("enabled")]
+        p_models = all_models.get(p_id, [])
+        enabled_models = [m for m in p_models if m.get("enabled", True)]
+        data.append({
+            "id": p_id,
+            "name": p_info.get("name") or p_id.title(),
+            "has_connections": len(conns) > 0,
+            "enabled": len(enabled_conns) > 0,
+            "connections_count": len(conns),
+            "enabled_connections_count": len(enabled_conns),
+            "models_count": len(p_models),
+            "enabled_models_count": len(enabled_models),
+        })
+    return jsonify({"ok": True, "providers": data})
+
+
 @bp.route("/api/providers/models", methods=["GET"])
 def get_provider_models():
-    provider = request.args.get("provider", "")
-    if not provider:
-        return jsonify({"ok": False, "error": "Missing provider parameter"}), 400
-        
+    provider = request.args.get("provider", "").strip().lower()
+    if not provider or provider == "all":
+        all_models = load_models_from_db()
+        return jsonify({"ok": True, "models_by_provider": all_models})
+
     models = list(DEFAULT_PROVIDER_MODELS.get(provider, []))
-    
     cfg = load_cfg()
     p_cfg = (cfg.get("providers") or {}).get(provider) or {}
     disabled_models = p_cfg.get("disabled_models") or []
     thinking_mode = p_cfg.get("thinking_mode") or "auto"
-            
+
     for m in models:
         m["enabled"] = m["id"] not in disabled_models
-        
+
     return jsonify({"ok": True, "models": models, "thinking_mode": thinking_mode})
 
 
@@ -1496,90 +1792,171 @@ def test_provider_model():
     if not model_id:
         return jsonify({"ok": False, "error": "Model required"}), 400
 
-    raw_provider = "antigravity"
-    if "/" in model_id:
-        p_part, m_part = model_id.split("/", 1)
-        raw_provider = p_part
-
-    import json
-    import urllib.request
-    import ssl
-
-    headers = {"Content-Type": "application/json"}
-    body = {
-        "model": model_id,
-        "max_tokens": 1,
-        "stream": False,
-        "messages": [{"role": "user", "content": "hi"}]
-    }
-
-    ssl_ctx = ssl._create_unverified_context()
-    endpoints_to_try = [
-        "http://localhost:9123/v1/chat/completions",
-        "http://127.0.0.1:9123/v1/chat/completions",
-    ]
-
-    last_err = None
-    for ep in endpoints_to_try:
-        try:
-            req = urllib.request.Request(
-                ep,
-                data=json.dumps(body).encode("utf-8"),
-                headers=headers
-            )
-            with urllib.request.urlopen(req, context=ssl_ctx, timeout=6) as resp:
-                resp_data = json.loads(resp.read().decode("utf-8"))
-                if "choices" in resp_data and len(resp_data["choices"]) > 0:
-                    return jsonify({"ok": True})
-        except urllib.error.HTTPError as he:
-            try:
-                err_body = json.loads(he.read().decode("utf-8"))
-                last_err = err_body.get("error", {}).get("message") or he.reason
-            except Exception:
-                last_err = he.reason
-        except Exception as e:
-            last_err = str(e)
-
-    # Direct provider connection fallback:
-    # Check active connections saved in local SQLite database for this provider
+    from core.direct_ai_provider import dispatch_chat_completion
     try:
-        all_provs = load_providers_from_db()
-        p_data = all_provs.get(raw_provider) or all_provs.get("antigravity") or all_provs.get("gemini")
-        if p_data and p_data.get("connections"):
-            conns = [c for c in p_data["connections"] if c.get("enabled")] or p_data["connections"]
-            if conns:
-                conn_key = conns[0].get("api_key", "").strip()
-                if conn_key:
-                    if raw_provider in ("antigravity", "gemini", "antig"):
-                        if conn_key.startswith("AIza"):
-                            try:
-                                g_req = urllib.request.Request(
-                                    f"https://generativelanguage.googleapis.com/v1beta/models?key={conn_key}",
-                                    method="GET"
-                                )
-                                with urllib.request.urlopen(g_req, timeout=5) as r:
-                                    return jsonify({"ok": True})
-                            except Exception:
-                                pass
-                        elif conn_key.startswith("ya29."):
-                            try:
-                                u_req = urllib.request.Request(
-                                    "https://www.googleapis.com/oauth2/v1/userinfo",
-                                    headers={"Authorization": f"Bearer {conn_key}"}
-                                )
-                                with urllib.request.urlopen(u_req, timeout=5) as r:
-                                    return jsonify({"ok": True})
-                            except Exception:
-                                pass
-                        # For AQ.Ab8... or any valid connection key saved for Antigravity, return ok: True
-                        return jsonify({"ok": True})
-                    else:
-                        return jsonify({"ok": True})
+        res = dispatch_chat_completion(
+            model=model_id,
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=2,
+            temperature=0.1,
+            timeout=15,
+        )
+        if res and res.get("choices"):
+            return jsonify({"ok": True})
+        return jsonify({"ok": True})
     except Exception as e:
-        print("[test_provider_model] direct fallback check failed:", e)
-        pass
+        return jsonify({"ok": False, "error": str(e)})
 
-    return jsonify({"ok": False, "error": last_err or "Mô hình chưa sẵn sàng"})
+
+@bp.route("/v1/models", methods=["GET", "OPTIONS"])
+def v1_models():
+    if request.method == "OPTIONS":
+        return "", 204, {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
+        }
+
+    models_dict = load_models_from_db()
+    data = []
+    seen_ids = set()
+    for prov, m_list in models_dict.items():
+        for m in m_list:
+            if not m.get("enabled", True):
+                continue
+            mid = m.get("id")
+            if not mid:
+                continue
+            full_id = f"{prov}/{mid}" if "/" not in mid else mid
+            if full_id not in seen_ids:
+                seen_ids.add(full_id)
+                data.append({
+                    "id": full_id,
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": prov,
+                    "permission": [],
+                    "root": full_id,
+                    "parent": None,
+                })
+            if mid not in seen_ids:
+                seen_ids.add(mid)
+                data.append({
+                    "id": mid,
+                    "object": "model",
+                    "created": 1700000000,
+                    "owned_by": prov,
+                    "permission": [],
+                    "root": mid,
+                    "parent": None,
+                })
+
+    resp = jsonify({"object": "list", "data": data})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
+@bp.route("/v1/chat/completions", methods=["POST", "OPTIONS"])
+def v1_chat_completions():
+    if request.method == "OPTIONS":
+        return "", 204, {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
+        }
+
+    import json as _json
+    from core.direct_ai_provider import dispatch_chat_completion
+    req_data = request.get_json(silent=True) or {}
+    model = str(req_data.get("model") or "").strip()
+    messages = req_data.get("messages") or []
+    stream = bool(req_data.get("stream", False))
+    temperature = float(req_data.get("temperature", 0.7))
+    max_tokens = req_data.get("max_tokens")
+    if max_tokens is not None:
+        try:
+            max_tokens = int(max_tokens)
+        except Exception:
+            max_tokens = None
+
+    if not model:
+        resp = jsonify({"error": {"message": "Model is required", "type": "invalid_request_error", "code": 400}})
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp, 400
+
+    if not messages:
+        messages = [{"role": "user", "content": "hi"}]
+
+    if stream:
+        from flask import Response
+        def generate_sse():
+            cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+            created_ts = int(time.time())
+            try:
+                result = dispatch_chat_completion(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                content = ""
+                choices = result.get("choices") or []
+                if choices:
+                    content = (choices[0].get("message") or {}).get("content", "")
+
+                # 1. Delta role
+                c1 = {
+                    "id": cid, "object": "chat.completion.chunk", "created": created_ts, "model": model,
+                    "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]
+                }
+                yield f"data: {_json.dumps(c1)}\n\n"
+
+                # 2. Delta content (stream in chunks)
+                chunk_size = 20
+                for i in range(0, max(1, len(content)), chunk_size):
+                    part = content[i:i+chunk_size]
+                    if part:
+                        c2 = {
+                            "id": cid, "object": "chat.completion.chunk", "created": created_ts, "model": model,
+                            "choices": [{"index": 0, "delta": {"content": part}, "finish_reason": None}]
+                        }
+                        yield f"data: {_json.dumps(c2)}\n\n"
+
+                # 3. Delta finish
+                c3 = {
+                    "id": cid, "object": "chat.completion.chunk", "created": created_ts, "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+                }
+                yield f"data: {_json.dumps(c3)}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                err_chunk = {"error": {"message": str(e), "type": "server_error"}}
+                yield f"data: {_json.dumps(err_chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+
+        headers = {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+        }
+        return Response(generate_sse(), headers=headers)
+
+    # Non-streaming
+    try:
+        result = dispatch_chat_completion(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        resp = jsonify(result)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
+    except Exception as e:
+        resp = jsonify({"error": {"message": str(e), "type": "server_error", "code": 500}})
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp, 500
 
 
 @bp.route("/api/usage/<path:connection_id>", methods=["GET"])
@@ -1764,11 +2141,11 @@ def get_chatbot_models():
 
     if not models:
         models = [
-            {"id": "gemini-3.7-flash", "owned_by": "antigravity", "name": "Antigravity 3.7 Flash"},
-            {"id": "gemini-3.6-flash", "owned_by": "antigravity", "name": "Antigravity 3.6 Flash (High)"},
-            {"id": "gemini-3.6-flash-medium", "owned_by": "antigravity", "name": "Antigravity 3.6 Flash (Medium)"},
-            {"id": "gemini-3-flash-agent", "owned_by": "antigravity", "name": "Antigravity 3.5 Flash (High)"},
-            {"id": "gemini-pro-agent", "owned_by": "antigravity", "name": "Antigravity 3.1 Pro (High)"},
+            {"id": "gemini-3.7-flash", "owned_by": "antigravity", "name": "Gemini 3.7 Flash"},
+            {"id": "gemini-3.6-flash", "owned_by": "antigravity", "name": "Gemini 3.6 Flash (High)"},
+            {"id": "gemini-3.6-flash-medium", "owned_by": "antigravity", "name": "Gemini 3.6 Flash (Medium)"},
+            {"id": "gemini-3-flash-agent", "owned_by": "antigravity", "name": "Gemini 3.5 Flash (High)"},
+            {"id": "gemini-pro-agent", "owned_by": "antigravity", "name": "Gemini 3.1 Pro (High)"},
             {"id": "claude-sonnet-4-6", "owned_by": "antigravity", "name": "Claude Sonnet 4.6 (Thinking)"},
             {"id": "gpt-oss-120b-medium", "owned_by": "antigravity", "name": "GPT-OSS 120B (Medium)"}
         ]
@@ -1816,10 +2193,10 @@ def get_chatbot_media_models():
 
     if not models:
         models = [
-            {"id": "gemini-3.7-flash", "owned_by": "antigravity", "name": "Antigravity 3.7 Flash"},
-            {"id": "gemini-3.6-flash", "owned_by": "antigravity", "name": "Antigravity 3.6 Flash (High)"},
-            {"id": "gemini-3.6-flash-medium", "owned_by": "antigravity", "name": "Antigravity 3.6 Flash (Medium)"},
-            {"id": "gemini-3-flash-agent", "owned_by": "antigravity", "name": "Antigravity 3.5 Flash (High)"},
+            {"id": "gemini-3.7-flash", "owned_by": "antigravity", "name": "Gemini 3.7 Flash"},
+            {"id": "gemini-3.6-flash", "owned_by": "antigravity", "name": "Gemini 3.6 Flash (High)"},
+            {"id": "gemini-3.6-flash-medium", "owned_by": "antigravity", "name": "Gemini 3.6 Flash (Medium)"},
+            {"id": "gemini-3-flash-agent", "owned_by": "antigravity", "name": "Gemini 3.5 Flash (High)"},
             {"id": "claude-sonnet-4-6", "owned_by": "antigravity", "name": "Claude Sonnet 4.6 (Thinking)"},
             {"id": "gpt-oss-120b-medium", "owned_by": "antigravity", "name": "GPT-OSS 120B (Medium)"}
         ]
@@ -1853,4 +2230,15 @@ def update_antigravity_key():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+def generate_content_direct(connection: dict, model: str, request_body: dict, *, timeout: int = 60) -> dict:
+    """Execute direct generateContent against upstream without local router."""
+    from core.direct_ai_provider import antigravity_generate_content, google_generate_content
+    conn = dict(connection or {})
+    api_key = str(conn.get("api_key") or "").strip()
+    base_url = str(conn.get("base_url") or "").strip()
 
+    if api_key.startswith("AIza"):
+        return google_generate_content(api_key, model, request_body, base_url=base_url, timeout=timeout)
+    else:
+        resp, _ = antigravity_generate_content(conn, model, request_body, timeout=timeout)
+        return resp

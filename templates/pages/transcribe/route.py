@@ -182,8 +182,8 @@ class AntigravityTranscriber:
         self.api_key = (api_key or "").strip()
         self.language = language
         m = (model_name or "").strip()
-        if m in ["tiny", "base", "small", "medium", "large", "auto", "model", "none"]:
-            m = ""
+        if not m or m in ["tiny", "base", "small", "medium", "large", "auto", "model", "none"]:
+            m = "gemini-3.8-flash-high"
         self.model_name = m
 
     def transcribe(self, video_path: Path, ffmpeg_bin: str, tmp_srt_path: Path | None = None) -> list[dict]:
@@ -203,14 +203,15 @@ class AntigravityTranscriber:
                 for conn in conns:
                     k = (conn.get("api_key") or "").strip()
                     b = (conn.get("base_url") or "").strip()
+                    p_id = (conn.get("project_id") or "").strip() or "aicode-consumers"
                     if k and not any(ck["key"] == k for ck in candidates_keys):
-                        candidates_keys.append({"key": k, "base_url": b})
+                        candidates_keys.append({"key": k, "base_url": b, "project_id": p_id, "conn": conn})
             except Exception:
                 pass
 
             env_key = os.getenv("ANTIGRAVITY_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
             if env_key and not any(ck["key"] == env_key for ck in candidates_keys):
-                candidates_keys.append({"key": env_key, "base_url": ""})
+                candidates_keys.append({"key": env_key, "base_url": "", "project_id": "aicode-consumers"})
 
             if not candidates_keys:
                 from core.video_processor import FasterWhisperTranscriber
@@ -233,74 +234,148 @@ class AntigravityTranscriber:
             prompt = (
                 f"Hãy nghe âm thanh và phiên âm toàn bộ lời nói sang {target_lang}.\n"
                 "QUY TẮC MỐC THỜI GIAN SRT:\n"
-                "- BẮT BUỘC định dạng SRT chuẩn: 00:MM:SS,mmm --> 00:MM:SS,mmm (Giờ:Phút:Giây,Miligiây).\n"
-                "- Ví dụ: 5 giây đầu là 00:00:00,000 --> 00:00:05,000. 1 phút 12 giây là 00:01:12,000 --> 00:01:15,000 (TUYỆT ĐỐI KHÔNG viết thành 01:12:00,000).\n"
-                "- Thời gian bắt đầu luôn nhỏ hơn thời gian kết thúc, các mốc thời gian tăng dần liên tục theo video.\n"
-                "- Chỉ xuất ra nội dung khối SRT hoàn chỉnh, không thêm bất kỳ văn bản chào hỏi hay giải thích nào khác."
+                "- BẮT BUỘC định dạng SRT chuẩn: HH:MM:SS,mmm --> HH:MM:SS,mmm (Giờ:Phút:Giây,Miligiây).\n"
+                "- TUYỆT ĐỐI KHÔNG dùng dấu ngoặc vuông [] quanh mốc thời gian.\n"
+                "- TUYỆT ĐỐI KHÔNG gộp nhiều câu hoặc nhiều mốc thời gian vào cùng 1 dòng text.\n"
+                "- Bắt buộc mỗi câu là 1 block SRT riêng biệt có số thứ tự tăng dần, cách nhau 1 dòng trống:\n"
+                "1\n"
+                "00:00:01,000 --> 00:00:04,000\n"
+                "Nội dung câu 1\n\n"
+                "2\n"
+                "00:00:04,500 --> 00:00:07,000\n"
+                "Nội dung câu 2\n\n"
+                "- Thời gian bắt đầu luôn nhỏ hơn thời gian kết thúc, khớp chính xác với âm thanh phát ra trong video.\n"
+                "- TUYỆT ĐỐI KHÔNG SUY NGHĨ (no thinking, no reasoning), không thêm suy nghĩ hay giải thích.\n"
+                "- Chỉ xuất trực tiếp duy nhất khối nội dung SRT hoàn chỉnh."
             )
 
             models_to_try = []
             if self.model_name:
-                models_to_try.append(self.model_name)
+                m_lower = self.model_name.lower()
+                if not any(bad in m_lower for bad in ["thinking", "claude", "gpt-oss"]):
+                    models_to_try.append(self.model_name)
 
-            try:
-                from templates.pages.config.route import load_models_from_db
-                db_models = load_models_from_db("antigravity").get("antigravity", [])
-                for dm in db_models:
-                    if dm.get("enabled") and dm.get("id") and dm.get("id") not in models_to_try:
-                        models_to_try.append(dm.get("id"))
-            except Exception:
-                pass
+            if not models_to_try:
+                try:
+                    from templates.pages.config.route import load_models_from_db
+                    db_models = load_models_from_db("antigravity").get("antigravity", [])
+                    for dm in db_models:
+                        if dm.get("enabled") and dm.get("id"):
+                            mid = str(dm["id"]).lower()
+                            if not any(bad in mid for bad in ["thinking", "claude", "gpt-oss"]):
+                                models_to_try.append(dm["id"])
+                                break
+                except Exception:
+                    pass
 
-            for m_fallback in ["gemini-3.6-flash", "gemini-3.6-flash-medium", "gemini-3-flash-agent", "gemini-3.5-flash-medium", "gemini-pro-agent"]:
-                if m_fallback not in models_to_try:
-                    models_to_try.append(m_fallback)
-
-            seen_models = set()
-            models_to_try = [m for m in models_to_try if m and not (m in seen_models or seen_models.add(m))]
+            if not models_to_try:
+                models_to_try = ["gemini-3.7-flash", "gemini-3.8-flash-high"]
+            else:
+                # Chỉ thử 1 model đầu tiên người dùng chọn, tối đa thêm 1 fallback nếu 404
+                primary = models_to_try[0]
+                models_to_try = [primary]
+                if primary not in ("gemini-3.8-flash-high", "gemini-3.8-flash"):
+                    models_to_try.append("gemini-3.8-flash-high")
 
             srt_text = ""
             for conn_item in candidates_keys:
                 k = conn_item["key"]
-                b_url = conn_item["base_url"]
-                base_endpoint = (b_url or "https://generativelanguage.googleapis.com").rstrip("/")
+                b_url = conn_item.get("base_url") or ""
+                from core.direct_ai_provider import detect_key_type, antigravity_generate_content, ProviderError
+                key_type = detect_key_type(k)
+
+                c_obj = conn_item.get("conn") or {
+                    "api_key": k,
+                    "refresh_token": (conn_item.get("conn") or {}).get("refresh_token") or (k if k.startswith("1//") else ""),
+                    "base_url": b_url,
+                    "project_id": conn_item.get("project_id", "aicode-consumers")
+                }
 
                 for model in models_to_try:
-                    if k.startswith("AIza"):
-                        url = f"{base_endpoint}/v1beta/models/{model}:generateContent?key={k}"
-                        headers = {"Content-Type": "application/json"}
-                    else:
-                        url = f"{base_endpoint}/v1beta/models/{model}:generateContent"
-                        headers = {
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {k}"
-                        }
-
-                    payload = json.dumps({
-                        "contents": [{
-                            "parts": [
-                                {"text": prompt},
-                                {"inline_data": {"mime_type": "audio/mp3", "data": b64_audio}}
-                            ]
-                        }]
-                    }).encode("utf-8")
-
                     try:
-                        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-                        with urllib.request.urlopen(req, timeout=40) as resp:
-                            r_json = json.loads(resp.read().decode("utf-8"))
-                            candidates = r_json.get("candidates") or []
-                            if candidates and "content" in candidates[0]:
-                                parts = candidates[0]["content"].get("parts") or []
-                                if parts and "text" in parts[0]:
-                                    srt_text = parts[0]["text"]
-                                    if srt_text:
-                                        break
+                        if key_type in ("oauth_token", "refresh_token") or "cloudcode" in b_url:
+                            req_body = {
+                                "contents": [{
+                                    "parts": [
+                                        {"text": prompt},
+                                        {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
+                                    ]
+                                }],
+                                "generationConfig": {
+                                    "thinkingConfig": {"thinkingBudget": 0}
+                                }
+                            }
+                            resp_data, _ = antigravity_generate_content(c_obj, model, req_body, timeout=50)
+                        elif key_type == "api_key":
+                            base_endpoint = (b_url or "https://generativelanguage.googleapis.com").rstrip("/")
+                            url = f"{base_endpoint}/v1beta/models/{model}:generateContent?key={k}"
+                            headers = {"Content-Type": "application/json"}
+                            payload = json.dumps({
+                                "contents": [{
+                                    "parts": [
+                                        {"text": prompt},
+                                        {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
+                                    ]
+                                }],
+                                "generationConfig": {
+                                    "thinkingConfig": {"thinkingBudget": 0}
+                                }
+                            }).encode("utf-8")
+                            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                            with urllib.request.urlopen(req, timeout=40) as resp:
+                                r_json = json.loads(resp.read().decode("utf-8"))
+                                resp_data = r_json.get("response") if isinstance(r_json.get("response"), dict) else r_json
+                        else:
+                            base_endpoint = (b_url or "https://generativelanguage.googleapis.com").rstrip("/")
+                            url = f"{base_endpoint}/v1beta/models/{model}:generateContent"
+                            headers = {
+                                "Content-Type": "application/json",
+                                "Authorization": f"Bearer {k}"
+                            }
+                            payload = json.dumps({
+                                "contents": [{
+                                    "parts": [
+                                        {"text": prompt},
+                                        {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
+                                    ]
+                                }],
+                                "generationConfig": {
+                                    "thinkingConfig": {"thinkingBudget": 0}
+                                }
+                            }).encode("utf-8")
+                            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                            with urllib.request.urlopen(req, timeout=40) as resp:
+                                r_json = json.loads(resp.read().decode("utf-8"))
+                                resp_data = r_json.get("response") if isinstance(r_json.get("response"), dict) else r_json
+
+                        candidates = resp_data.get("candidates") or []
+                        if candidates and "content" in candidates[0]:
+                            parts = candidates[0]["content"].get("parts") or []
+                            text_parts = []
+                            for p in parts:
+                                if isinstance(p, dict):
+                                    if p.get("thought") is True:
+                                        continue
+                                    t = p.get("text") or ""
+                                    if t:
+                                        text_parts.append(t)
+                                elif isinstance(p, str):
+                                    text_parts.append(p)
+                            srt_text = "".join(text_parts)
+                            srt_text = re.sub(r'<thought>.*?</thought>', '', srt_text, flags=re.DOTALL)
+                            srt_text = re.sub(r'<think>.*?</think>', '', srt_text, flags=re.DOTALL).strip()
+                            if srt_text:
+                                break
+                    except ProviderError:
+                        break  # Đổi sang tài khoản tiếp theo ngay lập tức
                     except urllib.error.HTTPError as he:
-                        if he.code in (401, 403):
+                        if he.code in (401, 403, 429):
                             break
+                        if he.code == 404:
+                            continue
+                        break
                     except Exception:
-                        pass
+                        break
 
                 if srt_text:
                     break
@@ -318,56 +393,36 @@ class AntigravityTranscriber:
 
 
 def _parse_srt_to_segments(srt_text: str, video_dur: float | None = None) -> list[dict]:
-    import re
-    if not srt_text:
-        return []
-    srt_text = re.sub(r"^```[a-zA-Z]*\n?", "", srt_text.strip(), flags=re.MULTILINE)
-    srt_text = re.sub(r"```$", "", srt_text.strip())
-
     try:
-        from core.video_processor import _parse_time_smart
+        from core.video_processor import _parse_srt_text_to_segments
+        return _parse_srt_text_to_segments(srt_text, video_dur=video_dur)
     except Exception:
-        def _parse_time_smart(t_str, video_dur=None):
-            t_str = str(t_str or "").strip().replace(",", ".")
-            parts = t_str.split(":")
-            if len(parts) == 3:
-                return float(parts[0])*3600.0 + float(parts[1])*60.0 + float(parts[2])
-            elif len(parts) == 2:
-                return float(parts[0])*60.0 + float(parts[1])
-            return 0.0
+        import re
+        if not srt_text:
+            return []
+        srt_text = re.sub(r"^```[a-zA-Z]*\n?", "", srt_text.strip(), flags=re.MULTILINE)
+        srt_text = re.sub(r"```$", "", srt_text.strip())
 
-    segments = []
-    blocks = re.split(r"\n\s*\n", srt_text.strip())
-    for block in blocks:
-        lines = [l.strip() for l in block.splitlines() if l.strip()]
-        time_idx = -1
-        for idx, line in enumerate(lines):
-            if "-->" in line:
-                time_idx = idx
-                break
-        if time_idx != -1 and time_idx + 1 < len(lines):
-            time_line = lines[time_idx]
-            parts = time_line.split("-->")
-            if len(parts) == 2:
-                try:
-                    start_sec = _parse_time_smart(parts[0], video_dur=video_dur)
-                    end_sec = _parse_time_smart(parts[1], video_dur=video_dur)
-                    text = " ".join(lines[time_idx + 1:]).strip()
-                    if text:
-                        if end_sec <= start_sec:
-                            dur_est = max(1.8, min(7.0, len(text) * 0.22))
-                            end_sec = start_sec + dur_est
-                        segments.append({"start": round(start_sec, 3), "end": round(end_sec, 3), "text": text})
-                except Exception:
-                    pass
-
-    segments.sort(key=lambda s: s["start"])
-    for i in range(len(segments)):
-        if i + 1 < len(segments):
-            next_start = segments[i + 1]["start"]
-            if segments[i]["end"] > next_start and next_start > segments[i]["start"]:
-                segments[i]["end"] = max(segments[i]["start"] + 1.0, next_start - 0.05)
-    return segments
+        ts_regex = re.compile(
+            r'\[?\s*(?P<start>\d{1,2}:\d{2}(?::\d{2})?(?:[,\.]\d{1,3})?)\s*(?:-->|->|-)\s*(?P<end>\d{1,2}:\d{2}(?::\d{2})?(?:[,\.]\d{1,3})?)\s*\]?'
+        )
+        matches = list(ts_regex.finditer(srt_text))
+        segments = []
+        for i in range(len(matches)):
+            start_pos = matches[i].end()
+            end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(srt_text)
+            seg_text = srt_text[start_pos:end_pos].strip()
+            seg_text = re.sub(r'\n\s*\d+\s*$', '', seg_text).strip()
+            seg_text = re.sub(r'^\s*[\d\.\,\-\]]+\s*', '', seg_text).strip()
+            seg_text = re.sub(
+                r'\[?\s*\d{1,2}:\d{2}(?::\d{2})?[,\.]\d{1,3}\s*(?:-->|->|-)\s*\d{1,2}:\d{2}(?::\d{2})?[,\.]\d{1,3}\s*\]?',
+                '',
+                seg_text
+            ).strip()
+            seg_text = ' '.join(seg_text.split())
+            if seg_text:
+                segments.append({"start": 0.0, "end": 2.0, "text": seg_text})
+        return segments
 
 
 # ─────────────────────────────────────────────────────────────────────────────

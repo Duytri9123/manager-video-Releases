@@ -1,358 +1,317 @@
-  <!-- ═════════════════ STEP 3: AI & Giọng đọc ═════════════════ -->
-  <section class="proc-step" data-proc-step="3" style="display:none">
-    <div class="proc-step-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div>
-        <h2 class="proc-step-title">🤖 AI & Giọng đọc</h2>
-        <p class="proc-step-sub">Chọn mô hình phiên âm/dịch và cấu hình lồng tiếng (tùy chọn).</p>
-      </div>
-      <div style="display:flex;gap:6px">
-        <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(3)" title="Lưu cấu hình Bước 3 (Whisper, Voice, TTS, Âm thanh...)" style="display:inline-flex;align-items:center;gap:4px">
-          💾 Lưu cấu hình Bước 3
-        </button>
-      </div>
+<!-- ═════════════════ STEP 3: AI & Giọng đọc ═════════════════ -->
+<section class="proc-step" data-proc-step="3" style="display:none">
+  
+  <!-- Step Header -->
+  <div class="proc-step-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+    <div>
+      <h2 class="proc-step-title" style="display:flex;align-items:center;gap:6px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent,#6366f1)"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+        <span>AI &amp; Giọng đọc</span>
+      </h2>
+      <p class="proc-step-sub" style="margin:2px 0 0 0">Chọn mô hình phiên âm/dịch, kiểm tra hàng chờ và điều khiển tiến trình xử lý.</p>
     </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(3)" title="Lưu cấu hình Bước 3" style="display:inline-flex;align-items:center;gap:4px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span>Lưu Bước 3</span>
+      </button>
+    </div>
+  </div>
 
-    <div class="proc-step5-grid">
+  <style>
+    .step3-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 1024px) {
+      .step3-layout {
+        grid-template-columns: minmax(580px, 1.35fr) minmax(360px, 1fr);
+      }
+    }
+    @media (min-width: 1280px) {
+      .step3-layout {
+        grid-template-columns: minmax(660px, 1.4fr) minmax(420px, 1fr);
+      }
+    }
+    @media (min-width: 1536px) {
+      .step3-layout {
+        grid-template-columns: minmax(760px, 1.45fr) minmax(480px, 1fr);
+      }
+    }
+    /* Disabled overlay for config card when processing */
+    .step3-config-disabled {
+      pointer-events: none;
+      opacity: 0.65;
+      position: relative;
+    }
+    .step3-config-disabled::after {
+      content: '⏳ Đang xử lý...';
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #f59e0b;
+      background: rgba(245,158,11,0.1);
+      padding: 2px 8px;
+      border-radius: 6px;
+      pointer-events: none;
+    }
+  </style>
 
-      <!-- ══════════════ COL LEFT: status & review panels ══════════════ -->
-      <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+  <div class="step3-layout" id="step3-workspace">
+    
+    <!-- LEFT PANE: 2 cột trên (Thao tác + Cấu hình) & Hàng chờ bên dưới 2 cái đó -->
+    <div class="flex flex-col gap-4 min-w-0">
 
-        <!-- ASS Review Panel — always on top of left col -->
-        <div class="card" id="proc-ass-review-card" style="display:none;border:2px solid var(--accent)">
-          <div class="card-header" style="background:var(--accent-light)">
-            <span class="card-title" style="color:var(--accent)">📝 Kiểm tra nội dung dịch</span>
+      <!-- Hàng trên: 2 CỘT (Thao tác & Tùy chọn bên trái, Cấu hình sử dụng AI bên phải) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch" id="step3-top-grid">
+
+        <!-- Card 1: Thao tác & Tùy chọn -->
+        <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex flex-col justify-between h-full" id="step3-start-card">
+          <div>
+            <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+              <span class="text-indigo-500 flex items-center">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </span>
+              <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Thao tác &amp; Tùy chọn</h3>
+            </div>
+
+            <div class="flex flex-col gap-2">
+              <!-- Toggle 1: Tự động hóa quy trình -->
+              <label class="flex items-center justify-between p-2 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 cursor-pointer transition hover:bg-slate-100/50 dark:hover:bg-slate-800/60">
+                <div class="flex items-center gap-2 min-w-0 pr-2">
+                  <span class="text-indigo-500 flex-shrink-0">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  </span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">Tự động hóa quy trình</span>
+                    <span class="text-[8.5px] text-slate-400 truncate">Chạy liên tục phụ đề, dịch, lồng tiếng</span>
+                  </div>
+                </div>
+                <label class="toggle-wrap m-0 scale-90 flex-shrink-0" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="toggle-input" id="step3-auto-flow" onchange="document.getElementById('proc-auto-flow').checked = this.checked">
+                  <div class="toggle"></div>
+                </label>
+              </label>
+
+              <!-- Toggle 2: Bỏ qua kiểm tra ASS -->
+              <label class="flex items-center justify-between p-2 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 cursor-pointer transition hover:bg-slate-100/50 dark:hover:bg-slate-800/60">
+                <div class="flex items-center gap-2 min-w-0 pr-2">
+                  <span class="text-sky-500 flex-shrink-0">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                  </span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">Bỏ qua kiểm tra ASS</span>
+                    <span class="text-[8.5px] text-slate-400 truncate">Không dừng chờ duyệt phụ đề</span>
+                  </div>
+                </div>
+                <label class="toggle-wrap m-0 scale-90 flex-shrink-0" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="toggle-input" id="step3-skip-ass-step3" onchange="document.getElementById('step3-skip-ass').checked = this.checked; if (typeof _onStep3SkipChange === 'function') _onStep3SkipChange()">
+                  <div class="toggle"></div>
+                </label>
+              </label>
+
+              <!-- Toggle 3: Bỏ qua tạo phụ đề -->
+              <label class="flex items-center justify-between p-2 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 cursor-pointer transition hover:bg-slate-100/50 dark:hover:bg-slate-800/60">
+                <div class="flex items-center gap-2 min-w-0 pr-2">
+                  <span class="text-amber-500 flex-shrink-0">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                  </span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">Bỏ qua tạo phụ đề</span>
+                    <span class="text-[8.5px] text-slate-400 truncate">Chỉ chỉnh sửa khung video</span>
+                  </div>
+                </div>
+                <label class="toggle-wrap m-0 scale-90 flex-shrink-0" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="toggle-input" id="step3-skip-transcription-step3" onchange="document.getElementById('proc-skip-transcription').checked = this.checked; if (typeof _onSkipTranscriptionChange === 'function') _onSkipTranscriptionChange()">
+                  <div class="toggle"></div>
+                </label>
+              </label>
+            </div>
+          </div>
+
+          <!-- Buttons -->
+          <div class="flex flex-col gap-2 mt-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <button type="button" class="btn btn-primary w-full py-2 font-bold text-[11.5px] flex justify-center items-center gap-1.5 h-[36px] shadow-sm" onclick="_step3StartProc()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span>Bắt đầu xử lý hàng chờ</span>
+            </button>
+            <button type="button" class="btn btn-secondary w-full py-1 text-[10.5px] flex justify-center items-center gap-1.5 h-[30px]" onclick="procWizGo(2)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              <span>Quay lại Bước 2 (Chỉnh sửa)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 2: Cấu hình sử dụng AI (Đẩy sang bên phải thành cột thứ 2) -->
+        <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex flex-col justify-between h-full" id="step3-config-card">
+          <div>
+            <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+              <div class="flex items-center gap-2">
+                <span class="text-indigo-500 flex items-center">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4"/></svg>
+                </span>
+                <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Cấu hình sử dụng AI</h3>
+              </div>
+              <a href="javascript:void(0)" onclick="procWizGo(1)" class="text-[9.5px] text-indigo-500 hover:text-indigo-600 font-semibold flex items-center gap-1">
+                <span>Sửa ở B1</span>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
+              </a>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+              <!-- Item 1: Ngôn ngữ -->
+              <div class="p-1.5 px-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="text-indigo-500 flex-shrink-0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
+                  <span class="text-[9.5px] font-bold uppercase text-slate-500 dark:text-slate-400">Ngôn ngữ</span>
+                </div>
+                <span class="text-[10.5px] font-semibold text-slate-800 dark:text-slate-200 truncate ml-2" id="step3-config-language">--</span>
+              </div>
+
+              <!-- Item 2: Phiên âm STT -->
+              <div class="p-1.5 px-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="text-indigo-500 flex-shrink-0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
+                  <span class="text-[9.5px] font-bold uppercase text-slate-500 dark:text-slate-400">Phiên âm</span>
+                </div>
+                <span class="text-[10.5px] font-semibold text-slate-800 dark:text-slate-200 truncate ml-2" id="step3-config-transcribe">--</span>
+              </div>
+
+              <!-- Item 3: Dịch phụ đề -->
+              <div class="p-1.5 px-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="text-indigo-500 flex-shrink-0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg></span>
+                  <span class="text-[9.5px] font-bold uppercase text-slate-500 dark:text-slate-400">Dịch thuật</span>
+                </div>
+                <span class="text-[10.5px] font-semibold text-slate-800 dark:text-slate-200 truncate ml-2" id="step3-config-translate">--</span>
+              </div>
+
+              <!-- Item 4: Đọc video/ảnh -->
+              <div class="p-1.5 px-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="text-indigo-500 flex-shrink-0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg></span>
+                  <span class="text-[9.5px] font-bold uppercase text-slate-500 dark:text-slate-400">Đọc video</span>
+                </div>
+                <span class="text-[10.5px] font-semibold text-slate-800 dark:text-slate-200 truncate ml-2" id="step3-config-video">--</span>
+              </div>
+
+              <!-- Item 5: Giọng đọc TTS -->
+              <div class="p-1.5 px-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between">
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <span class="text-indigo-500 flex-shrink-0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></span>
+                  <span class="text-[9.5px] font-bold uppercase text-slate-500 dark:text-slate-400">Giọng đọc</span>
+                </div>
+                <span class="text-[10.5px] font-semibold text-slate-800 dark:text-slate-200 truncate ml-2" id="step3-config-voice">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /#step3-top-grid -->
+
+      <!-- Card 3: Hàng chờ xử lý video (Ở DƯỚI 2 CÁI ĐÓ) -->
+      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex flex-col min-h-[220px]" id="step3-queue-card">
+        
+        <!-- ASS Review Panel (Hiện khi dừng kiểm tra) -->
+        <div class="card mb-3" id="proc-ass-review-card" style="display:none;border:2px solid var(--accent);border-radius:12px;overflow:hidden">
+          <div class="card-header" style="background:var(--accent-light);padding:8px 12px">
+            <span class="card-title" style="color:var(--accent);display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span>Kiểm tra nội dung dịch (ASS Review)</span>
+            </span>
             <span class="badge badge-accent">Chờ xác nhận</span>
           </div>
-          <div class="card-body">
-            <div class="alert-info mb-8" style="font-size:12px">
+          <div class="card-body" style="padding:10px">
+            <div class="alert-info mb-2" style="font-size:11px">
               File phụ đề đã được tạo. Kiểm tra và chỉnh sửa nếu cần, sau đó bấm <b>Tiếp tục</b>.
             </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px" id="proc-ass-review-path"></div>
-            <textarea id="proc-ass-review-content" rows="12"
-              style="width:100%;font-family:monospace;font-size:11px;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px;background:#f8faff;box-sizing:border-box">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px" id="proc-ass-review-path"></div>
+            <textarea id="proc-ass-review-content" rows="6"
+              style="width:100%;font-family:monospace;font-size:11px;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:6px 8px;background:var(--bg3);color:var(--text);box-sizing:border-box">
             </textarea>
-            <div class="btn-group mt-8">
-              <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="procAssReviewContinue()">
-                ✅ Tiếp tục xử lý
+            <div class="btn-group mt-2" style="display:flex;gap:8px">
+              <button type="button" class="btn btn-primary" style="flex:1;justify-content:center;font-size:11px;height:32px" onclick="procAssReviewContinue()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Tiếp tục xử lý</span>
               </button>
-              <button class="btn btn-secondary" onclick="procAssReviewSkipAlways()">
-                ⏭ Không cần kiểm tra nữa
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Processing log — always visible -->
-        <div class="card" id="step3-log-card">
-          <div class="card-header">
-            <span class="card-title">📝 Nhật ký xử lý</span>
-            <div class="card-actions">
-              <div class="progress-row" style="margin:0;gap:8px;min-width:200px">
-                <div class="progress-bar-wrap" style="flex:1"><div class="progress-bar pb-overall" id="pb-step3-overall"></div></div>
-                <span class="progress-pct text-xs" id="pb-step3-pct">0%</span>
-              </div>
-            </div>
-          </div>
-          <div class="card-body" style="padding:0">
-            <div class="log-box" id="step3-log" style="height:260px;border-radius:0 0 8px 8px"></div>
-          </div>
-        </div>
-
-        <!-- Process Start Panel -->
-        <div class="card" id="step3-start-card" style="display:none;border:2px solid var(--accent)">
-          <div class="card-header" style="background:var(--accent-light)">
-            <span class="card-title" style="color:var(--accent)">🚀 Bắt đầu xử lý</span>
-          </div>
-          <div class="card-body">
-            <div class="alert-info mb-8" style="font-size:12px">
-              Video đã sẵn sàng. Nhấn <b>Bắt đầu xử lý</b> để chạy AI phiên âm, dịch phụ đề và lồng tiếng.
-            </div>
-            
-            <!-- Tùy chọn tự động hóa ngay tại bước 3 -->
-            <div class="pe2-opts" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-              <label class="pe2-optcard" title="Khi bật: tự động chạy tạo SRT/ASS/Giọng lồng tiếng ở bước 3, dừng lại để check ASS &amp; Thumbnail rồi tiếp tục chạy xử lý ở bước 4.">
-                <input type="checkbox" id="step3-auto-flow" onchange="document.getElementById('proc-auto-flow').checked = this.checked">
-                <span class="pe2-optcard-ic">🔁</span>
-                <span class="pe2-optcard-lbl">Tự động hóa quy trình</span>
-                <span class="pe2-optcard-badge">✓</span>
-              </label>
-              <label class="pe2-optcard" title="Tự động bỏ qua bước kiểm tra và chỉnh sửa phụ đề ASS">
-                <input type="checkbox" id="step3-skip-ass-step3" onchange="document.getElementById('step3-skip-ass').checked = this.checked; _onStep3SkipChange()">
-                <span class="pe2-optcard-ic">⏭</span>
-                <span class="pe2-optcard-lbl">Bỏ qua kiểm tra ASS</span>
-                <span class="pe2-optcard-badge">✓</span>
-              </label>
-              <label class="pe2-optcard" title="Bỏ qua việc nhận diện phụ đề bằng AI Whisper và dịch thuật (chỉ chạy chỉnh sửa video)">
-                <input type="checkbox" id="step3-skip-transcription-step3" onchange="document.getElementById('proc-skip-transcription').checked = this.checked; _onSkipTranscriptionChange()">
-                <span class="pe2-optcard-ic">🚫</span>
-                <span class="pe2-optcard-lbl">Bỏ qua tạo phụ đề</span>
-                <span class="pe2-optcard-badge">✓</span>
-              </label>
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:-8px;margin-bottom:12px">(*) Cấu hình trên sẽ áp dụng cho toàn bộ hàng chờ nếu không có cấu hình riêng cho từng video.</div>
-
-            <div class="btn-group">
-              <button class="btn btn-primary" style="flex:1;justify-content:center;font-weight:700"
-                onclick="_step3StartProc()">
-                ▶ Bắt đầu xử lý
-              </button>
-              <button class="btn btn-secondary btn-sm" onclick="procWizGo(2)">
-                ← Quay lại bước 2
+              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;height:32px" onclick="procAssReviewSkipAlways()">
+                <span>Bỏ qua kiểm tra</span>
               </button>
             </div>
           </div>
         </div>
 
-        {#
-        Thumbnail Picker Panel disabled by request.
-        <div class="card" id="proc-thumb-pick-card" style="display:none;border:2px solid #f59e0b">
-          <div class="card-header" style="background:#fef3c7">
-            <span class="card-title" style="color:#b45309">🖼 Chọn thumbnail</span>
-            <span class="badge" style="background:#f59e0b;color:#fff">Chờ xác nhận</span>
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="text-indigo-500 flex items-center">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+            </span>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Hàng chờ xử lý video</h3>
           </div>
-          <div class="card-body">
-            <div class="alert-info mb-8" style="font-size:12px">
-              Chọn ảnh thumbnail cho video. Bỏ qua nếu không muốn chèn thumbnail vào đầu video.
+          <span class="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30" id="step3-queue-summary">0 video</span>
+        </div>
+
+        <!-- Video Queue List -->
+        <div id="step3-queue-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:5px" class="flex-1">
+          <div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>
+        </div>
+      </div>
+
+    </div><!-- /LEFT PANE -->
+
+    <!-- RIGHT PANE: Nhật ký xử lý AI -->
+    <div class="flex flex-col gap-4 min-w-0">
+      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex flex-col" id="step3-log-card">
+        <div class="flex justify-between items-center mb-2.5">
+          <div class="flex items-center gap-2">
+            <span class="text-indigo-500 flex items-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            </span>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Nhật ký xử lý AI</h3>
+          </div>
+          <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2 flex items-center gap-1" onclick="clearLog('step3-log')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>Xoá</span>
+          </button>
+        </div>
+
+        <!-- Progress bar row -->
+        <div class="grid grid-cols-2 gap-3 mb-2.5">
+          <div>
+            <div class="flex justify-between text-[11px] mb-0.5">
+              <span class="text-slate-500">Tiến trình</span>
+              <span id="pb-step3-pct" class="font-semibold text-indigo-500">0%</span>
             </div>
-            <div class="pe2-opts mb-12" style="grid-template-columns:repeat(4,1fr)">
-              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="none" checked onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">🚫</span><span class="pe2-optcard-lbl">Không dùng</span><span class="pe2-optcard-badge">✓</span></label>
-              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="frame" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">🎞</span><span class="pe2-optcard-lbl">Frame video</span><span class="pe2-optcard-badge">✓</span></label>
-              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="import" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">📤</span><span class="pe2-optcard-lbl">Upload ảnh</span><span class="pe2-optcard-badge">✓</span></label>
-              <label class="pe2-optcard"><input type="radio" name="proc-thumb-pick-mode" value="ai" onchange="procThumbPickModeChange()"><span class="pe2-optcard-ic">✨</span><span class="pe2-optcard-lbl">AI (Gemini)</span><span class="pe2-optcard-badge">✓</span></label>
+            <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+              <div id="pb-step3-overall" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
             </div>
-            <div id="proc-thumb-pick-frame-opts" style="display:none">
-              <label class="lbl">Thời điểm lấy frame (giây)</label>
-              <input type="number" id="proc-thumb-pick-ts" value="5" min="0" step="0.5" class="inp">
+          </div>
+          <div>
+            <div class="flex justify-between text-[11px] mb-0.5">
+              <span class="text-slate-500">Trạng thái</span>
+              <span id="step3-log-status" class="font-semibold text-slate-600 dark:text-slate-300 text-[11px]">Sẵn sàng</span>
             </div>
-            <div id="proc-thumb-pick-import-opts" style="display:none">
-              <label class="lbl">File ảnh thumbnail</label>
-              <input type="file" id="proc-thumb-pick-file" accept="image/*" onchange="procThumbPickPreview()">
-              <img id="proc-thumb-pick-preview" style="display:none;max-width:100%;max-height:200px;margin-top:8px;border-radius:6px;border:1px solid var(--border)">
-            </div>
-            <div id="proc-thumb-pick-common" style="display:none">
-              <div class="grid-2 mt-8">
-                <div>
-                  <label class="lbl">Tiêu đề trên thumbnail (tùy chọn)</label>
-                  <input type="text" id="proc-thumb-pick-title" class="inp" placeholder="Để trống = dùng tên video">
-                </div>
-                <div>
-                  <label class="lbl">Thời lượng chèn (giây)</label>
-                  <input type="number" id="proc-thumb-pick-duration" value="2" min="0.5" max="10" step="0.5" class="inp">
-                </div>
-              </div>
-            </div>
-            <div class="btn-group mt-12">
-              <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="procThumbPickContinue()">
-                ✅ Tiếp tục xử lý
-              </button>
-              <button class="btn btn-secondary" onclick="procThumbPickSkip()">
-                ⏭ Bỏ qua thumbnail
-              </button>
+            <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-emerald-500 h-full w-full opacity-60"></div>
             </div>
           </div>
         </div>
 
-        Thumbnail Failure Recovery Panel disabled by request.
-        <div class="card" id="proc-thumb-fail-card" style="display:none;border:2px solid #dc2626">
-          <div class="card-header" style="background:#fee2e2">
-            <span class="card-title" style="color:#991b1b">⚠ Thumbnail AI thất bại</span>
-            <span class="badge" style="background:#dc2626;color:#fff">Cần xử lý</span>
-          </div>
-          <div class="card-body">
-            <div class="alert-info mb-8" style="font-size:12px;background:#fef2f2;border-color:#fecaca;color:#991b1b">
-              Tạo thumbnail AI không thành công. Pipeline đang chờ — chọn 1 trong 3 cách bên dưới.
-            </div>
-            <div class="btn-group" style="flex-direction:column;gap:8px">
-              <button class="btn btn-primary" onclick="procThumbFailRetry()">🔄 Tạo lại bằng AI</button>
-              <div>
-                <label class="lbl">Hoặc upload ảnh thay thế:</label>
-                <input type="file" id="proc-thumb-fail-file" accept="image/*" onchange="procThumbFailUpload()">
-                <img id="proc-thumb-fail-preview" style="display:none;max-width:100%;max-height:200px;margin-top:8px;border-radius:6px;border:1px solid var(--border)">
-              </div>
-              <button class="btn btn-secondary" onclick="procThumbFailSkip()">⏭ Bỏ qua thumbnail (không chèn)</button>
-            </div>
-          </div>
-        </div>
-        #}
+        <!-- Log box -->
+        <div class="log-box text-[11px] font-mono bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3 rounded-xl flex-1 overflow-y-auto" id="step3-log" style="min-height:380px"></div>
+      </div>
+    </div><!-- /RIGHT PANE -->
 
-      </div><!-- /col left -->
+  </div>
 
-      <!-- ══════════════ COL RIGHT: AI & Voice config ══════════════ -->
-      <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
-
-        <!-- Queue status — shows all items with done/pending status -->
-        <div class="card" id="step3-queue-card">
-          <div class="card-header">
-            <span class="card-title">📋 Hàng chờ xử lý</span>
-            <div class="card-actions">
-              <span class="text-xs text-muted" id="step3-queue-summary"></span>
-            </div>
-          </div>
-          <div class="card-body" style="padding:8px">
-            <div id="step3-queue-list" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
-              <div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- AI Model -->
-        <div class="card card-collapsible">
-          <div class="card-header" onclick="toggleCard(this)">
-            <span class="card-title">🤖 Mô hình AI</span>
-          </div>
-          <div class="card-body">
-            <div class="grid-2">
-              <div class="field">
-                <label>Mô hình Whisper</label>
-                <select id="proc-model">
-                  <option value="tiny">tiny (nhanh nhất)</option>
-                  <option value="base" selected>base</option>
-                  <option value="small">small</option>
-                  <option value="medium">medium</option>
-                  <option value="large">large (tốt nhất)</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Phiên âm bằng</label>
-                <select id="proc-transcribe-provider-model" onchange="onTranscribeProviderChanged()">
-                  <option value="antigravity" selected>🌌 Antigravity / Gemini STT (Nhanh & Chuẩn)</option>
-                  <option value="groq">Groq Whisper API</option>
-                  <option value="model">Whisper local</option>
-                </select>
-              </div>
-            </div>
-            <div class="btn-group mt-8 mb-8">
-              <button class="btn btn-primary btn-sm" id="proc-tab-ai" onclick="setProcessMode('ai')">🤖 AI Mode</button>
-              <button class="btn btn-secondary btn-sm" id="proc-tab-model" onclick="setProcessMode('model')">⚙️ Model local</button>
-            </div>
-            <div style="display:none">
-              <select id="proc-transcribe-provider-ai"><option value="groq" selected>Groq</option></select>
-              <select id="proc-trans-provider-ai"><option value="antigravity" selected>🌌 Antigravity</option><option value="deepseek">DeepSeek</option><option value="groq">Groq</option><option value="openai">OpenAI</option><option value="google">Google</option><option value="auto">Auto</option></select>
-            </div>
-            <div id="proc-ai-panel" style="display:none"></div>
-            <div id="proc-model-panel" style="display:none"></div>
-          </div>
-        </div>
-
-        <!-- Voice -->
-        <div class="card card-collapsible collapsed">
-          <div class="card-header" onclick="toggleCard(this)">
-            <span class="card-title">🎙 Đổi giọng theo ngôn ngữ</span>
-            <div class="card-actions" onclick="event.stopPropagation()">
-              <label class="toggle-wrap">
-                <input type="checkbox" class="toggle-input" id="proc-voice" checked>
-                <div class="toggle"></div>
-                <span class="toggle-label text-sm">Bật</span>
-              </label>
-            </div>
-          </div>
-          <div class="card-body">
-            <div class="grid-2">
-              <div class="field">
-                <label>TTS Engine</label>
-                <select id="proc-tts-engine" onchange="_syncVoiceOptions('proc-tts-engine','proc-tts-voice')">
-                  <option value="fpt-ai" selected>FPT AI TTS</option>
-                  <option value="edge-tts">Edge TTS (Microsoft)</option>
-                  <option value="elevenlabs">ElevenLabs TTS</option>
-                  <option value="fish-audio">Fish Audio TTS (đa ngôn ngữ)</option>
-                  <option value="minimax">MiniMax TTS</option>
-                  <option value="gtts">gTTS (Google)</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Giọng đọc</label>
-                <select id="proc-tts-voice"></select>
-              </div>
-              <div class="field">
-                <label>Cao độ</label>
-                <input type="text" id="proc-tts-pitch" placeholder="+0Hz" value="+0Hz">
-              </div>
-              <div class="field">
-                <label>Tốc độ đọc</label>
-                <input type="text" id="proc-tts-rate" placeholder="+0%" value="+0%">
-              </div>
-              <div class="field">
-                <label>Cảm xúc</label>
-                <select id="proc-tts-emotion">
-                  <option value="default" selected>Mặc định</option>
-                  <option value="cheerful">Vui vẻ</option>
-                  <option value="sad">Buồn</option>
-                  <option value="angry">Giận dữ</option>
-                  <option value="excited">Hào hứng</option>
-                  <option value="friendly">Thân thiện</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Tốc độ TTS</label>
-                <div class="flex-center gap-8">
-                  <input type="range" id="proc-tts-speed" min="0.5" max="3.0" step="0.1" value="1.0"
-                    oninput="document.getElementById('proc-tts-speed-val').textContent=parseFloat(this.value).toFixed(1)+'x'" style="flex:1">
-                  <span class="text-xs" id="proc-tts-speed-val" style="min-width:32px">1.0x</span>
-                </div>
-              </div>
-            </div>
-            <div class="grid-2 mt-8" style="gap:8px">
-              <div class="check-item" style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box">
-                <span style="font-size:12px;color:var(--text2)">Tự động tốc độ</span>
-                <label class="toggle-wrap" style="margin-left:auto">
-                  <input type="checkbox" class="toggle-input" id="proc-auto-speed" checked>
-                  <div class="toggle"></div>
-                </label>
-              </div>
-              <div class="check-item" style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box">
-                <span style="font-size:12px;color:var(--text2)">Giữ nhạc nền</span>
-                <label class="toggle-wrap" style="margin-left:auto">
-                  <input type="checkbox" class="toggle-input" id="proc-keep-bg">
-                  <div class="toggle"></div>
-                </label>
-              </div>
-            </div>
-            <div class="field mt-8">
-              <label>Âm lượng nhạc nền</label>
-              <div class="flex-center gap-8">
-                <input type="range" id="proc-bg-vol" min="0" max="1" step="0.1" value="0.1"
-                  oninput="document.getElementById('proc-bg-vol-val').textContent=this.value" style="flex:1">
-                <span class="text-xs text-muted" id="proc-bg-vol-val">0.1</span>
-              </div>
-            </div>
-            <div class="flex-center gap-8 mt-8">
-              <button class="btn btn-secondary btn-sm" onclick="previewProcessVoice()">▶ Nghe thử</button>
-              <audio id="proc-preview-audio" controls style="display:none;height:32px;flex:1"></audio>
-            </div>
-            <!-- Voice FX -->
-            <hr class="divider">
-            <div class="flex-between mb-8">
-              <span class="section-title" style="margin:0">🎚 Hiệu ứng giọng (FX)</span>
-              <label class="toggle-wrap">
-                <input type="checkbox" class="toggle-input" id="proc-fx-enabled">
-                <div class="toggle"></div>
-                <span class="toggle-label text-sm">Bật</span>
-              </label>
-            </div>
-            <div class="grid-2">
-              <div class="field"><label>Pitch (bán âm)</label><input type="number" id="proc-fx-pitch" step="0.1" value="1.5"></div>
-              <div class="field"><label>Speed</label><input type="number" id="proc-fx-speed" step="0.01" value="1.08"></div>
-            </div>
-            <div class="grid-3 mt-8">
-              <div class="field"><label>Bass (dB)</label><input type="number" id="proc-fx-bass" step="1" value="-2"></div>
-              <div class="field"><label>Mid (dB)</label><input type="number" id="proc-fx-mid" step="1" value="2"></div>
-              <div class="field"><label>Treble (dB)</label><input type="number" id="proc-fx-treble" step="1" value="3"></div>
-            </div>
-            <div class="grid-2 mt-8">
-              <div class="field">
-                <label>Nén (Comp)</label>
-                <select id="proc-fx-comp">
-                  <option value="none">Tắt</option>
-                  <option value="light" selected>Nhẹ</option>
-                  <option value="heavy">Mạnh</option>
-                </select>
-              </div>
-              <div class="field"><label>Vang (Reverb %)</label><input type="number" id="proc-fx-reverb" min="0" max="100" value="5"></div>
-            </div>
-          </div>
-        </div><!-- /Voice card -->
-
-      </div><!-- /col right -->
-
-    </div><!-- /proc-step5-grid -->
-  </section><!-- /step 3 -->
+  <script>
+    // Compatibility shims
+    function step3SetViewMode(mode) {}
+    window.step3SetViewMode = step3SetViewMode;
+    function step3ToggleConsole() {}
+    window.step3ToggleConsole = step3ToggleConsole;
+  </script>
+</section>

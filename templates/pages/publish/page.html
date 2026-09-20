@@ -5,10 +5,10 @@
   <div class="publish-shell">
     <nav class="publish-nav">
       <div class="publish-tab active" onclick="pubSwitchMainTab(this,'pub-sec-multi')">
-        <span class="tab-ico">📤</span><span class="tab-label">Đa nền tảng</span>
+        <span class="tab-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span><span class="tab-label">Đa nền tảng</span>
       </div>
       <div class="publish-tab" onclick="pubSwitchMainTab(this,'pub-sec-batch')">
-        <span class="tab-ico">📦</span><span class="tab-label">Hàng loạt</span>
+        <span class="tab-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span><span class="tab-label">Hàng loạt</span>
       </div>
     </nav>
 
@@ -18,7 +18,7 @@
       <div id="pub-sec-multi" class="publish-pane active">
 
         <div class="publish-section-intro">
-          <span class="ico">📤</span>
+          <span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>
           <span>Chọn file video, dùng AI phân tích tạo nội dung, rồi đăng lên YouTube / TikTok / Facebook.</span>
         </div>
 
@@ -28,28 +28,28 @@
           <div class="col-left">
             <div class="card premium-card">
               <div class="card-header">
-                <span class="card-title">📁 Chọn tệp tin &amp; AI</span>
+                <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Chọn tệp tin &amp; AI</span>
               </div>
               
               <div class="card-body">
                 <!-- File selection group -->
                 <div class="content-group">
-                  <div class="section-title">📁 Chọn tệp tin</div>
+                  <div class="section-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Chọn tệp tin</div>
                   
                   <div class="field">
-                    <label>🎬 File video <span class="text-red">*</span></label>
+                    <label><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> File video <span class="text-red">*</span></label>
                     <div class="input-with-button">
                       <input type="text" id="pub-video-path" placeholder="Chọn file video hoặc nhập đường dẫn...">
-                      <button class="btn btn-secondary" onclick="document.getElementById('pub-video-file').click()">📂 Duyệt</button>
+                      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('pub-video-file').click()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Duyệt</button>
                       <input type="file" id="pub-video-file" accept="video/*" style="display:none" onchange="_pubSetVideoFile(this)">
                     </div>
                   </div>
 
                   <div class="field">
-                    <label>📝 File phụ đề (.srt / .ass)</label>
+                    <label><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> File phụ đề (.srt / .ass)</label>
                     <div class="input-with-button">
                       <input type="text" id="pub-sub-path" placeholder="Chọn file phụ đề (tùy chọn)..." readonly>
-                      <button class="btn btn-secondary" onclick="document.getElementById('pub-sub-file').click()">📂 Duyệt</button>
+                      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('pub-sub-file').click()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Duyệt</button>
                       <input type="file" id="pub-sub-file" accept=".srt,.ass" style="display:none" onchange="_pubSetSubFile(this)">
                     </div>
                   </div>
@@ -58,31 +58,31 @@
                 <!-- AI content generation -->
                 <div class="ai-generation-box">
                   <div class="ai-header">
-                    <div class="ai-title">🤖 AI Phân tích &amp; Sáng tạo</div>
+                    <div class="ai-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg> AI Phân tích &amp; Sáng tạo</div>
                     <div class="ai-controls">
                       <select id="pub-ai-provider" class="pub-select-sm">
-                        <option value="antigravity" selected>🌌 Antigravity</option>
-                        <option value="deepseek" selected>DeepSeek</option>
+                        <option value="gemini" selected>Google Gemini</option>
+                        <option value="deepseek">DeepSeek</option>
                         <option value="openai">OpenAI</option>
                         <option value="groq">Groq</option>
                       </select>
                       <select id="pub-target-lang" class="pub-select-sm" title="Ngôn ngữ nội dung đăng">
-                        <option value="vi" selected>🇻🇳 Tiếng Việt</option>
-                        <option value="en">🇺🇸 English</option>
-                        <option value="zh">🇨🇳 中文</option>
-                        <option value="ja">🇯🇵 日本語</option>
-                        <option value="ko">🇰🇷 한국어</option>
-                        <option value="th">🇹🇭 ไทย</option>
-                        <option value="id">🇮🇩 Indonesia</option>
-                        <option value="es">🇪🇸 Español</option>
-                        <option value="pt">🇵🇹 Português</option>
-                        <option value="fr">🇫🇷 Français</option>
-                        <option value="de">🇩🇪 Deutsch</option>
-                        <option value="ru">🇷🇺 Русский</option>
-                        <option value="ar">🇸🇦 العربية</option>
-                        <option value="hi">🇮🇳 हिन्दी</option>
+                        <option value="vi" selected>Tiếng Việt</option>
+                        <option value="en">English</option>
+                        <option value="zh">中文</option>
+                        <option value="ja">日本語</option>
+                        <option value="ko">한국어</option>
+                        <option value="th">ไทย</option>
+                        <option value="id">Indonesia</option>
+                        <option value="es">Español</option>
+                        <option value="pt">Português</option>
+                        <option value="fr">Français</option>
+                        <option value="de">Deutsch</option>
+                        <option value="ru">Русский</option>
+                        <option value="ar">العربية</option>
+                        <option value="hi">हिन्दी</option>
                       </select>
-                      <button class="btn btn-secondary btn-sm" onclick="_pubLoadSubContent()">📥 Nhập từ phụ đề</button>
+                      <button class="btn btn-secondary btn-sm" onclick="_pubLoadSubContent()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Nhập từ phụ đề</button>
                     </div>
                   </div>
                   
@@ -91,7 +91,7 @@
                   </div>
                   
                   <button class="btn btn-primary w-full" id="btn-pub-analyze" onclick="pubAnalyzeContent()">
-                    ✨ Xử lý &amp; Tạo nội dung bằng AI
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Xử lý &amp; Tạo nội dung bằng AI
                   </button>
                   <div id="pub-analyze-status" class="status-msg"></div>
                 </div>
@@ -104,15 +104,15 @@
             <div class="card premium-card">
               <div class="platform-tabs-header">
                 <div class="platform-tab active" id="pub-tab-yt" onclick="pubSwitchTab('youtube')">
-                  <span class="yt-color">▶</span><span>YouTube</span>
+                  <span class="yt-color"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:middle"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></span><span>YouTube</span>
                   <div class="tab-toggle" id="pub-toggle-yt" onclick="event.stopPropagation();pubTogglePlatform('youtube')">✓</div>
                 </div>
                 <div class="platform-tab" id="pub-tab-tt" onclick="pubSwitchTab('tiktok')">
-                  <span class="tt-color">🎵</span><span>TikTok</span>
+                  <span class="tt-color"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:middle"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></span><span>TikTok</span>
                   <div class="tab-toggle" id="pub-toggle-tt" onclick="event.stopPropagation();pubTogglePlatform('tiktok')">✓</div>
                 </div>
                 <div class="platform-tab" id="pub-tab-fb" onclick="pubSwitchTab('facebook')">
-                  <span class="fb-color">📘</span><span>Facebook</span>
+                  <span class="fb-color"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:middle"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span><span>Facebook</span>
                   <div class="tab-toggle" id="pub-toggle-fb" onclick="event.stopPropagation();pubTogglePlatform('facebook')">✓</div>
                 </div>
               </div>
@@ -122,7 +122,7 @@
                 <div id="pub-panel-youtube" class="platform-panel active">
                   <!-- Account Selector -->
                   <div class="field" style="margin-bottom:8px">
-                    <label style="font-size:11px;color:var(--text-muted)">📺 Tài khoản YouTube</label>
+                    <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg> Tài khoản YouTube</label>
                     <select id="yt-account-select" class="pub-select-sm" onchange="onAccountSelectChange('youtube', this)" style="width:100%">
                       <option value="">Chưa có tài khoản</option>
                     </select>
@@ -133,13 +133,13 @@
 
                     <!-- Chưa đăng nhập -->
                     <div id="yt-auth-disconnected" class="yt-status-row">
-                      <div class="yt-status-icon">▶</div>
+                      <div class="yt-status-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
                       <div class="yt-status-text">
                         <div class="yt-status-label">YouTube</div>
                         <div class="yt-status-sub" style="color:var(--text-muted)">Chưa kết nối</div>
                       </div>
                       <button class="btn btn-sm btn-yt" id="btn-yt-auth" onclick="youtubeLogin()">
-                        🔑 Đăng nhập
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M21 2l-2 2m-1.5 1.5L16 7m-1.5 1.5L13 10m-1.5 1.5L10 13m-1.5 1.5L7 16m-1.5 1.5L4 19m-2 2a2 2 0 1 0 2.83-2.83l.07-.07A10 10 0 1 1 19.07 4.93l-.07.07A2 2 0 1 0 21.83 2.1z"/></svg> Đăng nhập
                       </button>
                     </div>
 
@@ -147,13 +147,13 @@
                     <div id="yt-auth-connected" class="yt-status-row" style="display:none">
                       <div id="yt-ch-avatar-wrap" class="yt-ch-avatar">
                         <img id="yt-ch-avatar-img" src="" alt="" onerror="this.style.display='none';document.getElementById('yt-ch-avatar-ph').style.display='flex'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">
-                        <div id="yt-ch-avatar-ph" class="yt-ch-avatar-ph">▶</div>
+                        <div id="yt-ch-avatar-ph" class="yt-ch-avatar-ph"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
                       </div>
                       <div class="yt-status-text" style="flex:1;min-width:0">
                         <div class="yt-ch-name" id="yt-ch-name">--</div>
                         <div class="yt-ch-stats">
-                          <span>👥 <span id="yt-ch-subs">--</span></span>
-                          <span>🎬 <span id="yt-ch-videos">--</span> video</span>
+                          <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span id="yt-ch-subs">--</span></span>
+                          <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:2px"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span id="yt-ch-videos">--</span> video</span>
                         </div>
                       </div>
                       <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
@@ -183,15 +183,15 @@
                     <div class="field">
                       <label>Chế độ hiển thị</label>
                       <select id="yt-privacy" onchange="toggleYtScheduleDisplay()">
-                        <option value="private" selected>🔒 Riêng tư</option>
-                        <option value="unlisted">🔗 Không công khai</option>
-                        <option value="public">🌐 Công khai</option>
+                        <option value="private" selected>Riêng tư</option>
+                        <option value="unlisted">Không công khai</option>
+                        <option value="public">Công khai</option>
                       </select>
                     </div>
                     <div class="field">
                       <label>&nbsp;</label>
                       <label class="check-item w-full" style="height: 38px; margin: 0;">
-                        <input type="checkbox" id="yt-is-short"><span>📱 YouTube Shorts</span>
+                        <input type="checkbox" id="yt-is-short"><span style="display:inline-flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg> YouTube Shorts</span>
                       </label>
                     </div>
                   </div>
@@ -200,7 +200,7 @@
                   <div id="yt-schedule-wrap" class="schedule-box">
                     <label class="check-item mb-8">
                       <input type="checkbox" id="yt-use-schedule" onchange="toggleYtScheduleFields()">
-                      <span>📅 Đặt lịch đăng video</span>
+                      <span style="display:inline-flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Đặt lịch đăng video</span>
                     </label>
                     <div id="yt-schedule-fields" class="settings-grid" style="display:none; margin-top: 10px;">
                       <div class="field">
@@ -218,7 +218,7 @@
                   </div>
 
                   <button class="btn btn-lg btn-yt w-full mt-12" id="btn-yt-upload" onclick="pubUploadYouTube()">
-                    🚀 Bắt đầu Đăng lên YouTube
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Bắt đầu Đăng lên YouTube
                   </button>
                   
                   <div class="log-box mt-12" id="yt-upload-log" style="height:120px;display:none"></div>
@@ -227,7 +227,7 @@
                 <!-- TikTok Panel -->
                 <div id="pub-panel-tiktok" class="platform-panel">
                   <div class="platform-header-row">
-                    <div class="platform-name"><span class="tt-color">🎵</span> TikTok</div>
+                    <div class="platform-name"><span class="tt-color"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:middle"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></span> TikTok</div>
                     <div class="badge badge-accent">Đăng qua trình duyệt</div>
                   </div>
 
@@ -244,9 +244,9 @@
                   <div class="field">
                     <label>Quyền riêng tư</label>
                     <select id="tt-privacy">
-                      <option value="PUBLIC_TO_EVERYONE" selected>🌐 Công khai</option>
-                      <option value="FRIENDS">👥 Bạn bè</option>
-                      <option value="SELF_ONLY">🔒 Chỉ mình tôi</option>
+                      <option value="PUBLIC_TO_EVERYONE" selected>Công khai</option>
+                      <option value="FRIENDS">Bạn bè</option>
+                      <option value="SELF_ONLY">Chỉ mình tôi</option>
                     </select>
                   </div>
 
@@ -254,7 +254,7 @@
                   <div class="field" style="margin-top:8px">
                     <label class="check-item" style="margin:0">
                       <input type="checkbox" id="pub-tt-use-schedule" onchange="pubTtToggleSchedule()">
-                      <span>📅 Đặt lịch đăng (trên TikTok Studio)</span>
+                      <span style="display:inline-flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Đặt lịch đăng (trên TikTok Studio)</span>
                     </label>
                   </div>
                   <div id="pub-tt-schedule-fields" style="display:none;margin-top:6px">
@@ -265,10 +265,10 @@
                   </div>
 
                   <button class="btn btn-lg btn-tt w-full mt-8" onclick="pubOpenTikTok()">
-                    🎵 Mở TikTok Studio &amp; tự điền nội dung
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Mở TikTok Studio &amp; tự điền nội dung
                   </button>
                   <div class="text-xs text-muted mt-4">
-                    💡 Mở trình duyệt đã đăng nhập, gắn sẵn file và caption. Bạn chỉ việc kiểm tra rồi nhấn Post.
+                    Mở trình duyệt đã đăng nhập, gắn sẵn file và caption. Bạn chỉ việc kiểm tra rồi nhấn Post.
                   </div>
                 </div>
 
@@ -277,7 +277,7 @@
 
                   <!-- Account Selector -->
                   <div class="field" style="margin-bottom:8px">
-                    <label style="font-size:11px;color:var(--text-muted)">📘 Tài khoản Facebook</label>
+                    <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> Tài khoản Facebook</label>
                     <select id="fb-account-select" class="pub-select-sm" onchange="onAccountSelectChange('facebook', this)" style="width:100%">
                       <option value="">Chưa có tài khoản</option>
                     </select>
@@ -286,14 +286,14 @@
                   <!-- Chưa kết nối -->
                   <div id="pub-fb-disconnected">
                     <div class="platform-header-row">
-                      <div class="platform-name"><span class="fb-color">📘</span> Facebook</div>
+                      <div class="platform-name"><span class="fb-color"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:middle"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span> Facebook</div>
                       <span class="badge badge-gray">Chưa kết nối</span>
                     </div>
                     <div class="alert-info mb-12" style="font-size:12px">
                       Nhập <b>User Access Token</b> từ
                       <a href="https://developers.facebook.com/tools/explorer/" target="_blank" style="color:var(--accent)">Graph API Explorer</a>
                       để kết nối và đăng video lên Pages.
-                      <br><span style="color:var(--text-muted)">💡 Cấu hình App ID + Secret trong config.yml để token tự động gia hạn.</span>
+                      <br><span style="color:var(--text-muted)">Cấu hình App ID + Secret trong config.yml để token tự động gia hạn.</span>
                     </div>
                     <div class="field">
                       <label>User Access Token</label>
@@ -301,18 +301,18 @@
                         <input type="password" id="pub-fb-token-input"
                           placeholder="EAAxxxxxxx..."
                           style="flex:1;font-family:monospace;font-size:11px">
-                        <button class="btn btn-sm btn-secondary" onclick="pubFbToggleToken()">👁</button>
+                        <button class="btn btn-sm btn-secondary" onclick="pubFbToggleToken()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                       </div>
                     </div>
                     <button class="btn btn-primary w-full mt-8" id="btn-pub-fb-connect" onclick="pubFbConnect()">
-                      🔗 Kết nối Facebook
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Kết nối Facebook
                     </button>
                   </div>
 
                   <!-- Đã kết nối -->
                   <div id="pub-fb-connected" style="display:none">
                     <div class="platform-header-row">
-                      <div class="platform-name"><span class="fb-color">📘</span> Facebook</div>
+                      <div class="platform-name"><span class="fb-color"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:middle"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span> Facebook</div>
                       <div style="display:flex;align-items:center;gap:8px">
                         <span class="badge badge-green">✓ <span id="pub-fb-user-name">--</span></span>
                         <button class="btn btn-sm btn-danger" onclick="pubFbDisconnect()">Ngắt</button>
@@ -321,15 +321,15 @@
 
                     <!-- Token expiry info -->
                     <div id="pub-fb-token-info" style="font-size:11px;margin-bottom:8px;padding:6px 8px;border-radius:6px;background:var(--bg-secondary)">
-                      <span id="pub-fb-token-status">⏳ Đang kiểm tra token...</span>
+                      <span id="pub-fb-token-status">Đang kiểm tra token...</span>
                       <button id="btn-pub-fb-refresh" class="btn btn-sm btn-secondary" onclick="pubFbRefreshToken()" style="float:right;padding:2px 8px;font-size:11px">
-                        🔄 Gia hạn
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Gia hạn
                       </button>
                     </div>
 
                     <!-- Chọn Page -->
                     <div class="field">
-                      <label>📄 Đăng lên Page</label>
+                      <label><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Đăng lên Page</label>
                       <select id="pub-fb-page-select" onchange="pubFbOnPageChange()">
                         <option value="">-- Chọn Page --</option>
                       </select>
@@ -352,20 +352,20 @@
                         <label>Định dạng</label>
                         <select id="pub-fb-post-type">
                           <option value="auto" selected>Tự động (9:16 → Reel)</option>
-                          <option value="reel">🎬 Reel (yêu cầu 9:16, 540x960+)</option>
-                          <option value="video">📹 Video thường</option>
+                          <option value="reel">Reel (yêu cầu 9:16, 540x960+)</option>
+                          <option value="video">Video thường</option>
                         </select>
                       </div>
                       <div class="field">
                         <label>&nbsp;</label>
                         <label class="check-item" style="height:38px;margin:0">
                           <input type="checkbox" id="pub-fb-use-schedule" onchange="pubFbToggleSchedule()">
-                          <span>📅 Đặt lịch đăng</span>
+                          <span style="display:inline-flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Đặt lịch đăng</span>
                         </label>
                       </div>
                     </div>
                     <div class="text-xs text-muted mt-4">
-                      💡 Bài đăng trên Page luôn công khai. Reel yêu cầu MP4, 9:16, tối thiểu 540x960, 3-90 giây.
+                      Bài đăng trên Page luôn công khai. Reel yêu cầu MP4, 9:16, tối thiểu 540x960, 3-90 giây.
                     </div>
                     <div id="pub-fb-schedule-fields" style="display:none;margin-top:8px">
                       <input type="datetime-local" id="pub-fb-schedule-dt" style="width:100%">
@@ -373,7 +373,7 @@
                     </div>
 
                     <button class="btn btn-lg btn-fb w-full mt-12" id="btn-pub-fb-upload" onclick="pubUploadFacebook()">
-                      🚀 Đăng Video lên Facebook
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Đăng Video lên Facebook
                     </button>
 
                     <div class="log-box mt-12" id="fb-upload-log" style="height:120px;display:none"></div>
@@ -393,20 +393,20 @@
       <div id="pub-sec-batch" class="publish-pane">
 
         <div class="publish-section-intro">
-          <span class="ico">📦</span>
+          <span class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
           <span>Import nhiều cặp file (1 video + 1 file ASS). AI sẽ đọc nội dung ASS để tự động tạo tiêu đề, mô tả, hashtag cho từng video rồi đăng lên các nền tảng đã bật.</span>
         </div>
 
         <!-- Platform status indicators for batch -->
         <div class="platform-status-row" id="batch-platform-status">
           <div class="platform-status-chip enabled" id="batch-plat-yt">
-            <span style="color:#ff0000">▶</span> YouTube <span class="dot dot-green"></span>
+            <span style="color:#ff0000;display:inline-flex;align-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></span> YouTube <span class="dot dot-green"></span>
           </div>
           <div class="platform-status-chip enabled" id="batch-plat-tt">
-            <span>🎵</span> TikTok <span class="dot dot-green"></span>
+            <span style="display:inline-flex;align-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></span> TikTok <span class="dot dot-green"></span>
           </div>
           <div class="platform-status-chip enabled" id="batch-plat-fb">
-            <span style="color:#1877f2">📘</span> Facebook <span class="dot dot-green"></span>
+            <span style="color:#1877f2;display:inline-flex;align-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></span> Facebook <span class="dot dot-green"></span>
           </div>
           <span class="text-xs text-muted" style="display:flex;align-items:center">← Bật/tắt ở tab Đa nền tảng</span>
         </div>
@@ -416,14 +416,14 @@
           <!-- Import files -->
           <div class="card premium-card">
             <div class="card-header">
-              <span class="card-title">📂 Chọn files</span>
+              <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Chọn files</span>
             </div>
             <div class="field">
               <label>Chọn nhiều file hoặc thư mục chứa video + ASS</label>
               <div class="input-with-button">
                 <input type="text" id="batch-pub-info" placeholder="Chưa chọn file..." readonly style="flex:1">
-                <button class="btn btn-secondary" onclick="document.getElementById('batch-pub-files').click()">📂 Chọn files</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('batch-pub-folder').click()">📁 Chọn thư mục</button>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('batch-pub-files').click()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Chọn files</button>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('batch-pub-folder').click()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Chọn thư mục</button>
                 <input type="file" id="batch-pub-files" multiple accept="video/*,.ass,.srt" style="display:none" onchange="_batchPubImportFiles(this)">
                 <input type="file" id="batch-pub-folder" webkitdirectory style="display:none" onchange="_batchPubImportFolder(this)">
               </div>
@@ -434,39 +434,39 @@
           <!-- Config -->
           <div class="card premium-card">
             <div class="card-header">
-              <span class="card-title">⚙️ Cài đặt AI &amp; Lịch</span>
+              <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Cài đặt AI &amp; Lịch</span>
             </div>
             <div class="field">
-              <label>🤖 AI Provider (phân tích nội dung ASS)</label>
+              <label><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg> AI Provider (phân tích nội dung ASS)</label>
               <select id="batch-pub-ai-provider" style="width:100%">
-                <option value="antigravity" selected>🌌 Antigravity</option>
-                <option value="deepseek" selected>DeepSeek</option>
+                <option value="gemini" selected>Google Gemini</option>
+                <option value="deepseek">DeepSeek</option>
                 <option value="openai">OpenAI</option>
                 <option value="groq">Groq</option>
               </select>
             </div>
             <div class="field">
-              <label>🌐 Ngôn ngữ nội dung đăng</label>
+              <label><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Ngôn ngữ nội dung đăng</label>
               <select id="batch-pub-target-lang" style="width:100%">
-                <option value="vi" selected>🇻🇳 Tiếng Việt</option>
-                <option value="en">🇺🇸 English</option>
-                <option value="zh">🇨🇳 中文</option>
-                <option value="ja">🇯🇵 日本語</option>
-                <option value="ko">🇰🇷 한국어</option>
-                <option value="th">🇹🇭 ไทย</option>
-                <option value="id">🇮🇩 Indonesia</option>
-                <option value="es">🇪🇸 Español</option>
-                <option value="pt">🇵🇹 Português</option>
-                <option value="fr">🇫🇷 Français</option>
-                <option value="de">🇩🇪 Deutsch</option>
-                <option value="ru">🇷🇺 Русский</option>
-                <option value="ar">🇸🇦 العربية</option>
-                <option value="hi">🇮🇳 हिन्दी</option>
+                <option value="vi" selected>Tiếng Việt</option>
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="th">ไทย</option>
+                <option value="id">Indonesia</option>
+                <option value="es">Español</option>
+                <option value="pt">Português</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="ru">Русский</option>
+                <option value="ar">العربية</option>
+                <option value="hi">हिन्दी</option>
               </select>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="field">
-                <label>📅 Khoảng cách giờ</label>
+                <label><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Khoảng cách giờ</label>
                 <input type="number" id="batch-pub-interval" value="0" min="0" step="0.5" placeholder="0 = đăng ngay">
                 <div class="text-xs text-muted mt-4">0 = đăng ngay, >0 = cách N giờ/video</div>
               </div>
@@ -480,9 +480,9 @@
           <!-- Queue list -->
           <div class="card premium-card span-2">
             <div class="card-header">
-              <span class="card-title">📋 Danh sách video (<span id="batch-pub-count">0</span> cặp)</span>
+              <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Danh sách video (<span id="batch-pub-count">0</span> cặp)</span>
               <div class="card-actions">
-                <button class="btn btn-danger btn-sm" onclick="_batchPubClear()">🗑 Xóa tất cả</button>
+                <button class="btn btn-danger btn-sm" onclick="_batchPubClear()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Xóa tất cả</button>
               </div>
             </div>
             <div id="batch-pub-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
@@ -493,14 +493,14 @@
           <!-- Actions -->
           <div class="card premium-card span-2">
             <div class="card-header">
-              <span class="card-title">🚀 Thực thi</span>
+              <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Thực thi</span>
             </div>
             <div class="btn-group" style="display:flex;gap:10px">
               <button class="btn btn-primary" id="btn-batch-pub-analyze" onclick="_batchPubAnalyzeAll()" style="flex:1;justify-content:center">
-                🤖 AI Phân tích tất cả
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg> AI Phân tích tất cả
               </button>
-              <button class="btn btn-primary" id="btn-batch-pub-start" onclick="_batchPubStartAll()" style="flex:1;justify-content:center;background:#28a745">
-                🚀 Đăng tất cả
+              <button class="btn btn-primary" id="btn-batch-pub-start" onclick="_batchPubStartAll()" style="flex:1;justify-content:center;background:#28a745;border-color:#218838">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Đăng tất cả
               </button>
             </div>
           </div>
@@ -508,9 +508,9 @@
           <!-- Log -->
           <div class="card premium-card span-2">
             <div class="card-header">
-              <span class="card-title">📜 Nhật ký</span>
+              <span class="card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Nhật ký</span>
               <div class="card-actions">
-                <button class="btn btn-secondary btn-xs" onclick="const b=document.getElementById('batch-pub-log');if(b){b.innerHTML='';b.style.display='none'}">🗑 Xóa</button>
+                <button class="btn btn-secondary btn-xs" onclick="const b=document.getElementById('batch-pub-log');if(b){b.innerHTML='';b.style.display='none'}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Xóa</button>
               </div>
             </div>
             <div class="log-box" id="batch-pub-log" style="height:200px;display:block;margin-top:0">

@@ -21,14 +21,37 @@ async function loadContentList() {
   }
 }
 
+function _contentFileSvg(ext) {
+  if (['mp4','mkv','avi','mov'].includes(ext)) {
+    return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>';
+  }
+  if (['ass','srt'].includes(ext)) {
+    return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v12H7l-3 3Z"/><path d="M8 10h3m2 0h3M8 14h8"/></svg>';
+  }
+  if (['jpg','jpeg','png','webp'].includes(ext)) {
+    return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+  }
+  return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+}
+
 function renderContentList() {
   const container = document.getElementById('content-list-container');
   if (!container) return;
   const search   = document.getElementById('content-search')?.value.toLowerCase() || '';
   const filtered = _contentFiles.filter(f => f.name.toLowerCase().includes(search));
 
+  const summaryEl = document.getElementById('content-file-summary');
+  if (summaryEl) summaryEl.textContent = `${filtered.length} tệp`;
+
   if (!filtered.length) {
-    container.innerHTML = '<div style="padding:60px;text-align:center;color:var(--text-muted)"><div style="font-size:40px;margin-bottom:10px">📂</div>Không tìm thấy tệp nào</div>';
+    container.innerHTML = `
+      <div style="padding:60px 20px;text-align:center;color:var(--text-muted)">
+        <div style="width:48px;height:48px;margin:0 auto 12px;border-radius:12px;background:var(--bg3);display:flex;align-items:center;justify-content:center;color:var(--text-muted)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">Không tìm thấy tệp nào</div>
+        <div style="font-size:11.5px">Các tệp video tải về hoặc đã xử lý sẽ hiển thị tại danh sách này.</div>
+      </div>`;
     return;
   }
 
@@ -40,22 +63,33 @@ function renderContentList() {
     filtered.forEach(f => {
       const size = f.size >= 1048576 ? (f.size / 1048576).toFixed(2) + ' MB' : (f.size / 1024).toFixed(1) + ' KB';
       const date = new Date(f.mtime * 1000).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-      const ext  = f.ext.replace('.', '');
-      const icon = ['mp4','mkv','avi','mov'].includes(ext) ? '🎬' : ['ass','srt'].includes(ext) ? '📝' : ext === 'json' ? '⚙️' : ['jpg','jpeg','png','webp'].includes(ext) ? '🖼️' : '📄';
+      const ext  = f.ext.replace('.', '').toLowerCase();
       const safeName = f.name.replace(/'/g, "\\'");
       const isVideo = ['mp4','mkv','avi','mov'].includes(ext);
 
-      html += `<div style="background:var(--bg2);border:1.5px solid var(--border);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start">
-        <div style="width:36px;height:36px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${icon}</div>
+      html += `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start">
+        <div style="width:36px;height:36px;border-radius:8px;background:rgba(59,130,246,0.08);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">${_contentFileSvg(ext)}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:600;color:var(--text);word-break:break-word;line-height:1.4;margin-bottom:4px">${f.name}</div>
           <div style="font-size:11px;color:var(--text-muted)">${size} · ${date}</div>
           <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
             <a href="/api/files/download?path=${encodeURIComponent(f.name)}" download="${f.name}"
-               class="btn btn-sm btn-primary" style="padding:5px 10px;font-size:11px;text-decoration:none">⬇ Tải về</a>
-            ${isVideo ? `<button class="btn btn-sm btn-secondary" style="padding:5px 10px;font-size:11px" onclick="sendToPublishFromContent('${safeName}')">📤 Đăng</button>` : ''}
-            ${isVideo ? `<button class="btn btn-sm btn-secondary" style="padding:5px 10px;font-size:11px" onclick="sendToProcessFromContent('${safeName}')">🎬 Xử lý</button>` : ''}
-            <button class="btn btn-sm" style="padding:5px 10px;font-size:11px;background:var(--error-bg);color:var(--error);border:1px solid rgba(192,57,43,.3)" onclick="deleteContentFile('${safeName}')">🗑</button>
+               class="btn btn-sm btn-primary" style="padding:4px 8px;font-size:11px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+               <span>Tải về</span>
+            </a>
+            ${isVideo ? `
+            <button class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px;display:inline-flex;align-items:center;gap:4px" onclick="sendToPublishFromContent('${safeName}')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              <span>Đăng</span>
+            </button>
+            <button class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px;display:inline-flex;align-items:center;gap:4px" onclick="sendToProcessFromContent('${safeName}')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span>Xử lý</span>
+            </button>` : ''}
+            <button class="btn btn-sm" style="padding:4px 8px;font-size:11px;background:var(--error-bg);color:var(--error);border:1px solid rgba(192,57,43,.3);display:inline-flex;align-items:center" onclick="deleteContentFile('${safeName}')">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
           </div>
         </div>
       </div>`;
@@ -67,30 +101,46 @@ function renderContentList() {
 
   // ── Desktop: table ──
   let html = `<table class="content-table"><thead><tr>
-    <th>Tên tệp</th><th>Kích thước</th><th>Ngày tạo</th><th style="text-align:right">Thao tác</th>
+    <th>Tên tệp</th>
+    <th style="width:110px">Kích thước</th>
+    <th style="width:150px">Ngày tạo</th>
+    <th style="text-align:right;width:180px">Thao tác</th>
   </tr></thead><tbody>`;
 
   filtered.forEach(f => {
-    const date = new Date(f.mtime * 1000).toLocaleString('vi-VN');
+    const date = new Date(f.mtime * 1000).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const size = f.size >= 1048576 ? (f.size / 1048576).toFixed(2) + ' MB' : (f.size / 1024).toFixed(1) + ' KB';
-    const ext  = f.ext.replace('.', '');
-    const icon = ['mp4','mkv','avi','mov'].includes(ext) ? '🎬' : ['ass','srt'].includes(ext) ? '📝' : ext === 'json' ? '⚙️' : ['jpg','jpeg','png','webp'].includes(ext) ? '🖼️' : '📄';
+    const ext  = f.ext.replace('.', '').toLowerCase();
+    const isVideo = ['mp4','mkv','avi','mov'].includes(ext);
     const safeName = f.name.replace(/'/g, "\\'");
     html += `<tr>
       <td><div class="file-name-cell">
-        <div class="file-icon ext-${ext}">${icon}</div>
-        <div><div class="file-name">${f.name}</div><div class="file-meta">${f.path}</div></div>
+        <div class="file-icon ext-${ext}">${_contentFileSvg(ext)}</div>
+        <div style="min-width:0"><div class="file-name" title="${f.name}">${f.name}</div><div class="file-meta">${f.path || f.name}</div></div>
       </div></td>
-      <td style="white-space:nowrap">${size}</td>
-      <td style="white-space:nowrap">${date}</td>
+      <td style="white-space:nowrap;font-size:11.5px;color:var(--text)">${size}</td>
+      <td style="white-space:nowrap;font-size:11.5px;color:var(--text-muted)">${date}</td>
       <td><div class="content-actions">
         <a href="/api/files/download?path=${encodeURIComponent(f.name)}" download="${f.name}"
-           class="btn-action" title="Tải về" style="display:flex;align-items:center;justify-content:center;text-decoration:none">⬇️</a>
-        <button class="btn-action" onclick="sendToProcessFromContent('${safeName}')" title="Gửi sang Xử lý">🎬</button>
-        <button class="btn-action" onclick="sendToPublishFromContent('${safeName}')" title="Gửi sang Đăng bài">📤</button>
-        <button class="btn-action" onclick="fbMgrPrefillVideo('${safeName}')" title="Đăng lên Facebook">📘</button>
-        <button class="btn-action" onclick="renameContentFile('${safeName}')" title="Đổi tên">✏️</button>
-        <button class="btn-action btn-delete" onclick="deleteContentFile('${safeName}')" title="Xóa">🗑️</button>
+           class="btn-action" title="Tải về" style="text-decoration:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+        ${isVideo ? `
+        <button class="btn-action" onclick="sendToProcessFromContent('${safeName}')" title="Gửi sang Xử lý">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <button class="btn-action" onclick="sendToPublishFromContent('${safeName}')" title="Gửi sang Đăng bài">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        </button>
+        <button class="btn-action" onclick="fbMgrPrefillVideo('${safeName}')" title="Đăng lên Facebook Page">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+        </button>` : ''}
+        <button class="btn-action" onclick="renameContentFile('${safeName}')" title="Đổi tên">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
+        <button class="btn-action btn-delete" onclick="deleteContentFile('${safeName}')" title="Xóa">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </button>
       </div></td>
     </tr>`;
   });
@@ -187,7 +237,7 @@ function _fbMgrShowConnected(user, pages) {
   document.getElementById('fb-mgr-user-id').textContent   = 'ID: ' + (user.id || '--');
 
   const badge = document.getElementById('fb-mgr-status-badge');
-  if (badge) badge.innerHTML = '<span class="badge badge-green">✓ Đã kết nối</span>';
+  if (badge) badge.innerHTML = '<span class="badge badge-green">Đã kết nối</span>';
 
   window._fbMgrPages = pages || [];
   _fbMgrRenderPages(pages);
@@ -219,7 +269,7 @@ function _fbMgrRenderPages(pages) {
     <div class="fb-page-card ${window._fbMgrSelectedPage?.id === p.id ? 'selected' : ''}"
          id="fb-page-card-${p.id}"
          onclick="fbMgrSelectPage('${p.id}')">
-      <div class="fb-page-avatar">📄</div>
+      <div class="fb-page-avatar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
       <div style="flex:1;min-width:0">
         <div class="fb-page-name">${p.name}</div>
         <div class="fb-page-cat">${p.category || ''} · ID: ${p.id}</div>
@@ -269,15 +319,15 @@ async function fbMgrConnect() {
     });
     const data = await res.json();
     if (data.ok) {
-      toast(`✅ Kết nối thành công! Tìm thấy ${data.pages.length} Page`, 'success');
+      toast(`Kết nối thành công! Tìm thấy ${data.pages.length} Page`, 'success');
       _fbMgrShowConnected(data.user, data.pages);
     } else {
-      toast('❌ ' + (data.error || 'Kết nối thất bại'), 'error');
+      toast((data.error || 'Kết nối thất bại'), 'error');
     }
   } catch (e) {
     toast('Lỗi kết nối: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔗 Kết nối & Lấy danh sách Pages'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Kết nối & Lấy danh sách Pages'; }
   }
 }
 
@@ -303,7 +353,7 @@ function fbMgrSetVideoFile(input) {
   const el = document.getElementById('fb-post-video-path');
   if (el) el.value = file ? file.name : '';
   input.value = '';
-  if (file) toast('✅ Đã chọn: ' + file.name, 'success');
+  if (file) toast('Đã chọn: ' + file.name, 'success');
 }
 
 /* ── Facebook AI helpers (content page) ── */
@@ -321,7 +371,7 @@ async function fbMgrReadAssFile(input, mode) {
   const ta = document.getElementById(taId);
   if (ta) ta.value = plain.slice(0, 3000);
   input.value = '';
-  toast('✅ Đã nhập nội dung từ ' + file.name, 'success');
+  toast('Đã nhập nội dung từ ' + file.name, 'success');
 }
 
 function _fbExtractPlainText(text, filename) {
@@ -384,13 +434,13 @@ async function fbMgrGenerateAI(mode) {
       descEl.value = [fb.description, hashtags].filter(Boolean).join('\n\n');
     }
 
-    if (status) status.textContent = '✅ Đã tạo nội dung';
-    toast('✅ AI tạo nội dung thành công!', 'success');
+    if (status) status.textContent = 'Đã tạo nội dung thành công';
+    toast('AI tạo nội dung thành công!', 'success');
   } catch (e) {
-    if (status) status.textContent = '❌ ' + e.message;
+    if (status) status.textContent = e.message;
     toast('Lỗi AI: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '✨ Tạo nội dung bằng AI'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Tạo nội dung bằng AI'; }
   }
 }
 
@@ -437,7 +487,7 @@ async function fbMgrPostVideo() {
 
   const btn = document.getElementById('btn-fb-post-video');
   const setBusy = (busy) => {
-    if (btn) { btn.disabled = busy; btn.textContent = busy ? '⏳ Đang đăng...' : '🚀 Đăng Video lên Facebook'; }
+    if (btn) { btn.disabled = busy; btn.textContent = busy ? 'Đang đăng...' : 'Đăng Video lên Facebook'; }
   };
   const logBox = document.getElementById('fb-post-log');
   if (logBox) { logBox.style.display = 'block'; logBox.innerHTML = ''; }
@@ -460,7 +510,7 @@ async function fbMgrPostVideo() {
         const d = await r.json();
         if (d.is_vertical_9_16 && d.ok) {
           postType = 'reel';
-          _fbLog(`🎬 Video ${d.width}x${d.height} → đăng dạng Reel`, 'info');
+          _fbLog(`Video ${d.width}x${d.height} → đăng dạng Reel`, 'info');
         } else {
           postType = 'video';
           if (d.error) _fbLog(`ℹ ${d.error} → đăng video thường`, 'info');
@@ -495,7 +545,7 @@ async function fbMgrPostVideo() {
     return form;
   };
 
-  _fbLog(`🚀 Đang đăng lên Facebook (${postType === 'reel' ? 'Reel' : 'Video'})...`, 'info');
+  _fbLog(`Đang đăng lên Facebook (${postType === 'reel' ? 'Reel' : 'Video'})...`, 'info');
 
   try {
     let form;
@@ -504,7 +554,7 @@ async function fbMgrPostVideo() {
 
     for (let attempt = 1; attempt <= 5; attempt++) {
       const result = await _fbMgrUploadOnce(endpoint, form);
-      if (result.success) { toast('✅ Đăng Facebook thành công!', 'success', 6000); return; }
+      if (result.success) { toast('Đăng Facebook thành công!', 'success', 6000); return; }
       if (result.tokenError) {
         if (typeof _pFbShowTokenModal === 'function') {
           const action = await _pFbShowTokenModal(result.errorMsg || '');
@@ -512,15 +562,15 @@ async function fbMgrPostVideo() {
           if (action === 'skip')   { _fbLog('⏭ Bỏ qua video này', 'warning'); return; }
           return; // cancel
         } else {
-          _fbLog('❌ Token hết hạn — kết nối lại Facebook', 'error');
-          toast('⚠ Token Facebook hết hạn — kết nối lại', 'warning', 6000);
+          _fbLog('Token hết hạn — kết nối lại Facebook', 'error');
+          toast('Token Facebook hết hạn — vui lòng kết nối lại', 'warning', 6000);
           return;
         }
       }
       if (result.errorMsg) toast('Lỗi: ' + result.errorMsg, 'error');
       return;
     }
-    _fbLog('❌ Đã thử lại 5 lần nhưng không thành công', 'error');
+    _fbLog('Đã thử lại 5 lần nhưng không thành công', 'error');
   } finally {
     setBusy(false);
   }
@@ -539,7 +589,7 @@ async function _fbMgrUploadOnce(endpoint, form) {
         tokenError = !!errData.token_error;
       } catch (_) {}
       if (res.status === 401) tokenError = true;
-      _fbLog('❌ ' + errMsg, 'error');
+      _fbLog(errMsg, 'error');
       out.errorMsg = errMsg; out.tokenError = tokenError;
       return out;
     }
@@ -559,7 +609,7 @@ async function _fbMgrUploadOnce(endpoint, form) {
         try {
           const d = JSON.parse(t);
           if (d.log) _fbLog(d.log, d.level || 'info');
-          if (d.url) _fbLog('🔗 ' + d.url, 'success');
+          if (d.url) _fbLog(d.url, 'success');
           if (d.ok)  gotOk = true;
           if (d.token_error) { out.tokenError = true; out.errorMsg = d.error || d.log || 'Token hết hạn'; }
           else if (d.error)  { out.errorMsg = d.error; }
@@ -569,7 +619,7 @@ async function _fbMgrUploadOnce(endpoint, form) {
     out.success = gotOk;
     return out;
   } catch (e) {
-    _fbLog('❌ ' + e.message, 'error');
+    _fbLog(e.message, 'error');
     out.errorMsg = e.message;
     return out;
   }
@@ -594,17 +644,17 @@ async function fbMgrPostText() {
     });
     const data = await res.json();
     if (data.ok) {
-      toast('✅ Đã đăng bài viết thành công!', 'success');
+      toast('Đã đăng bài viết thành công!', 'success');
       document.getElementById('fb-post-text-msg').value = '';
       document.getElementById('fb-post-text-link').value = '';
       fbMgrLoadPosts();
     } else {
-      toast('❌ ' + (data.error || 'Đăng thất bại'), 'error');
+      toast((data.error || 'Đăng thất bại'), 'error');
     }
   } catch (e) {
     toast('Lỗi: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📝 Đăng bài viết'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Đăng bài viết'; }
   }
 }
 
@@ -628,14 +678,14 @@ async function fbMgrLoadPosts() {
       const isTokenErr = /190|463|expired|OAuthException/i.test(errMsg);
       if (isTokenErr) {
         list.innerHTML = `<div style="padding:12px;font-size:12px;text-align:center">
-          <div style="color:var(--warning,#f39c12);font-size:20px;margin-bottom:8px">⚠️</div>
+          <div style="color:var(--warning,#f39c12);margin-bottom:8px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
           <div style="font-weight:600;margin-bottom:4px">Token Facebook đã hết hạn</div>
           <div style="color:var(--text-muted);font-size:11px;margin-bottom:12px">Cần gia hạn hoặc kết nối lại để xem bài đăng</div>
-          <button class="btn btn-primary btn-sm" onclick="fbMgrRefreshToken()" style="font-size:11px">🔄 Gia hạn token</button>
+          <button class="btn btn-primary btn-sm" onclick="fbMgrRefreshToken()" style="font-size:11px">Gia hạn token</button>
         </div>`;
       } else {
         list.innerHTML = `<div style="padding:12px;font-size:11px;color:var(--error,#e74c3c);word-break:break-word">
-          ❌ ${errMsg}
+          ${errMsg}
           ${data.debug_errors ? '<br><br><b>Chi tiết:</b><br>' + data.debug_errors.map(e => `• ${JSON.stringify(e)}`).join('<br>') : ''}
         </div>`;
       }
@@ -649,16 +699,16 @@ async function fbMgrLoadPosts() {
       const msg  = (p.message || p.story || '(Không có nội dung)').slice(0, 120);
       const date = new Date(p.created_time).toLocaleString('vi-VN');
       // likes/comments returned as {data:[...]} array or summary object
-      const likes = p.likes?.summary?.total_count ?? p.likes?.data?.length ?? (p.likes ? '✓' : '--');
-      const cmts  = p.comments?.summary?.total_count ?? p.comments?.data?.length ?? (p.comments ? '✓' : '--');
+      const likes = p.likes?.summary?.total_count ?? p.likes?.data?.length ?? (p.likes ? '0' : '--');
+      const cmts  = p.comments?.summary?.total_count ?? p.comments?.data?.length ?? (p.comments ? '0' : '--');
       const url   = p.permalink_url || '#';
       return `<div class="fb-post-item">
         <div class="fb-post-msg">${msg}${(p.message||'').length > 120 ? '...' : ''}</div>
         <div class="fb-post-meta">
-          <span>📅 ${date}</span>
-          <span>👍 ${likes}</span>
-          <span>💬 ${cmts}</span>
-          ${url !== '#' ? `<a href="${url}" target="_blank" style="color:var(--accent)">🔗 Xem</a>` : ''}
+          <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:2px"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${date}</span>
+          <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>${likes}</span>
+          <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${cmts}</span>
+          ${url !== '#' ? `<a href="${url}" target="_blank" style="color:var(--accent)">Xem</a>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -674,17 +724,17 @@ async function fbMgrRefreshToken() {
     const res  = await fetch('/api/facebook/refresh_token', { method: 'POST' });
     const data = await res.json();
     if (data.ok) {
-      toast(data.message || '✅ Token đã được gia hạn!', 'success', 5000);
+      toast(data.message || 'Token đã được gia hạn thành công!', 'success', 5000);
       fbMgrLoadPosts();
     } else if (data.need_reauth) {
       if (list) list.innerHTML = `<div style="padding:12px;font-size:12px;text-align:center">
-        <div style="color:var(--danger,#e74c3c);font-size:20px;margin-bottom:8px">❌</div>
+        <div style="color:var(--error,#ef4444);margin-bottom:8px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div>
         <div style="font-weight:600;margin-bottom:4px">Token hết hạn hoàn toàn</div>
         <div style="color:var(--text-muted);font-size:11px;margin-bottom:12px">Cần nhập token mới từ Graph API Explorer</div>
-        <a href="https://developers.facebook.com/tools/explorer/" target="_blank" class="btn btn-primary btn-sm" style="font-size:11px">🔗 Mở Graph API Explorer</a>
+        <a href="https://developers.facebook.com/tools/explorer/" target="_blank" class="btn btn-primary btn-sm" style="font-size:11px">Mở Graph API Explorer</a>
       </div>`;
     } else {
-      toast('❌ ' + (data.error || 'Gia hạn thất bại'), 'error', 6000);
+      toast((data.error || 'Gia hạn thất bại'), 'error', 6000);
       if (list) list.innerHTML = `<div style="padding:12px;font-size:11px;color:var(--error,#e74c3c)">${data.error || 'Gia hạn thất bại'}</div>`;
     }
   } catch (e) {
@@ -758,7 +808,7 @@ async function ytMgrLoadVideos(pageToken) {
   try {
     const res  = await fetch(url);
     const data = await res.json();
-    if (!data.ok) { grid.innerHTML = `<div style="padding:40px;text-align:center;color:var(--error)">❌ ${data.error}</div>`; return; }
+    if (!data.ok) { grid.innerHTML = `<div style="padding:40px;text-align:center;color:var(--error)">${data.error}</div>`; return; }
 
     let videos = data.videos || [];
     if (privacy) videos = videos.filter(v => v.privacy === privacy);
@@ -775,13 +825,13 @@ async function ytMgrLoadVideos(pageToken) {
     if (info) info.textContent = `${videos.length} video`;
 
     if (!videos.length) {
-      grid.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)">📭 Không có video nào</div>';
+      grid.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)">Chưa có video nào trong danh sách</div>';
       return;
     }
 
     grid.innerHTML = videos.map(v => _ytMgrVideoCard(v)).join('');
   } catch (e) {
-    grid.innerHTML = `<div style="padding:40px;text-align:center;color:var(--error)">❌ Lỗi: ${e.message}</div>`;
+    grid.innerHTML = `<div style="padding:40px;text-align:center;color:var(--error)">Lỗi: ${e.message}</div>`;
   }
 }
 
@@ -813,7 +863,7 @@ function _fmtNum(n) {
 }
 
 function _ytMgrVideoCard(v) {
-  const privacyLabel = { public:'🌐 Công khai', unlisted:'🔗 Không công khai', private:'🔒 Riêng tư' }[v.privacy] || v.privacy;
+  const privacyLabel = { public:'Công khai', unlisted:'Không công khai', private:'Riêng tư' }[v.privacy] || v.privacy;
   const privacyCls   = { public:'yt-privacy-public', unlisted:'yt-privacy-unlisted', private:'yt-privacy-private' }[v.privacy] || '';
   const dur   = _fmtDuration(v.duration);
   const date  = v.published_at ? new Date(v.published_at).toLocaleDateString('vi-VN') : '';
@@ -844,10 +894,10 @@ function _ytMgrVideoCard(v) {
     <div class="yt-video-info">
       <div class="yt-video-title" title="${safeTitle}">${v.title || '(Không có tiêu đề)'}</div>
       <div class="yt-video-meta">
-        <span>👁 ${_fmtNum(v.views)}</span>
-        <span>👍 ${_fmtNum(v.likes)}</span>
-        <span>💬 ${_fmtNum(v.comments)}</span>
-        ${date ? `<span>📅 ${date}</span>` : ''}
+        <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>${_fmtNum(v.views)}</span>
+        <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>${_fmtNum(v.likes)}</span>
+        <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>${_fmtNum(v.comments)}</span>
+        ${date ? `<span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:2px"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${date}</span>` : ''}
       </div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
         ${licBadge}${hdBadge}${capBadge}${kidsBadge}
@@ -855,11 +905,11 @@ function _ytMgrVideoCard(v) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
         <span class="yt-privacy-badge ${privacyCls}">${privacyLabel}</span>
         <div class="yt-video-actions">
-          <a href="${v.url}" target="_blank" class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px" title="Xem trên YouTube">🔗</a>
+          <a href="${v.url}" target="_blank" class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px" title="Xem trên YouTube"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></a>
           <button class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px" title="Chỉnh sửa"
-            onclick="ytMgrOpenEdit('${safeId}')">✏️</button>
+            onclick="ytMgrOpenEdit('${safeId}')" title="Chỉnh sửa"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
           <button class="btn btn-sm btn-danger" style="padding:4px 8px;font-size:11px" title="Xóa"
-            onclick="ytMgrDeleteVideo('${safeId}', '${safeTitle}')">🗑</button>
+            onclick="ytMgrDeleteVideo('${safeId}', '${safeTitle}')" title="Xóa"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         </div>
       </div>
     </div>
@@ -882,7 +932,7 @@ async function ytMgrLoadVideos(pageToken) {
   try {
     const res  = await fetch(url);
     const data = await res.json();
-    if (!data.ok) { grid.innerHTML = `<div style="padding:40px;text-align:center;color:var(--error)">❌ ${data.error}</div>`; return; }
+    if (!data.ok) { grid.innerHTML = `<div style="padding:40px;text-align:center;color:var(--error)">${data.error}</div>`; return; }
 
     let videos = data.videos || [];
     // Cache for edit
@@ -900,12 +950,12 @@ async function ytMgrLoadVideos(pageToken) {
     if (info) info.textContent = `${videos.length} video`;
 
     if (!videos.length) {
-      grid.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)">📭 Không có video nào</div>';
+      grid.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)">Chưa có video nào trong danh sách</div>';
       return;
     }
     grid.innerHTML = videos.map(v => _ytMgrVideoCard(v)).join('');
   } catch (e) {
-    grid.innerHTML = `<div style="padding:40px;text-align:center;color:var(--error)">❌ Lỗi: ${e.message}</div>`;
+    grid.innerHTML = `<div style="padding:40px;text-align:center;color:var(--error)">Lỗi: ${e.message}</div>`;
   }
 }
 
@@ -955,16 +1005,16 @@ async function ytMgrSaveEdit() {
     });
     const data = await res.json();
     if (data.ok) {
-      toast('✅ Đã cập nhật video thành công', 'success');
+      toast('Đã cập nhật video thành công', 'success');
       ytMgrCloseEdit();
       ytMgrLoadVideos();
     } else {
-      toast('❌ ' + (data.error || 'Cập nhật thất bại'), 'error');
+      toast((data.error || 'Cập nhật thất bại'), 'error');
     }
   } catch (e) {
     toast('Lỗi: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '💾 Lưu thay đổi'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Lưu thay đổi'; }
   }
 }
 
@@ -978,10 +1028,10 @@ async function ytMgrDeleteVideo(videoId, title) {
     });
     const data = await res.json();
     if (data.ok) {
-      toast('✅ Đã xóa video', 'success');
+      toast('Đã xóa video thành công', 'success');
       ytMgrLoadVideos();
     } else {
-      toast('❌ ' + (data.error || 'Xóa thất bại'), 'error');
+      toast((data.error || 'Xóa thất bại'), 'error');
     }
   } catch (e) {
     toast('Lỗi: ' + e.message, 'error');
@@ -1041,7 +1091,7 @@ function ttMgrSaveUsername() {
   const username = (el?.value || '').trim().replace(/^@/, '');
   try {
     localStorage.setItem(_TT_MGR_KEY, username);
-    if (username) toast(`💾 Đã lưu username: @${username}`, 'success', 3000);
+    if (username) toast(`Đã lưu username: @${username}`, 'success', 3000);
   } catch (_) {}
 }
 

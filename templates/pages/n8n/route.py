@@ -606,7 +606,7 @@ def n8n_flow_run():
                     payload = {"input": cfg.get("input", ""), "model": cfg.get("model", "openai/tts-1"),
                                "voice": cfg.get("voice", "")}
                 elif ntype == "ai.tts_file":
-                    payload = {"text": cfg.get("text", ""), "tts_engine": cfg.get("tts_engine", "edge-tts"),
+                    payload = {"text": cfg.get("text", ""), "tts_engine": "vieneu",
                                "tts_voice": cfg.get("tts_voice", "")}
                 elif ntype == "ai.stt":
                     payload = {"model": cfg.get("model", "openai/whisper-1")}

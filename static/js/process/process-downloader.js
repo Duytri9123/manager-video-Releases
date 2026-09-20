@@ -32,15 +32,17 @@ async function _runStep1QueueDownload() {
           })
         });
         let data;
+        const body = await res.text();
         try {
-          data = await res.json();
+          data = body ? JSON.parse(body) : {};
         } catch (jsonErr) {
-          let txt = '';
-          try { txt = await res.text(); } catch(_) {}
-          throw new Error(txt.slice(0, 150) || 'Lỗi HTTP ' + res.status);
+          const plain = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          throw new Error(plain.slice(0, 180) || ('Máy chủ trả dữ liệu không hợp lệ (HTTP ' + res.status + ')'));
         }
         if (!res.ok || !data.ok) {
-          throw new Error(data.error || 'Tải thất bại');
+          const downloadError = new Error(data.error || ('Tải thất bại (HTTP ' + res.status + ')'));
+          downloadError.isDownloadError = true;
+          throw downloadError;
         }
         if (data.ok) {
           pending.status = 'ready';
@@ -87,25 +89,6 @@ async function _runStep1QueueDownload() {
             procWizGo(3);
             startProcessVideo();
           }
-        } else {
-          pending.status = 'error';
-          pending.desc = 'Lỗi: ' + (data.error || 'Unknown error');
-          _step1Log('❌ Tải thất bại: ' + (data.error || 'Unknown error'), 'error');
-          toast('❌ Tải video lỗi: ' + (data.error || ''), 'error');
-
-          // Check if this is a cookie/bot/lock error
-          const errMsg = (data.error || '').toLowerCase();
-          const isCookieErr = errMsg.includes('confirm you’re not a bot') ||
-                              errMsg.includes('confirm you\'re not a bot') ||
-                              errMsg.includes('sign in to confirm') ||
-                              errMsg.includes('--cookies') ||
-                              errMsg.includes('cookie database') ||
-                              errMsg.includes('cookies for the authentication');
-          if (isCookieErr) {
-            if (typeof showYtdlpCookieModal === 'function') {
-              showYtdlpCookieModal(data.error, pending);
-            }
-          }
         }
       } else {
         // File type — already on disk, just mark ready
@@ -151,9 +134,22 @@ async function _runStep1QueueDownload() {
       }
     } catch (e) {
       pending.status = 'error';
-      pending.desc = 'Lỗi kết nối';
-      _step1Log('❌ Lỗi kết nối: ' + e.message, 'error');
-      toast('❌ Lỗi kết nối tải video', 'error');
+      const message = String(e.message || 'Không rõ lỗi');
+      pending.desc = 'Lỗi: ' + message;
+      _step1Log('❌ Tải video thất bại: ' + message, 'error');
+      toast('❌ Tải video lỗi: ' + message, 'error');
+      const low = message.toLowerCase();
+      const isCookieErr = low.includes('confirm you’re not a bot') ||
+                          low.includes('confirm you\'re not a bot') ||
+                          low.includes('sign in to confirm') ||
+                          low.includes('--cookies') ||
+                          low.includes('cookie database') ||
+                          low.includes('cookies for the authentication') ||
+                          low.includes('cookies may be invalid');
+      if (isCookieErr && typeof showYtdlpCookieModal === 'function') {
+        window._step1DownloadPaused = true;
+        showYtdlpCookieModal(message, pending);
+      }
     } finally {
       window._step1Downloading = false;
       _renderBatchQueue();

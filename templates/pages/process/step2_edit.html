@@ -1,77 +1,129 @@
-  <!-- ═════════════════ STEP 2: Xem & Chỉnh sửa (sau khi tải video) ═════════════════ -->
-  <section class="proc-step" data-proc-step="2" style="display:none">
+<!-- ═════════════════ STEP 2: Xem & Chỉnh sửa (sau khi tải video) ═════════════════ -->
+<section class="proc-step" data-proc-step="2" style="display:none">
 
-    <!-- ── Scoped styles cho editor (light theme, theo biến của app) ──────── -->
-    
+  <!-- ── Scoped styles cho editor (light theme, theo biến của app) ──────── -->
 
-    <div class="pe2-editor">
 
-      <!-- ── Editor body: panel (phải/inspector) | center (trái/preview) ── -->
-      <div class="pe2-body">
+  <div class="pe2-editor">
 
-        <!-- RIGHT PANEL: Inspector & Settings -->
-        <div class="pe2-panel">
+    <!-- ── Editor body: inspector | preview ── -->
+    <div class="pe2-body">
+      <!-- RIGHT PANEL: Inspector & Settings -->
+      <div class="pe2-panel" id="pe2-panel">
+        <div class="pe2-panel-main">
           <div class="pe2-panel-head">
             <div style="display:flex;align-items:center;gap:8px">
               <span id="pe2-head-icon" style="color:var(--accent,#3b82f6);display:flex;align-items:center">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  <path d="M8 9h8" />
+                  <path d="M8 13h5" />
+                </svg>
               </span>
               <span class="pe2-panel-title">Phụ đề &amp; Dịch</span>
             </div>
             <div class="pe2-panel-actions" onclick="event.stopPropagation()">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="procRestoreDefaults()" title="Khôi phục cài đặt mặc định" style="display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 8px">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                <span>Khôi phục</span>
+              <div class="pe2-view-switcher" title="Chế độ hiển thị">
+                <button type="button" class="pe2-view-btn active" data-pe2layout="standard"
+                  onclick="pe2SetLayoutMode('standard')" title="Chuẩn (Cột bên + Xem trước)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="18" rx="1" />
+                    <rect x="12" y="3" width="9" height="18" rx="1" />
+                  </svg>
+                  <span>Chuẩn</span>
+                </button>
+                <button type="button" class="pe2-view-btn" data-pe2layout="expanded"
+                  onclick="pe2SetLayoutMode('expanded')" title="Tập trung Xem trước (Inspector thu gọn)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="9" y1="3" x2="9" y2="21" />
+                  </svg>
+                  <span>Mở rộng</span>
+                </button>
+                <button type="button" class="pe2-view-btn" data-pe2layout="dual" onclick="pe2SetLayoutMode('dual')"
+                  title="Song song (Track + Inspector)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="5" height="18" rx="1" />
+                    <rect x="10" y="3" width="11" height="18" rx="1" />
+                  </svg>
+                  <span>Song song</span>
+                </button>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="procRestoreDefaults()"
+                title="Khôi phục cài đặt mặc định" style="display:inline-flex;align-items:center;gap:4px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
               </button>
-              <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(2)" title="Lưu cấu hình Bước 2 (Khung hình, Subtitle, Overlays...)" style="display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 8px">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                <span>Lưu Bước 2</span>
+              <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(2)"
+                title="Lưu cấu hình Bước 2 (Khung hình, Subtitle, Overlays...)"
+                style="display:inline-flex;align-items:center;gap:4px">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
               </button>
-              <label class="toggle-wrap" title="Ghi phụ đề vào video" style="margin:0">
-                <input type="checkbox" class="toggle-input" id="proc-burn" checked>
-                <div class="toggle"></div>
-                <span class="toggle-label text-xs font-semibold">Ghi Sub</span>
-              </label>
+
             </div>
           </div>
 
-          <!-- Modern Horizontal Tabs with SVG Icons -->
-          <div class="pe2-tabs">
-            <button type="button" class="pe2-tab active" data-pe2tab="subs" onclick="pe2Tool('subs')">
-              <span class="ic">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
-              </span>
-              <span>Phụ đề</span>
+          <!-- Named presets: compact 1-line bar + collapsible drawer with matching 32px heights -->
+          <div class="pe2-profile-compact-bar">
+            <div class="pe2-profile-select-wrap">
+              <select id="pe2-profile-select" title="Cấu hình Bước 2 đã lưu"
+                onchange="pe2ApplyNamedProfile(this.value)">
+                <option value="">Cấu hình đã lưu…</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm proc-action-icon-btn"
+                onclick="pe2ApplyNamedProfile()" title="Áp dụng cấu hình">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                </svg>
+              </button>
+              <button type="button" class="btn btn-sm btn-icon-danger proc-action-icon-btn"
+                onclick="pe2DeleteNamedProfile()" title="Xóa cấu hình">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+              </button>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm btn-new-preset" id="pe2-profile-toggle-drawer"
+              onclick="pe2ToggleProfileDrawer()" title="Lưu cấu hình mới">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Mới</span>
             </button>
-            <button type="button" class="pe2-tab" data-pe2tab="ai" onclick="pe2Tool('ai')">
-              <span class="ic">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
-              </span>
-              <span>AI</span>
-            </button>
-            <button type="button" class="pe2-tab" data-pe2tab="frame" onclick="pe2Tool('frame')">
-              <span class="ic">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
-              </span>
-              <span>Khung</span>
-            </button>
-            <button type="button" class="pe2-tab" data-pe2tab="overlay" onclick="pe2Tool('overlay')">
-              <span class="ic">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-              </span>
-              <span>Chữ / Khối</span>
-            </button>
-            <button type="button" class="pe2-tab" data-pe2tab="audio" onclick="pe2Tool('audio')">
-              <span class="ic">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-              </span>
-              <span>Âm thanh</span>
-            </button>
-            <button type="button" class="pe2-tab" data-pe2tab="tracks" onclick="pe2Tool('tracks')">
-              <span class="ic">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-              </span>
-              <span>Lớp / Track</span>
+          </div>
+          <div class="pe2-profile-drawer" id="pe2-profile-save-drawer" style="display:none">
+            <select id="pe2-profile-type" title="Loại video">
+              <option value="Dọc ngắn">Dọc ngắn</option>
+              <option value="Ngang dài">Ngang dài</option>
+              <option value="Review">Review</option>
+              <option value="Phỏng vấn">Phỏng vấn</option>
+              <option value="Kể chuyện">Kể chuyện</option>
+              <option value="Tùy chỉnh">Tùy chỉnh</option>
+            </select>
+            <input type="text" id="pe2-profile-name" placeholder="Tên cấu hình (vd: Dọc có sub)…" title="Tên cấu hình">
+            <button type="button" class="btn btn-primary btn-sm" onclick="pe2SaveNamedProfile()" title="Lưu cấu hình">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+              </svg>
+              <span>Lưu</span>
             </button>
           </div>
 
@@ -81,14 +133,13 @@
             <div class="pe2-pane" data-pe2pane="tracks">
               <div class="pe2-grp" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
                 <span>Thứ tự hiển thị (Z-Index)</span>
-                <button type="button" class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 8px;height:24px" onclick="window._pe2LayerOrder=['video','frame','blur','logo','overlays','subs'];window._pe2TrackVisibility={video:true,frame:true,blur:true,logo:true,overlays:true,subs:true};if(window.pe2RenderTracksUI)window.pe2RenderTracksUI();if(typeof framePreviewUpdate==='function')framePreviewUpdate();toast('✓ Đã khôi phục thứ tự lớp mặc định','info');">
+                <button type="button" class="btn btn-secondary btn-sm"
+                  style="font-size:10px;padding:2px 8px;height:24px"
+                  onclick="window._pe2LayerOrder=['video','frame','blur','logo','overlays','subs'];window._pe2TrackVisibility={video:true,frame:true,blur:true,logo:true,overlays:true,subs:true};if(window.pe2RenderTracksUI)window.pe2RenderTracksUI();if(typeof framePreviewUpdate==='function')framePreviewUpdate();toast('✓ Đã khôi phục thứ tự lớp mặc định','info');">
                   ↺ Mặc định
                 </button>
               </div>
-              <p style="font-size:11px;color:var(--text-muted);margin:0 0 12px 0;line-height:1.4">
-                Lớp ở <strong>trên cùng</strong> (▲) sẽ nằm đè lên các lớp ở dưới (▼). Dùng ▲ / ▼ để đổi thứ tự, 👁 để ẩn/hiện.
-              </p>
-              <div id="pe2-tracks-list" style="display:flex;flex-direction:column;gap:6px"></div>
+              <div id="pe2-tracks-list" style="display:flex;flex-direction:column;gap:4px"></div>
             </div>
 
             <!-- ══ PANE: Phụ đề & Dịch ══ -->
@@ -96,81 +147,117 @@
 
               <!-- Chế độ video: lưới tỉ lệ -->
               <div class="pe2-grp">Chế độ video (Aspect Ratio)</div>
-              <select id="proc-preview-aspect" onchange="_onPreviewAspectChange();if(window._syncAspectBtns)_syncAspectBtns()" style="display:none">
+              <select id="proc-preview-aspect"
+                onchange="_onPreviewAspectChange();if(window._syncAspectBtns)_syncAspectBtns()" style="display:none">
                 <option value="auto" selected>Tự nhận diện</option>
                 <option value="16x9">16:9 (ngang)</option>
                 <option value="9x16">9:16 (dọc)</option>
               </select>
               <div class="pe2-aspect-grid">
-                <button type="button" class="pe2-aspect-btn active" data-pe2aspect="auto" onclick="pe2SetAspect('auto')">
+                <button type="button" class="pe2-aspect-btn active" data-pe2aspect="auto"
+                  onclick="pe2SetAspect('auto')">
                   <span class="box" style="width:22px;height:16px"></span>
-                  <span>Tự nhận diện</span>
+                  <span>Auto</span>
                 </button>
                 <button type="button" class="pe2-aspect-btn" data-pe2aspect="16x9" onclick="pe2SetAspect('16x9')">
                   <span class="box" style="width:26px;height:15px"></span>
-                  <span>16:9 (Ngang)</span>
+                  <span>16:9</span>
                 </button>
                 <button type="button" class="pe2-aspect-btn" data-pe2aspect="9x16" onclick="pe2SetAspect('9x16')">
                   <span class="box" style="width:13px;height:22px"></span>
-                  <span>9:16 (Dọc)</span>
+                  <span>9:16</span>
                 </button>
               </div>
-              <label class="check-item" style="margin:6px 0 0;font-size:12px;gap:6px" title="Khi chuyển ngang↔dọc: lấp viền bằng nền mờ của video thay vì viền đen">
-                <input type="checkbox" id="proc-aspect-blur-bg" onchange="if(window._onPreviewAspectChange)_onPreviewAspectChange()">
-                <span>Nền mờ trên/dưới (thay viền đen)</span>
-              </label>
 
               <div class="pe2-grp">Nội dung mẫu (Preview Content)</div>
               <input type="text" id="sub-preview-sample" value="Đây là phụ đề tiếng Việt mẫu"
                 style="width:100%;font-size:12px;height:38px;box-sizing:border-box" oninput="subPreviewUpdate()">
 
               <div class="pe2-grp">Tùy chọn xử lý (Options)</div>
-              <div class="pe2-opts mb-8">
-                <label class="pe2-optcard">
+              <div class="pe2-opts pe2-opts-compact mb-8">
+                <label class="pe2-optcard" title="Dịch ngôn ngữ phụ đề">
                   <input type="checkbox" id="proc-translate-subs" checked>
                   <span class="pe2-optcard-ic">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="2" y1="12" x2="22" y2="12" />
+                      <path
+                        d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                    </svg>
                   </span>
-                  <span class="pe2-optcard-lbl">Dịch tiếng</span>
+                  <span class="pe2-optcard-lbl">Dịch</span>
                   <span class="pe2-optcard-badge">✓</span>
                 </label>
-                <label class="pe2-optcard">
+                <label class="pe2-optcard" title="Ghi phụ đề vào video">
                   <input type="checkbox" id="proc-burn-vi" checked>
                   <span class="pe2-optcard-ic">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
                   </span>
-                  <span class="pe2-optcard-lbl">Ghi phụ đề</span>
+                  <span class="pe2-optcard-lbl">Ghi sub</span>
                   <span class="pe2-optcard-badge">✓</span>
                 </label>
-                <label class="pe2-optcard">
+                <label class="pe2-optcard" title="Che phụ đề gốc">
                   <input type="checkbox" id="proc-blur-original" checked>
                   <span class="pe2-optcard-ic">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
                   </span>
-                  <span class="pe2-optcard-lbl">Che sub gốc</span>
+                  <span class="pe2-optcard-lbl">Che gốc</span>
+                  <span class="pe2-optcard-badge">✓</span>
+                </label>
+                <label class="pe2-optcard" title="Lấp viền bằng nền mờ khi đổi tỉ lệ ngang và dọc">
+                  <input type="checkbox" id="proc-aspect-blur-bg"
+                    onchange="if(window._onPreviewAspectChange)_onPreviewAspectChange()">
+                  <span class="pe2-optcard-ic">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <line x1="3" y1="9" x2="21" y2="9" />
+                      <line x1="3" y1="15" x2="21" y2="15" />
+                    </svg>
+                  </span>
+                  <span class="pe2-optcard-lbl">Nền mờ</span>
                   <span class="pe2-optcard-badge">✓</span>
                 </label>
               </div>
 
               <div class="pe2-grp">Kiểu chữ &amp; Định dạng (Typography)</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
-                <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="proc-font-size" min="1" max="20" step="0.5" value="4.5" oninput="subPreviewUpdate()"></div>
-                <div class="field"><label>Vị trí</label><select id="proc-sub-pos" onchange="subPreviewUpdate()"><option value="bottom" selected>Dưới (Bottom)</option><option value="top">Trên (Top)</option></select></div>
-                <div class="field" style="grid-column:1 / -1"><label>Màu chữ</label>
+                <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="proc-font-size" min="1" max="20"
+                    step="0.5" value="4.5" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Vị trí</label><select id="proc-sub-pos" onchange="subPreviewUpdate()">
+                    <option value="bottom" selected>Dưới (Bottom)</option>
+                    <option value="top">Trên (Top)</option>
+                  </select></div>
+                <div class="field"><label>Màu chữ</label>
                   <div style="display:flex;gap:4px;align-items:center;height:38px">
-                    <select id="proc-font-color" onchange="subPreviewUpdate();_syncColorPicker()" style="flex:1;font-size:12px;height:38px"><option value="white" selected>Trắng</option><option value="yellow">Vàng</option><option value="cyan">Cyan</option><option value="custom">Tùy chỉnh</option></select>
-                    <input type="color" id="proc-font-color-picker" value="#ffffff" style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer;flex-shrink:0;box-sizing:border-box" oninput="_onColorPickerChange()">
+                    <input type="color" id="proc-font-color-picker" value="#ffffff"
+                      style="width:38px;height:38px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer;flex-shrink:0;box-sizing:border-box"
+                      oninput="if(document.getElementById('proc-font-color-hex'))document.getElementById('proc-font-color-hex').value=this.value;_onColorPickerChange()">
+                    <input type="text" id="proc-font-color-hex" value="#ffffff"
+                      style="flex:1;font-family:monospace;font-size:12px;height:38px;box-sizing:border-box;min-width:0;border-radius:6px"
+                      oninput="document.getElementById('proc-font-color-picker').value=this.value;_onColorPickerChange()">
+                    <select id="proc-font-color" style="display:none"><option value="custom" selected>custom</option></select>
                   </div>
                 </div>
-                <div class="field"><label>Đáy (%)</label><input type="number" id="proc-margin-v" min="0" max="50" step="0.5" value="3" oninput="subPreviewUpdate()"></div>
-                <div class="field"><label>Độ dày viền</label><input type="number" id="proc-outline-width" min="0" max="10" step="1" value="2" oninput="subPreviewUpdate()"></div>
-                <div class="field" style="grid-column:1 / -1;display:flex;align-items:center;gap:8px;margin-top:4px">
-                  <label class="toggle-wrap" style="margin:0">
-                    <input type="checkbox" class="toggle-input" id="proc-font-bold" checked onchange="subPreviewUpdate()">
-                    <div class="toggle"></div>
-                    <span class="toggle-label text-sm" style="font-weight:600">Chữ in đậm (Bold)</span>
-                  </label>
+                <div class="field"><label>Kiểu chữ</label>
+                  <select id="proc-font-weight" style="height:38px;font-size:12px" onchange="_onSubFontWeightChange(this.value)">
+                    <option value="bold" selected>In đậm (Bold)</option>
+                    <option value="regular">Thường (Regular)</option>
+                  </select>
+                  <input type="checkbox" class="toggle-input" id="proc-font-bold" checked style="display:none"
+                    onchange="subPreviewUpdate();if(window._syncSubFontWeightUI)_syncSubFontWeightUI()">
                 </div>
+                <div class="field"><label>Đáy (%)</label><input type="number" id="proc-margin-v" min="0" max="50"
+                    step="0.5" value="3" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Độ dày viền</label><input type="number" id="proc-outline-width" min="0"
+                    max="10" step="1" value="2" oninput="subPreviewUpdate()"></div>
               </div>
             </div>
 
@@ -181,7 +268,8 @@
                 <div style="margin-bottom:8px">
                   <div class="field" style="margin-bottom:8px">
                     <label>Mô hình AI đọc video</label>
-                    <select id="proc-ai-video-nine-model-step2" onfocus="loadProcAiVideoModels()" onchange="if(typeof _syncAiVideoModel==='function')_syncAiVideoModel(this.value)">
+                    <select id="proc-ai-video-nine-model-step2" onfocus="loadProcAiVideoModels()"
+                      onchange="if(typeof _syncAiVideoModel==='function')_syncAiVideoModel(this.value)">
                       <option value="none">Tắt (Không đọc)</option>
                     </select>
                   </div>
@@ -197,12 +285,19 @@
                   </div>
                 </div>
                 <div class="btn-group" style="gap:8px;align-items:center">
-                  <button class="btn btn-primary btn-sm" id="proc-ai-video-btn" onclick="procAnalyzeVideoAI({force:true})" style="display:inline-flex;align-items:center;gap:4px">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg>
+                  <button class="btn btn-primary btn-sm" id="proc-ai-video-btn"
+                    onclick="procAnalyzeVideoAI({force:true})" style="display:inline-flex;align-items:center;gap:4px">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="11" width="18" height="10" rx="2" />
+                      <circle cx="12" cy="5" r="2" />
+                      <path d="M12 7v4" />
+                    </svg>
                     <span>Phân tích video</span>
                   </button>
                   <label class="toggle-wrap" title="Khi bật, dùng vùng che AI đề xuất cho video này">
-                    <input type="checkbox" class="toggle-input" id="proc-use-ai-analysis" onchange="procToggleAiAnalysis(this)">
+                    <input type="checkbox" class="toggle-input" id="proc-use-ai-analysis"
+                      onchange="procToggleAiAnalysis(this)">
                     <div class="toggle"></div>
                     <span class="toggle-label text-sm">Dùng phân tích AI</span>
                   </label>
@@ -215,27 +310,31 @@
             <!-- ══ PANE: Khung video (Always Enabled, Modern Style) ══ -->
             <div class="pe2-pane" data-pe2pane="frame">
               <!-- Always-on hidden state for full compatibility with all scripts -->
-              <input type="checkbox" class="toggle-input" id="frame-enabled" checked style="display:none" onchange="frameToggle()">
+              <input type="checkbox" class="toggle-input" id="frame-enabled" checked style="display:none"
+                onchange="frameToggle()">
 
               <div id="frame-controls" class="pe2-frame-body" style="display:block;border:none;padding:0">
-                
+
                 <!-- CONTENT: Tiêu đề video -->
                 <div class="pe2-grp" style="display:flex;align-items:center;justify-content:space-between;margin-top:0">
                   <span>Tiêu đề video (Content)</span>
                   <label class="toggle-wrap" style="margin:0;cursor:pointer" title="Bật/tắt hiển thị tiêu đề">
-                    <input type="checkbox" class="toggle-input" id="frame-title-enabled" checked onchange="framePreviewUpdate()">
+                    <input type="checkbox" class="toggle-input" id="frame-title-enabled" checked
+                      onchange="framePreviewUpdate()">
                     <div class="toggle"></div>
                     <span class="toggle-label text-xs font-semibold">Hiện</span>
                   </label>
                 </div>
                 <div class="field wide" style="margin-bottom:12px">
-                  <input type="text" id="frame-title" placeholder="Nhập tiêu đề video..." style="height:38px;width:100%;font-weight:600;border-radius:8px" oninput="framePreviewUpdate()">
+                  <input type="text" id="frame-title" placeholder="Nhập tiêu đề video..."
+                    style="height:38px;width:100%;font-weight:600;border-radius:8px" oninput="framePreviewUpdate()">
                 </div>
 
                 <!-- TYPOGRAPHY: Định dạng chữ & vị trí -->
                 <div class="pe2-grp">Định dạng &amp; Kích thước (Typography)</div>
                 <div class="pe2-frame-grid">
-                  <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="frame-title-size" value="5" min="1" max="15" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="frame-title-size" value="5"
+                      min="1" max="15" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
                   <div class="field"><label>Độ đậm</label>
                     <select id="frame-title-weight" style="height:36px" onchange="framePreviewUpdate()">
                       <option value="300">Mảnh (Light)</option>
@@ -247,10 +346,14 @@
                       <option value="900">Siêu đậm (Black)</option>
                     </select>
                   </div>
-                  <div class="field"><label>Cao khung (%)</label><input type="number" id="frame-title-bar-h" value="6" min="3" max="20" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Lề ngang (%)</label><input type="number" id="frame-title-margin-x" value="5" min="0" max="40" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Vị trí X (%)</label><input type="number" id="frame-title-x" value="50" min="0" max="100" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Vị trí Y (%)</label><input type="number" id="frame-title-y" value="50" min="0" max="100" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Cao khung (%)</label><input type="number" id="frame-title-bar-h" value="6"
+                      min="3" max="20" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Lề ngang (%)</label><input type="number" id="frame-title-margin-x" value="5"
+                      min="0" max="40" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Vị trí X (%)</label><input type="number" id="frame-title-x" value="50"
+                      min="0" max="100" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Vị trí Y (%)</label><input type="number" id="frame-title-y" value="50"
+                      min="0" max="100" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
                 </div>
 
                 <!-- COLOR: Màu sắc tiêu đề -->
@@ -259,22 +362,32 @@
                   <div class="field">
                     <label>Màu 1</label>
                     <div style="display:flex;gap:4px;height:36px;align-items:center">
-                      <input type="color" id="frame-title-color" value="#000000" style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer;box-sizing:border-box" oninput="document.getElementById('frame-title-color-hex').value=this.value;framePreviewUpdate()">
-                      <input type="text" id="frame-title-color-hex" value="#000000" style="flex:1;font-family:monospace;font-size:11px;height:36px;box-sizing:border-box;min-width:0;border-radius:6px" oninput="document.getElementById('frame-title-color').value=this.value;framePreviewUpdate()">
+                      <input type="color" id="frame-title-color" value="#000000"
+                        style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer;box-sizing:border-box"
+                        oninput="document.getElementById('frame-title-color-hex').value=this.value;framePreviewUpdate()">
+                      <input type="text" id="frame-title-color-hex" value="#000000"
+                        style="flex:1;font-family:monospace;font-size:11px;height:36px;box-sizing:border-box;min-width:0;border-radius:6px"
+                        oninput="document.getElementById('frame-title-color').value=this.value;framePreviewUpdate()">
                     </div>
                   </div>
                   <div class="field">
                     <label>Màu 2</label>
                     <div style="display:flex;gap:4px;height:36px;align-items:center">
-                      <input type="color" id="frame-title-color-2" value="#ff0000" style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer;box-sizing:border-box" oninput="document.getElementById('frame-title-color-2-hex').value=this.value;framePreviewUpdate()">
-                      <input type="text" id="frame-title-color-2-hex" value="#ff0000" style="flex:1;font-family:monospace;font-size:11px;height:36px;box-sizing:border-box;min-width:0;border-radius:6px" oninput="document.getElementById('frame-title-color-2').value=this.value;framePreviewUpdate()">
+                      <input type="color" id="frame-title-color-2" value="#ff0000"
+                        style="width:36px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer;box-sizing:border-box"
+                        oninput="document.getElementById('frame-title-color-2-hex').value=this.value;framePreviewUpdate()">
+                      <input type="text" id="frame-title-color-2-hex" value="#ff0000"
+                        style="flex:1;font-family:monospace;font-size:11px;height:36px;box-sizing:border-box;min-width:0;border-radius:6px"
+                        oninput="document.getElementById('frame-title-color-2').value=this.value;framePreviewUpdate()">
                     </div>
                   </div>
                   <div class="field wide" style="margin-top:2px">
-                    <div class="check-item" style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;height:38px;background:var(--bg3);border:1px solid var(--border);border-radius:8px">
+                    <div class="check-item"
+                      style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;height:38px;background:var(--bg3);border:1px solid var(--border);border-radius:8px">
                       <span style="font-size:12px;color:var(--text2);font-weight:600">Chia đôi màu tiêu đề (|)</span>
                       <label class="toggle-wrap" style="margin:0;margin-left:auto">
-                        <input type="checkbox" class="toggle-input" id="frame-title-split-color" checked onchange="framePreviewUpdate()">
+                        <input type="checkbox" class="toggle-input" id="frame-title-split-color" checked
+                          onchange="framePreviewUpdate()">
                         <div class="toggle"></div>
                       </label>
                     </div>
@@ -284,10 +397,14 @@
                 <!-- BLUR: Mờ viền video -->
                 <div class="pe2-grp">Hiệu ứng mờ nền (Blur Effect)</div>
                 <div class="pe2-frame-grid">
-                  <div class="field"><label>Mờ trên (%)</label><input type="number" id="frame-blur-top" value="0" min="0" max="40" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Mờ dưới (%)</label><input type="number" id="frame-blur-bottom" value="0" min="0" max="40" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Mờ bên (%)</label><input type="number" id="frame-blur-w" value="15" min="0" max="40" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Độ mờ</label><input type="number" id="frame-blur-opacity" value="60" min="0" max="100" step="5" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Mờ trên (%)</label><input type="number" id="frame-blur-top" value="0"
+                      min="0" max="40" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Mờ dưới (%)</label><input type="number" id="frame-blur-bottom" value="0"
+                      min="0" max="40" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Mờ bên (%)</label><input type="number" id="frame-blur-w" value="15" min="0"
+                      max="40" step="1" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Độ mờ</label><input type="number" id="frame-blur-opacity" value="60" min="0"
+                      max="100" step="5" style="height:36px" oninput="framePreviewUpdate()"></div>
                 </div>
 
                 <div style="display:none !important">
@@ -301,18 +418,31 @@
                   <div class="field wide">
                     <label>Tệp Logo</label>
                     <div style="display:flex;gap:4px;height:36px;width:100%">
-                      <input type="text" id="frame-logo-path" placeholder="Chọn file logo ảnh..." readonly style="flex:1;font-size:11px;height:36px;box-sizing:border-box;border-radius:6px">
-                      <button type="button" class="btn btn-secondary btn-sm" style="padding:0 12px;height:36px;display:flex;align-items:center;gap:4px" onclick="document.getElementById('frame-logo-file').click()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                      <input type="text" id="frame-logo-path" placeholder="Chọn file logo ảnh..." readonly
+                        style="flex:1;font-size:11px;height:36px;box-sizing:border-box;border-radius:6px">
+                      <button type="button" class="btn btn-secondary btn-sm"
+                        style="padding:0 12px;height:36px;display:flex;align-items:center;gap:4px"
+                        onclick="document.getElementById('frame-logo-file').click()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
                         <span>Chọn</span>
                       </button>
-                      <input type="file" id="frame-logo-file" accept="image/*" style="display:none" onchange="frameSetLogo(this)">
+                      <input type="file" id="frame-logo-file" accept="image/*" style="display:none"
+                        onchange="frameSetLogo(this)">
                     </div>
                   </div>
-                  <div class="field"><label>Size (%)</label><input type="number" id="frame-logo-size" value="12" min="2" max="40" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Top (%)</label><input type="number" id="frame-logo-top" value="3" min="0" max="90" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Left (%)</label><input type="number" id="frame-logo-left" value="3" min="0" max="90" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
-                  <div class="field"><label>Bo tròn (<span id="frame-logo-radius-val">50</span>%)</label><input type="range" id="frame-logo-radius" min="0" max="50" step="1" value="50" style="width:100%" oninput="document.getElementById('frame-logo-radius-val').textContent=this.value;framePreviewUpdate()"></div>
+                  <div class="field"><label>Size (%)</label><input type="number" id="frame-logo-size" value="12" min="2"
+                      max="40" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Top (%)</label><input type="number" id="frame-logo-top" value="3" min="0"
+                      max="90" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Left (%)</label><input type="number" id="frame-logo-left" value="3" min="0"
+                      max="90" step="0.5" style="height:36px" oninput="framePreviewUpdate()"></div>
+                  <div class="field"><label>Bo tròn (<span id="frame-logo-radius-val">50</span>%)</label><input
+                      type="range" id="frame-logo-radius" min="0" max="50" step="1" value="50" style="width:100%"
+                      oninput="document.getElementById('frame-logo-radius-val').textContent=this.value;framePreviewUpdate()">
+                  </div>
                 </div>
               </div>
             </div>
@@ -321,18 +451,30 @@
             <div class="pe2-pane" data-pe2pane="overlay">
               <div class="pe2-grp" style="margin-top:0">Vùng che phụ đề gốc</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-                <div class="field"><label>Che rộng (%)</label><input type="number" id="proc-blur-width" min="10" max="100" step="1" value="80" oninput="subPreviewUpdate()"></div>
-                <div class="field"><label>Che cao (%)</label><input type="number" id="proc-blur-height" min="3" max="45" step="1" value="15" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Che rộng (%)</label><input type="number" id="proc-blur-width" min="10"
+                    max="100" step="1" value="80" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Che cao (%)</label><input type="number" id="proc-blur-height" min="3" max="45"
+                    step="1" value="15" oninput="subPreviewUpdate()"></div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-                <div class="field"><label>Vị trí X (%)</label><input type="number" id="proc-blur-x" min="0" max="100" step="1" value="" placeholder="50" oninput="subPreviewUpdate()" title="Vị trí X vùng che (0=trái, 100=phải). Để trống = 50"></div>
-                <div class="field"><label>Vị trí Y (%)</label><input type="number" id="proc-blur-y" min="0" max="100" step="1" value="" placeholder="auto" oninput="subPreviewUpdate()" title="Vị trí Y vùng che (0=trên, 100=dưới). Để trống = tự theo phụ đề"></div>
+                <div class="field"><label>Vị trí X (%)</label><input type="number" id="proc-blur-x" min="0" max="100"
+                    step="1" value="" placeholder="50" oninput="subPreviewUpdate()"
+                    title="Vị trí X vùng che (0=trái, 100=phải). Để trống = 50"></div>
+                <div class="field"><label>Vị trí Y (%)</label><input type="number" id="proc-blur-y" min="0" max="100"
+                    step="1" value="" placeholder="auto" oninput="subPreviewUpdate()"
+                    title="Vị trí Y vùng che (0=trên, 100=dưới). Để trống = tự theo phụ đề"></div>
               </div>
 
               <div class="pe2-grp" style="margin-top:10px">Vùng che bổ sung</div>
               <div id="proc-blur-extra-list" style="margin-bottom:10px"></div>
-              <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:6px 12px;margin-bottom:14px;display:inline-flex;align-items:center;gap:4px" onclick="procAddBlurZone()">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <button type="button" class="btn btn-secondary btn-sm"
+                style="font-size:11px;padding:6px 12px;margin-bottom:14px;display:inline-flex;align-items:center;gap:4px"
+                onclick="procAddBlurZone()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
                 <span>Thêm vùng che</span>
               </button>
 
@@ -341,23 +483,44 @@
               <div class="flex-between" style="margin-bottom:8px;gap:8px">
                 <div class="pe2-grp" style="margin:0">Chữ / Hình khối (Layers)</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap">
-                  <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:5px 9px;display:inline-flex;align-items:center;gap:3px" onclick="ovAddText()">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                  <button type="button" class="btn btn-secondary btn-sm"
+                    style="font-size:11px;padding:5px 9px;display:inline-flex;align-items:center;gap:3px"
+                    onclick="ovAddText()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="4 7 4 4 20 4 20 7" />
+                      <line x1="9" y1="20" x2="15" y2="20" />
+                      <line x1="12" y1="4" x2="12" y2="20" />
+                    </svg>
                     <span>Text</span>
                   </button>
-                  <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:5px 9px;display:inline-flex;align-items:center;gap:3px" onclick="ovAddRect()">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                  <button type="button" class="btn btn-secondary btn-sm"
+                    style="font-size:11px;padding:5px 9px;display:inline-flex;align-items:center;gap:3px"
+                    onclick="ovAddRect()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                    </svg>
                     <span>Khối</span>
                   </button>
-                  <button type="button" class="btn btn-secondary btn-sm" style="font-size:11px;padding:5px 9px;display:inline-flex;align-items:center;gap:3px" onclick="document.getElementById('ov-add-image-file').click()">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <button type="button" class="btn btn-secondary btn-sm"
+                    style="font-size:11px;padding:5px 9px;display:inline-flex;align-items:center;gap:3px"
+                    onclick="document.getElementById('ov-add-image-file').click()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
                     <span>Ảnh</span>
                   </button>
                 </div>
               </div>
               <input type="hidden" id="ov-layers-json" value="[]">
-              <input type="file" id="ov-add-image-file" accept="image/*" style="display:none" onchange="ovAddImage(this)">
-              <input type="file" id="ov-change-image-file" accept="image/*" style="display:none" onchange="ovChangeImage(this)">
+              <input type="file" id="ov-add-image-file" accept="image/*" style="display:none"
+                onchange="ovAddImage(this)">
+              <input type="file" id="ov-change-image-file" accept="image/*" style="display:none"
+                onchange="ovChangeImage(this)">
 
               <div id="ov-layer-list"></div>
             </div>
@@ -365,11 +528,13 @@
             <!-- ══ PANE: Âm thanh ══ -->
             <div class="pe2-pane" data-pe2pane="audio">
               <div class="pe2-grp">Ghép âm thanh ngoài</div>
-              
-              <div class="field" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+
+              <div class="field"
+                style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
                 <span style="font-size:12px;color:var(--text2,#1f2430);font-weight:600">Sử dụng âm thanh ngoài</span>
                 <label class="toggle-wrap" style="margin:0;cursor:pointer">
-                  <input type="checkbox" class="toggle-input" id="proc-ext-audio-enabled" onchange="if(window.subPreviewUpdate)subPreviewUpdate()">
+                  <input type="checkbox" class="toggle-input" id="proc-ext-audio-enabled"
+                    onchange="if(window.subPreviewUpdate)subPreviewUpdate()">
                   <div class="toggle"></div>
                 </label>
               </div>
@@ -379,114 +544,236 @@
                   <label style="font-size:11px;color:var(--text-muted,#8a8a93)">Âm lượng video gốc:</label>
                   <span style="font-size:11px;font-weight:bold;margin-left:auto" id="proc-vol-orig-val">100%</span>
                 </div>
-                <input type="range" id="proc-vol-orig" min="0" max="200" step="5" value="100" style="width:100%" oninput="document.getElementById('proc-vol-orig-val').textContent=this.value+'%';if(window.subPreviewUpdate)subPreviewUpdate()">
+                <input type="range" id="proc-vol-orig" min="0" max="200" step="5" value="100" style="width:100%"
+                  oninput="document.getElementById('proc-vol-orig-val').textContent=this.value+'%';if(window.subPreviewUpdate)subPreviewUpdate()">
               </div>
 
               <!-- List of external audios -->
               <input type="hidden" id="proc-ext-audios-json" value="[]">
-              <div id="proc-ext-audio-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px"></div>
+              <div id="proc-ext-audio-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px">
+              </div>
 
-              <button type="button" class="btn btn-secondary btn-sm" style="width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:600" onclick="document.getElementById('proc-ext-audio-multi-file').click()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <button type="button" class="btn btn-secondary btn-sm"
+                style="width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:6px;font-weight:600"
+                onclick="document.getElementById('proc-ext-audio-multi-file').click()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
                 <span>Thêm âm thanh ngoài</span>
               </button>
-              <input type="file" id="proc-ext-audio-multi-file" accept="audio/*" style="display:none" onchange="procAddExtAudio(this)">
+              <input type="file" id="proc-ext-audio-multi-file" accept="audio/*" style="display:none"
+                onchange="procAddExtAudio(this)">
             </div>
 
           </div><!-- /panel-body -->
-          <div style="padding:12px 14px; border-top:1px solid var(--border); background:var(--bg2); display:flex; justify-content:space-between; align-items:center;">
+          <div
+            style="padding:12px 14px; border-top:1px solid var(--border); background:var(--bg2); display:flex; justify-content:space-between; align-items:center;">
             <span style="font-size:11px; color:var(--text-muted)">Cấu hình xong?</span>
-            <button type="button" class="btn btn-primary" onclick="procWizStep2Continue()" style="font-weight:700;display:inline-flex;align-items:center;gap:6px;padding:8px 16px">
+            <button type="button" class="btn btn-primary" onclick="procWizStep2Continue()"
+              style="font-weight:700;display:inline-flex;align-items:center;gap:6px;padding:8px 16px">
               <span>Tiếp tục</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
             </button>
           </div>
-        </div><!-- /panel -->
+        </div><!-- /pe2-panel-main -->
 
-        <!-- CENTER: timeline + video screen -->
-        <div class="pe2-center">
+        <!-- Vertical Tabs on the right edge (icon-only, no labels) -->
+        <div class="pe2-tabs-vertical" id="pe2-tabs-vertical">
+          <button type="button" class="pe2-vtab active" data-pe2tab="subs" onclick="pe2Tool('subs')"
+            title="Phụ đề & Dịch">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              <path d="M8 9h8" />
+              <path d="M8 13h5" />
+            </svg>
+          </button>
+          <button type="button" class="pe2-vtab" data-pe2tab="ai" onclick="pe2Tool('ai')" title="Trí tuệ nhân tạo (AI)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="10" rx="2" />
+              <circle cx="12" cy="5" r="2" />
+              <path d="M12 7v4" />
+              <line x1="8" y1="16" x2="8" y2="16" />
+              <line x1="16" y1="16" x2="16" y2="16" />
+            </svg>
+          </button>
+          <button type="button" class="pe2-vtab" data-pe2tab="frame" onclick="pe2Tool('frame')"
+            title="Khung hình & Tỉ lệ">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="3" y1="9" x2="21" y2="9" />
+              <line x1="3" y1="15" x2="21" y2="15" />
+            </svg>
+          </button>
+          <button type="button" class="pe2-vtab" data-pe2tab="overlay" onclick="pe2Tool('overlay')"
+            title="Chữ & Khối phủ">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 7 4 4 20 4 20 7" />
+              <line x1="9" y1="20" x2="15" y2="20" />
+              <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+          </button>
+          <button type="button" class="pe2-vtab" data-pe2tab="audio" onclick="pe2Tool('audio')"
+            title="Âm thanh & Nhạc nền">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            </svg>
+          </button>
+          <button type="button" class="pe2-vtab" data-pe2tab="tracks" onclick="pe2Tool('tracks')"
+            title="Quản lý Lớp & Track">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2" />
+              <polyline points="2 17 12 22 22 17" />
+              <polyline points="2 12 12 17 22 12" />
+            </svg>
+          </button>
+        </div>
+      </div><!-- /pe2-panel -->
 
-          <!-- Video screen (proc-preview-col / row giữ nguyên cho logic _onPreviewAspectChange) -->
-          <div class="pe2-screen">
-            <div id="proc-preview-col" style="display:flex;flex-direction:column;gap:10px">
-              <div id="proc-preview-row" style="display:flex;flex-direction:column;gap:10px">
-                <div id="sub-preview-wrap" style="position:relative;width:100%;background:#111;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
-                  <img id="sub-preview-bgblur" src="" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(18px) brightness(.7);transform:scale(1.12);z-index:0;pointer-events:none">
-                  <img id="sub-preview-img" src="" alt="" style="width:100%;display:none;vertical-align:bottom">
-                  <div id="sub-preview-placeholder" style="color:#666;font-size:12px;padding:20px;text-align:center">
-                    Bấm 📷 Lấy frame để xem preview
+      <!-- Resizer Handle for inspector width dragging -->
+      <div class="pe2-resizer" id="pe2-panel-resizer" title="Kéo để điều chỉnh độ rộng inspector"></div>
+
+      <!-- CENTER: timeline + video screen -->
+      <div class="pe2-center">
+
+        <!-- Video screen (proc-preview-col / row giữ nguyên cho logic _onPreviewAspectChange) -->
+        <div class="pe2-screen">
+          <div id="proc-preview-col" style="display:flex;flex-direction:column;gap:10px">
+            <div id="proc-preview-row" style="display:flex;flex-direction:column;gap:10px">
+              <div id="sub-preview-wrap"
+                style="position:relative;width:100%;background:#111;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+                <img id="sub-preview-bgblur" src="" alt=""
+                  style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(18px) brightness(.7);transform:scale(1.12);z-index:0;pointer-events:none">
+                <img id="sub-preview-img" src="" alt="" style="width:100%;display:none;vertical-align:bottom">
+                <div id="sub-preview-placeholder" style="color:#666;font-size:12px;padding:20px;text-align:center">
+                  <div style="display:inline-flex;align-items:center;gap:6px">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    <span>Bấm <b>Lấy frame</b> để xem preview</span>
                   </div>
-                  <div id="sub-preview-blur" style="display:none;position:absolute;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:2px;"></div>
-                  <canvas id="sub-preview-blur-canvas" style="display:none;position:absolute;pointer-events:none;border-radius:2px;"></canvas>
-                  <div id="sub-preview-text" style="position:absolute;left:0;right:0;pointer-events:none;padding:0 12px;text-align:center;display:none"></div>
-                  <canvas id="frame-preview-canvas" style="display:none;width:100%;border-radius:8px"></canvas>
                 </div>
+                <div id="sub-preview-blur"
+                  style="display:none;position:absolute;background:rgba(0,0,0,0.55);pointer-events:none;border-radius:2px;">
+                </div>
+                <canvas id="sub-preview-blur-canvas"
+                  style="display:none;position:absolute;pointer-events:none;border-radius:2px;"></canvas>
+                <div id="sub-preview-text"
+                  style="position:absolute;left:0;right:0;pointer-events:none;padding:0 12px;text-align:center;display:none">
+                </div>
+                <canvas id="frame-preview-canvas" style="display:none;width:100%;border-radius:8px"></canvas>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Timeline (filmstrip + ruler + playhead) — đặt phía dưới video -->
-          <div class="pe2-timeline" id="pe2-timeline">
-            <div class="pe2-tl-controls">
-              <button type="button" class="btn btn-primary btn-sm" onclick="subPreviewFetchFrame()" style="display:inline-flex;align-items:center;gap:4px">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                <span>Lấy frame</span>
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="pe2-strip-btn" onclick="pe2BuildFilmstrip()" style="display:inline-flex;align-items:center;gap:4px">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
-                <span>Tạo dải thời gian</span>
-              </button>
-              <select id="pe2-queue-select" title="Chọn video đã sẵn sàng trong hàng chờ"
-                style="font-size:12px;height:32px;max-width:200px;border:1px solid var(--border);border-radius:6px;padding:0 6px;background:var(--bg2);color:var(--text);cursor:pointer"
-                onchange="pe2SelectQueueVideo(this.value)">
-                <option value="">Chọn video hàng chờ…</option>
-              </select>
-              <span class="pe2-flex"></span>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="pe2Zoom(-0.1)" title="Thu nhỏ" style="display:inline-flex;align-items:center;padding:0 8px">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-              </button>
-              <span class="pe2-ts-badge" id="pe2-zoom-val" style="cursor:pointer;min-width:48px" onclick="pe2ZoomReset()" title="Bấm để về 100% (vừa khung)">100%</span>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="pe2Zoom(0.1)" title="Phóng to" style="display:inline-flex;align-items:center;padding:0 8px">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-              </button>
-              <input type="text" id="pe2-ts-input" value="0:05"
-                style="width:56px;font-size:12px;height:28px;text-align:center;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);padding:0 4px;box-sizing:border-box"
-                title="Nhập thời gian (m:ss hoặc giây)"
-                onchange="pe2SetTimeFromInput(this.value)"
-                onkeydown="if(event.key==='Enter'){pe2SetTimeFromInput(this.value);this.blur();}">
-              <span class="pe2-tl-dur" id="pe2-tl-dur">/ --:--</span>
-              <input type="hidden" id="sub-preview-ts" min="0" step="1" value="5">
-            </div>
-            <div class="pe2-tl-track" id="pe2-tl-track" onmousedown="pe2TimelineDown(event)">
-              <div class="pe2-tl-ruler" id="pe2-tl-ruler"></div>
-              <div class="pe2-tl-strip" id="pe2-tl-strip"></div>
-              <div class="pe2-tl-ranges" id="pe2-tl-ranges"></div>
-              <div class="pe2-tl-empty" id="pe2-tl-empty">Bấm Tạo dải thời gian để xem khung hình chạy theo thời gian video</div>
-              <div class="pe2-tl-playhead" id="pe2-tl-playhead" style="left:0%"></div>
-            </div>
+        <!-- Timeline (filmstrip + ruler + playhead) — đặt phía dưới video -->
+        <div class="pe2-timeline" id="pe2-timeline">
+          <div class="pe2-tl-controls">
+            <button type="button" class="btn btn-primary btn-sm" onclick="subPreviewFetchFrame()"
+              style="display:inline-flex;align-items:center;gap:4px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+              <span>Lấy frame</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="pe2-strip-btn" onclick="pe2BuildFilmstrip()"
+              style="display:inline-flex;align-items:center;gap:4px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+                <line x1="7" y1="2" x2="7" y2="22" />
+                <line x1="17" y1="2" x2="17" y2="22" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <line x1="2" y1="7" x2="7" y2="7" />
+                <line x1="2" y1="17" x2="7" y2="17" />
+                <line x1="17" y1="17" x2="22" y2="17" />
+                <line x1="17" y1="7" x2="22" y2="7" />
+              </svg>
+              <span>Tạo dải thời gian</span>
+            </button>
+            <select id="pe2-queue-select" title="Chọn video đã sẵn sàng trong hàng chờ"
+              style="font-size:12px;height:32px;max-width:200px;border:1px solid var(--border);border-radius:6px;padding:0 6px;background:var(--bg2);color:var(--text);cursor:pointer"
+              onchange="pe2SelectQueueVideo(this.value)">
+              <option value="">Chọn video hàng chờ…</option>
+            </select>
+            <span class="pe2-flex"></span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="pe2Zoom(-0.1)" title="Thu nhỏ"
+              style="display:inline-flex;align-items:center;padding:0 8px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </button>
+            <span class="pe2-ts-badge" id="pe2-zoom-val" style="cursor:pointer;min-width:48px" onclick="pe2ZoomReset()"
+              title="Bấm để về 100% (vừa khung)">100%</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="pe2Zoom(0.1)" title="Phóng to"
+              style="display:inline-flex;align-items:center;padding:0 8px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="11" y1="8" x2="11" y2="14" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </button>
+            <input type="text" id="pe2-ts-input" value="0:05"
+              style="width:56px;font-size:12px;height:28px;text-align:center;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);padding:0 4px;box-sizing:border-box"
+              title="Nhập thời gian (m:ss hoặc giây)" onchange="pe2SetTimeFromInput(this.value)"
+              onkeydown="if(event.key==='Enter'){pe2SetTimeFromInput(this.value);this.blur();}">
+            <span class="pe2-tl-dur" id="pe2-tl-dur">/ --:--</span>
+            <input type="hidden" id="sub-preview-ts" min="0" step="1" value="5">
           </div>
+          <div class="pe2-tl-track" id="pe2-tl-track" onmousedown="pe2TimelineDown(event)">
+            <div class="pe2-tl-ruler" id="pe2-tl-ruler"></div>
+            <div class="pe2-tl-strip" id="pe2-tl-strip"></div>
+            <div class="pe2-tl-ranges" id="pe2-tl-ranges"></div>
+            <div class="pe2-tl-empty" id="pe2-tl-empty">Bấm Tạo dải thời gian để xem khung hình chạy theo thời gian
+              video</div>
+            <div class="pe2-tl-playhead" id="pe2-tl-playhead" style="left:0%"></div>
+          </div>
+        </div>
 
-        </div><!-- /pe2-center -->
+      </div><!-- /pe2-center -->
 
-      </div><!-- /pe2-body -->
-    </div><!-- /pe2-editor -->
+    </div><!-- /pe2-body -->
+  </div><!-- /pe2-editor -->
 
-    <!-- Tab switcher + Aspect + Timeline (UI-only, không đụng logic xử lý) -->
-    <script>
-    window.onerror = function(msg, url, line, col, error) {
-      alert("JS Error: " + msg + "\nLine: " + line + "\nURL: " + url);
+  <!-- Tab switcher + Aspect + Timeline (UI-only, không đụng logic xử lý) -->
+  <script>
+    window.onerror = function (msg, url, line, col, error) {
+      console.error("JS Error: " + msg + "\nLine: " + line + "\nURL: " + url, error);
       return false;
     };
-    (function(){
-       window.pe2Tool = function(name){
+    (function () {
+      window.pe2Tool = function (name) {
         if (name === 'blur') name = 'overlay';
         var root = document.querySelector('[data-proc-step="2"] .pe2-editor');
         if (!root) return;
-        var titles = { 
-          subs: 'Phụ đề & Dịch', 
-          ai: 'Phân tích AI', 
-          frame: 'Khung video', 
-          overlay: 'Chữ / Khối', 
+        var titles = {
+          subs: 'Phụ đề & Dịch',
+          ai: 'Phân tích AI',
+          frame: 'Khung video',
+          overlay: 'Chữ / Khối',
           audio: 'Âm thanh ngoài',
           tracks: 'Quản lý Lớp & Track'
         };
@@ -498,10 +785,10 @@
           audio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
           tracks: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>'
         };
-        root.querySelectorAll('[data-pe2tab]').forEach(function(b){
+        root.querySelectorAll('[data-pe2tab]').forEach(function (b) {
           b.classList.toggle('active', b.getAttribute('data-pe2tab') === name);
         });
-        root.querySelectorAll('.pe2-pane').forEach(function(p){
+        root.querySelectorAll('.pe2-pane').forEach(function (p) {
           p.classList.toggle('active', p.getAttribute('data-pe2pane') === name);
         });
         var t = root.querySelector('.pe2-panel-title');
@@ -512,54 +799,112 @@
       };
 
       // ── Aspect ratio buttons (giữ select ẩn cho logic) ──
-      window._syncAspectBtns = function(){
+      window._syncAspectBtns = function () {
         var sel = document.getElementById('proc-preview-aspect');
         var v = sel ? sel.value : 'auto';
-        document.querySelectorAll('[data-pe2aspect]').forEach(function(b){
+        document.querySelectorAll('[data-pe2aspect]').forEach(function (b) {
           b.classList.toggle('active', b.getAttribute('data-pe2aspect') === v);
         });
       };
-      window.pe2SetAspect = function(v){
+      window.pe2SetAspect = function (v) {
         var sel = document.getElementById('proc-preview-aspect');
-        if (sel){
+        if (sel) {
           sel.value = v;
-          try { localStorage.setItem('proc_preview_aspect_v1', v); } catch (_) {}
+          try { localStorage.setItem('proc_preview_aspect_v1', v); } catch (_) { }
           if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
         }
         _syncAspectBtns();
       };
 
+      // ── Inspector drag-to-resize ──
+      (function () {
+        var resizer = document.getElementById('pe2-panel-resizer');
+        var panel = document.getElementById('pe2-panel');
+        if (!resizer || !panel) return;
+
+        var savedW = localStorage.getItem('pe2_panel_width');
+        if (savedW) {
+          var w = parseInt(savedW, 10);
+          if (w >= 320 && w <= 720) {
+            panel.style.flex = '0 0 ' + w + 'px';
+            panel.style.width = w + 'px';
+          }
+        }
+
+        resizer.addEventListener('pointerdown', function (e) {
+          e.preventDefault();
+          var isDragging = true;
+          var startX = e.clientX;
+          var startW = panel.getBoundingClientRect().width;
+          var editor = panel.closest('.pe2-editor');
+          var maxW = Math.min(720, Math.max(320, (editor ? editor.clientWidth : window.innerWidth) - 340));
+          try { resizer.setPointerCapture(e.pointerId); } catch (_) { }
+          resizer.classList.add('is-dragging');
+          document.body.style.cursor = 'col-resize';
+          document.body.style.userSelect = 'none';
+
+          function onPointerMove(e) {
+            if (!isDragging) return;
+            var delta = startX - e.clientX;
+            var newW = Math.max(320, Math.min(maxW, startW + delta));
+            panel.style.flex = '0 0 ' + newW + 'px';
+            panel.style.width = newW + 'px';
+            if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+          }
+
+          function onPointerUp() {
+            if (!isDragging) return;
+            isDragging = false;
+            resizer.classList.remove('is-dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
+            try {
+              var finalW = Math.round(panel.getBoundingClientRect().width);
+              localStorage.setItem('pe2_panel_width', finalW);
+            } catch (_) { }
+            window.dispatchEvent(new Event('resize'));
+          }
+
+          window.addEventListener('pointermove', onPointerMove);
+          window.addEventListener('pointerup', onPointerUp);
+          window.addEventListener('pointercancel', onPointerUp);
+        });
+      })();
+
       // ── Zoom preview ──
       window._pe2Zoom = window._pe2Zoom || 1;
       window._pe2PanX = window._pe2PanX || 0;
       window._pe2PanY = window._pe2PanY || 0;
-      window.pe2ApplyZoom = function(){
+      window.pe2ApplyZoom = function () {
         var col = document.getElementById('proc-preview-col');
         var v = document.getElementById('pe2-zoom-val');
-        if (col){
+        if (col) {
           col.style.transform = 'translate(' + (window._pe2PanX || 0) + 'px,' + (window._pe2PanY || 0) + 'px) scale(' + window._pe2Zoom + ')';
           col.style.transformOrigin = 'center center';
         }
         if (v) v.textContent = Math.round(window._pe2Zoom * 100) + '%';
       };
-      window.pe2Zoom = function(d){
+      window.pe2Zoom = function (d) {
         window._pe2Zoom = Math.max(0.3, Math.min(3, (window._pe2Zoom || 1) + d));
         pe2ApplyZoom();
       };
-      window.pe2ZoomReset = function(){ window._pe2Zoom = 1; window._pe2PanX = 0; window._pe2PanY = 0; pe2ApplyZoom(); };
+      window.pe2ZoomReset = function () { window._pe2Zoom = 1; window._pe2PanX = 0; window._pe2PanY = 0; pe2ApplyZoom(); };
 
       // ── Screen pan: chỉ khi click vùng TRỐNG (không phải element draggable) ──
       // Dùng flag window._pe2ElementDrag để element drag báo cho screen biết không pan
       window._pe2ElementDrag = false;
 
-      (function(){
+      (function () {
         var screen = document.querySelector('[data-proc-step="2"] .pe2-screen');
         if (!screen || screen.dataset.pe2ZoomPanReady) return;
         screen.dataset.pe2ZoomPanReady = '1';
         var panDrag = null;
 
         // Wheel zoom chỉ khi chuột ở vùng trống ngoài preview wrap
-        screen.addEventListener('wheel', function(e){
+        screen.addEventListener('wheel', function (e) {
           var wrap = document.getElementById('sub-preview-wrap');
           if (wrap && wrap.contains(e.target)) {
             // Nếu đang có thành phần được chọn → scroll để resize thành phần đó
@@ -567,19 +912,19 @@
             if (sel) {
               e.preventDefault();
               var up = e.deltaY < 0;
-              var clampV = function(v,a,b){ return Math.max(a,Math.min(b,v)); };
+              var clampV = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
               // Đọc giá trị hiện tại từ field (không dùng ||0 để tránh về 0 rồi phình to)
-              function _getNumSafe(id, fallback){
+              function _getNumSafe(id, fallback) {
                 var el = document.getElementById(id);
                 if (!el) return fallback;
                 var v = parseFloat(el.value);
                 return isNaN(v) ? fallback : v;
               }
-              function _setNum(id, v, min, max, digits){
-                var el = document.getElementById(id); if(!el) return;
+              function _setNum(id, v, min, max, digits) {
+                var el = document.getElementById(id); if (!el) return;
                 var factor = Math.pow(10, digits == null ? 1 : digits);
                 el.value = Math.round(clampV(v, min, max) * factor) / factor;
-                el.dispatchEvent(new Event('input', {bubbles:true}));
+                el.dispatchEvent(new Event('input', { bubbles: true }));
               }
               var frameOn = document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked;
               var needUpdate = true;
@@ -588,18 +933,18 @@
               } else if (sel.type === 'blur') {
                 _setNum('proc-blur-height', _getNumSafe('proc-blur-height', 15) + (up ? 1 : -1), 3, 45, 0);
               } else if (sel.type === 'extra') {
-                var z = (window._procExtraBlurZones||[]).find(function(x){return x.id===sel.id;});
+                var z = (window._procExtraBlurZones || []).find(function (x) { return x.id === sel.id; });
                 if (z) {
                   z.height = clampV((z.height || 12) + (up ? 2 : -2), 2, 80);
                   if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
                 }
               } else if (sel.type === 'overlay') {
-                var ov = (window._videoOverlays||[]).find(function(o){return String(o.id)===String(sel.id);});
+                var ov = (window._videoOverlays || []).find(function (o) { return String(o.id) === String(sel.id); });
                 if (ov) {
                   if (ov.type === 'text') {
                     ov.size_pct = clampV((ov.size_pct || 0.05) + (up ? 0.005 : -0.005), 0.01, 0.30);
                   } else {
-                    ov.width_pct  = clampV((ov.width_pct  || 0.8)  + (up ? 0.02 : -0.02), 0.05, 1);
+                    ov.width_pct = clampV((ov.width_pct || 0.8) + (up ? 0.02 : -0.02), 0.05, 1);
                     ov.height_pct = clampV((ov.height_pct || 0.12) + (up ? 0.01 : -0.01), 0.02, 1);
                   }
                   if (window.ovRenderLayerList) window.ovRenderLayerList();
@@ -619,11 +964,11 @@
           }
           e.preventDefault();
           pe2Zoom(e.deltaY < 0 ? 0.1 : -0.1);
-        }, { passive:false });
+        }, { passive: false });
 
         // Pointerdown: chỉ bắt đầu pan nếu KHÔNG có element drag đang xảy ra
         // và target không nằm trong sub-preview-wrap (để element drag xử lý)
-        screen.addEventListener('pointerdown', function(e){
+        screen.addEventListener('pointerdown', function (e) {
           if (e.button !== 0) return;
           var wrap = document.getElementById('sub-preview-wrap');
           // Nếu click vào preview wrap → element drag system sẽ xử lý, không pan
@@ -640,7 +985,7 @@
           e.preventDefault();
         });
 
-        screen.addEventListener('pointermove', function(e){
+        screen.addEventListener('pointermove', function (e) {
           if (!panDrag) return;
           var dx = e.clientX - panDrag.x;
           var dy = e.clientY - panDrag.y;
@@ -651,7 +996,7 @@
           pe2ApplyZoom();
         });
 
-        function stopPan(e){
+        function stopPan(e) {
           if (!panDrag) return;
           panDrag = null;
           if (screen.releasePointerCapture) screen.releasePointerCapture(e.pointerId);
@@ -662,36 +1007,52 @@
       })();
 
       // ── Kéo-thả thành phần trên preview (chỉ ở chế độ phụ đề) ──
-      (function(){
+      (function () {
         var wrap = document.getElementById('sub-preview-wrap');
         if (!wrap) return;
         var drag = null;
-        var clamp = function(v, min, max){ return Math.max(min, Math.min(max, v)); };
+        var clamp = function (v, min, max) { return Math.max(min, Math.min(max, v)); };
         var undoFields = [
-          'proc-font-size','proc-margin-v','proc-sub-pos','proc-blur-height','proc-blur-width','proc-blur-x','proc-blur-y',
-          'proc-burn','proc-burn-vi','proc-blur-original','proc-preview-aspect','proc-aspect-blur-bg',
-          'frame-enabled','frame-title','frame-title-enabled','frame-title-size','frame-title-weight','frame-title-bar-h','frame-title-margin-x','frame-title-x','frame-title-y',
-          'frame-title-color','frame-title-color-hex','frame-title-color-2','frame-title-color-2-hex',
-          'frame-title-split-color','frame-blur-w','frame-blur-top','frame-blur-bottom','frame-blur-opacity',
-          'frame-logo-size','frame-logo-top','frame-logo-left','frame-logo-radius','ov-layers-json'
+          'proc-font-size', 'proc-margin-v', 'proc-sub-pos', 'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y',
+          'proc-burn', 'proc-burn-vi', 'proc-blur-original', 'proc-preview-aspect', 'proc-aspect-blur-bg',
+          'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y',
+          'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex',
+          'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity',
+          'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'ov-layers-json',
+          'proc-font-color-picker', 'proc-font-color-hex', 'proc-font-weight'
         ];
+        window._onSubFontWeightChange = function (val) {
+          var chk = document.getElementById('proc-font-bold');
+          if (chk) {
+            chk.checked = (val === 'bold');
+            chk.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+        };
+        window._syncSubFontWeightUI = function () {
+          var chk = document.getElementById('proc-font-bold');
+          var sel = document.getElementById('proc-font-weight');
+          if (chk && sel) {
+            sel.value = chk.checked ? 'bold' : 'regular';
+          }
+        };
         var undoFieldSet = new Set(undoFields);
-        var clone = function(v){ return JSON.parse(JSON.stringify(v == null ? null : v)); };
-        function _fieldValue(id){
+        var clone = function (v) { return JSON.parse(JSON.stringify(v == null ? null : v)); };
+        function _fieldValue(id) {
           var el = document.getElementById(id);
           if (!el) return undefined;
           return (el.type === 'checkbox') ? !!el.checked : el.value;
         }
-        function _setFieldValue(id, value){
+        function _setFieldValue(id, value) {
           var el = document.getElementById(id);
           if (!el || value === undefined) return;
           if (el.type === 'checkbox') el.checked = !!value;
           else el.value = value;
         }
-        function _pe2Snapshot(){
-          try { if (typeof _ovSyncHidden === 'function') _ovSyncHidden(); } catch (_) {}
+        function _pe2Snapshot() {
+          try { if (typeof _ovSyncHidden === 'function') _ovSyncHidden(); } catch (_) { }
           var fields = {};
-          undoFields.forEach(function(id){ fields[id] = _fieldValue(id); });
+          undoFields.forEach(function (id) { fields[id] = _fieldValue(id); });
           var blurMode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay';
           return {
             fields: fields,
@@ -701,11 +1062,11 @@
             selection: clone(window._pe2Sel || null)
           };
         }
-        function _pe2ApplySnapshot(snap){
+        function _pe2ApplySnapshot(snap) {
           if (!snap) return;
           window._pe2Restoring = true;
           try {
-            Object.keys(snap.fields || {}).forEach(function(id){ _setFieldValue(id, snap.fields[id]); });
+            Object.keys(snap.fields || {}).forEach(function (id) { _setFieldValue(id, snap.fields[id]); });
             var radio = document.querySelector('input[name="frame-blur-mode"][value="' + (snap.blurMode || 'overlay') + '"]');
             if (radio) radio.checked = true;
             window._procExtraBlurZones = clone(snap.extraZones || []);
@@ -714,7 +1075,7 @@
             var radiusVal = document.getElementById('frame-logo-radius-val');
             var radiusInput = document.getElementById('frame-logo-radius');
             if (radiusVal && radiusInput) radiusVal.textContent = radiusInput.value;
-            try { if (typeof _ovSyncHidden === 'function') _ovSyncHidden(); } catch (_) {}
+            try { if (typeof _ovSyncHidden === 'function') _ovSyncHidden(); } catch (_) { }
             if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
             if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
             if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
@@ -725,17 +1086,17 @@
             window._pe2Restoring = false;
           }
         }
-        function _pe2PushSnapshot(snap){
+        function _pe2PushSnapshot(snap) {
           if (!snap || window._pe2Restoring) return;
           window._pe2UndoStack = window._pe2UndoStack || [];
           var key = JSON.stringify(snap);
           var last = window._pe2UndoStack.length ? window._pe2UndoStack[window._pe2UndoStack.length - 1] : null;
           if (last && last.key === key) return;
-          window._pe2UndoStack.push({ key:key, snap:snap });
+          window._pe2UndoStack.push({ key: key, snap: snap });
           if (window._pe2UndoStack.length > 60) window._pe2UndoStack.shift();
         }
-        window.pe2PushUndo = function(){ _pe2PushSnapshot(_pe2Snapshot()); };
-        window.pe2Undo = function(){
+        window.pe2PushUndo = function () { _pe2PushSnapshot(_pe2Snapshot()); };
+        window.pe2Undo = function () {
           var stack = window._pe2UndoStack || [];
           var entry = stack.pop();
           if (!entry) {
@@ -744,26 +1105,26 @@
           }
           _pe2ApplySnapshot(entry.snap);
         };
-        function _isTextEditing(el){
+        function _isTextEditing(el) {
           if (!el) return false;
           var tag = (el.tagName || '').toLowerCase();
           return tag === 'textarea' || tag === 'select' || tag === 'input';
         }
-        function _pe2SetChecked(id, checked){
+        function _pe2SetChecked(id, checked) {
           var el = document.getElementById(id);
           if (!el) return false;
           el.checked = !!checked;
-          el.dispatchEvent(new Event('change', { bubbles:true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
           return true;
         }
-        function _pe2RefreshAfterDelete(){
+        function _pe2RefreshAfterDelete() {
           if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
           if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
           if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
           if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
           if (typeof pe2ApplySelection === 'function') pe2ApplySelection();
         }
-        function _pe2DeleteSelection(){
+        function _pe2DeleteSelection() {
           var s = window._pe2Sel;
           if (!s) return false;
           if (window.pe2PushUndo) window.pe2PushUndo();
@@ -797,7 +1158,7 @@
           _pe2RefreshAfterDelete();
           return true;
         }
-        document.addEventListener('keydown', function(e){
+        document.addEventListener('keydown', function (e) {
           var editor = document.querySelector('[data-proc-step="2"] .pe2-editor');
           if (!editor || editor.closest('.proc-step')?.style.display === 'none') return;
           if ((e.ctrlKey || e.metaKey) && !e.shiftKey && String(e.key || '').toLowerCase() === 'z') {
@@ -814,12 +1175,12 @@
             }
           }
         }, true);
-        document.addEventListener('focusin', function(e){
+        document.addEventListener('focusin', function (e) {
           var el = e.target;
           if (!el || !undoFieldSet.has(el.id)) return;
           el._pe2UndoSnap = _pe2Snapshot();
         }, true);
-        document.addEventListener('change', function(e){
+        document.addEventListener('change', function (e) {
           var el = e.target;
           if (!el || !undoFieldSet.has(el.id) || !el._pe2UndoSnap) return;
           _pe2PushSnapshot(el._pe2UndoSnap);
@@ -828,9 +1189,9 @@
 
         // Đánh dấu thành phần đang chọn (giữ trạng thái khi vẽ lại)
         window._pe2Sel = window._pe2Sel || null;   // {type, id}
-        window.pe2ApplySelection = function(skipAutoOpen){
-          wrap.querySelectorAll('.pe2-selected').forEach(function(el){ el.classList.remove('pe2-selected'); });
-          document.querySelectorAll('.ov-layer-card.pe2-selected').forEach(function(el){ el.classList.remove('pe2-selected'); });
+        window.pe2ApplySelection = function (skipAutoOpen) {
+          wrap.querySelectorAll('.pe2-selected').forEach(function (el) { el.classList.remove('pe2-selected'); });
+          document.querySelectorAll('.ov-layer-card.pe2-selected').forEach(function (el) { el.classList.remove('pe2-selected'); });
           var s = window._pe2Sel;
           if (!s) return;
           var el = null;
@@ -838,7 +1199,7 @@
             el = document.getElementById('sub-preview-text');
             if (window.pe2Tool) window.pe2Tool('subs');
           }
-          else if (s.type === 'blur'){
+          else if (s.type === 'blur') {
             el = document.getElementById('sub-preview-blur');
             if (window.pe2Tool) window.pe2Tool('overlay');
           }
@@ -846,7 +1207,7 @@
             el = wrap.querySelector('.extra-blur-zone[data-zone-id="' + s.id + '"]');
             if (window.pe2Tool) window.pe2Tool('overlay');
             if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
-            setTimeout(function(){
+            setTimeout(function () {
               var card = document.querySelector('.pe2-extra-zone[data-blur-id="' + s.id + '"]');
               if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }, 50);
@@ -862,7 +1223,7 @@
                 ov.open = true;
                 if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
               }
-              setTimeout(function(){
+              setTimeout(function () {
                 var cardActual = document.querySelector('.ov-layer-card[data-ov-id="' + s.id + '"]');
                 if (cardActual && cardActual.scrollIntoView) cardActual.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
               }, 50);
@@ -874,14 +1235,14 @@
           if (el) el.classList.add('pe2-selected');
         };
 
-        function _ovById(id){
-          return (window._videoOverlays || []).find(function(o){ return String(o.id) === String(id); });
+        function _ovById(id) {
+          return (window._videoOverlays || []).find(function (o) { return String(o.id) === String(id); });
         }
-        function _ovBoundsFrac(ov){
+        function _ovBoundsFrac(ov) {
           if (!ov) return null;
           var x = Number(ov.x_pct == null ? 0.5 : ov.x_pct);
           var y = Number(ov.y_pct == null ? 0.5 : ov.y_pct);
-          
+
           var frameOn = document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked;
           if (frameOn) {
             if (window._lastCanvasOverlayBoxes && window._lastCanvasOverlayBoxes[ov.id]) {
@@ -897,60 +1258,60 @@
               var elRect = el.getBoundingClientRect();
               var w = elRect.width / br.width;
               var h = elRect.height / br.height;
-              return { left:x - w/2, right:x + w/2, top:y - h/2, bottom:y + h/2, x:x, y:y, w:w, h:h };
+              return { left: x - w / 2, right: x + w / 2, top: y - h / 2, bottom: y + h / 2, x: x, y: y, w: w, h: h };
             }
           }
-          
+
           if (ov.type === 'text') {
             var size = Number(ov.size_pct || 0.05);
             var txt = String(ov.text || 'Text');
             var lines = Math.max(1, Math.ceil(txt.length / 18));
             var w = clamp(txt.length * size * 0.35, 0.08, 0.9);
             var h = clamp(lines * size * 1.45, 0.035, 0.6);
-            return { left:x - w/2, right:x + w/2, top:y - h/2, bottom:y + h/2, x:x, y:y, w:w, h:h };
+            return { left: x - w / 2, right: x + w / 2, top: y - h / 2, bottom: y + h / 2, x: x, y: y, w: w, h: h };
           }
           var rw = Number(ov.width_pct || 0.8);
           var rh = Number(ov.height_pct || 0.12);
-          return { left:x - rw/2, right:x + rw/2, top:y - rh/2, bottom:y + rh/2, x:x, y:y, w:rw, h:rh };
+          return { left: x - rw / 2, right: x + rw / 2, top: y - rh / 2, bottom: y + rh / 2, x: x, y: y, w: rw, h: rh };
         }
-        function _pe2HandlePoints(left, top, right, bottom, cornersOnly){
+        function _pe2HandlePoints(left, top, right, bottom, cornersOnly) {
           var midX = (left + right) / 2;
           var midY = (top + bottom) / 2;
           return cornersOnly ? [
-            { edge:'nw', x:left, y:top },
-            { edge:'ne', x:right, y:top },
-            { edge:'se', x:right, y:bottom },
-            { edge:'sw', x:left, y:bottom }
+            { edge: 'nw', x: left, y: top },
+            { edge: 'ne', x: right, y: top },
+            { edge: 'se', x: right, y: bottom },
+            { edge: 'sw', x: left, y: bottom }
           ] : [
-            { edge:'nw', x:left, y:top },
-            { edge:'n',  x:midX, y:top },
-            { edge:'ne', x:right, y:top },
-            { edge:'e',  x:right, y:midY },
-            { edge:'se', x:right, y:bottom },
-            { edge:'s',  x:midX, y:bottom },
-            { edge:'sw', x:left, y:bottom },
-            { edge:'w',  x:left, y:midY }
+            { edge: 'nw', x: left, y: top },
+            { edge: 'n', x: midX, y: top },
+            { edge: 'ne', x: right, y: top },
+            { edge: 'e', x: right, y: midY },
+            { edge: 'se', x: right, y: bottom },
+            { edge: 's', x: midX, y: bottom },
+            { edge: 'sw', x: left, y: bottom },
+            { edge: 'w', x: left, y: midY }
           ];
         }
-        function _pe2HandleHitRect(left, top, right, bottom, x, y, tol, cornersOnly){
+        function _pe2HandleHitRect(left, top, right, bottom, x, y, tol, cornersOnly) {
           var pts = _pe2HandlePoints(left, top, right, bottom, cornersOnly);
           for (var i = 0; i < pts.length; i++) {
             if (Math.abs(x - pts[i].x) <= tol && Math.abs(y - pts[i].y) <= tol) return pts[i].edge;
           }
           return null;
         }
-        function _pe2CursorForEdge(edge){
+        function _pe2CursorForEdge(edge) {
           if (edge === 'nw' || edge === 'se') return 'nwse-resize';
           if (edge === 'ne' || edge === 'sw') return 'nesw-resize';
           if (edge === 'e' || edge === 'w') return 'ew-resize';
           if (edge === 'n' || edge === 's') return 'ns-resize';
           return 'move';
         }
-        function _pe2CursorForHit(hit){
+        function _pe2CursorForHit(hit) {
           if (!hit) return '';
           return hit.edge ? _pe2CursorForEdge(hit.edge) : 'move';
         }
-        function _hitOverlay(fxv, fyv, handlesOnly){
+        function _hitOverlay(fxv, fyv, handlesOnly) {
           var layers = window._videoOverlays || [];
           var sel = window._pe2Sel;
           var tol = 0.04;
@@ -960,7 +1321,7 @@
             if (b) {
               var cornersOnly = (cur && cur.type === 'text');
               var edge = _pe2HandleHitRect(b.left, b.top, b.right, b.bottom, fxv, fyv, tol, cornersOnly);
-              if (edge) return { type:'ov-resize', id:cur.id, edge:edge };
+              if (edge) return { type: 'ov-resize', id: cur.id, edge: edge };
             }
           }
           if (handlesOnly) return null;
@@ -970,20 +1331,20 @@
             if (window._ovVisibleAtPreviewTime && !window._ovVisibleAtPreviewTime(ov)) continue;
             var ob = _ovBoundsFrac(ov);
             if (ob && fxv >= ob.left && fxv <= ob.right && fyv >= ob.top && fyv <= ob.bottom) {
-              return { type:'overlay', id:ov.id };
+              return { type: 'overlay', id: ov.id };
             }
           }
           return null;
         }
-        function _boxHit(box, x, y){
+        function _boxHit(box, x, y) {
           return box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
         }
-        function _boxHandle(box, x, y, cornersOnly){
+        function _boxHandle(box, x, y, cornersOnly) {
           if (!box) return null;
           var tol = Math.max(8, Math.min(16, Math.min(box.w || 0, box.h || 0) * 0.14));
           return _pe2HandleHitRect(box.x, box.y, box.x + box.w, box.y + box.h, x, y, tol, cornersOnly);
         }
-        function _extraBoundsFrac(z){
+        function _extraBoundsFrac(z) {
           if (!z) return null;
           var w = Math.max(0.01, Math.min(1, (z.width || 80) / 100));
           var h = Math.max(0.01, Math.min(1, (z.height || 12) / 100));
@@ -991,9 +1352,9 @@
           var yc = ((z.position === undefined || z.position === null) ? 50 : z.position) / 100;
           var left = Math.max(0, Math.min(1 - w, xc - w / 2));
           var top = Math.max(0, Math.min(1 - h, yc - h / 2));
-          return { left:left, top:top, right:left + w, bottom:top + h, x:left + w / 2, y:top + h / 2, w:w, h:h };
+          return { left: left, top: top, right: left + w, bottom: top + h, x: left + w / 2, y: top + h / 2, w: w, h: h };
         }
-        function _mainBlurBoundsFrac(){
+        function _mainBlurBoundsFrac() {
           if (!document.getElementById('proc-blur-original')?.checked) return null;
           var h = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
           var yVal = document.getElementById('proc-blur-y')?.value?.trim();
@@ -1007,45 +1368,45 @@
             : 0.5;
           var left = Math.max(0, Math.min(1 - w, xc - w / 2));
           var top = Math.max(0, Math.min(1 - h, yc - h / 2));
-          return { left:left, top:top, right:left + w, bottom:top + h, x:xc, y:top + h / 2, w:w, h:h };
+          return { left: left, top: top, right: left + w, bottom: top + h, x: xc, y: top + h / 2, w: w, h: h };
         }
-        function _hitExtraHandle(fxv, fyv){
+        function _hitExtraHandle(fxv, fyv) {
           var sel = window._pe2Sel;
           if (!sel || sel.type !== 'extra') return null;
-          var z = (window._procExtraBlurZones || []).find(function(item){ return item.id === sel.id; });
+          var z = (window._procExtraBlurZones || []).find(function (item) { return item.id === sel.id; });
           var b = _extraBoundsFrac(z);
           var edge = b ? _pe2HandleHitRect(b.left, b.top, b.right, b.bottom, fxv, fyv, 0.04) : null;
-          return edge ? { type:'resize', id:sel.id, edge:edge } : null;
+          return edge ? { type: 'resize', id: sel.id, edge: edge } : null;
         }
-        function _hitMainBlurHandle(fxv, fyv){
+        function _hitMainBlurHandle(fxv, fyv) {
           var sel = window._pe2Sel;
           if (!sel || sel.type !== 'blur') return null;
           var b = _mainBlurBoundsFrac();
           var edge = b ? _pe2HandleHitRect(b.left, b.top, b.right, b.bottom, fxv, fyv, 0.04) : null;
-          return edge ? { type:'blur-resize', edge:edge } : null;
+          return edge ? { type: 'blur-resize', edge: edge } : null;
         }
-        function _hitFrameInteractive(cx, cy){
+        function _hitFrameInteractive(cx, cy) {
           var items = window._frameInteractive || {};
           var sel = window._pe2Sel;
           if (sel && sel.type === 'frame-logo') {
             var logoHandle = _boxHandle(items.logo, cx, cy, false);
-            if (logoHandle) return { type:'frame-logo-resize', edge:logoHandle };
+            if (logoHandle) return { type: 'frame-logo-resize', edge: logoHandle };
           }
           if (sel && sel.type === 'frame-title') {
             var titleHandle = _boxHandle(items.title, cx, cy, true);
-            if (titleHandle) return { type:'frame-title-resize', edge:titleHandle };
+            if (titleHandle) return { type: 'frame-title-resize', edge: titleHandle };
           }
           if (sel && sel.type === 'sub') {
             var subHandle = _boxHandle(items.sub, cx, cy, true);
-            if (subHandle) return { type:'sub-resize', edge:subHandle };
+            if (subHandle) return { type: 'sub-resize', edge: subHandle };
           }
-          if (_boxHit(items.logo, cx, cy)) return { type:'frame-logo' };
-          if (_boxHit(items.title, cx, cy)) return { type:'frame-title' };
-          if (_boxHit(items.titleBar, cx, cy)) return { type:'frame-title' };
-          if (_boxHit(items.sub, cx, cy)) return { type:'sub' };
+          if (_boxHit(items.logo, cx, cy)) return { type: 'frame-logo' };
+          if (_boxHit(items.title, cx, cy)) return { type: 'frame-title' };
+          if (_boxHit(items.titleBar, cx, cy)) return { type: 'frame-title' };
+          if (_boxHit(items.sub, cx, cy)) return { type: 'sub' };
           return null;
         }
-        function _frameSourcePointFromEvent(e, g){
+        function _frameSourcePointFromEvent(e, g) {
           var canvas = document.getElementById('frame-preview-canvas');
           var crect = canvas ? canvas.getBoundingClientRect() : wrap.getBoundingClientRect();
           var cx = (e.clientX - crect.left) / (crect.width || 1) * (g.cW || 1);
@@ -1056,22 +1417,22 @@
             y: (cy - (g.fgY || 0)) / scale
           };
         }
-        function _setNumericValue(id, value, digits){
+        function _setNumericValue(id, value, digits) {
           var el = document.getElementById(id);
           if (!el) return;
           var factor = Math.pow(10, digits == null ? 1 : digits);
           el.value = Math.round(value * factor) / factor;
         }
-        function _frameTitleActive(){
+        function _frameTitleActive() {
           return (document.getElementById('frame-title-enabled')?.checked ?? true)
             && !!(document.getElementById('frame-title')?.value || '').trim();
         }
-        function _frameLogoTitleOffset(g){
+        function _frameLogoTitleOffset(g) {
           var mode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay';
           return (mode === 'overlay' && _frameTitleActive()) ? (g.srcTitleBarH || 0) : 0;
         }
 
-        document.addEventListener('pointerdown', function(e){
+        document.addEventListener('pointerdown', function (e) {
           if (!wrap.contains(e.target)) return;
           var frameOn = document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked;
 
@@ -1083,8 +1444,8 @@
             var rect = canvas.getBoundingClientRect();
             if (!rect.width || !rect.height) return;
             // Click position in canvas-internal coords
-            var cx = (e.clientX - rect.left) / rect.width  * g.cW;
-            var cy = (e.clientY - rect.top)  / rect.height * g.cH;
+            var cx = (e.clientX - rect.left) / rect.width * g.cW;
+            var cy = (e.clientY - rect.top) / rect.height * g.cH;
             // Convert to video-area fraction (0..1)
             var fxv = (cx - g.vidX) / g.vidW;
             var fyv = (cy - g.vidY) / g.vidH;
@@ -1102,7 +1463,7 @@
                 var z = zones[zi];
                 var zb = _extraBoundsFrac(z);
                 if (zb && fxv >= zb.left && fxv <= zb.right && fyv >= zb.top && fyv <= zb.bottom) {
-                  hit = { type:'extra', id: z.id };
+                  hit = { type: 'extra', id: z.id };
                   break;
                 }
               }
@@ -1116,13 +1477,13 @@
               if (byOv !== '' && byOv !== undefined) {
                 myc = parseFloat(byOv) / 100;
               } else {
-                myc = (document.getElementById('proc-sub-pos')?.value === 'top') ? mbh/2 + 0.06 : 1 - mbh/2 - 0.06;
+                myc = (document.getElementById('proc-sub-pos')?.value === 'top') ? mbh / 2 + 0.06 : 1 - mbh / 2 - 0.06;
               }
               var bxOvX = document.getElementById('proc-blur-x')?.value?.trim();
               var mxc = (bxOvX !== '' && bxOvX !== undefined) ? parseFloat(bxOvX) / 100 : 0.5;
-              if (fxv >= mxc - mbw/2 && fxv <= mxc + mbw/2 &&
-                  fyv >= myc - mbh/2 && fyv <= myc + mbh/2) {
-                hit = { type:'blur' };
+              if (fxv >= mxc - mbw / 2 && fxv <= mxc + mbw / 2 &&
+                fyv >= myc - mbh / 2 && fyv <= myc + mbh / 2) {
+                hit = { type: 'blur' };
               }
               var blurHandleHit = _hitMainBlurHandle(fxv, fyv);
               if (blurHandleHit) hit = blurHandleHit;
@@ -1136,16 +1497,16 @@
               drag._active = false;
               // Selection follows the zone (resize keeps the same zone selected)
               window._pe2Sel = (hit.type === 'resize')
-                ? { type:'extra', id: hit.id }
+                ? { type: 'extra', id: hit.id }
                 : ((hit.type === 'ov-resize')
-                  ? { type:'overlay', id: hit.id }
+                  ? { type: 'overlay', id: hit.id }
                   : ((hit.type === 'frame-logo-resize')
-                    ? { type:'frame-logo' }
+                    ? { type: 'frame-logo' }
                     : ((hit.type === 'frame-title-resize')
-                      ? { type:'frame-title' }
+                      ? { type: 'frame-title' }
                       : ((hit.type === 'sub-resize')
-                        ? { type:'sub' }
-                        : ((hit.type === 'blur-resize') ? { type:'blur' } : hit)))));
+                        ? { type: 'sub' }
+                        : ((hit.type === 'blur-resize') ? { type: 'blur' } : hit)))));
               if (hit.type === 'ov-resize') {
                 var ro = _ovById(hit.id);
                 if (ro) {
@@ -1208,14 +1569,14 @@
 
           var t = e.target;
           var handle = (t.closest ? t.closest('.pe2-handle') : null);
-          if (handle){
+          if (handle) {
             var ovElH = handle.closest('.video-overlay-el');
             var zEl = handle.closest('.extra-blur-zone');
             var blurElH = handle.closest('#sub-preview-blur');
             if (ovElH) {
               var ovId = ovElH.dataset.ovId;
               var ro = _ovById(ovId);
-              drag = { type:'ov-resize', id: ovId, edge: handle.dataset.pe2handle };
+              drag = { type: 'ov-resize', id: ovId, edge: handle.dataset.pe2handle };
               if (ro) {
                 drag._startSizePct = Number(ro.size_pct || 0.05);
                 var elRect = ovElH.getBoundingClientRect();
@@ -1225,22 +1586,22 @@
                 drag._startDist = Math.max(8, Math.max(Math.abs(e.clientX - cxSub) * 0.7, Math.abs(e.clientY - cySub) * 2));
                 drag._startBounds = _ovBoundsFrac(ro);
               }
-              window._pe2Sel = { type:'overlay', id: drag.id };
+              window._pe2Sel = { type: 'overlay', id: drag.id };
               if (window.ovSelectLayer) window.ovSelectLayer(drag.id, true, true);
             } else if (zEl) {
-              drag = { type:'resize', id: parseInt(zEl.dataset.zoneId), edge: handle.dataset.pe2handle };
-              window._pe2Sel = { type:'extra', id: drag.id };
+              drag = { type: 'resize', id: parseInt(zEl.dataset.zoneId), edge: handle.dataset.pe2handle };
+              window._pe2Sel = { type: 'extra', id: drag.id };
             } else if (blurElH) {
-              drag = { type:'blur-resize', edge: handle.dataset.pe2handle };
-              window._pe2Sel = { type:'blur' };
+              drag = { type: 'blur-resize', edge: handle.dataset.pe2handle };
+              window._pe2Sel = { type: 'blur' };
             } else return;
           } else {
             var zoneEl = (t.closest ? t.closest('.extra-blur-zone') : null);
             var ovEl = (t.closest ? t.closest('.video-overlay-el') : null);
-            if (t.id === 'sub-preview-text') drag = { type:'sub' };
-            else if (t.id === 'sub-preview-blur' || t.id === 'sub-preview-blur-canvas') drag = { type:'blur' };
-            else if (ovEl) drag = { type:'overlay', id: ovEl.dataset.ovId };
-            else if (zoneEl) drag = { type:'extra', id: parseInt(zoneEl.dataset.zoneId) };
+            if (t.id === 'sub-preview-text') drag = { type: 'sub' };
+            else if (t.id === 'sub-preview-blur' || t.id === 'sub-preview-blur-canvas') drag = { type: 'blur' };
+            else if (ovEl) drag = { type: 'overlay', id: ovEl.dataset.ovId };
+            else if (zoneEl) drag = { type: 'extra', id: parseInt(zoneEl.dataset.zoneId) };
             else { window._pe2Sel = null; pe2ApplySelection(); return; }   // bấm vùng trống → bỏ chọn
             window._pe2Sel = drag;
             if (drag.type === 'overlay' && window.ovSelectLayer) window.ovSelectLayer(drag.id, true, true);
@@ -1256,7 +1617,7 @@
           e.preventDefault(); e.stopPropagation();
         }, true);
 
-        function _pe2CanvasHoverHit(e){
+        function _pe2CanvasHoverHit(e) {
           var frameOn = document.getElementById('frame-enabled') && document.getElementById('frame-enabled').checked;
           if (!frameOn) return null;
           var canvas = document.getElementById('frame-preview-canvas');
@@ -1265,8 +1626,8 @@
           var rect = canvas.getBoundingClientRect();
           if (!rect.width || !rect.height) return null;
           if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return null;
-          var cx = (e.clientX - rect.left) / rect.width  * g.cW;
-          var cy = (e.clientY - rect.top)  / rect.height * g.cH;
+          var cx = (e.clientX - rect.left) / rect.width * g.cW;
+          var cy = (e.clientY - rect.top) / rect.height * g.cH;
           var fxv = (cx - g.vidX) / g.vidW;
           var fyv = (cy - g.vidY) / g.vidH;
 
@@ -1281,29 +1642,29 @@
           for (var zi = zones.length - 1; zi >= 0; zi--) {
             var zb = _extraBoundsFrac(zones[zi]);
             if (zb && fxv >= zb.left && fxv <= zb.right && fyv >= zb.top && fyv <= zb.bottom) {
-              return { type:'extra', id:zones[zi].id };
+              return { type: 'extra', id: zones[zi].id };
             }
           }
           var mb = _mainBlurBoundsFrac();
           if (mb && fxv >= mb.left && fxv <= mb.right && fyv >= mb.top && fyv <= mb.bottom) {
-            return { type:'blur' };
+            return { type: 'blur' };
           }
           return null;
         }
 
-        document.addEventListener('pointermove', function(e){
+        document.addEventListener('pointermove', function (e) {
           if (drag || !wrap.contains(e.target)) return;
           var canvas = document.getElementById('frame-preview-canvas');
           if (!canvas) return;
           var hit = _pe2CanvasHoverHit(e);
           canvas.style.cursor = _pe2CursorForHit(hit) || '';
         }, true);
-        wrap.addEventListener('mouseleave', function(){
+        wrap.addEventListener('mouseleave', function () {
           var canvas = document.getElementById('frame-preview-canvas');
           if (canvas) canvas.style.cursor = '';
         });
 
-        document.addEventListener('pointermove', function(e){
+        document.addEventListener('pointermove', function (e) {
           if (!drag) return;
           // Dead-zone: chỉ chặn di chuyển, không chặn selection (selection đã xảy ra ở pointerdown)
           if (!drag._active) {
@@ -1324,9 +1685,9 @@
           if (frameOn && g && g.vidH) {
             var canvas = document.getElementById('frame-preview-canvas');
             var crect = canvas ? canvas.getBoundingClientRect() : rect;
-            var cx = (e.clientX - crect.left) / crect.width  * g.cW;
-            var cy = (e.clientY - crect.top)  / crect.height * g.cH;
-            f  = clamp((cy - g.vidY) / g.vidH, 0, 1);
+            var cx = (e.clientX - crect.left) / crect.width * g.cW;
+            var cy = (e.clientY - crect.top) / crect.height * g.cH;
+            f = clamp((cy - g.vidY) / g.vidH, 0, 1);
             fx = clamp((cx - g.vidX) / g.vidW, 0, 1);
           } else {
             // Chế độ phụ đề: tính theo vùng ẢNH (khi letterbox đổi khung, ảnh nằm
@@ -1334,11 +1695,11 @@
             var _imgD = document.getElementById('sub-preview-img');
             var _ir = (_imgD && _imgD.style.display !== 'none') ? _imgD.getBoundingClientRect() : null;
             var br = (_ir && _ir.height) ? _ir : rect;
-            f  = clamp((e.clientY - br.top)  / br.height, 0, 1);
-            fx = clamp((e.clientX - br.left) / br.width,  0, 1);
+            f = clamp((e.clientY - br.top) / br.height, 0, 1);
+            fx = clamp((e.clientX - br.left) / br.width, 0, 1);
           }
 
-          if (drag.type === 'sub'){
+          if (drag.type === 'sub') {
             var posSel = document.getElementById('proc-sub-pos');
             var marginEl = document.getElementById('proc-margin-v');
             // Offset từ điểm click để tránh nhảy
@@ -1348,7 +1709,7 @@
               drag._offsetF = f - curPos;
             }
             var adjF = clamp(f - drag._offsetF, 0, 1);
-            if (adjF < 0.5){
+            if (adjF < 0.5) {
               if (posSel) posSel.value = 'top';
               if (marginEl) marginEl.value = Math.round(clamp(adjF * 100, 0, 50) * 10) / 10;
             } else {
@@ -1356,7 +1717,7 @@
               if (marginEl) marginEl.value = Math.round(clamp((1 - adjF) * 100, 0, 50) * 10) / 10;
             }
             if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
-          } else if (drag.type === 'blur'){
+          } else if (drag.type === 'blur') {
             var by = document.getElementById('proc-blur-y');
             var bx = document.getElementById('proc-blur-x');
             if (by) {
@@ -1369,7 +1730,7 @@
             }
             if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
 
-          } else if (drag.type === 'blur-resize'){
+          } else if (drag.type === 'blur-resize') {
             var bhEl = document.getElementById('proc-blur-height');
             var bwEl = document.getElementById('proc-blur-width');
             var byEl = document.getElementById('proc-blur-y');
@@ -1377,7 +1738,7 @@
             var curH = parseFloat(bhEl?.value || 15) / 100;
             var center = (byEl?.value?.trim() !== '' && byEl?.value !== undefined)
               ? parseFloat(byEl.value) / 100
-              : ((document.getElementById('proc-sub-pos')?.value === 'top') ? curH/2 + 0.06 : 1 - curH/2 - 0.06);
+              : ((document.getElementById('proc-sub-pos')?.value === 'top') ? curH / 2 + 0.06 : 1 - curH / 2 - 0.06);
             var centerX = (bxEl?.value?.trim() !== '' && bxEl?.value !== undefined)
               ? parseFloat(bxEl.value) / 100
               : 0.5;
@@ -1389,9 +1750,9 @@
               if (bwEl) bwEl.value = Math.round(clamp(2 * Math.abs(fx - centerX) * 100, 10, 100));
             }
             if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
-          } else if (drag.type === 'extra'){
-            var z = (window._procExtraBlurZones || []).find(function(x){ return x.id === drag.id; });
-            if (z){
+          } else if (drag.type === 'extra') {
+            var z = (window._procExtraBlurZones || []).find(function (x) { return x.id === drag.id; });
+            if (z) {
               // Di chuyển tương đối từ điểm click (tránh nhảy vị trí)
               if (drag._offsetF === undefined) {
                 drag._offsetF = f - (z.position || 50) / 100;
@@ -1399,7 +1760,7 @@
               }
               z.position = Math.round(clamp((f - drag._offsetF) * 100, 0, 100));
               z.x = Math.round(clamp((fx - drag._offsetFx) * 100, 0, 100));
-              
+
               if (!frameOn) {
                 // DOM mode: direct style update to prevent drag target deletion
                 var el = wrap.querySelector('.extra-blur-zone[data-zone-id="' + drag.id + '"]');
@@ -1411,12 +1772,12 @@
                   var _wrapRectO = wrap.getBoundingClientRect();
                   var imgOffX = rect.width ? Math.max(0, Math.round(rect.left - _wrapRectO.left)) : 0;
                   var imgOffY = rect.height ? Math.max(0, Math.round(rect.top - _wrapRectO.top)) : 0;
-                  
+
                   var zH = (z.height || 12) / 100;
                   var zY = z.position / 100 - zH / 2;
                   var zW = (z.width || 80) / 100;
                   var zLeftFrac = Math.max(0, Math.min(1 - zW, z.x / 100 - zW / 2));
-                  
+
                   el.style.left = (imgOffX + Math.round(dispW * zLeftFrac)) + 'px';
                   el.style.top = (imgOffY + Math.round(dispH * Math.max(0, Math.min(1 - zH, zY)))) + 'px';
                 }
@@ -1437,9 +1798,9 @@
                 if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
               }
             }
-          } else if (drag.type === 'resize'){
-            var zr = (window._procExtraBlurZones || []).find(function(x){ return x.id === drag.id; });
-            if (zr){
+          } else if (drag.type === 'resize') {
+            var zr = (window._procExtraBlurZones || []).find(function (x) { return x.id === drag.id; });
+            if (zr) {
               var edgeZ = drag.edge || '';
               var w0 = Math.max(0.01, Math.min(1, (zr.width || 80) / 100));
               var h0 = Math.max(0.01, Math.min(1, (zr.height || 12) / 100));
@@ -1462,7 +1823,7 @@
               zr.height = Math.round(newH * 100);
               zr.x = Math.round((left + newW / 2) * 100);
               zr.position = Math.round((top + newH / 2) * 100);
-              
+
               if (!frameOn) {
                 // DOM mode: direct style update to prevent target element deletion
                 var el = wrap.querySelector('.extra-blur-zone[data-zone-id="' + drag.id + '"]');
@@ -1474,12 +1835,12 @@
                   var _wrapRectO = wrap.getBoundingClientRect();
                   var imgOffX = rect.width ? Math.max(0, Math.round(rect.left - _wrapRectO.left)) : 0;
                   var imgOffY = rect.height ? Math.max(0, Math.round(rect.top - _wrapRectO.top)) : 0;
-                  
+
                   var zH = zr.height / 100;
                   var zY = zr.position / 100 - zH / 2;
                   var zW = zr.width / 100;
                   var zLeftFrac = Math.max(0, Math.min(1 - zW, zr.x / 100 - zW / 2));
-                  
+
                   el.style.left = (imgOffX + Math.round(dispW * zLeftFrac)) + 'px';
                   el.style.top = (imgOffY + Math.round(dispH * Math.max(0, Math.min(1 - zH, zY)))) + 'px';
                   el.style.width = Math.round(dispW * zW) + 'px';
@@ -1504,16 +1865,16 @@
                 if (typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
               }
             }
-          } else if (drag.type === 'overlay'){
+          } else if (drag.type === 'overlay') {
             var ov = _ovById(drag.id);
-            if (ov){
+            if (ov) {
               if (drag._offsetF === undefined) {
-                drag._offsetF  = f  - Number(ov.y_pct == null ? 0.5 : ov.y_pct);
+                drag._offsetF = f - Number(ov.y_pct == null ? 0.5 : ov.y_pct);
                 drag._offsetFx = fx - Number(ov.x_pct == null ? 0.5 : ov.x_pct);
               }
               ov.x_pct = Math.round(clamp(fx - drag._offsetFx, 0, 1) * 1000) / 1000;
-              ov.y_pct = Math.round(clamp(f  - drag._offsetF,  0, 1) * 1000) / 1000;
-              
+              ov.y_pct = Math.round(clamp(f - drag._offsetF, 0, 1) * 1000) / 1000;
+
               if (!frameOn) {
                 // DOM mode: direct style update
                 var el = wrap.querySelector('.video-overlay-el[data-ov-id="' + drag.id + '"]');
@@ -1557,7 +1918,7 @@
                 if (window.ovRenderLayerList) window.ovRenderLayerList();
               }
             }
-          } else if (drag.type === 'frame-title'){
+          } else if (drag.type === 'frame-title') {
             var spTitle = _frameSourcePointFromEvent(e, g || {});
             var srcCW = Math.max(1, g?.srcCW || g?.cW || 1);
             var titleH = Math.max(1, g?.srcTitleBarH || g?.titleBarH || 1);
@@ -1565,17 +1926,17 @@
               var curTX = parseFloat(document.getElementById('frame-title-x')?.value || 50) / 100 * srcCW;
               var curTY = parseFloat(document.getElementById('frame-title-y')?.value || 50) / 100 * titleH;
               drag._offsetFx = spTitle.x - curTX;
-              drag._offsetF  = spTitle.y - curTY;
+              drag._offsetF = spTitle.y - curTY;
             }
             _setNumericValue('frame-title-x', clamp((spTitle.x - drag._offsetFx) / srcCW * 100, 0, 100), 1);
-            _setNumericValue('frame-title-y', clamp((spTitle.y - drag._offsetF)  / titleH * 100, 0, 100), 1);
-          } else if (drag.type === 'frame-title-resize'){
+            _setNumericValue('frame-title-y', clamp((spTitle.y - drag._offsetF) / titleH * 100, 0, 100), 1);
+          } else if (drag.type === 'frame-title-resize') {
             var titleSrc = window._frameInteractive?.title;
             if (titleSrc && g && g.cW) {
               var canvas = document.getElementById('frame-preview-canvas');
               var crect = canvas ? canvas.getBoundingClientRect() : rect;
-              var cx = (e.clientX - crect.left) / crect.width  * g.cW;
-              var cy = (e.clientY - crect.top)  / crect.height * g.cH;
+              var cx = (e.clientX - crect.left) / crect.width * g.cW;
+              var cy = (e.clientY - crect.top) / crect.height * g.cH;
               var sizePct;
               if (drag._startCenter && drag._startDist) {
                 var curDist = Math.max(Math.abs(cx - drag._startCenter.x) * 0.45, Math.abs(cy - drag._startCenter.y) * 1.6);
@@ -1587,12 +1948,12 @@
               }
               _setNumericValue('frame-title-size', clamp(sizePct, 1, 15), 1);
             }
-          } else if (drag.type === 'frame-logo-resize'){
+          } else if (drag.type === 'frame-logo-resize') {
             var logoSrc = window._frameInteractive?.logo;
             if (logoSrc && g && g.vidH) {
               var canvas = document.getElementById('frame-preview-canvas');
               var crect = canvas ? canvas.getBoundingClientRect() : rect;
-              var cy = (e.clientY - crect.top)  / crect.height * g.cH;
+              var cy = (e.clientY - crect.top) / crect.height * g.cH;
               var logoPct;
               if (drag._startCenterY !== undefined && drag._startDist) {
                 var curDist = Math.abs(cy - drag._startCenterY) * 2;
@@ -1603,7 +1964,7 @@
               }
               _setNumericValue('frame-logo-size', clamp(logoPct, 2, 40), 1);
             }
-          } else if (drag.type === 'frame-logo'){
+          } else if (drag.type === 'frame-logo') {
             var spLogo = _frameSourcePointFromEvent(e, g || {});
             var srcVidX = g?.srcVidX || 0;
             var srcVidY = g?.srcVidY || 0;
@@ -1612,19 +1973,19 @@
             var titleOffset = _frameLogoTitleOffset(g || {});
             if (drag._offsetFx === undefined) {
               var curLogoLeft = parseFloat(document.getElementById('frame-logo-left')?.value || 5) / 100 * srcVidW + srcVidX;
-              var curLogoTop  = parseFloat(document.getElementById('frame-logo-top')?.value  || 5) / 100 * srcVidH + srcVidY + titleOffset;
+              var curLogoTop = parseFloat(document.getElementById('frame-logo-top')?.value || 5) / 100 * srcVidH + srcVidY + titleOffset;
               drag._offsetFx = spLogo.x - curLogoLeft;
-              drag._offsetF  = spLogo.y - curLogoTop;
+              drag._offsetF = spLogo.y - curLogoTop;
             }
             _setNumericValue('frame-logo-left', clamp((spLogo.x - drag._offsetFx - srcVidX) / srcVidW * 100, 0, 90), 1);
-            _setNumericValue('frame-logo-top',  clamp((spLogo.y - drag._offsetF  - srcVidY - titleOffset) / srcVidH * 100, 0, 90), 1);
-          } else if (drag.type === 'frame-logo-resize'){
+            _setNumericValue('frame-logo-top', clamp((spLogo.y - drag._offsetF - srcVidY - titleOffset) / srcVidH * 100, 0, 90), 1);
+          } else if (drag.type === 'frame-logo-resize') {
             var logoSrc = window._frameInteractive?.logo;
             if (logoSrc && g && g.vidH) {
               var canvas = document.getElementById('frame-preview-canvas');
               var crect = canvas ? canvas.getBoundingClientRect() : rect;
-              var cy = (e.clientY - crect.top)  / crect.height * g.cH;
-              
+              var cy = (e.clientY - crect.top) / crect.height * g.cH;
+
               var cyLogo = logoSrc.y + logoSrc.h / 2;
               var logoPct = Math.abs(cy - cyLogo) * 2 / g.vidH * 100;
               _setNumericValue('frame-logo-size', clamp(logoPct, 2, 40), 1);
@@ -1634,8 +1995,8 @@
             if (subSrc && g && g.vidH) {
               var canvas = document.getElementById('frame-preview-canvas');
               var crect = canvas ? canvas.getBoundingClientRect() : rect;
-              var cx = (e.clientX - crect.left) / crect.width  * g.cW;
-              var cy = (e.clientY - crect.top)  / crect.height * g.cH;
+              var cx = (e.clientX - crect.left) / crect.width * g.cW;
+              var cy = (e.clientY - crect.top) / crect.height * g.cH;
               var sizePct;
               if (drag._startCenter && drag._startDist) {
                 var curDist = Math.max(Math.abs(cy - drag._startCenter.y) * 2, Math.abs(cx - drag._startCenter.x) * 0.7);
@@ -1647,31 +2008,31 @@
               }
               _setNumericValue('proc-font-size', clamp(sizePct, 1, 20), 1);
             }
-          } else if (drag.type === 'ov-resize'){
+          } else if (drag.type === 'ov-resize') {
             var ro = _ovById(drag.id);
-            if (ro){
+            if (ro) {
               var edgeO = drag.edge || '';
               var ox = Number(ro.x_pct == null ? 0.5 : ro.x_pct);
               var oy = Number(ro.y_pct == null ? 0.5 : ro.y_pct);
               if (ro.type === 'text') {
                 var b0 = drag._startBounds || _ovBoundsFrac(ro);
                 var oldSizePct = drag._startSizePct || Number(ro.size_pct || 0.05);
-                
+
                 var xFixed = b0.x;
                 var yFixed = b0.y;
                 if (edgeO.indexOf('w') >= 0) xFixed = b0.right;
                 else if (edgeO.indexOf('e') >= 0) xFixed = b0.left;
                 if (edgeO.indexOf('n') >= 0) yFixed = b0.bottom;
                 else if (edgeO.indexOf('s') >= 0) yFixed = b0.top;
-                
+
                 var targetW = Math.abs(fx - xFixed);
                 var targetH = Math.abs(f - yFixed);
                 if (xFixed === b0.x) targetW = 2 * targetW;
                 if (yFixed === b0.y) targetH = 2 * targetH;
-                
+
                 var ratioW = b0.w > 0 ? targetW / b0.w : 1;
                 var ratioH = b0.h > 0 ? targetH / b0.h : 1;
-                
+
                 var ratio = 1;
                 if (edgeO.indexOf('w') >= 0 || edgeO.indexOf('e') >= 0) {
                   if (edgeO.indexOf('n') >= 0 || edgeO.indexOf('s') >= 0) {
@@ -1682,20 +2043,20 @@
                 } else if (edgeO.indexOf('n') >= 0 || edgeO.indexOf('s') >= 0) {
                   ratio = ratioH;
                 }
-                
+
                 var newSizePct = clamp(oldSizePct * ratio, 0.01, 0.30);
                 ro.size_pct = Math.round(newSizePct * 1000) / 1000;
-                
+
                 var actualRatio = newSizePct / oldSizePct;
                 var newW = b0.w * actualRatio;
                 var newH = b0.h * actualRatio;
-                
+
                 if (edgeO.indexOf('w') >= 0) {
                   ro.x_pct = Math.round(clamp(xFixed - newW / 2, 0, 1) * 1000) / 1000;
                 } else if (edgeO.indexOf('e') >= 0) {
                   ro.x_pct = Math.round(clamp(xFixed + newW / 2, 0, 1) * 1000) / 1000;
                 }
-                
+
                 if (edgeO.indexOf('n') >= 0) {
                   ro.y_pct = Math.round(clamp(yFixed - newH / 2, 0, 1) * 1000) / 1000;
                 } else if (edgeO.indexOf('s') >= 0) {
@@ -1720,7 +2081,7 @@
                 ro.x_pct = Math.round((rLeft + newRectW / 2) * 1000) / 1000;
                 ro.y_pct = Math.round((rTop + newRectH / 2) * 1000) / 1000;
               }
-              
+
               if (!frameOn) {
                 // DOM mode: direct style update
                 var el = wrap.querySelector('.video-overlay-el[data-ov-id="' + drag.id + '"]');
@@ -1774,8 +2135,8 @@
           e.preventDefault();
         });
 
-        document.addEventListener('pointerup', function(){
-          if (drag){
+        document.addEventListener('pointerup', function () {
+          if (drag) {
             drag = null;
             document.body.classList.remove('pe2-dragging');
             if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
@@ -1789,21 +2150,21 @@
       // ── Timeline state ──
       window._pe2Duration = window._pe2Duration || 0;   // 0 = chưa biết
 
-      function _fmt(sec){
+      function _fmt(sec) {
         sec = Math.max(0, Math.round(sec));
         var m = Math.floor(sec / 60), s = sec % 60;
         return m + ':' + (s < 10 ? '0' + s : s);
       }
-      function _dur(){ return window._pe2Duration > 0 ? window._pe2Duration : 0; }
+      function _dur() { return window._pe2Duration > 0 ? window._pe2Duration : 0; }
 
-      function _renderRuler(){
+      function _renderRuler() {
         var ruler = document.getElementById('pe2-tl-ruler');
         if (!ruler) return;
         var dur = _dur();
         ruler.innerHTML = '';
         if (!dur) return;   // Chưa có duration → không vẽ tick (tránh hiển thị sai)
         var ticks = 8;
-        for (var i = 0; i <= ticks; i++){
+        for (var i = 0; i <= ticks; i++) {
           var pct = (i / ticks) * 100;
           var tk = document.createElement('div');
           tk.className = 'pe2-tl-tick';
@@ -1817,7 +2178,7 @@
       // Expose để scripts.html có thể gọi khi duration cập nhật
       window._pe2RenderRuler = _renderRuler;
       // Vẽ các đoạn "burn từ → đến" của các lớp lên timeline đa track
-      window.pe2RenderRanges = function(){
+      window.pe2RenderRanges = function () {
         var box = document.getElementById('pe2-tl-ranges');
         if (!box) return;
         box.innerHTML = '';
@@ -1847,7 +2208,7 @@
         }
 
         // 2. Track Vùng che bổ sung (Blur Zones)
-        (window._procExtraBlurZones || []).forEach(function(z){
+        (window._procExtraBlurZones || []).forEach(function (z) {
           var hasS = !(z.start === '' || z.start === null || z.start === undefined);
           var hasE = !(z.end === '' || z.end === null || z.end === undefined);
           var s = hasS ? Number(z.start) : 0;
@@ -1876,7 +2237,7 @@
         });
 
         // 3. Track Overlays (Text / Shape / Image)
-        (window._videoOverlays || []).forEach(function(ov, oIdx){
+        (window._videoOverlays || []).forEach(function (ov, oIdx) {
           if (ov.enabled === false) return;
           var hasS = !(ov.start_sec === '' || ov.start_sec === null || ov.start_sec === undefined);
           var hasE = !(ov.end_sec === '' || ov.end_sec === null || ov.end_sec === undefined);
@@ -1924,7 +2285,7 @@
         vidAudioLine.style.display = 'flex';
         vidAudioLine.style.alignItems = 'center';
         vidAudioLine.style.paddingLeft = '4px';
-        
+
         var vidAudioIcon = document.createElement('span');
         vidAudioIcon.textContent = '🔊';
         vidAudioIcon.style.fontSize = '9px';
@@ -1936,14 +2297,14 @@
         // 5. Track Âm thanh ngoài (External audio)
         var extAudioEnabled = document.getElementById('proc-ext-audio-enabled')?.checked || false;
         if (extAudioEnabled && window._procExtAudios && window._procExtAudios.length > 0) {
-          window._procExtAudios.forEach(function(track, tIdx) {
+          window._procExtAudios.forEach(function (track, tIdx) {
             if (!track.path) return;
             var startStr = String(track.vid_start || '').trim().toLowerCase();
             var endStr = String(track.vid_end || '').trim().toLowerCase();
-            
+
             var s = (startStr === 'đầu' || startStr === 'dau' || startStr === '') ? 0 : parseFloat(startStr);
             var e = (endStr === 'cuối' || endStr === 'cuoi' || endStr === 'hết' || endStr === 'het' || endStr === '') ? dur : parseFloat(endStr);
-            
+
             if (isNaN(s)) s = 0;
             if (isNaN(e)) e = dur;
 
@@ -1953,7 +2314,7 @@
 
             s = Math.max(0, Math.min(dur, s));
             e = Math.max(s, Math.min(dur, e));
-            
+
             if (e > s) {
               var left = Math.max(0, Math.min(100, s / dur * 100));
               var width = Math.max(1, Math.min(100 - left, (e - s) / dur * 100));
@@ -1962,7 +2323,7 @@
               seg.style.left = left + '%';
               seg.style.width = width + '%';
               seg.style.top = 'auto';
-              seg.style.bottom = (12 + tIdx * 13) + 'px'; 
+              seg.style.bottom = (12 + tIdx * 13) + 'px';
               seg.style.height = '12px';
               seg.style.background = 'rgb(168,85,247)';
               seg.style.border = 'none';
@@ -1971,14 +2332,14 @@
               seg.style.display = 'flex';
               seg.style.alignItems = 'center';
               seg.style.paddingLeft = '4px';
-              
+
               var segIcon = document.createElement('span');
-              segIcon.textContent = '🎵';
-              segIcon.style.fontSize = '9px';
+              segIcon.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+              segIcon.style.display = 'inline-flex';
+              segIcon.style.alignItems = 'center';
               segIcon.style.color = '#ffffff';
-              segIcon.style.lineHeight = '12px';
               seg.appendChild(segIcon);
-              
+
               box.appendChild(seg);
             }
           });
@@ -1986,7 +2347,7 @@
       };
 
       // Parse "m:ss" hoặc số giây → số giây
-      function _parseTime(val){
+      function _parseTime(val) {
         val = String(val || '').trim();
         if (/^\d+$/.test(val)) return parseInt(val, 10);
         var m = val.match(/^(\d+):(\d{1,2})$/);
@@ -1995,7 +2356,7 @@
       }
 
       // Nhập thời gian từ ô text (m:ss hoặc giây)
-      window.pe2SetTimeFromInput = function(val){
+      window.pe2SetTimeFromInput = function (val) {
         var ts = Math.max(0, _parseTime(val));
         var dur = window._pe2Duration > 0 ? window._pe2Duration : 0;
         if (dur > 0) ts = Math.min(ts, dur);
@@ -2008,7 +2369,7 @@
       };
 
       // Đồng bộ playhead theo giá trị sub-preview-ts
-      window.pe2SyncPlayhead = function(){
+      window.pe2SyncPlayhead = function () {
         var ph = document.getElementById('pe2-tl-playhead');
         var durEl = document.getElementById('pe2-tl-dur');
         var ts = parseFloat(document.getElementById('sub-preview-ts')?.value || 0) || 0;
@@ -2021,7 +2382,7 @@
         if (durEl) durEl.textContent = '/ ' + (window._pe2Duration > 0 ? _fmt(window._pe2Duration) : '--:--');
       };
 
-      function _seekFromX(clientX, fetch){
+      function _seekFromX(clientX, fetch) {
         var track = document.getElementById('pe2-tl-track');
         var tsInput = document.getElementById('sub-preview-ts');
         if (!track || !tsInput) return;
@@ -2038,31 +2399,31 @@
       }
 
       var _dragging = false;
-      window.pe2TimelineDown = function(e){
+      window.pe2TimelineDown = function (e) {
         _dragging = true;
         _seekFromX(e.clientX, false);
         e.preventDefault();
       };
-      document.addEventListener('mousemove', function(e){
+      document.addEventListener('mousemove', function (e) {
         if (_dragging) _seekFromX(e.clientX, false);
       });
-      document.addEventListener('mouseup', function(e){
-        if (_dragging){ _dragging = false; _seekFromX(e.clientX, true); }
+      document.addEventListener('mouseup', function (e) {
+        if (_dragging) { _dragging = false; _seekFromX(e.clientX, true); }
       });
 
       // ── Build filmstrip ──
-      window.pe2BuildFilmstrip = async function(){
+      window.pe2BuildFilmstrip = async function () {
         if (typeof _getPreviewVideoPath !== 'function') return;
         var source = _getPreviewVideoPath();
-        if (!source){ if (window.toast) toast('Chưa có video — hãy chọn file hoặc nhập URL', 'warning'); return; }
-        if (source.type !== 'file'){
+        if (!source) { if (window.toast) toast('Chưa có video — hãy chọn file hoặc nhập URL', 'warning'); return; }
+        if (source.type !== 'file') {
           if (window.toast) toast('Dải thời gian chỉ hỗ trợ video từ file (URL chỉ có ảnh bìa)', 'warning');
           return;
         }
         var btn = document.getElementById('pe2-strip-btn');
         var strip = document.getElementById('pe2-tl-strip');
         var empty = document.getElementById('pe2-tl-empty');
-        if (btn){ btn.disabled = true; btn.textContent = '⏳ Đang tạo...'; }
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tạo...'; }
         try {
           var res = await fetch('/api/video_filmstrip', {
             method: 'POST',
@@ -2070,12 +2431,12 @@
             body: JSON.stringify({ video_path: source.val, count: 14 })
           });
           var data = await res.json();
-          if (data.ok && data.frames && data.frames.length){
+          if (data.ok && data.frames && data.frames.length) {
             window._pe2Duration = data.duration || 0;
-            if (strip){
+            if (strip) {
               strip.innerHTML = '';
               var count = data.frames.length;
-              data.frames.forEach(function(src){
+              data.frames.forEach(function (src) {
                 var im = document.createElement('img');
                 im.src = src;
                 im.style.width = (100 / count) + '%';
@@ -2089,9 +2450,9 @@
             // Clamp current ts to actual duration
             var tsInput = document.getElementById('sub-preview-ts');
             var inp = document.getElementById('pe2-ts-input');
-            if (tsInput && window._pe2Duration > 0){
+            if (tsInput && window._pe2Duration > 0) {
               var cur = parseFloat(tsInput.value) || 0;
-              if (cur > window._pe2Duration) { tsInput.value = 0; if(inp) inp.value = '0:00'; }
+              if (cur > window._pe2Duration) { tsInput.value = 0; if (inp) inp.value = '0:00'; }
             }
             pe2SyncPlayhead();
             if (window.pe2RenderRanges) pe2RenderRanges();
@@ -2099,33 +2460,33 @@
           } else {
             if (window.toast) toast('Không tạo được dải: ' + (data.error || ''), 'error');
           }
-        } catch (err){
+        } catch (err) {
           if (window.toast) toast('Lỗi: ' + err.message, 'error');
         } finally {
-          if (btn){ btn.disabled = false; btn.textContent = '🎞 Tạo dải thời gian'; }
+          if (btn) { btn.disabled = false; btn.textContent = '🎞 Tạo dải thời gian'; }
         }
       };
 
       // Init ruler + playhead + aspect buttons khi DOM sẵn sàng
-      function _init(){ _renderRuler(); pe2SyncPlayhead(); _syncAspectBtns(); pe2ApplyZoom(); if(window.pe2RenderRanges) pe2RenderRanges(); }
+      function _init() { _renderRuler(); pe2SyncPlayhead(); _syncAspectBtns(); pe2ApplyZoom(); if (window.pe2RenderRanges) pe2RenderRanges(); }
       if (document.readyState !== 'loading') _init();
       else document.addEventListener('DOMContentLoaded', _init);
     })();
 
     // ── Queue video select ────────────────────────────────────────────────────
     // Populate the select with videos that have status 'ready', 'done' or 'processing'
-    window.pe2RefreshQueueSelect = function() {
+    window.pe2RefreshQueueSelect = function () {
       var sel = document.getElementById('pe2-queue-select');
       if (!sel) return;
       var q = window._batchQueue || [];
-      var items = q.filter(function(t){ return t.status === 'ready' || t.status === 'done' || t.status === 'processing'; });
+      var items = q.filter(function (t) { return t.status === 'ready' || t.status === 'done' || t.status === 'processing'; });
       // Preserve current selection
       var cur = sel.value;
       sel.innerHTML = '';
       if (items.length === 0) {
         sel.innerHTML = '<option value="">📋 Chọn video hàng chờ…</option>';
       }
-      items.forEach(function(t) {
+      items.forEach(function (t) {
         var rawLabel = t.desc || t.val || t.id || '';
         var label = rawLabel.split(/[\\/]/).pop() || rawLabel;
         var badge = t.status === 'done' ? ' ✓' : '';
@@ -2144,10 +2505,10 @@
       }
     };
 
-    window.pe2SelectQueueVideo = function(taskId) {
+    window.pe2SelectQueueVideo = function (taskId) {
       if (!taskId) return;
       var q = window._batchQueue || [];
-      var t = q.find(function(x){ return x.id === taskId; });
+      var t = q.find(function (x) { return x.id === taskId; });
       if (!t) return;
       // Set as current task
       window._procCurrentTaskId = taskId;
@@ -2165,7 +2526,7 @@
       pe2SyncPlayhead();
       // Sync proc-video field
       var pathEl = document.getElementById('proc-video');
-      var urlEl  = document.getElementById('proc-url');
+      var urlEl = document.getElementById('proc-url');
       if (/^https?:\/\//i.test(t.val || '')) {
         if (urlEl) urlEl.value = t.val;
         if (pathEl) pathEl.value = '';
@@ -2175,29 +2536,29 @@
       }
       // Fetch frame preview
       if (typeof subPreviewFetchFrame === 'function') {
-        setTimeout(function(){ subPreviewFetchFrame(); }, 100);
+        setTimeout(function () { subPreviewFetchFrame(); }, 100);
       }
       if (window.toast) toast('📋 Đã chọn: ' + (t.desc || t.val.split(/[\\/]/).pop()), 'info');
     };
 
     // Patch _renderBatchQueue inside DOMContentLoaded to ensure window._renderBatchQueue has been declared in scripts.html
-    document.addEventListener('DOMContentLoaded', function(){
+    document.addEventListener('DOMContentLoaded', function () {
       var _origRender = window._renderBatchQueue;
       if (typeof _origRender === 'function') {
-        window._renderBatchQueue = function() {
+        window._renderBatchQueue = function () {
           // Check if current active task was deleted before rendering
           var activeId = window._procCurrentTaskId;
           var q = window._batchQueue || [];
-          var activeTaskStillExists = q.some(function(t) { return t.id === activeId; });
-          
+          var activeTaskStillExists = q.some(function (t) { return t.id === activeId; });
+
           _origRender.apply(this, arguments);
-          
+
           if (activeId && !activeTaskStillExists) {
             // Active task was deleted! Resolve the next active queue item
             var nextItem = (typeof window._resolveActiveQueueItem === 'function')
               ? window._resolveActiveQueueItem()
-              : q.find(function(t) { return t.status === 'ready' || t.status === 'processing'; });
-              
+              : q.find(function (t) { return t.status === 'ready' || t.status === 'processing'; });
+
             if (nextItem) {
               if (typeof window.pe2SelectQueueVideo === 'function') {
                 window.pe2SelectQueueVideo(nextItem.id);
@@ -2206,10 +2567,10 @@
               // No ready task left. Clear active ID and reset preview
               window._procCurrentTaskId = null;
               var pathEl = document.getElementById('proc-video');
-              var urlEl  = document.getElementById('proc-url');
+              var urlEl = document.getElementById('proc-url');
               if (pathEl) pathEl.value = '';
               if (urlEl) urlEl.value = '';
-              
+
               // Hide preview image, text, blur overlays, and show placeholder
               var img = document.getElementById('sub-preview-img');
               var blurBg = document.getElementById('sub-preview-bgblur');
@@ -2218,7 +2579,7 @@
               var txt = document.getElementById('sub-preview-text');
               var blur = document.getElementById('sub-preview-blur');
               var blurCanvas = document.getElementById('sub-preview-blur-canvas');
-              
+
               if (img) img.style.display = 'none';
               if (blurBg) blurBg.style.display = 'none';
               if (placeholder) placeholder.style.display = '';
@@ -2226,7 +2587,7 @@
               if (txt) txt.style.display = 'none';
               if (blur) blur.style.display = 'none';
               if (blurCanvas) blurCanvas.style.display = 'none';
-              
+
               // Clear timeline strip
               var strip = document.getElementById('pe2-tl-strip');
               var empty = document.getElementById('pe2-tl-empty');
@@ -2235,12 +2596,12 @@
               window._pe2Duration = 0;
             }
           }
-          
+
           if (typeof window.pe2RefreshQueueSelect === 'function') window.pe2RefreshQueueSelect();
         };
       }
       if (typeof window.pe2RefreshQueueSelect === 'function') window.pe2RefreshQueueSelect();
     });
-    </script>
+  </script>
 
-  </section><!-- /step 2 -->
+</section><!-- /step 2 -->

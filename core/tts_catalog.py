@@ -82,16 +82,13 @@ _GOOGLE_CLOUD_SAMPLE_VOICES: Dict[str, List[Tuple[str, str]]] = {
 
 def _vieneu_preset_voices() -> List[Tuple[str, str]]:
     fallback = [
-        ("Ngọc Linh", "Ngọc Linh (nữ, giọng tươi sáng)"),
-        ("Ngọc Lan", "Ngọc Lan (nữ, giọng dịu dàng)"),
-        ("Mỹ Duyên", "Mỹ Duyên (nữ, giọng mượt mà)"),
+        ("Minh Quân Pro", "Minh Quân Pro (nam, giọng mặc định)"),
         ("Trúc Ly", "Trúc Ly (nữ, giọng trẻ trung)"),
-        ("Gia Bảo", "Gia Bảo (nam, giọng mượt mà)"),
+        ("Anh Khôi", "Anh Khôi (nam, kể chuyện)"),
+        ("Mai Anh", "Mai Anh (nữ)"),
         ("Thái Sơn", "Thái Sơn (nam, giọng chắc khỏe)"),
         ("Đức Trí", "Đức Trí (nam, giọng rõ ràng)"),
         ("Xuân Vĩnh", "Xuân Vĩnh (nam, giọng vui tươi)"),
-        ("Trọng Hữu", "Trọng Hữu (nam, giọng uyên bác)"),
-        ("Bình An", "Bình An (nam, giọng điềm đạm)"),
     ]
     try:
         import json as _json
@@ -111,11 +108,11 @@ def _vieneu_preset_voices() -> List[Tuple[str, str]]:
 
 def local_tts_engines() -> List[Dict[str, Any]]:
     """Return built-in/local TTS engines."""
-    return [
+    engines = [
         {
             "id": "vieneu",
-            "label": "VieNeu TTS",
-            "default": "Ngọc Linh",
+            "label": "VieNeu v3 Turbo (local, 48 kHz)",
+            "default": "Minh Quân Pro",
             "backend": "local",
             "voices": {
                 "vi": _vieneu_preset_voices(),
@@ -356,12 +353,8 @@ def local_tts_engines() -> List[Dict[str, Any]]:
             },
         },
     ]
-
-
-# Engines that can synthesize (almost) any language — used as fallback when the
-# chosen engine can't speak the target language. edge-tts covers every entry in
-# _LANGS; gTTS is the simpler last resort.
-_UNIVERSAL_FALLBACKS = ("edge-tts", "omnivoice", "gtts")
+    # Tạm khóa TTS web: toàn bộ giao diện và pipeline chỉ được chọn VieNeu local.
+    return [engines[0]]
 
 
 def _local_engine_by_id(engine_id: str) -> Dict[str, Any] | None:
@@ -386,47 +379,18 @@ def resolve_engine_voice(
     lang: str,
     cfg: Dict[str, Any] | None = None,
 ) -> Tuple[str, str, bool, str]:
-    """Pick an (engine, voice) pair that can actually speak `lang`.
-
-    Keeps the user's choice when it already supports the target language;
-    otherwise auto-selects the engine's default voice for that language, and
-    finally falls back to a universal engine (edge-tts) when the chosen engine
-    can't speak it at all.
-
-    Returns ``(engine_id, voice_id, changed, note)`` where ``changed`` is True
-    when the selection was adjusted and ``note`` is a short human-readable
-    description of what changed.
-    """
-    lang = (lang or "vi").strip().lower() or "vi"
-    eid = (engine_id or "").strip().lower()
+    """Normalize every saved selection to local VieNeu and a valid preset."""
+    # Chính sách hiện tại: VieNeu local là engine duy nhất, kể cả cấu hình cũ
+    # còn lưu tên engine web.
     vid = (voice_id or "").strip()
 
-    # MiniMax / OmniVoice models are multilingual — trust the caller's selection.
-    if eid in ("minimax", "omnivoice"):
-        return (eid or "edge-tts"), vid, False, ""
-
-    eng = _local_engine_by_id(eid)
-    if eng is not None:
-        rows = engine_voices_for_lang(eng, lang)
-        if rows:
-            valid_ids = {r[0] for r in rows}
-            if vid in valid_ids:
-                return eid, vid, False, ""
-            default_voice = eng.get("default")
-            new_voice = default_voice if default_voice in valid_ids else rows[0][0]
-            return eid, new_voice, True, f"voice→{new_voice}"
-
-    # Engine cannot speak this language → fall back to a universal engine.
-    for fb in _UNIVERSAL_FALLBACKS:
-        if fb == eid:
-            continue
-        fb_eng = _local_engine_by_id(fb)
-        rows = engine_voices_for_lang(fb_eng, lang) if fb_eng else []
-        if rows:
-            return fb, rows[0][0], True, f"engine→{fb}, voice→{rows[0][0]}"
-
-    # Last resort: keep whatever we were given.
-    return (eid or "edge-tts"), vid, False, ""
+    vieneu = _local_engine_by_id("vieneu")
+    rows = engine_voices_for_lang(vieneu, "vi") if vieneu else []
+    valid_ids = {row[0] for row in rows}
+    if vid in valid_ids:
+        return "vieneu", vid, (engine_id or "").strip().lower() != "vieneu", "engine→vieneu"
+    default_voice = str((vieneu or {}).get("default") or "Minh Quân Pro")
+    return "vieneu", default_voice, True, f"engine→vieneu, voice→{default_voice}"
 
 
 def dtrouter_tts_engines(cfg: Dict[str, Any] | None = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:

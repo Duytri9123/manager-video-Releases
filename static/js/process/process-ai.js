@@ -7,7 +7,7 @@
       const cur = presets[window._procActiveAspect || '16x9'] || presets['16x9'] || presets['9x16'] || {};
       if (cur['proc-ai-video-nine-model']) return cur['proc-ai-video-nine-model'];
     } catch (_) {}
-    return 'gemini-3.7-flash';
+    return '';
   }
 
   function _syncAiVideoModel(val) {
@@ -66,7 +66,7 @@
         if (!this.checked) {
           _syncAiVideoModel('none');
         } else {
-          _syncAiVideoModel(_getSavedAiVideoModel() || 'gemini-3.6-flash');
+          loadProcAiVideoModels(true);
         }
       });
     }
@@ -128,72 +128,18 @@
     const savedTarget = _getSavedAiVideoModel();
 
     try {
-      let items = [];
-      const first = await _procAiFetchJson('/api/chatbot/media_models?kind=video', 5000).catch(() => null);
-      if (first && first.ok && Array.isArray(first.models) && first.models.length) {
-        items = first.models;
-      } else {
-        const fallback = await _procAiFetchJson('/api/chatbot/models', 5000).catch(() => null);
-        if (fallback && fallback.ok && Array.isArray(fallback.models)) items = fallback.models;
-      }
-      if (!items.length) {
-        items = [
-          { id: 'gemini-3.7-flash', name: 'Antigravity 3.7 Flash', owned_by: 'antigravity' },
-          { id: 'gemini-3.6-flash', name: 'Antigravity 3.6 Flash (High)', owned_by: 'antigravity' },
-          { id: 'gemini-3.6-flash-medium', name: 'Antigravity 3.6 Flash (Medium)', owned_by: 'antigravity' },
-          { id: 'gemini-3.6-flash-low', name: 'Antigravity 3.6 Flash (Low)', owned_by: 'antigravity' },
-          { id: 'gemini-3-flash-agent', name: 'Antigravity 3.5 Flash (High)', owned_by: 'antigravity' },
-          { id: 'gemini-3.5-flash-medium', name: 'Antigravity 3.5 Flash (Medium)', owned_by: 'antigravity' },
-          { id: 'gemini-3.5-flash-low', name: 'Antigravity 3.5 Flash (Low)', owned_by: 'antigravity' },
-          { id: 'gemini-pro-agent', name: 'Antigravity 3.1 Pro (High)', owned_by: 'antigravity' },
-          { id: 'gemini-3.1-pro-low', name: 'Antigravity 3.1 Pro (Low)', owned_by: 'antigravity' },
-          { id: 'gemini-3-flash', name: 'Antigravity 3 Flash', owned_by: 'antigravity' },
-          { id: 'gemini-2.5-flash', name: 'Antigravity 2.5 Flash', owned_by: 'antigravity' },
-          { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (Thinking)', owned_by: 'antigravity' },
-          { id: 'claude-opus-4-6-thinking', name: 'Claude Opus 4.6 (Thinking)', owned_by: 'antigravity' },
-          { id: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)', owned_by: 'antigravity' }
-        ];
-      }
+      const response = await _procAiFetchJson('/api/providers/models?provider=antigravity', 5000);
+      const items = response && response.ok && Array.isArray(response.models) ? response.models : [];
       window._procAiVideoModelsLoaded = true;
 
-      // Filter to strictly antigravity models for video analyzer
+      // DB is the single source of truth for Antigravity models and ordering.
       const agModels = items
-        .filter(m => {
-          const p = (m.owned_by || '').toLowerCase();
-          return p === 'antigravity' || !p;
-        })
+        .filter(m => m && m.enabled !== false && (!m.type || m.type === 'llm'))
         .map(m => ({
-          id: String((m && (m.id || m)) || '').trim(),
-          name: (m && m.name) ? m.name : String((m && (m.id || m)) || '').trim(),
-          owned_by: 'antigravity'
+          id: String(m.id || '').trim(),
+          name: String(m.name || m.id || '').trim()
         }))
         .filter(m => m.id && m.id !== 'none');
-
-      const priorityOrder = [
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
-        'gemini-3.6-flash-medium',
-        'gemini-3.6-flash-low',
-        'gemini-3-flash-agent',
-        'gemini-3.5-flash-medium',
-        'gemini-3.5-flash-low',
-        'gemini-pro-agent',
-        'gemini-3.1-pro-low',
-        'gemini-3-flash',
-        'gemini-2.5-flash',
-        'claude-sonnet-4-6',
-        'claude-opus-4-6-thinking',
-        'gpt-oss-120b-medium'
-      ];
-
-      agModels.sort((a, b) => {
-        const ia = priorityOrder.indexOf(a.id);
-        const ib = priorityOrder.indexOf(b.id);
-        if (ia !== -1 && ib !== -1) return ia - ib;
-        if (ia !== -1) return -1;
-        if (ib !== -1) return 1;
-        return a.name.localeCompare(b.name);
-      });
 
       selects.forEach(sel => {
         sel.innerHTML = '<option value="none">Tắt (Không đọc)</option>';
@@ -211,14 +157,23 @@
             added.add(item.id);
           }
         });
-        sel.appendChild(grp);
+        if (agModels.length) {
+          sel.appendChild(grp);
+        } else {
+          const empty = document.createElement('option');
+          empty.value = '';
+          empty.disabled = true;
+          empty.textContent = 'Chưa có model Antigravity được bật trong DB';
+          sel.appendChild(empty);
+        }
 
         if (savedTarget && Array.from(sel.options).some(o => o.value === savedTarget)) {
           sel.value = savedTarget;
         } else {
-          sel.value = 'gemini-3.7-flash';
+          sel.value = agModels[0]?.id || 'none';
         }
       });
+      if (agModels.length && !savedTarget) _syncAiVideoModel(agModels[0].id);
     } catch (_) {
       window._procAiVideoModelsLoaded = false;
     }
@@ -333,11 +288,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           video_path: path,
-          provider: 'gemini',
-          model: document.getElementById('proc-ai-video-nine-model-step2')?.value
+          provider: 'antigravity',
+          nine_model: document.getElementById('proc-ai-video-nine-model-step2')?.value
             || document.getElementById('proc-ai-video-nine-model')?.value
             || localStorage.getItem('proc_ai_video_nine_model')
-            || 'gemini-3.6-flash',
+            || '',
           sample_count: sampleValue === 'full' ? 0 : parseInt(sampleValue || '5', 10),
           language: document.getElementById('proc-lang')?.value || '',
           target_language: document.getElementById('proc-target-lang')?.value || 'vi'
@@ -367,7 +322,7 @@
       if (useToggle) { useToggle.checked = false; }
       procRemoveAiZones();
       procRenderAiAnalysis();
-      _procAiSetStatus((e.message || '').includes('API key') ? 'Chưa có API key Gemini để đọc video.' : ('Không đọc được video: ' + e.message), 'error');
+      _procAiSetStatus((e.message || '').includes('API key') ? 'Chưa có kết nối Antigravity để đọc video.' : ('Không đọc được video: ' + e.message), 'error');
       if (typeof toast === 'function') toast('AI không đọc được video: ' + e.message, 'warning');
       return null;
     } finally {

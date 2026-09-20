@@ -614,33 +614,10 @@ Return strict JSON only:
 If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones": [].
 """.strip()
 
-    def _call_gemini(api_key: str, model: str, prompt: str, frames: list[dict], base_url: str = "") -> dict:
-        import ssl
-        base_endpoint = (base_url or "https://generativelanguage.googleapis.com").rstrip("/")
-        if base_endpoint.endswith("/v1beta") or base_endpoint.endswith("/v1"):
-            base_endpoint = base_endpoint.rsplit("/", 1)[0]
-        
+    def _call_gemini(api_key: str, model: str, prompt: str, frames: list[dict], base_url: str = "", connection=None, db_models=None) -> dict:
         m_clean = str(model or "").split("/")[-1].lower().strip()
-        GEMINI_MAP = {
-            "gemini-3.7-flash": "gemini-3.7-flash",
-            "gemini-3.6-flash": "gemini-3.7-flash",
-            "gemini-3.6-flash-high": "gemini-3.7-flash",
-            "gemini-3.6-flash-medium": "gemini-3.5-flash",
-            "gemini-3.6-flash-low": "gemini-3.5-flash",
-            "gemini-3-flash-agent": "gemini-3.5-flash",
-            "gemini-3.5-flash-medium": "gemini-3.5-flash",
-            "gemini-3.5-flash-low": "gemini-3.5-flash",
-            "gemini-3.5-flash": "gemini-3.5-flash",
-            "gemini-3-flash": "gemini-3-flash-preview",
-            "gemini-3-flash-preview": "gemini-3-flash-preview",
-            "gemini-2.5-flash": "gemini-2.5-flash",
-            "gemini-flash-latest": "gemini-flash-latest",
-            "gemini-pro-agent": "gemini-2.5-flash",
-            "gemini-3.1-pro-low": "gemini-2.5-flash",
-            "gemini-3.1-pro-preview": "gemini-2.5-flash",
-            "gemini-2.5-pro": "gemini-2.5-flash",
-        }
-        actual_model = GEMINI_MAP.get(m_clean, m_clean if (m_clean.startswith("gemini-") and not m_clean.startswith("gemini-3.6")) else "gemini-3.7-flash")
+        if not m_clean:
+            raise RuntimeError("Chưa chọn model Antigravity")
 
         parts = [{"text": prompt}]
         for f in frames:
@@ -654,46 +631,24 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
                 "responseMimeType": "application/json",
             },
         }
-        models_to_try = [actual_model]
-        for fb in ("gemini-3.5-flash", "gemini-2.5-flash", "gemini-flash-latest"):
-            if fb not in models_to_try:
-                models_to_try.append(fb)
-
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        models_to_try = [m_clean]
+        for db_model in (db_models or []):
+            candidate = str(db_model or "").split("/")[-1].lower().strip()
+            if candidate and candidate not in models_to_try:
+                models_to_try.append(candidate)
 
         last_err = None
         for m_candidate in models_to_try:
-            if api_key.startswith("AIza"):
-                url = f"{base_endpoint}/v1beta/models/{m_candidate}:generateContent?key={api_key}"
-                headers = {"Content-Type": "application/json"}
-            else:
-                url = f"{base_endpoint}/v1beta/models/{m_candidate}:generateContent"
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}"
-                }
-            req = urllib.request.Request(
-                url,
-                data=_j.dumps(payload).encode("utf-8"),
-                headers=headers,
-                method="POST",
-            )
             try:
-                with urllib.request.urlopen(req, timeout=35, context=ctx) as resp:
-                    data = _j.loads(resp.read().decode("utf-8", "replace") or "{}")
+                from templates.pages.config.route import generate_content_direct
+                direct_connection = connection or {"api_key": api_key, "base_url": base_url}
+                data = generate_content_direct(direct_connection, m_candidate, payload, timeout=35)
                 parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
                 text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text")).strip()
                 if text:
                     res_json = _json_from_text(text)
                     if res_json:
                         return res_json
-            except urllib.error.HTTPError as e:
-                LOGGER.warning("Antigravity model %s HTTP error %s, trying next candidate", m_candidate, e.code)
-                last_err = e
-                time.sleep(0.5)
-                continue
             except Exception as e:
                 LOGGER.warning("Antigravity model %s failed: %s, trying next candidate", m_candidate, e)
                 last_err = e
@@ -713,7 +668,7 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
         return jsonify({"ok": False, "error": f"Video khong ton tai: {video_path_str}"}), 404
 
     cfg = load_cfg()
-    requested_nine_model = str(data.get("nine_model") or "").strip()
+    requested_nine_model = str(data.get("nine_model") or data.get("model") or "").strip()
     language = str(data.get("language") or "").strip()
     target_language = str(data.get("target_language") or "vi").strip()
     sample_value = data.get("sample_count")
@@ -729,31 +684,26 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
 
     # Resolve Antigravity connection from DB
     ag_conns = []
+    ag_models = []
     try:
-        from templates.pages.config.route import load_providers_from_db
+        from templates.pages.config.route import load_models_from_db, load_providers_from_db
         all_provs = load_providers_from_db()
         ag_data = all_provs.get("antigravity") or {}
         ag_conns = [c for c in ag_data.get("connections", []) if c.get("enabled")] or ag_data.get("connections", [])
+        ag_models = [
+            str(m.get("id") or "") for m in load_models_from_db("antigravity").get("antigravity", [])
+            if m.get("enabled") and str(m.get("model_type") or "llm") == "llm"
+        ]
     except Exception:
         pass
 
-    gemini_key = ""
-    gemini_base_url = ""
-    for c in ag_conns:
-        if c.get("api_key"):
-            gemini_key = c.get("api_key").strip()
-            gemini_base_url = (c.get("base_url") or "").strip()
-            break
-
-    if not gemini_key:
-        gemini_key = (
-            (cfg.get("gemini_video") or {}).get("api_key", "").strip()
-            or os.environ.get("GEMINI_API_KEY", "").strip()
-            or os.environ.get("ANTIGRAVITY_API_KEY", "").strip()
-        )
-
-    if not gemini_key:
-        return jsonify({"ok": False, "code": "missing_api_key", "error": "Chưa cấu hình API key Antigravity để đọc video"}), 400
+    ag_conns = [c for c in ag_conns if c.get("api_key") or c.get("refresh_token")]
+    if not ag_conns:
+        return jsonify({
+            "ok": False,
+            "code": "missing_login",
+            "error": "Chưa kết nối Antigravity. Mở Nhà cung cấp AI → Antigravity → Kết nối.",
+        }), 400
 
     try:
         frames, duration = _extract_frames(vp, sample_count)
@@ -767,17 +717,36 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
     # ── Antigravity direct only ──────────────────────────────────
     try:
         m_target = requested_nine_model.split("/")[-1] if "/" in requested_nine_model else requested_nine_model
-        gemini_model = m_target if (m_target and m_target not in ("none", "auto", "duytris", "")) else str((cfg.get("gemini_video") or {}).get("llm_model") or "gemini-3.7-flash").strip()
+        gemini_model = m_target if (m_target and m_target not in ("none", "auto", "duytris", "")) else (ag_models[0].split("/")[-1] if ag_models else "")
+        if not gemini_model:
+            return jsonify({"ok": False, "error": "Chưa có model Antigravity đang bật trong DB"}), 400
         LOGGER.info("analyze_video_ai: using Antigravity model=%s", gemini_model)
-        result = _call_gemini(gemini_key, gemini_model, prompt, frames, base_url=gemini_base_url)
-        return jsonify({
-            "ok": True,
-            "provider": "antigravity",
-            "model": gemini_model,
-            "frame_count": len(frames),
-            "duration": round(duration, 3),
-            "result": _clean_result(result),
-        })
+        last_error = None
+        for connection in ag_conns:
+            try:
+                result = _call_gemini(
+                    str(connection.get("api_key") or ""), gemini_model, prompt, frames,
+                    base_url=str(connection.get("base_url") or ""), connection=connection, db_models=ag_models,
+                )
+                return jsonify({
+                    "ok": True,
+                    "provider": "antigravity",
+                    "model": gemini_model,
+                    "account": connection.get("email") or connection.get("name") or "Antigravity",
+                    "frame_count": len(frames),
+                    "duration": round(duration, 3),
+                    "result": _clean_result(result),
+                })
+            except Exception as account_error:
+                last_error = account_error
+                LOGGER.warning(
+                    "Antigravity account %s failed, rotating: %s",
+                    connection.get("email") or connection.get("name") or connection.get("id"),
+                    account_error,
+                )
+        if last_error:
+            raise last_error
+        raise RuntimeError("Không có tài khoản Antigravity khả dụng")
     except urllib.error.HTTPError as e:
         LOGGER.warning("analyze_video_ai Antigravity HTTPError: %s", e)
         return jsonify({"ok": False, "error": f"Antigravity: HTTP {e.code}"}), 502
@@ -1157,10 +1126,48 @@ def _make_ytdlp_progress_hook(url):
     return progress_hook
 
 
+async def _download_douyin_ytdlp_fallback(url: str, out_path: Path, aweme_id: str):
+    """Fallback when Douyin's signed detail API rejects a valid fresh session."""
+    from core.multi_platform import download_video as download_generic
+    from core.video_processor import _safe_stem
+
+    temp_dir = out_path / "Process_video" / "_tmp_dl"
+    result = await asyncio.to_thread(
+        download_generic,
+        url,
+        str(temp_dir),
+        progress_hook=_make_ytdlp_progress_hook(url),
+    )
+    if not result.get("ok"):
+        message = str(result.get("error") or "Douyin download failed")
+        if "fresh cookies" in message.casefold() or "403" in message:
+            raise RuntimeError(
+                "Douyin từ chối request hiện tại (HTTP 403). Cookie có thể vẫn còn hạn; "
+                "hãy thử lại, hoặc mở Cookie → Tự động lấy nếu lỗi tiếp diễn."
+            )
+        raise RuntimeError(message)
+
+    source = Path(result["file"])
+    title = _resolve_naming_title(result.get("title") or source.stem or "video")
+    identity = str(result.get("id") or aweme_id or int(time.time()))
+    base_name = f"{_safe_stem(title)}_{identity}"
+    save_dir = out_path / "Process_video" / base_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+    save_path = save_dir / f"{base_name}.mp4"
+    if save_path.exists():
+        save_path = save_dir / f"{base_name}_{int(time.time())}.mp4"
+    try:
+        source.replace(save_path)
+    except Exception:
+        import shutil
+        shutil.move(str(source), str(save_path))
+    return save_path.resolve(), title
 @require_valid_license
 @bp.route("/api/process_video", methods=["POST"])
 def process_video():
     import sys
+    if hasattr(request, "environ") and isinstance(request.environ, dict):
+        request.environ["eventlet.minimum_write_chunk_size"] = 0
     print("=== [BACKEND] process_video() route called ===", file=sys.stderr, flush=True)
     data = {}
     if request.form:
@@ -1262,8 +1269,9 @@ def process_video():
 
             cm = CookieManager()
             cm.set_cookies(get_cookies_with_fallback())
-            if not cm.validate_cookies():
-                raise RuntimeError("Cookies may be invalid")
+            cookie_ok, cookie_reason = cm.cookie_status()
+            if not cookie_ok:
+                raise RuntimeError(cookie_reason)
 
             from core.proxy_resolver import resolve_proxy as _resolve_proxy
             async with DouyinAPIClient(cm.get_cookies(), proxy=_resolve_proxy(cfg)) as api:
@@ -1289,7 +1297,8 @@ def process_video():
 
                 aweme_data = await api.get_video_detail(aweme_id)
                 if not aweme_data:
-                    raise RuntimeError("Failed to fetch video detail")
+                    fallback_out = Path(out_dir).expanduser() if out_dir else Path(cfg.get("path") or "./Downloaded")
+                    return await _download_douyin_ytdlp_fallback(resolved_url, fallback_out, aweme_id)
 
                 raw_title = str(aweme_data.get("desc") or "video").strip() or "video"
                 resolved_title = _resolve_naming_title(raw_title)
@@ -1504,8 +1513,9 @@ def download_original_video():
 
         cm = CookieManager()
         cm.set_cookies(get_cookies_with_fallback())
-        if not cm.validate_cookies():
-            raise RuntimeError("Cookies may be invalid")
+        cookie_ok, cookie_reason = cm.cookie_status()
+        if not cookie_ok:
+            raise RuntimeError(cookie_reason)
 
         from core.proxy_resolver import resolve_proxy as _resolve_proxy
         async with DouyinAPIClient(cm.get_cookies(), proxy=_resolve_proxy(cfg)) as api:
@@ -1531,7 +1541,8 @@ def download_original_video():
 
             aweme_data = await api.get_video_detail(aweme_id)
             if not aweme_data:
-                raise RuntimeError("Failed to fetch video detail")
+                fallback_out = Path(out_dir).expanduser() if out_dir else Path(cfg.get("path") or "./Downloaded")
+                return await _download_douyin_ytdlp_fallback(resolved_url, fallback_out, aweme_id)
 
             raw_title = str(aweme_data.get("desc") or "video").strip() or "video"
             resolved_title = _resolve_naming_title(raw_title)

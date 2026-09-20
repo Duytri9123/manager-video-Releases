@@ -13,6 +13,7 @@ tảng chỉ với một code-path), nhưng gói lại thành các hàm tiện d
 from __future__ import annotations
 
 import os
+import json
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
@@ -133,6 +134,32 @@ def cookie_opts_for(platform: str, cfg: Optional[Dict[str, Any]] = None) -> Dict
         mode = str(yt.get(f"{platform}_cookie_mode") or "default").strip().lower()
         if mode != "custom":
             return opts
+
+    # Douyin's native downloader and yt-dlp fallback share the cookie set
+    # saved by the Cookie page.  Convert the JSON map to Netscape format so
+    # yt-dlp can actually use it (previously the fallback ran without cookies).
+    if platform == "douyin":
+        try:
+            root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            json_path = os.path.join(root, ".cookies.json")
+            cookie_map = (cfg or {}).get("cookies") or {}
+            if not cookie_map and os.path.exists(json_path):
+                with open(json_path, "r", encoding="utf-8") as handle:
+                    cookie_map = json.load(handle) or {}
+            if cookie_map:
+                temp_dir = os.path.join(root, "config", "cookies")
+                os.makedirs(temp_dir, exist_ok=True)
+                temp_file = os.path.join(temp_dir, "douyin_cookies.txt")
+                lines = ["# Netscape HTTP Cookie File", "# Generated from .cookies.json"]
+                for name, value in cookie_map.items():
+                    if name and value:
+                        lines.append(f".douyin.com\tTRUE\t/\tTRUE\t0\t{name}\t{value}")
+                with open(temp_file, "w", encoding="utf-8", newline="\n") as handle:
+                    handle.write("\n".join(lines) + "\n")
+                opts["cookiefile"] = temp_file
+                return opts
+        except Exception:
+            pass
 
 
     # 0) Kiểm tra nội dung cookie thô lưu trực tiếp trong config

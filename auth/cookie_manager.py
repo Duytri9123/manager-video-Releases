@@ -44,6 +44,11 @@ class CookieManager:
             logger.error("Failed to load cookies: %s", e)
 
     def validate_cookies(self) -> bool:
+        ok, _reason = self.cookie_status()
+        return ok
+
+    def cookie_status(self) -> tuple[bool, str]:
+        """Validate the fields required to attempt a Douyin request."""
         required_keys = {"ttwid", "odin_tt", "passport_csrf_token"}
         cookies = self.get_cookies()
         missing = [
@@ -51,12 +56,13 @@ class CookieManager:
         ]
         if missing:
             logger.warning("Cookie validation failed, missing: %s", ", ".join(missing))
-            return False
+            return False, "Thiếu cookie Douyin: " + ", ".join(missing)
+
         if not cookies.get("msToken"):
             logger.info(
                 "msToken not found, it will be generated automatically if needed"
             )
-        return True
+        return True, "Cookie Douyin có đủ trường bắt buộc"
 
     def clear_cookies(self):
         self.cookies = {}

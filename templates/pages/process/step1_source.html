@@ -1,187 +1,444 @@
-<!-- ═════════════════ STEP 1: Nguồn video ═════════════════ -->
+<!-- ═════════════════ STEP 1: Nguồn & cấu hình dùng chung ═════════════════ -->
 <section class="proc-step" data-proc-step="1">
-  <div class="proc-step-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+  <div class="proc-step-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
     <div>
-      <h2 class="proc-step-title">📥 Nguồn video</h2>
-      <p class="proc-step-sub">Dán link video hoặc chọn file từ máy, rồi thêm vào hàng chờ. Tải video gốc tự động và chuẩn bị preview.</p>
+      <h2 class="proc-step-title" style="display:flex;align-items:center;gap:6px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent,#6366f1)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Nguồn video &amp; cấu hình sử dụng</span>
+      </h2>
+      <p class="proc-step-sub" style="margin:2px 0 0 0">Chọn video đầu vào, thiết lập mô hình AI dùng chung và quản lý hàng chờ tải.</p>
     </div>
-    <div style="display:flex;gap:6px">
-      <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(1)" title="Lưu cấu hình Bước 1 (Ngôn ngữ, Dịch, Tự động hóa...)" style="display:inline-flex;align-items:center;gap:4px">
-        💾 Lưu cấu hình Bước 1
-      </button>
-    </div>
+    <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(1)" title="Lưu cấu hình dùng chung" style="display:inline-flex;align-items:center;gap:4px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      <span>Lưu cấu hình</span>
+    </button>
   </div>
 
-  <div class="proc-step5-grid">
+  <style>
+    .step1-grid-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 1024px) {
+      .step1-grid-layout {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) 380px;
+      }
+    }
+    @media (min-width: 1280px) {
+      .step1-grid-layout {
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) 430px;
+      }
+    }
+    @media (min-width: 1536px) {
+      .step1-grid-layout {
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) 450px;
+      }
+    }
+  </style>
 
-  <!-- COL LEFT: Source input & AI Config -->
-  <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
-    <div class="card card-collapsible">
-      <div class="card-header" onclick="toggleCard(this)">
-        <span class="card-title">📥 Nhập dữ liệu</span>
-      </div>
-      <div class="card-body">
-        <div class="field">
-          <label>Import file video</label>
-          <div class="flex-center gap-8">
-            <input type="text" id="proc-video" readonly style="flex:1" placeholder="Chọn file video...">
-            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('proc-file').click()">📂 Chọn</button>
-            <input type="file" id="proc-file" accept="video/*" style="display:none" multiple onchange="_onProcFileSelected(this)">
-          </div>
-          <div class="text-xs text-muted mt-4" id="proc-file-name">--</div>
-          <div id="proc-file-progress" style="display:none;margin-top:4px">
-            <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden;margin-bottom:4px">
-              <div id="proc-file-progress-bar" style="background:var(--primary);height:100%;width:0%;transition:width 0.3s"></div>
+  <div class="step1-grid-layout" id="step1-grid-container">
+    
+    <!-- COL 1: Video đầu vào + File đã tải (ở dưới Video đầu vào) -->
+    <div class="flex flex-col gap-4 min-w-0">
+      <!-- Card: Video đầu vào -->
+      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4">
+        <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+          <span class="text-indigo-500 flex items-center">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </span>
+          <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Video đầu vào</h3>
+        </div>
+        
+        <div class="flex flex-col gap-3">
+          <!-- Import file video -->
+          <div class="field mb-0">
+            <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block truncate h-3.5 leading-[14px]">Import file video</label>
+            <div class="input-btn-group">
+              <input type="text" id="proc-video" readonly placeholder="Chọn file video...">
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('proc-file').click()" title="Chọn file">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </button>
+              <input type="file" id="proc-file" accept="video/*" style="display:none" multiple onchange="_onProcFileSelected(this)">
             </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <div class="loader-spinner"></div>
-              <span class="text-xs text-muted" id="proc-file-progress-text"></span>
+            <div class="text-[10px] text-slate-400 mt-0.5 italic truncate" id="proc-file-name">Chưa chọn file</div>
+            <div id="proc-file-progress" style="display:none;margin-top:4px">
+              <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden;margin-bottom:4px">
+                <div id="proc-file-progress-bar" style="background:var(--primary);height:100%;width:0%;transition:width .3s"></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div class="loader-spinner"></div>
+                <span class="text-[10px] text-slate-400 truncate" id="proc-file-progress-text"></span>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="field">
-          <label>URL video</label>
-          <input type="text" id="proc-url" placeholder="Douyin · TikTok · YouTube · Instagram · Facebook ...">
-        </div>
-        <div class="field">
-          <label>Thư mục xuất (để trống = cùng thư mục video)</label>
-          <input type="text" id="proc-out" placeholder="Để trống = cùng thư mục video">
-        </div>
 
-        <div class="btn-group mt-12">
-          <button class="btn btn-primary" id="btn-proc" onclick="_addCurrentToQueue()">➕ Thêm vào hàng chờ</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- AI Model Config -->
-    <div class="card card-collapsible">
-      <div class="card-header" onclick="toggleCard(this)">
-        <span class="card-title">🤖 Mô hình AI</span>
-      </div>
-      <div class="card-body">
-        <div class="grid-2">
-          <div class="field">
-            <label>Ngôn ngữ đầu vào</label>
-            <select id="proc-lang">
-              <option value="zh" selected>Tiếng Trung</option>
-              <option value="en">Tiếng Anh</option>
-              <option value="ja">Tiếng Nhật</option>
-              <option value="ko">Tiếng Hàn</option>
-            </select>
+          <!-- URL video -->
+          <div class="field mb-0">
+            <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block truncate h-3.5 leading-[14px]">URL video</label>
+            <input type="text" id="proc-url" placeholder="Douyin · TikTok · YouTube · Facebook..." class="w-full text-[11px] h-[34px] rounded-lg">
           </div>
-          <div class="field">
-            <label>Ngôn ngữ đầu ra</label>
-            <select id="proc-target-lang" onchange="_onTargetLangChange()">
-              <option value="vi" selected>🇻🇳 Tiếng Việt</option>
-              <option value="en">🇺🇸 English</option>
-              <option value="ja">🇯🇵 日本語</option>
-              <option value="ko">🇰🇷 한국어</option>
-              <option value="th">🇹🇭 ภาษาไทย</option>
-              <option value="id">🇮🇩 Bahasa Indonesia</option>
-              <option value="es">🇪🇸 Español</option>
-              <option value="pt">🇧🇷 Português</option>
-              <option value="fr">🇫🇷 Français</option>
-              <option value="de">🇩🇪 Deutsch</option>
-              <option value="ru">🇷🇺 Русский</option>
-              <option value="ar">🇸🇦 العربية</option>
-              <option value="hi">🇮🇳 हिन्दी</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Dịch phụ đề</label>
-            <select id="proc-trans-provider-model">
-              <option value="antigravity" selected>🌌 Antigravity</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="groq">Groq</option>
-              <option value="openai">OpenAI</option>
-              <option value="google">Google</option>
-              <option value="auto">Auto</option>
-            </select>
-          </div>
-          <div class="field" id="proc-ai-video-nine-model-row">
-            <label>Đọc ảnh/video</label>
-            <select id="proc-ai-video-nine-model" onfocus="loadProcAiVideoModels()" onchange="if(typeof _syncAiVideoModel==='function')_syncAiVideoModel(this.value)">
-              <option value="none">Tắt (Không đọc)</option>
-            </select>
-            <input type="checkbox" id="proc-ai-video-auto" style="display:none" checked>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
-  <!-- COL RIGHT: Queue -->
-  <div class="card card-collapsible">
-    <div class="card-header" onclick="toggleCard(this)">
-      <span class="card-title">📋 Hàng chờ tải &amp; xử lý (<span id="batch-count">0</span>)</span>
-      <div class="card-actions" onclick="event.stopPropagation()">
-        <button class="btn btn-danger btn-sm" onclick="window._batchQueue=[];_renderBatchQueue()">🗑 Xóa tất cả</button>
-      </div>
-    </div>
-    <div class="card-body">
-      <!-- Tùy chọn tự động hóa — áp dụng cho cả hàng chờ -->
-      
-      <div class="proc-auto-options" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
-        <div class="pe2-opts">
-          <label class="pe2-optcard" title="Khi bật: tải xong sẽ bỏ qua bước 2 Xem &amp; Chỉnh sửa, tự động chạy tạo SRT/ASS/Giọng lồng tiếng ở bước 3, dừng lại ở bước 3 để check ASS &amp; Thumbnail rồi tiếp tục chạy xử lý ở bước 4.">
-            <input type="checkbox" id="proc-auto-flow">
-            <span class="pe2-optcard-ic">🔁</span>
-            <span class="pe2-optcard-lbl">Tự động hóa quy trình</span>
-            <span class="pe2-optcard-badge">✓</span>
-          </label>
-          <label class="pe2-optcard" title="Tự động bỏ qua bước kiểm tra và chỉnh sửa phụ đề ASS">
-            <input type="checkbox" id="step3-skip-ass" onchange="_onStep3SkipChange()">
-            <span class="pe2-optcard-ic">⏭</span>
-            <span class="pe2-optcard-lbl">Bỏ qua kiểm tra ASS</span>
-            <span class="pe2-optcard-badge">✓</span>
-          </label>
-          <label class="pe2-optcard" title="Bỏ qua việc nhận diện phụ đề bằng AI Whisper và dịch thuật (chỉ chạy chỉnh sửa video)">
-            <input type="checkbox" id="proc-skip-transcription" onchange="_onSkipTranscriptionChange()">
-            <span class="pe2-optcard-ic">🚫</span>
-            <span class="pe2-optcard-lbl">Bỏ qua tạo phụ đề</span>
-            <span class="pe2-optcard-badge">✓</span>
-          </label>
-          {# Thumbnail flow disabled by request. #}
-        </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">(*) Cấu hình trên sẽ áp dụng cho toàn bộ hàng chờ nếu không có cấu hình riêng cho từng video.</div>
-      </div>
+          <!-- Thư mục xuất -->
+          <div class="field mb-0">
+            <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block truncate h-3.5 leading-[14px]">Thư mục xuất (mặc định: cùng video)</label>
+            <input type="text" id="proc-out" placeholder="Để trống = cùng thư mục video" class="w-full text-[11px] h-[34px] rounded-lg">
+          </div>
 
-      <div id="batch-queue-list" style="display:flex;flex-direction:column;gap:4px">
-        <div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>
-      </div>
-
-      <!-- Download trigger + log -->
-      <div id="step1-download-area" style="display:none;margin-top:12px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <button class="btn btn-secondary btn-sm" id="btn-step1-download"
-            onclick="window._step1Downloading=false;_runStep1QueueDownload()"
-            style="white-space:nowrap">
-            📥 Tải hàng chờ
+          <!-- Button thêm hàng chờ -->
+          <button type="button" class="btn btn-primary w-full py-1.5 font-semibold text-[11px] flex justify-center items-center gap-1.5 mt-1 h-[34px]" id="btn-proc" onclick="_addCurrentToQueue()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Thêm vào hàng chờ</span>
           </button>
-          <div class="check-item" style="margin:0;padding:6px 12px;display:flex;align-items:center;gap:8px" title="Bật để chỉ tải video từ link mà không xử lý tiếp">
-            <label class="toggle-wrap" style="margin:0">
-              <input type="checkbox" class="toggle-input" id="proc-download-only">
-              <div class="toggle"></div>
-            </label>
-            <span style="font-size:12px;color:var(--text2,#1f2430);white-space:nowrap">Chỉ tải video</span>
-          </div>
-          <span class="text-xs text-muted" id="step1-dl-status">Nhấn để bắt đầu tải video gốc từ URL.</span>
-        </div>
-        <!-- Download log box -->
-        <div id="step1-dl-log"
-          style="max-height:160px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;font-family:monospace;color:var(--text);display:none">
         </div>
       </div>
 
-      <div class="btn-group mt-12" id="step1-next-btn-wrap" style="display:none">
-        <button class="btn btn-primary w-full justify-center" style="font-weight:700"
-          onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
-          ▶ Xử lý &amp; Xem kết quả (Bước 2) →
-        </button>
+      <!-- Card: File đã tải (ở dưới Video đầu vào, mở rộng) -->
+      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex flex-col" id="proc-step1-right">
+        <div class="flex justify-between items-center mb-2 pb-2 border-b border-slate-100 dark:border-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="text-indigo-500 flex items-center">
+              <svg class="proc-svg-icon" width="14" height="14" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h7l2 2h9l-2 11H3Z"></path></svg>
+            </span>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">File đã tải</h3>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <!-- Nút xóa nhiều mục đã chọn -->
+            <button type="button" id="proc-batch-del-btn" class="btn btn-danger text-[9px] py-0.5 px-2 flex items-center gap-1 font-medium shadow-sm transition-all" style="display:none;background:#ef4444;color:#ffffff;border-radius:6px" onclick="deleteSelectedDownloadedFiles()" title="Xóa tất cả mục đã chọn">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span id="proc-batch-del-count">Xóa (0)</span>
+            </button>
+
+            <!-- Chuyển đổi chế độ xem Danh sách / Lưới (Grid) -->
+            <div class="inline-flex rounded-md border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-900/60 p-0.5" id="proc-view-toggle-wrap">
+              <button type="button" id="proc-view-btn-list" onclick="setDownloadedViewMode('list')" class="px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 shadow-xs transition-all" title="Xem dạng danh sách">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              </button>
+              <button type="button" id="proc-view-btn-grid" onclick="setDownloadedViewMode('grid')" class="px-1.5 py-0.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all" title="Xem dạng lưới (Grid)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+              </button>
+            </div>
+
+            <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2 flex items-center gap-1" onclick="loadDownloadedVideos()">
+              <span>↻ Làm mới</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2 text-[11px]">
+          <div id="proc-files-breadcrumb" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text2)">
+            <span style="color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:5px"><svg class="proc-svg-icon" width="13" height="13" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h7l2 2h9l-2 11H3Z"></path></svg> Downloaded</span>
+          </div>
+          <label class="inline-flex items-center gap-1.5 text-[10.5px] text-slate-600 dark:text-slate-300 cursor-pointer select-none font-medium ml-auto" id="proc-select-all-wrap">
+            <input type="checkbox" id="proc-select-all-files" onchange="toggleSelectAllDownloadedFiles(this.checked)" class="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 scale-90 cursor-pointer">
+            <span>Chọn tất cả</span>
+          </label>
+        </div>
+        <div id="proc-downloaded-list" style="max-height:420px;min-height:220px;overflow-y:auto" class="flex-1">
+          <div class="empty-state text-xs">Đang tải danh sách...</div>
+        </div>
       </div>
     </div>
+
+    <!-- COL 2: Hàng chờ tải & xử lý -->
+    <div class="flex flex-col gap-4 min-w-0 flex-1">
+      <!-- Card: Hàng chờ tải & xử lý (mở rộng toàn bộ chiều cao) -->
+      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex flex-col" id="step1-queue-card">
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="text-indigo-500 flex items-center">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+            </span>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Hàng chờ tải &amp; xử lý (<span id="batch-count" class="text-indigo-500 font-bold">0</span>)</h3>
+          </div>
+          <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2 flex items-center gap-1" onclick="window._batchQueue=[];_renderBatchQueue()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>Xóa tất cả</span>
+          </button>
+        </div>
+
+        <!-- 4 Quick Option Checkboxes: 1 hàng ngang duy nhất -->
+        <div class="grid grid-cols-4 gap-1 mb-2.5 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]" title="Tự động hóa toàn bộ quy trình sau khi tải">
+            <input type="checkbox" id="proc-auto-flow" class="accent-indigo-500">
+            <span class="truncate">Tự động hóa</span>
+          </label>
+          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]" title="Bỏ qua phụ đề ASS">
+            <input type="checkbox" id="step3-skip-ass" onchange="_onStep3SkipChange()" class="accent-indigo-500">
+            <span class="truncate">Bỏ qua ASS</span>
+          </label>
+          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]" title="Bỏ qua phụ đề">
+            <input type="checkbox" id="proc-skip-transcription" onchange="_onSkipTranscriptionChange()" class="accent-indigo-500">
+            <span class="truncate">Bỏ qua phụ đề</span>
+          </label>
+          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]" title="Chỉ tải video gốc về máy">
+            <input type="checkbox" id="proc-download-only" class="accent-indigo-500">
+            <span class="truncate">Chỉ tải video</span>
+          </label>
+        </div>
+
+        <!-- Video Queue List (tối ưu mở rộng theo chiều cao) -->
+        <div id="batch-queue-list" style="display:flex;flex-direction:column;gap:6px;max-height:460px;min-height:240px;overflow-y:auto;margin-bottom:8px" class="flex-1">
+          <div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>
+        </div>
+
+        <!-- Download area -->
+        <div id="step1-download-area" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+            <button type="button" class="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1.5 h-[30px]" id="btn-step1-download" onclick="window._step1Downloading=false;_runStep1QueueDownload()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Tải hàng chờ</span>
+            </button>
+            <span class="text-[10px] text-slate-400" id="step1-dl-status">Nhấn để tải video gốc từ URL.</span>
+          </div>
+          <div id="step1-dl-log" style="max-height:120px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:monospace;color:var(--text);display:none"></div>
+        </div>
+
+        <!-- Next button -->
+        <div class="mt-2" id="step1-next-btn-wrap" style="display:none">
+          <button type="button" class="btn btn-primary w-full py-1.5 font-semibold text-[11px] flex justify-center items-center gap-1.5 h-[34px]" onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
+            <span>Tiếp tục sang Bước 2</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Card: Lịch sử tải xuống (đã ẩn theo yêu cầu) -->
+      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex-col" id="proc-history-card" style="display:none">
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="text-indigo-500 flex items-center">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </span>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Lịch sử tải xuống</h3>
+          </div>
+          <span class="text-[10px] text-slate-400 font-medium" id="proc-history-count"></span>
+        </div>
+
+        <div id="proc-download-history" style="display:flex;flex-direction:column;gap:5px;max-height:360px;min-height:180px;overflow-y:auto" class="flex-1">
+          <div class="text-[10px] text-slate-400 italic">Đang tải lịch sử...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COL 3: Cấu hình sử dụng (trong cùng bên phải, khung thu nhỏ gọn) -->
+    <div class="flex flex-col gap-4 min-w-0">
+      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-3" id="proc-shared-config-card">
+        <div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-100 dark:border-slate-700">
+          <span class="text-indigo-500 flex items-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4"/></svg>
+          </span>
+          <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Cấu hình sử dụng</h3>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <!-- Ngôn ngữ đầu vào / đầu ra -->
+          <div class="grid grid-cols-2 gap-1.5 items-start">
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5 block truncate h-3 leading-[12px]">Ngôn ngữ đầu vào</label>
+              <select id="proc-lang" class="w-full text-[11px] h-[30px] rounded-lg px-2">
+                <option value="zh" selected>Tiếng Trung</option>
+                <option value="en">Tiếng Anh</option>
+                <option value="ja">Tiếng Nhật</option>
+                <option value="ko">Tiếng Hàn</option>
+              </select>
+            </div>
+            <div class="field mb-0 flex flex-col">
+              <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5 block truncate h-3 leading-[12px]">Ngôn ngữ đầu ra</label>
+              <select id="proc-target-lang" onchange="_onTargetLangChange()" class="w-full text-[11px] h-[30px] rounded-lg px-2">
+                <option value="vi" selected>Tiếng Việt</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="th">ภาษาไทย</option>
+                <option value="id">Bahasa Indonesia</option>
+                <option value="es">Español</option>
+                <option value="pt">Português</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="ru">Русский</option>
+                <option value="ar">العربية</option>
+                <option value="hi">हिन्दी</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Feature 1: Dịch phụ đề -->
+          <div class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+                <span>Dịch phụ đề</span>
+              </span>
+              <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt dịch phụ đề">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-trans" checked onchange="cfgToggleFeature('trans', this.checked)">
+                <div class="toggle"></div>
+              </label>
+            </div>
+            <div id="cfg-wrap-trans" class="grid grid-cols-2 gap-1.5">
+              <div class="field mb-0">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Provider</label>
+                <select id="proc-translation-provider" onchange="onTranslationProviderChanged();if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                  <option value="antigravity" selected>Antigravity</option>
+                  <option value="google">Google Translate</option>
+                  <option value="groq">Groq</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="deepseek">DeepSeek</option>
+                </select>
+              </div>
+              <div class="field mb-0">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Model</label>
+                <select id="proc-trans-provider-model" onfocus="if(this.options.length<=1)onTranslationProviderChanged(true)" onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                  <option value="">Tự động theo Provider</option>
+                  <option value="gemini-3.7-flash" selected>Gemini 3.7 Flash</option>
+                  <option value="gemini-3.8-flash-high">Gemini 3.8 Flash (High)</option>
+                  <option value="gemini-3.8-flash-medium">Gemini 3.8 Flash (Medium)</option>
+                  <option value="gemini-3.8-flash-low">Gemini 3.8 Flash (Low)</option>
+                  <option value="gemini-3.6-flash-medium">Gemini 3.6 Flash (Medium)</option>
+                  <option value="gemini-3.6-flash">Gemini 3.6 Flash (High)</option>
+                  <option value="gemini-3.6-flash-low">Gemini 3.6 Flash (Low)</option>
+                  <option value="gemini-3.5-flash-medium">Gemini 3.5 Flash (Medium)</option>
+                  <option value="gemini-3.1-pro-low">Gemini 3.1 Pro (Low)</option>
+                  <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Thinking)</option>
+                  <option value="claude-opus-4-6-thinking">Claude Opus 4.6 (Thinking)</option>
+                  <option value="gpt-oss-120b-medium">GPT-OSS 120B (Medium)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 2: Đọc ảnh / Video -->
+          <div class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+                <span>Đọc ảnh / Video</span>
+              </span>
+              <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt đọc ảnh/video">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-video-ai" checked onchange="cfgToggleFeature('video-ai', this.checked)">
+                <div class="toggle"></div>
+              </label>
+            </div>
+            <div id="cfg-wrap-video-ai" class="grid grid-cols-2 gap-1.5">
+              <div class="field mb-0">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Provider</label>
+                <select id="proc-ai-video-provider" disabled class="w-full text-[10.5px] h-[28px] rounded px-1.5"><option value="antigravity">Antigravity</option></select>
+              </div>
+              <div class="field mb-0" id="proc-ai-video-nine-model-row">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Model</label>
+                <select id="proc-ai-video-nine-model" onfocus="loadProcAiVideoModels()" onchange="if(typeof _syncAiVideoModel==='function')_syncAiVideoModel(this.value);if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5"><option value="none">Tắt</option></select>
+                <input type="checkbox" id="proc-ai-video-auto" style="display:none" checked>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 3: Phiên âm STT -->
+          <div class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                <span>Phiên âm STT</span>
+              </span>
+              <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt phiên âm">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-stt" checked onchange="cfgToggleFeature('stt', this.checked)">
+                <div class="toggle"></div>
+              </label>
+            </div>
+            <div id="cfg-wrap-stt" class="grid grid-cols-2 gap-1.5">
+              <div class="field mb-0">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Provider</label>
+                <select id="proc-transcribe-provider-model" onchange="onTranscribeProviderChanged();if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5"><option value="antigravity" selected>Antigravity</option><option value="groq">Groq</option><option value="model">Whisper local</option></select>
+              </div>
+              <div class="field mb-0">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Model</label>
+                <select id="proc-model" onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                  <option value="gemini-3.8-flash-high" selected>Gemini 3.8 Flash (High)</option>
+                  <option value="gemini-3.8-flash-medium">Gemini 3.8 Flash (Medium)</option>
+                  <option value="gemini-3.8-flash-low">Gemini 3.8 Flash (Low)</option>
+                  <option value="gemini-3.7-flash-medium">Gemini 3.7 Flash (Medium)</option>
+                  <option value="gemini-3.6-flash-medium">Gemini 3.6 Flash (Medium)</option>
+                  <option value="gemini-3.1-pro-low">Gemini 3.1 Pro (Low)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 4: Lồng tiếng TTS -->
+          <div class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                <span>Lồng tiếng (TTS)</span>
+              </span>
+              <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt lồng tiếng">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-tts" checked onchange="cfgToggleFeature('tts', this.checked)">
+                <div class="toggle"></div>
+              </label>
+            </div>
+            <div id="cfg-wrap-tts" class="grid grid-cols-2 gap-1.5">
+              <div class="field mb-0">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Engine</label>
+                <select id="proc-tts-engine" onchange="_syncVoiceOptions('proc-tts-engine','proc-tts-voice');if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5"><option value="vieneu" selected>VieNeu v3 Turbo</option></select>
+              </div>
+              <div class="field mb-0">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Giọng đọc</label>
+                <select id="proc-tts-voice" onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                  <option value="vi-VN-Standard-A" selected>Mặc định (Nữ)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:none"><select id="proc-transcribe-provider-ai"><option value="groq" selected>Groq</option></select><select id="proc-trans-provider-ai"><option value="antigravity" selected>Antigravity</option></select></div><div id="proc-ai-panel" style="display:none"></div><div id="proc-model-panel" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  </div><!-- /proc-step5-grid -->
-</section><!-- /step 1 -->
+  <script>
+    function cfgToggleFeature(feat, enabled) {
+      const wrap = document.getElementById('cfg-wrap-' + feat);
+      if (wrap) wrap.style.display = enabled ? (wrap.classList.contains('grid-2') || wrap.classList.contains('grid') ? 'grid' : 'block') : 'none';
+      if (feat === 'stt') {
+        const skipChk = document.getElementById('proc-skip-transcription');
+        if (skipChk) {
+          skipChk.checked = !enabled;
+          if (typeof _onSkipTranscriptionChange === 'function') _onSkipTranscriptionChange();
+        }
+      } else if (feat === 'video-ai') {
+        const vidSel = document.getElementById('proc-ai-video-nine-model');
+        if (!enabled && vidSel) vidSel.value = 'none';
+      }
+      try { localStorage.setItem('cfg_toggle_' + feat, enabled ? '1' : '0'); } catch(_) {}
+      if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
+    }
+    window.cfgToggleFeature = cfgToggleFeature;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      ['trans', 'video-ai', 'stt', 'tts'].forEach(f => {
+        try {
+          const val = localStorage.getItem('cfg_toggle_' + f);
+          if (val !== null) {
+            const isEnabled = val === '1';
+            const chk = document.getElementById('cfg-toggle-' + f);
+            if (chk) {
+              chk.checked = isEnabled;
+              cfgToggleFeature(f, isEnabled);
+            }
+          }
+        } catch(_) {}
+      });
+
+      if (typeof loadDownloadedVideos === 'function') loadDownloadedVideos('');
+      if (typeof loadProcessDownloadHistory === 'function') loadProcessDownloadHistory();
+      if (typeof onTranscribeProviderChanged === 'function') onTranscribeProviderChanged();
+      if (typeof _syncVoiceOptions === 'function') _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+      if (typeof loadProcAiVideoModels === 'function') loadProcAiVideoModels();
+      if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
+      setTimeout(() => { if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary(); }, 400);
+      setTimeout(() => { if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary(); }, 1200);
+    });
+  </script>
+</section>

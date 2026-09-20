@@ -87,9 +87,11 @@
     { id:'proc-font-size',      type:'value' },
     { id:'proc-font-color',     type:'value' },
     { id:'proc-font-color-picker', type:'value' },
+    { id:'proc-font-color-hex', type:'value' },
     { id:'proc-margin-v',       type:'value' },
     { id:'proc-outline-width',  type:'value' },
     { id:'proc-font-bold',      type:'checkbox' },
+    { id:'proc-font-weight',    type:'value' },
     { id:'proc-sub-pos',        type:'value' },
     { id:'frame-enabled',       type:'checkbox' },
     { id:'frame-title',         type:'value' },
@@ -147,7 +149,7 @@
 
   const _STEP_FIELD_IDS = {
     1: ['proc-lang', 'proc-target-lang', 'proc-trans-provider-model', 'proc-ai-video-auto', 'proc-ai-video-samples', 'proc-ai-video-nine-model', 'proc-auto-flow', 'step3-skip-ass', 'proc-skip-transcription', 'batch-auto-drain', 'proc-batch-resolution', 'proc-batch-cookie'],
-    2: ['proc-aspect-blur-bg', 'proc-burn', 'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-blur-height', 'proc-blur-width', 'proc-blur-zone', 'proc-blur-x', 'proc-blur-y', 'proc-font-size', 'proc-font-color', 'proc-font-color-picker', 'proc-margin-v', 'proc-outline-width', 'proc-font-bold', 'proc-sub-pos', 'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y', 'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex', 'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'ov-layers-json', 'sub-preview-sample', 'sub-preview-ts', 'proc-capcut-enabled', 'proc-capcut-auto-open', 'proc-ext-audios-json', 'proc-out'],
+    2: ['proc-aspect-blur-bg', 'proc-burn', 'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-blur-height', 'proc-blur-width', 'proc-blur-zone', 'proc-blur-x', 'proc-blur-y', 'proc-font-size', 'proc-font-color', 'proc-font-color-picker', 'proc-font-color-hex', 'proc-margin-v', 'proc-outline-width', 'proc-font-bold', 'proc-font-weight', 'proc-sub-pos', 'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y', 'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex', 'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'ov-layers-json', 'sub-preview-sample', 'sub-preview-ts', 'proc-capcut-enabled', 'proc-capcut-auto-open', 'proc-ext-audios-json', 'proc-out'],
     3: ['proc-model', 'proc-transcribe-provider-model', 'proc-ai-video-samples', 'proc-voice', 'proc-tts-engine', 'proc-tts-voice', 'proc-tts-pitch', 'proc-tts-rate', 'proc-tts-emotion', 'proc-tts-speed', 'proc-auto-speed', 'proc-keep-bg', 'proc-bg-vol', 'proc-fx-enabled', 'proc-fx-pitch', 'proc-fx-speed', 'proc-fx-bass', 'proc-fx-mid', 'proc-fx-treble', 'proc-fx-comp', 'proc-fx-reverb']
   };
 
@@ -328,6 +330,35 @@
     if (burnChk2) burnChk2.addEventListener('change', () => _renderSubOverlay());
     const burnViChk2 = document.getElementById('proc-burn-vi');
     if (burnViChk2) burnViChk2.addEventListener('change', () => _renderSubOverlay());
+
+    try {
+      const savedLayout = localStorage.getItem('pe2_layout_mode') || 'standard';
+      if (typeof pe2SetLayoutMode === 'function') pe2SetLayoutMode(savedLayout);
+    } catch (_) {}
   });
+
+  function pe2ToggleProfileDrawer() {
+    const drawer = document.getElementById('pe2-profile-save-drawer');
+    if (!drawer) return;
+    const isHidden = drawer.style.display === 'none' || !drawer.style.display;
+    drawer.style.display = isHidden ? 'flex' : 'none';
+    if (isHidden) {
+      document.getElementById('pe2-profile-name')?.focus();
+    }
+  }
+  window.pe2ToggleProfileDrawer = pe2ToggleProfileDrawer;
+
+  function pe2SetLayoutMode(mode) {
+    const editor = document.querySelector('.pe2-editor');
+    if (!editor) return;
+    const targetMode = mode || 'standard';
+    editor.setAttribute('data-layout', targetMode);
+    document.querySelectorAll('.pe2-view-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-pe2layout') === targetMode);
+    });
+    try { localStorage.setItem('pe2_layout_mode', targetMode); } catch (_) {}
+    if (typeof framePreviewUpdate === 'function') setTimeout(framePreviewUpdate, 60);
+  }
+  window.pe2SetLayoutMode = pe2SetLayoutMode;
 
 

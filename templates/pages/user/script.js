@@ -830,6 +830,9 @@ async function searchUser() {
         btnLoadAll.textContent = 'Tải đủ ' + total + ' video (qua trình duyệt)';
         btnLoadAll.disabled = false;
       }
+      if (fetched === 0 && total > 0) {
+        toast('Douyin giới hạn API. Vui lòng nhấn "Tải đủ ' + total + ' video (qua trình duyệt)" để lấy bài đăng!', 'info', 6000);
+      }
     } else {
       if (statusEl) {
         statusEl.textContent = fetched + ' video';
@@ -1030,7 +1033,7 @@ async function _loadTranslationStatus() {
           const owned = m.owned_by || m.provider;
           const names = {
             oc: 'OpenCode Free',
-            ag: 'Google Antigravity',
+            ag: 'Antigravity',
             gc: 'Gemini',
             qd: 'Qoder',
             kr: 'Kiro AI',

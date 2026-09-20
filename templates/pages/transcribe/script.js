@@ -97,30 +97,29 @@
       modelEl.appendChild(autoOpt);
 
       try {
-        // Lấy tên default model từ config nếu có
-        fetch('/api/chatbot/config').then(r => r.json()).then(cfg => {
-          if (cfg && cfg.ok && cfg.default_model) {
-            autoOpt.textContent = `Tự động theo Provider (${cfg.default_model})`;
-          }
-        }).catch(() => null);
+        const resAg = await fetch('/api/providers/models?provider=antigravity').then(r => r.json());
+        const rawModels = resAg && resAg.ok && Array.isArray(resAg.models)
+          ? resAg.models.filter(m => {
+              if (!m || m.enabled === false) return false;
+              if (m.type && m.type !== 'llm' && m.type !== 'stt') return false;
+              const id = String(m.id || m).toLowerCase();
+              const name = String(m.name || id).toLowerCase();
+              // KHÔNG sử dụng thinking trong phiên âm
+              if (id.includes('thinking') || name.includes('thinking')) return false;
+              if (id.includes('claude') || id.includes('gpt-oss') || id.includes('image')) return false;
+              return true;
+            })
+          : [];
 
-        let items = [];
-        const resMedia = await fetch('/api/chatbot/media_models?kind=audio-to-text').then(r => r.json()).catch(() => null);
-        if (resMedia && resMedia.ok && Array.isArray(resMedia.models) && resMedia.models.length) {
-          items = resMedia.models;
-        } else {
-          const resChat = await fetch('/api/chatbot/models').then(r => r.json()).catch(() => null);
-          if (resChat && resChat.ok && Array.isArray(resChat.models) && resChat.models.length) {
-            items = resChat.models;
-          }
-        }
-
-        if (!items.length) {
-          const resAg = await fetch('/api/providers/models?provider=antigravity').then(r => r.json()).catch(() => null);
-          if (resAg && resAg.ok && Array.isArray(resAg.models)) {
-            items = resAg.models;
-          }
-        }
+        const items = [
+          { id: 'gemini-3.8-flash-high', name: 'Gemini 3.8 Flash (High)' },
+          { id: 'gemini-3.8-flash-medium', name: 'Gemini 3.8 Flash (Medium)' },
+          { id: 'gemini-3.8-flash-low', name: 'Gemini 3.8 Flash (Low)' },
+          { id: 'gemini-3.7-flash-medium', name: 'Gemini 3.7 Flash (Medium)' },
+          { id: 'gemini-3.6-flash-medium', name: 'Gemini 3.6 Flash (Medium)' },
+          { id: 'gemini-3.1-pro-low', name: 'Gemini 3.1 Pro (Low)' },
+        ];
+        items.push(...rawModels);
 
         const groups = {};
         const existing = new Set();
@@ -130,8 +129,7 @@
           if (!mId || existing.has(mId)) return;
           existing.add(mId);
 
-          const owned = String((m && m.owned_by) || '').trim();
-          const prefix = mId.includes('/') ? mId.split('/')[0] : (owned || 'google');
+          const prefix = mId.includes('/') ? mId.split('/')[0] : 'antigravity';
           const groupName = _trGroupLabel(prefix);
           groups[groupName] = groups[groupName] || [];
           groups[groupName].push({
@@ -152,8 +150,17 @@
           modelEl.appendChild(grp);
         });
 
+        if (!items.length) {
+          autoOpt.textContent = 'Chưa có model Antigravity được bật trong DB';
+          autoOpt.disabled = true;
+        } else {
+          autoOpt.textContent = `Tự động theo Antigravity (${items[0].name || items[0].id})`;
+        }
+
       } catch (err) {
         console.warn('[Transcribe] Error loading models:', err);
+        autoOpt.textContent = 'Không tải được model Antigravity từ DB';
+        autoOpt.disabled = true;
       }
 
       if (currentVal && Array.from(modelEl.options).some(o => o.value === currentVal)) {
@@ -296,9 +303,6 @@
       voiceSel.value = engine.default;
     }
   }
-      voiceSel.value = engine.default;
-    }
-  }
 
   // ── TRANSCRIBE OPERATION ──────────────────────────────────────────────
   async function trStartTranscribe() {
@@ -322,7 +326,7 @@
       single: window._trSelectedFile ? '' : trFile,
       out_dir: document.getElementById('tr-out')?.value?.trim() || '',
       provider: document.getElementById('tr-provider')?.value || 'antigravity',
-      model: document.getElementById('tr-model')?.value || 'gemini-3.6-flash',
+      model: document.getElementById('tr-model')?.value || '',
       lang: document.getElementById('tr-lang')?.value || 'zh',
       srt: document.getElementById('tr-srt')?.checked ?? true,
       sc: document.getElementById('tr-sc')?.checked ?? false,
@@ -454,6 +458,21 @@
 
   // ── PREVIEW DYNAMIC VOICE ─────────────────────────────────────────────
   let _isPreviewing = false;
+  async function _fetchTtsPreview(payload, onRetry) {
+    const options = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    };
+    try {
+      return await fetch('/api/tts_preview', options);
+    } catch (firstError) {
+      if (typeof onRetry === 'function') onRetry(firstError);
+      await new Promise(resolve => setTimeout(resolve, 800));
+      return fetch('/api/tts_preview', options);
+    }
+  }
+
   async function trPreviewVoice() {
     if (_isPreviewing) return;
     const text = document.getElementById('tr-preview-text')?.value?.trim();
@@ -473,24 +492,21 @@
       btn.innerHTML = '<span class="w-3.5 h-3.5 border-2 border-slate-600 border-t-transparent rounded-full animate-spin inline-block mr-1"></span> Đang thử giọng...';
     }
     
-    let engine = engineSel?.value || 'edge-tts';
+    let engine = 'vieneu';
     let voice = voiceSel?.value || '';
     
-    trAppendLog(`⏳ Đang tạo giọng nói thử nghiệm (${engine} / ${voice})...`, 'info');
+    trAppendLog(`⏳ Đang tạo giọng nói thử nghiệm (${engine} / ${voice}). Lần đầu sau khi mở app có thể cần chờ model khởi động...`, 'info');
     
     try {
-      const res = await fetch('/api/tts_preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const res = await _fetchTtsPreview({
           text,
           tts_engine: engine,
           tts_voice: voice,
+          vieneu_ref_audio: document.getElementById('tr-vieneu-ref')?.value || '',
           tts_rate: document.getElementById('tr-tts-rate')?.value || '+0%',
           tts_pitch: document.getElementById('tr-tts-pitch')?.value || '+0Hz',
           tts_lang: document.getElementById('tr-tts-lang')?.value || 'vi'
-        })
-      });
+        }, () => trAppendLog('⚠️ Kết nối nghe thử bị ngắt, đang tự thử lại một lần...', 'warning'));
       if (!res.ok) {
         let msg = '';
         try {
@@ -500,6 +516,11 @@
           try { msg = await res.text(); } catch(__) {}
         }
         throw new Error(msg || 'Lỗi HTTP ' + res.status);
+      }
+      const metricEl = document.getElementById('tr-tts-metrics');
+      if (metricEl) {
+        const type = res.headers.get('X-TTS-Voice-Type') === 'clone' ? 'clone' : 'preset';
+        metricEl.textContent = `⏱ ${res.headers.get('X-TTS-Elapsed') || '?'}s · audio ${res.headers.get('X-TTS-Duration') || '?'}s · RTF ${res.headers.get('X-TTS-RTF') || '?'} · ${res.headers.get('X-TTS-Sample-Rate') || '?'} Hz · ${type} · ${res.headers.get('X-TTS-Quality') || 'unknown'}`;
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -549,7 +570,7 @@
     trClearLogs();
     trAppendLog('Bắt đầu lồng tiếng từ file phụ đề .ass...', 'info');
     
-    let engine = document.getElementById('tr-tts-engine')?.value || 'edge-tts';
+    let engine = 'vieneu';
     let voice = document.getElementById('tr-tts-voice')?.value || '';
     
     const payload = {
@@ -557,6 +578,7 @@
       output_dir: document.getElementById('tr-out')?.value?.trim() || '',
       tts_engine: engine,
       tts_voice: voice,
+      vieneu_ref_audio: document.getElementById('tr-vieneu-ref')?.value || '',
       tts_rate: document.getElementById('tr-tts-rate')?.value || '+0%',
       tts_pitch: document.getElementById('tr-tts-pitch')?.value || '+0Hz',
       tts_lang: document.getElementById('tr-tts-lang')?.value || 'vi'

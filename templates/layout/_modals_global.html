@@ -7,11 +7,11 @@
   <div class="bg-white dark:bg-slate-800 rounded-xl max-w-[480px] w-full shadow-2xl p-6 animate-[fadeUp_0.2s_ease]">
     <!-- Header -->
     <div class="flex items-center gap-3 mb-4">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/30 dark:to-amber-800/30 flex items-center justify-center text-xl flex-shrink-0">
-        ⚠️
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/30 dark:to-amber-800/30 flex items-center justify-center flex-shrink-0 text-amber-600 dark:text-amber-400">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       </div>
       <div class="flex-1">
-        <div class="font-bold text-[15px] text-slate-900 dark:text-slate-100">
+        <div class="font-bold text-[13px] text-slate-900 dark:text-slate-100">
           API key lỗi hoặc hết hạn
         </div>
         <div class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
@@ -35,8 +35,9 @@
           placeholder="Dán API key mới vào đây..."
           class="flex-1 font-mono text-xs"
           onkeydown="if(event.key==='Enter')apiCheckModalTest()" />
-        <button id="btn-api-check-test" class="btn btn-secondary" onclick="apiCheckModalTest()">
-          🧪 Test
+        <button id="btn-api-check-test" class="btn btn-secondary flex items-center gap-1" onclick="apiCheckModalTest()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Test
         </button>
       </div>
     </div>
@@ -46,11 +47,13 @@
 
     <!-- Actions -->
     <div class="flex gap-2 justify-end flex-wrap">
-      <button class="btn btn-secondary" onclick="apiCheckModalCancel()">
-        ✕ Hủy bỏ
+      <button class="btn btn-secondary flex items-center gap-1" onclick="apiCheckModalCancel()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Hủy bỏ
       </button>
-      <button class="btn btn-primary" id="btn-api-check-ok" onclick="apiCheckModalOk()" disabled>
-        ✅ Tiếp tục
+      <button class="btn btn-primary flex items-center gap-1" id="btn-api-check-ok" onclick="apiCheckModalOk()" disabled>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Tiếp tục
       </button>
     </div>
   </div>
@@ -64,11 +67,11 @@
   class="fixed inset-0 z-[10000] bg-black/45 dark:bg-black/60 items-center justify-center p-4">
   <div class="bg-white dark:bg-slate-800 rounded-xl max-w-[520px] w-full shadow-2xl p-6">
     <div class="flex items-center gap-2.5 mb-3">
-      <div class="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg">
-        🔑
+      <div class="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
       </div>
       <div class="flex-1">
-        <div class="font-bold text-[15px] text-slate-900 dark:text-slate-100">
+        <div class="font-bold text-[13px] text-slate-900 dark:text-slate-100">
           Token Facebook cần cập nhật
         </div>
         <div class="text-[11px] text-slate-400 dark:text-slate-500">
@@ -105,18 +108,20 @@
       <input type="password" id="fb-token-modal-input"
         placeholder="EAAxxxxxxx..."
         class="flex-1 font-mono text-[11px]" />
-      <button class="btn btn-secondary btn-sm" onclick="fbTokenModalTogglePw()">👁</button>
+      <button class="btn btn-secondary btn-sm flex items-center" onclick="fbTokenModalTogglePw()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </div>
 
     <div class="flex gap-2 justify-between items-center flex-wrap">
-      <button class="btn btn-secondary btn-sm" onclick="fbTokenModalDiagnose()">
-        🔍 Chẩn đoán
+      <button class="btn btn-secondary btn-sm flex items-center gap-1" onclick="fbTokenModalDiagnose()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Chẩn đoán
       </button>
       <div class="flex gap-2 flex-wrap">
-        <button class="btn btn-secondary" onclick="fbTokenModalSkip()">⏭ Bỏ qua video này</button>
+        <button class="btn btn-secondary flex items-center gap-1" onclick="fbTokenModalSkip()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg> Bỏ qua</button>
         <button class="btn btn-secondary" onclick="fbTokenModalCancel()">Hủy</button>
-        <button class="btn btn-primary" id="btn-fb-token-modal-save" onclick="fbTokenModalSave()">
-          🔄 Lưu &amp; Thử lại
+        <button class="btn btn-primary flex items-center gap-1" id="btn-fb-token-modal-save" onclick="fbTokenModalSave()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Lưu &amp; Thử lại
         </button>
       </div>
     </div>
@@ -133,11 +138,11 @@
   <div class="bg-white dark:bg-slate-800 rounded-xl max-w-[500px] w-full shadow-2xl p-6">
     <!-- Header -->
     <div class="flex items-center gap-2.5 mb-3">
-      <div class="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg">
-        🍪
+      <div class="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="8" cy="9" r="1"/><circle cx="15" cy="8" r="1"/><circle cx="10" cy="15" r="1"/></svg>
       </div>
       <div class="flex-1">
-        <div class="font-bold text-[15px] text-slate-900 dark:text-slate-100">
+        <div class="font-bold text-[13px] text-slate-900 dark:text-slate-100">
           Yêu cầu xác thực tải video (<span id="ytdlp-cookie-modal-platform-title">Đa nền tảng</span>)
         </div>
         <div class="text-[11px] text-slate-400 dark:text-slate-500">
@@ -154,7 +159,7 @@
     <!-- Tech details (Collapsible) -->
     <details class="mb-3 text-[10.5px]">
       <summary class="cursor-pointer text-slate-400 hover:text-slate-500 font-semibold select-none outline-none">
-        📄 Xem chi tiết lỗi kỹ thuật (Tech Log)
+        Xem chi tiết lỗi kỹ thuật
       </summary>
       <div id="ytdlp-cookie-modal-error"
         class="mt-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md p-2 max-h-[100px] overflow-y-auto font-mono text-[10px] text-slate-500 whitespace-pre-wrap leading-normal">
@@ -167,27 +172,32 @@
         Chọn trình duyệt đã đăng nhập tài khoản để tự động lấy cookie &amp; tải lại:
       </label>
       <div class="grid grid-cols-2 gap-2" id="ytdlp-cookie-modal-browser-grid">
-        <button data-browser="chrome" class="btn btn-secondary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('chrome')">
-          🌐 Google Chrome
+        <button data-browser="chrome" class="btn btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('chrome')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+          Google Chrome
         </button>
-        <button data-browser="edge" class="btn btn-secondary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('edge')">
-          🌐 Microsoft Edge
+        <button data-browser="edge" class="btn btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('edge')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+          Microsoft Edge
         </button>
-        <button data-browser="firefox" class="btn btn-secondary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('firefox')">
-          🦊 Mozilla Firefox
+        <button data-browser="firefox" class="btn btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('firefox')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+          Mozilla Firefox
         </button>
-        <button data-browser="brave" class="btn btn-secondary text-xs py-2.5 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('brave')">
-          🦁 Brave Browser
+        <button data-browser="brave" class="btn btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5" onclick="ytdlpCookieModalSaveBrowser('brave')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Brave Browser
         </button>
         <button data-browser="" class="btn btn-secondary text-xs py-2 px-3 flex items-center justify-center gap-1.5 col-span-2" onclick="ytdlpCookieModalSaveBrowser('')">
-          📄 Dùng file cookie Netscape (.txt) thủ công
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Cookie Netscape (.txt) thủ công
         </button>
       </div>
     </div>
 
     <!-- Important note -->
     <div class="alert-info text-[11.5px] mb-4 px-3.5 py-2.5 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-lg">
-      <b>💡 Gợi ý giải quyết lỗi khóa tệp tin:</b>
+      <b>Gợi ý giải quyết lỗi khóa tệp tin:</b>
       <ul class="mt-1 ml-4 p-0 list-disc leading-relaxed text-slate-600 dark:text-slate-400">
         <li>Nếu chọn trình duyệt: Vui lòng <b>đóng trình duyệt đó</b> khi chạy tool để tránh bị lỗi khóa tệp dữ liệu.</li>
         <li>Hoặc xuất file cookie Netscape <b><code class="text-xs font-mono" id="ytdlp-cookie-modal-cookie-file-name">cookies.txt</code></b> và lưu vào thư mục gốc của tool (không bao giờ bị lỗi khóa file).</li>
@@ -199,7 +209,7 @@
 
     <!-- Actions -->
     <div class="flex gap-2 justify-end flex-wrap">
-      <button class="btn btn-secondary" onclick="ytdlpCookieModalSkip()">⏭ Bỏ qua video</button>
+      <button class="btn btn-secondary flex items-center gap-1" onclick="ytdlpCookieModalSkip()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg> Bỏ qua</button>
       <button class="btn btn-secondary" onclick="ytdlpCookieModalCancel()">Hủy</button>
     </div>
   </div>

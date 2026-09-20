@@ -80,4 +80,4 @@ if __name__ == "__main__":
     if OPEN_BROWSER and HOST in ("127.0.0.1", "localhost"):
         threading.Timer(1.2, lambda: webbrowser.open(local_url)).start()
 
-    socketio.run(app, host=HOST, port=PORT, debug=DEBUG, allow_unsafe_werkzeug=True)
+    socketio.run(app, host=HOST, port=PORT, debug=DEBUG, allow_unsafe_werkzeug=True, minimum_chunk_size=0)

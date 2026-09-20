@@ -110,21 +110,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "keep_bg_music": True,
         "keep_bg": True,
         "blur_zone": "bottom",
-        "tts_voice": "vi-VN-HoaiMyNeural",
-        "tts_engine": "edge-tts",
+        "tts_voice": "Minh Quân Pro",
+        "tts_engine": "vieneu",
         "tts_speed": 1.0,
         "tts_concurrency": 4,
         "tts_retries": 2,
         "auto_speed": True,
         "pitch_semitones": 0.0,
-        "fpt_api_key": "",  # Set via env FPT_TTS_API_KEY or video_process.fpt_api_key in config.yml
-        "elevenlabs_api_key": "",   # Set via env ELEVENLABS_API_KEY or config
-        "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM",  # Rachel — eleven_multilingual_v2 supports VI
-        "elevenlabs_model": "eleven_multilingual_v2",
-        "fpt_fallback_elevenlabs": True,  # Tự động fallback FPT → ElevenLabs khi FPT hết token
-        "fish_api_key": "",            # Fish Audio key — env FISH_API_KEY hoặc video_process.fish_api_key
-        "fish_model": "s2-pro",        # Backbone đa ngôn ngữ: "s2-pro" hoặc "s1" (tốt cho tiếng Nhật...)
-        "fish_reference_id": "",       # Voice model ID (reference_id) — để trống = giọng mặc định
+        "vieneu_ref_audio": "",  # WAV/MP3 3-8 giây; trống = dùng preset
         "bg_volume": 0.15,
         "font_size": 18,
         "font_name": "Arial",

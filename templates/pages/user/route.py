@@ -382,7 +382,7 @@ def user_videos_all():
                 _emit("videos", videos=emitted_batch)
                 emitted_batch = []
 
-            # Những id còn lại chưa có item → gọi API detail
+            # Những id còn lại chưa có item → gọi API detail (nếu bị 403 WAF thì tạo fallback item an toàn)
             remaining = [aid for aid in missing_ids if str(aid) not in cached_items]
             total_remain = len(remaining)
             for idx, aid in enumerate(remaining, start=1):
@@ -392,6 +392,19 @@ def user_videos_all():
                     detail = None
                 if detail:
                     emitted_batch.append(parse_item(detail))
+                else:
+                    emitted_batch.append({
+                        "aweme_id": str(aid),
+                        "desc": f"Video {aid}",
+                        "cover": "",
+                        "date": "",
+                        "ts": 0,
+                        "play": 0,
+                        "like": 0,
+                        "comment": 0,
+                        "type": "video",
+                        "duration": 0,
+                    })
                 if emitted_batch and (len(emitted_batch) >= 5 or idx == total_remain):
                     _emit("videos", videos=emitted_batch)
                     emitted_batch = []

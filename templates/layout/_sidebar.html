@@ -1,106 +1,84 @@
 <!-- ══════════ SIDEBAR (desktop) ══════════ -->
 <nav id="sidebar"
-  class="w-56 min-w-[224px] bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col transition-all duration-200 z-[100] flex-shrink-0 shadow-[2px_0_8px_rgba(0,0,0,0.04)]">
+  class="w-[230px] min-w-[230px] bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col transition-all duration-200 z-[100] flex-shrink-0 shadow-[2px_0_8px_rgba(0,0,0,0.04)]">
 
   <!-- Logo -->
-  <div class="flex items-center gap-2.5 px-3.5 pt-4 pb-3.5 border-b border-slate-200 dark:border-slate-700">
+  <div class="flex items-center gap-2 px-3 pt-3 pb-2.5 border-b border-slate-200 dark:border-slate-700">
     <img src="/static/Images/dowload_logo.png"
-      class="w-[38px] h-[38px] rounded-[10px] object-cover flex-shrink-0 shadow-[0_2px_8px_rgba(59,130,246,0.3)]"
+      class="w-[30px] h-[30px] rounded-[8px] object-cover flex-shrink-0 shadow-[0_2px_8px_rgba(59,130,246,0.3)]"
       alt="Logo">
     <span id="sidebar-logo-text"
-      class="font-bold text-[15px] whitespace-nowrap overflow-hidden text-slate-900 dark:text-slate-100">Video Tool</span>
+      class="font-bold text-[13px] whitespace-nowrap overflow-hidden text-slate-900 dark:text-slate-100">Video Tool</span>
   </div>
 
   <!-- Navigation -->
-  <div class="flex-1 px-2 py-2.5 overflow-y-auto">
-    <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2">Nội dung
+  <div class="flex-1 px-1.5 py-2 overflow-y-auto">
+    <div class="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-2.5 mb-1.5">Nội dung
     </div>
 
     <a class="nav-item" data-page="user" onclick="switchPage('user')">
-      <span class="nav-icon">🔍</span><span class="nav-label" data-i18n="nav_user">Tìm người dùng</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><span class="nav-label" data-i18n="nav_user">Tìm người dùng</span>
     </a>
     <a class="nav-item" data-page="process" onclick="switchPage('process')">
-      <span class="nav-icon">🎬</span><span class="nav-label" data-i18n="nav_process">Xử lý Video</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg></span><span class="nav-label" data-i18n="nav_process">Xử lý Video</span>
     </a>
     <a class="nav-item" data-page="transcribe" onclick="switchPage('transcribe')">
-      <span class="nav-icon">🎙</span><span class="nav-label" data-i18n="nav_transcribe">Phiên âm</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span><span class="nav-label" data-i18n="nav_transcribe">Phiên âm</span>
     </a>
 
-    <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mt-4 mb-2">Phân
+    <div class="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-2.5 mt-3 mb-1.5">Phân
       phối</div>
 
     <a class="nav-item" data-page="publish" onclick="switchPage('publish')">
-      <span class="nav-icon">📤</span><span class="nav-label">Đăng video</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span><span class="nav-label">Đăng video</span>
     </a>
     <a class="nav-item" data-page="content" onclick="switchPage('content')">
-      <span class="nav-icon">📋</span><span class="nav-label">Quản lý bài đăng</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></span><span class="nav-label">Quản lý bài đăng</span>
     </a>
 
-    <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mt-4 mb-2">Công
+    <div class="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-2.5 mt-3 mb-1.5">Công
       cụ</div>
 
     <a class="nav-item" data-page="providers" onclick="switchPage('providers')">
-      <span class="nav-icon">🔌</span><span class="nav-label">AI Providers</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></span><span class="nav-label">AI Providers</span>
     </a>
     <a class="nav-item" data-page="quota" onclick="switchPage('quota')">
-      <span class="nav-icon">📊</span><span class="nav-label">Quota Tracker</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><span class="nav-label">Quota Tracker</span>
     </a>
 
 
     <a class="nav-item" data-page="history" onclick="switchPage('history')">
-      <span class="nav-icon">🗃</span><span class="nav-label">Lịch sử</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><span class="nav-label">Lịch sử</span>
     </a>
-    <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mt-4 mb-2">Hệ
+    <div class="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-2.5 mt-3 mb-1.5">Hệ
       thống</div>
     <a class="nav-item" data-page="proxies" onclick="switchPage('proxies')">
-      <span class="nav-icon">🌐</span><span class="nav-label">Proxy & Router</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><span class="nav-label">Proxy & Router</span>
     </a>
-
-    <!-- SYSTEM dropdown and submenus -->
-    <div class="flex flex-col">
-      <a class="nav-item justify-between" onclick="toggleSidebarDropdown('system-media')">
-        <div class="flex items-center">
-          <span class="nav-icon">📁</span>
-          <span class="nav-label">Media Providers</span>
-        </div>
-        <span class="text-[10px] text-slate-400 transition-transform duration-200" id="arrow-system-media">▼</span>
-      </a>
-      <div id="dropdown-system-media" class="hidden flex-col pl-4 bg-slate-50/50 dark:bg-slate-900/20 py-1 space-y-0.5 border-l-2 border-slate-100 dark:border-slate-800 ml-3">
-        <a class="nav-item py-1 text-[11px]" onclick="switchPage('media-tts')">
-          <span class="nav-icon text-xs">🗣️</span><span class="nav-label">Text To Speech</span>
-        </a>
-        <a class="nav-item py-1 text-[11px]" onclick="switchPage('media-stt')">
-          <span class="nav-icon text-xs">🎙️</span><span class="nav-label">Speech To Text</span>
-        </a>
-        <a class="nav-item py-1 text-[11px]" onclick="switchPage('media-video')">
-          <span class="nav-icon text-xs">📹</span><span class="nav-label">Video</span>
-        </a>
-      </div>
-    </div>
 
     <a class="nav-item" data-page="config" onclick="switchPage('config')">
-      <span class="nav-icon">⚙️</span><span class="nav-label" data-i18n="nav_config">Cấu hình</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="nav-label" data-i18n="nav_config">Cấu hình</span>
     </a>
     <!-- <a class="nav-item" data-page="cookies" onclick="switchPage('cookies')">
-      <span class="nav-icon">🍪</span><span class="nav-label">Cookies</span>
+      <span class="nav-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="8" cy="9" r="1"/><circle cx="15" cy="8" r="1"/><circle cx="10" cy="15" r="1"/></svg></span><span class="nav-label">Cookies</span>
     </a> -->
   </div>
 
   <!-- Footer -->
-  <div class="p-2 border-t border-slate-200 dark:border-slate-700">
+  <div class="p-1.5 border-t border-slate-200 dark:border-slate-700">
     <!-- Version -->
     <div id="sidebar-version"
-      class="px-2 py-1.5 mb-1 rounded-md bg-slate-50 dark:bg-slate-700 text-center text-[11px] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-all"
+      class="px-2 py-1 mb-1 rounded-md bg-slate-50 dark:bg-slate-700 text-center text-[10px] text-slate-400 dark:text-slate-500 cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-all"
       onclick="checkForUpdate()" title="Bấm để kiểm tra cập nhật">
       <span id="sidebar-version-text">v...</span>
       <span id="sidebar-update-dot"
-        class="hidden w-[7px] h-[7px] rounded-full bg-emerald-500 ml-1 align-middle inline-block"
+        class="hidden w-[6px] h-[6px] rounded-full bg-emerald-500 ml-1 align-middle inline-block"
         title="Có bản cập nhật mới!"></span>
     </div>
     <!-- Collapse toggle -->
     <button onclick="toggleSidebar()" id="sidebar-toggle-btn"
-      class="w-full p-2 bg-transparent border-0 text-slate-400 dark:text-slate-500 cursor-pointer rounded-md hover:bg-blue-50 dark:hover:bg-slate-700 transition-all text-[13px]">
-      ◀
+      class="w-full p-1.5 bg-transparent border-0 text-slate-400 dark:text-slate-500 cursor-pointer rounded-md hover:bg-blue-50 dark:hover:bg-slate-700 transition-all text-[12px]">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
   </div>
 </nav>

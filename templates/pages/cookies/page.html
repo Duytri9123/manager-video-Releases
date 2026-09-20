@@ -4,18 +4,19 @@
   <!-- Cookie tabs switcher -->
   <div class="card mb-4" style="padding:8px">
     <div class="platform-tabs" style="margin:0">
-      <div class="platform-tab active cookie-tab" data-cookie-platform="tiktok" onclick="switchCookieTab('tiktok')">🎵 TikTok / Douyin</div>
+      <div class="platform-tab active cookie-tab" data-cookie-platform="douyin" onclick="switchCookieTab('douyin')">🎵 Douyin</div>
+      <div class="platform-tab cookie-tab" data-cookie-platform="tiktok" onclick="switchCookieTab('tiktok')">📱 TikTok</div>
       <div class="platform-tab cookie-tab" data-cookie-platform="youtube" onclick="switchCookieTab('youtube')">📺 YouTube</div>
       <div class="platform-tab cookie-tab" data-cookie-platform="facebook" onclick="switchCookieTab('facebook')">👥 Facebook</div>
     </div>
   </div>
 
-  <!-- TikTok / Douyin Cookie Panel -->
-  <div class="cookie-tab-panel" data-cookie-platform="tiktok">
+  <!-- Douyin Cookie Panel -->
+  <div class="cookie-tab-panel" data-cookie-platform="douyin">
     <!-- Mode toggle card -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">🍪 Chế độ Cookie TikTok / Douyin</span>
+        <span class="card-title">🍪 Chế độ Cookie Douyin</span>
         <div class="card-actions">
           <span class="badge badge-accent" id="ck-mode-badge" data-i18n="lbl_cookie_default">Mặc định</span>
         </div>
@@ -98,8 +99,70 @@
         </div>
       </div>
       <div class="btn-group mt-12">
-        <button class="btn btn-primary" onclick="saveCookies()">💾 Lưu Cookie TikTok</button>
+        <button class="btn btn-primary" onclick="saveCookies()">💾 Lưu Cookie Douyin</button>
         <button class="btn btn-secondary" onclick="validateCookie()">✅ Kiểm tra hợp lệ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TikTok Cookie Panel -->
+  <div class="cookie-tab-panel" data-cookie-platform="tiktok" style="display:none">
+    <div class="card shadow-xs">
+      <div class="card-header">
+        <span class="card-title">📱 Cookie TikTok (yt-dlp)</span>
+      </div>
+      
+      <div class="alert-info mb-4">
+        Cấu hình Cookie TikTok giúp yt-dlp tải các video bị giới hạn vùng, video riêng tư, hoặc bỏ qua kiểm tra đăng nhập của TikTok.
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Browser Cookie Source -->
+        <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+            📡 Đọc trực tiếp từ trình duyệt (Khuyên dùng)
+          </h4>
+          <div class="field">
+            <label>Trình duyệt nguồn (cookies_from_browser)</label>
+            <select id="ck-standalone-tiktok-browser" class="w-full">
+              <option value="">-- Không sử dụng --</option>
+              <option value="chrome">Google Chrome</option>
+              <option value="firefox">Mozilla Firefox</option>
+              <option value="edge">Microsoft Edge</option>
+              <option value="brave">Brave Browser</option>
+              <option value="opera">Opera</option>
+              <option value="safari">Safari</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Netscape Cookie File Path -->
+        <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+            📄 Đường dẫn File Cookie TikTok (Netscape .txt)
+          </h4>
+          <div class="field">
+            <label>Đường dẫn File Cookie TikTok</label>
+            <input type="text" id="ck-standalone-tiktok-file" placeholder="VD: C:\cookies\tiktok-cookies.txt" class="w-full">
+          </div>
+        </div>
+      </div>
+
+      <!-- Paste Raw Cookie Content -->
+      <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 mt-4">
+        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
+          📋 Dán nội dung Cookie TikTok (Netscape .txt hoặc Header Raw)
+        </h4>
+        <div class="field mb-0">
+          <label>Nội dung Cookie TikTok</label>
+          <textarea id="ck-standalone-tiktok-content" rows="4" placeholder="Dán nội dung file cookie TikTok .txt hoặc chuỗi raw ở đây..." class="w-full text-xs font-mono"></textarea>
+        </div>
+      </div>
+
+      <div class="btn-group mt-12" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <button class="btn btn-primary" onclick="savePlatformConfig('tiktok')">💾 Lưu Cookie TikTok</button>
+        <button class="btn btn-secondary" onclick="validateTiktokCookie(this)">✅ Kiểm tra hợp lệ</button>
+        <span id="ck-standalone-tiktok-status" style="font-size: 13px; font-weight: 500;"></span>
       </div>
     </div>
   </div>

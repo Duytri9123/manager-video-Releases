@@ -153,7 +153,8 @@ function procRemoveAiZones() {
     const scaledFont   = Math.max(6, Math.round(vidH * fontPct   / 100));
     const scaledMargin = Math.max(2, Math.round(vidH * marginPct / 100));
 
-    const boldOn = document.getElementById('proc-font-bold')?.checked ?? true;
+    const wSel = document.getElementById('proc-font-weight');
+    const boldOn = wSel ? (wSel.value === 'bold') : (document.getElementById('proc-font-bold')?.checked ?? true);
     const outlineW = parseInt(document.getElementById('proc-outline-width')?.value || 2);
 
     ctx.font         = `${boldOn ? 'bold ' : ''}${scaledFont}px Arial, sans-serif`;

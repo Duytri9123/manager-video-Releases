@@ -1127,8 +1127,8 @@ class BaseDownloader(ABC):
             source = processed_path if processed_path else video_path
             voice_out = out_dir / f"{post_title}_{target_lang}_voice.mp4"
             # Lấy đúng engine và voice từ config
-            tts_voice = vp_cfg.get("tts_voice") or "vi-VN-HoaiMyNeural"
-            tts_engine = vp_cfg.get("tts_engine") or "edge-tts"
+            tts_voice = vp_cfg.get("tts_voice") or "Minh Quân Pro"
+            tts_engine = "vieneu"
             elevenlabs_api_key = (
                 str(vp_cfg.get("elevenlabs_api_key") or "").strip()
                 or os.environ.get("ELEVENLABS_API_KEY", "").strip()

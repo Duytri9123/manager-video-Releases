@@ -1,5 +1,5 @@
 /* ── Cookies page ────────────────────────────────────────────────────────── */
-const CK_FIELDS = ['ttwid','odin_tt','passport_csrf_token','s_v_web_id','__ac_nonce','__ac_signature','UIFID','bd_ticket_guard_client_web_domain'];
+const CK_FIELDS = ['ttwid','odin_tt','passport_csrf_token','s_v_web_id','__ac_nonce','__ac_signature','UIFID','bd_ticket_guard_client_web_domain','msToken'];
 
 async function loadCookieMode() {
   const data = await API.get('/api/cookie_mode');
@@ -22,11 +22,14 @@ async function loadCookieFields() {
     if (el) el.value = ck[f] || '';
   });
 
-  // Load YouTube & Facebook cookie settings
+  // Load TikTok, YouTube & Facebook cookie settings
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
   const ytdlp = cfg?.ytdlp || {};
   const cookieFiles = ytdlp.cookie_files || {};
   const cookieContents = ytdlp.cookie_contents || {};
+  set('ck-standalone-tiktok-browser', ytdlp.cookies_from_browser_tiktok || '');
+  set('ck-standalone-tiktok-file', cookieFiles.tiktok || '');
+  set('ck-standalone-tiktok-content', cookieContents.tiktok || '');
   set('ck-yt-browser', ytdlp.cookies_from_browser || '');
   set('ck-yt-file', cookieFiles.youtube || '');
   set('ck-yt-content', cookieContents.youtube || '');
@@ -47,12 +50,25 @@ function switchCookieTab(platform) {
 window.switchCookieTab = switchCookieTab;
 
 async function savePlatformConfig(platform) {
-  if (platform === 'tiktok') {
+  if (platform === 'douyin') {
     await saveCookies();
     return;
   }
   const payload = {};
-  if (platform === 'youtube') {
+  if (platform === 'tiktok') {
+    const browser = document.getElementById('ck-standalone-tiktok-browser')?.value || document.getElementById('ck-tiktok-browser')?.value || '';
+    const filepath = document.getElementById('ck-standalone-tiktok-file')?.value?.trim() || document.getElementById('ck-tiktok-file')?.value?.trim() || '';
+    const content = document.getElementById('ck-standalone-tiktok-content')?.value || document.getElementById('ck-tiktok-content')?.value || '';
+    payload.ytdlp = {
+      cookies_from_browser_tiktok: browser,
+      cookie_files: {
+        tiktok: filepath
+      },
+      cookie_contents: {
+        tiktok: content
+      }
+    };
+  } else if (platform === 'youtube') {
     const browser = document.getElementById('ck-yt-browser')?.value || '';
     const filepath = document.getElementById('ck-yt-file')?.value?.trim() || '';
     const content = document.getElementById('ck-yt-content')?.value || '';
@@ -121,8 +137,8 @@ async function validateCookie() {
   const status = document.getElementById('ck-status');
   if (status) {
     status.innerHTML = res?.ok
-      ? '<span class="dot dot-green"></span><span>Valid</span>'
-      : '<span class="dot dot-red"></span><span>Invalid</span>';
+      ? '<span class="dot dot-green"></span><span>' + (res?.reason || 'Hợp lệ') + (res?.has_ms_token ? ' · có msToken' : ' · msToken sẽ tự tạo') + '</span>'
+      : '<span class="dot dot-red"></span><span>' + (res?.reason || 'Không hợp lệ') + '</span>';
   }
 }
 
@@ -137,8 +153,16 @@ async function parseCookie() {
 }
 
 async function autoFetch() {
-  toast('Auto fetching...', 'info');
-  // placeholder — implement if backend supports it
+  try {
+    const res = await API.post('/api/auto_fetch_cookie', {});
+    if (res?.ok) {
+      toast('Đã mở Douyin. Hãy đăng nhập/xác minh rồi đóng cửa sổ để lưu cookie mới.', 'info');
+    } else {
+      toast('Không thể mở Douyin: ' + (res?.error || 'Không rõ lỗi'), 'error');
+    }
+  } catch (e) {
+    toast('Không thể mở Douyin: ' + e.message, 'error');
+  }
 }
 
 async function openYoutubeLoginCookie(btn) {

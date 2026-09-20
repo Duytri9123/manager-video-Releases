@@ -95,45 +95,48 @@ function renderAccountManagementPanel() {
 
   let html = '';
 
-  html += `<div class="section-title mb-8">📺 YouTube (${ytAccounts.length})</div>`;
+  const ytSvg = '<svg class="w-3.5 h-3.5 text-rose-600 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>';
+  const fbSvg = '<svg class="w-3.5 h-3.5 text-blue-600 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>';
+
+  html += `<div class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 flex items-center">${ytSvg} YouTube (${ytAccounts.length})</div>`;
   if (ytAccounts.length === 0) {
-    html += '<div class="text-xs text-muted mb-12">Chưa có tài khoản YouTube nào.</div>';
+    html += '<div class="text-xs text-slate-400 mb-3 pl-1">Chưa có tài khoản YouTube nào.</div>';
   } else {
-    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
+    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">';
     for (const acc of ytAccounts) {
       const isActive = acc.id === window._activeAccounts.youtube;
       html += `
-        <div class="account-item ${isActive ? 'active' : ''}" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};border-radius:8px">
-          ${acc.thumbnail ? `<img src="${acc.thumbnail}" style="width:28px;height:28px;border-radius:50%">` : '<span style="font-size:20px">📺</span>'}
+        <div class="account-item ${isActive ? 'active' : ''}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};border-radius:10px">
+          ${acc.thumbnail ? `<img src="${acc.thumbnail}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : `<div style="width:28px;height:28px;border-radius:50%;background:rgba(225,29,72,0.1);display:flex;align-items:center;justify-content:center">${ytSvg}</div>`}
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acc.channel_title || acc.name || acc.id}</div>
             <div style="font-size:10px;color:var(--text-muted)">${acc.channel_id || ''}</div>
           </div>
-          ${isActive ? '<span class="badge badge-green" style="font-size:10px">Active</span>' : 
-            `<button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 8px" onclick="setActiveYouTube('${acc.id}')">Chọn</button>`}
-          <button class="btn-icon text-red" style="font-size:14px" onclick="removeYouTubeAccount('${acc.id}')" title="Xóa">✕</button>
+          ${isActive ? '<span class="badge badge-green" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-weight:600">Active</span>' : 
+            `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 10px;height:26px;cursor:pointer" onclick="setActiveYouTube('${acc.id}')">Chọn</button>`}
+          <button class="btn-icon text-red cursor-pointer" style="width:24px;height:24px;border:none;background:transparent;color:#ef4444;font-size:12px;display:flex;align-items:center;justify-content:center" onclick="removeYouTubeAccount('${acc.id}')" title="Xóa">✕</button>
         </div>`;
     }
     html += '</div>';
   }
 
-  html += `<div class="section-title mb-8">📘 Facebook (${fbAccounts.length})</div>`;
+  html += `<div class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2 flex items-center pt-2 border-t border-slate-100 dark:border-slate-800">${fbSvg} Facebook (${fbAccounts.length})</div>`;
   if (fbAccounts.length === 0) {
-    html += '<div class="text-xs text-muted mb-12">Chưa có tài khoản Facebook nào.</div>';
+    html += '<div class="text-xs text-slate-400 mb-2 pl-1">Chưa có tài khoản Facebook nào.</div>';
   } else {
-    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">';
+    html += '<div style="display:flex;flex-direction:column;gap:6px">';
     for (const acc of fbAccounts) {
       const isActive = acc.id === window._activeAccounts.facebook;
       html += `
-        <div class="account-item ${isActive ? 'active' : ''}" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};border-radius:8px">
-          ${acc.profile_pic ? `<img src="${acc.profile_pic}" style="width:28px;height:28px;border-radius:50%">` : '<span style="font-size:20px">📘</span>'}
+        <div class="account-item ${isActive ? 'active' : ''}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};border-radius:10px">
+          ${acc.profile_pic ? `<img src="${acc.profile_pic}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : `<div style="width:28px;height:28px;border-radius:50%;background:rgba(37,99,235,0.1);display:flex;align-items:center;justify-content:center">${fbSvg}</div>`}
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acc.name || acc.id}</div>
             <div style="font-size:10px;color:var(--text-muted)">${(acc.pages || []).length} trang</div>
           </div>
-          ${isActive ? '<span class="badge badge-green" style="font-size:10px">Active</span>' : 
-            `<button class="btn btn-secondary btn-sm" style="font-size:10px;padding:2px 8px" onclick="setActiveFacebook('${acc.id}')">Chọn</button>`}
-          <button class="btn-icon text-red" style="font-size:14px" onclick="removeFacebookAccount('${acc.id}')" title="Xóa">✕</button>
+          ${isActive ? '<span class="badge badge-green" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-weight:600">Active</span>' : 
+            `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 10px;height:26px;cursor:pointer" onclick="setActiveFacebook('${acc.id}')">Chọn</button>`}
+          <button class="btn-icon text-red cursor-pointer" style="width:24px;height:24px;border:none;background:transparent;color:#ef4444;font-size:12px;display:flex;align-items:center;justify-content:center" onclick="removeFacebookAccount('${acc.id}')" title="Xóa">✕</button>
         </div>`;
     }
     html += '</div>';
@@ -287,16 +290,37 @@ async function loadHardwareInfo() {
       const hw = data.hardware;
       const preset = hw.selected_preset;
       el.innerHTML = `
-        <div style="font-size:11px;color:var(--text-muted);line-height:1.6">
-          <div><b>CPU:</b> ${hw.cpu_name || 'Unknown'} (${hw.cpu_cores}C/${hw.cpu_threads}T)</div>
-          <div><b>RAM:</b> ${hw.ram_gb} GB</div>
-          <div><b>GPU:</b> ${hw.nvidia_gpu_name || (hw.has_intel_qsv ? 'Intel QSV' : hw.has_amd_amf ? 'AMD AMF' : 'Không có')}</div>
-          <div><b>Profile:</b> ${hw.machine_profile}</div>
-          <div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">
-            <b>FFmpeg Preset:</b> ${preset.video_codec} / ${preset.preset_name} / CRF ${preset.crf}
-            ${preset.hwaccel ? `(HW: ${preset.hwaccel})` : '(CPU)'}
+        <div class="flex flex-col gap-2.5">
+          <div class="grid grid-cols-2 gap-2 text-[11px]">
+            <div class="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <span class="text-slate-400 block text-[10px] font-semibold uppercase">CPU</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 truncate block" title="${hw.cpu_name || ''}">${hw.cpu_name || 'Unknown'} (${hw.cpu_cores}C/${hw.cpu_threads}T)</span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <span class="text-slate-400 block text-[10px] font-semibold uppercase">RAM</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 block">${hw.ram_gb} GB</span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <span class="text-slate-400 block text-[10px] font-semibold uppercase">GPU</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 truncate block">${hw.nvidia_gpu_name || (hw.has_intel_qsv ? 'Intel QSV' : hw.has_amd_amf ? 'AMD AMF' : 'Không có')}</span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <span class="text-slate-400 block text-[10px] font-semibold uppercase">Profile</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 block">${hw.machine_profile}</span>
+            </div>
           </div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">${preset.description}</div>
+          <div class="p-2.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 text-[11px]">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                FFmpeg: ${preset.video_codec} / ${preset.preset_name} / CRF ${preset.crf}
+              </span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold ${preset.hwaccel ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' : 'bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}">
+                ${preset.hwaccel ? `HW: ${preset.hwaccel}` : 'CPU Encoder'}
+              </span>
+            </div>
+            <div class="text-[10px] text-slate-400 dark:text-slate-400 mt-1">${preset.description}</div>
+          </div>
         </div>`;
     }
   } catch (e) {

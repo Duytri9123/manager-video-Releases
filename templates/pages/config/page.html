@@ -1,170 +1,250 @@
 <!-- PAGE: CONFIG -->
 <div id="page-config" class="page">
   <!-- Debug error banner -->
-  <div id="cfg-error-banner" style="display:none;padding:12px 16px;margin-bottom:16px;background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;font-size:12px;font-family:monospace;color:#b91c1c;white-space:pre-wrap;"></div>
+  <div id="cfg-error-banner" style="display:none;padding:12px 16px;margin-bottom:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;font-size:12px;font-family:monospace;color:#b91c1c;white-space:pre-wrap;"></div>
 
+  <!-- ════════════════ Header Bar ════════════════ -->
+  <div class="cfg-header-box mb-3 flex flex-wrap items-center justify-between gap-3 p-3 sm:px-4 sm:py-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500/10 to-violet-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0 border border-indigo-500/20 shadow-xs">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          Cấu hình hệ thống
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">Settings</span>
+        </h1>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          Tùy chỉnh thông số tải video, tài khoản mạng xã hội và cookie phiên làm việc.
+        </p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" class="btn btn-primary h-[34px] text-xs font-semibold px-4 flex items-center gap-2 shadow-xs cursor-pointer" onclick="saveConfig()">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+        Lưu cấu hình
+      </button>
+    </div>
+  </div>
 
-  <!-- ════════════════ Shell: left nav + right panes ════════════════ -->
+  <!-- ════════════════ Shell: Nav Tabs + Panes ════════════════ -->
   <div class="config-shell">
     <nav class="config-nav">
       <div class="config-tab active" onclick="switchConfigTab(this,'cfg-sec-general')">
-        <span class="tab-ico">📥</span><span class="tab-label">Tải xuống</span>
-      </div>
-      <div class="config-tab" onclick="switchConfigTab(this,'cfg-sec-process')">
-        <span class="tab-ico">🔑</span><span class="tab-label">API &amp; AI</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="tab-label">Tải xuống</span>
       </div>
       <div class="config-tab" onclick="switchConfigTab(this,'cfg-sec-integration')">
-        <span class="tab-ico">🔗</span><span class="tab-label">Tài khoản &amp; Đăng</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+        <span class="tab-label">Tài khoản &amp; Đăng tải</span>
       </div>
       <div class="config-tab" onclick="switchConfigTab(this,'cfg-sec-cookies')">
-        <span class="tab-ico">🍪</span><span class="tab-label">Cookie</span>
+        <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM15 14a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>
+        <span class="tab-label">Quản lý Cookie</span>
       </div>
     </nav>
 
     <div class="config-panes">
 
-      <!-- ════════════════ SECTION 1: Download ════════════════ -->
+      <!-- ════════════════ SECTION 1: Tải xuống ════════════════ -->
       <div id="cfg-sec-general" class="config-pane active">
 
-        <div class="config-section-intro">
-          <span class="ico">📥</span>
-          <span>Thiết lập nguồn tải, thư mục lưu và các chế độ tải video từ Douyin / TikTok.</span>
-        </div>
-
-        <div class="cfg-cards">
-          <div class="card span-2">
-            <div class="card-header">
-              <span class="card-title">🔗 Danh sách URL</span>
-            </div>
-            <div class="field">
-              <label>URLs (mỗi dòng một URL)</label>
-              <textarea id="cfg-urls" rows="4" placeholder="https://www.douyin.com/user/...&#10;https://www.tiktok.com/@..."></textarea>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">📁 Đường dẫn &amp; Kết nối</span>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="field">
-                <label>Thư mục lưu</label>
-                <div style="display: flex; gap: 8px;">
-                  <input type="text" id="cfg-path" style="flex: 1;">
-                  <button type="button" class="btn btn-secondary" onclick="browseSavePath()" style="white-space: nowrap; height: 38px;">📁 Chọn</button>
+        <div class="cfg-bento-grid">
+          <!-- Cột chính (Left) -->
+          <div>
+            <!-- Card 1: Danh sách URL -->
+            <div class="cfg-card">
+              <div class="cfg-card-header">
+                <span class="cfg-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  Danh sách liên kết tải hàng loạt
+                </span>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" class="btn btn-secondary h-[28px] text-[11px] px-2.5 flex items-center gap-1 cursor-pointer" onclick="pasteToUrlsInput()">
+                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                    Dán clipboard
+                  </button>
+                  <button type="button" class="btn btn-secondary h-[28px] text-[11px] px-2 text-rose-500 hover:text-rose-600 cursor-pointer" onclick="clearUrlsInput()" title="Xóa danh sách">
+                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
                 </div>
               </div>
-              <div class="field">
-                <label>Proxy</label>
-                <input type="text" id="cfg-proxy" placeholder="http://127.0.0.1:7890">
+              <div class="field mb-0">
+                <textarea id="cfg-urls" rows="4" placeholder="Mỗi dòng một URL (Hỗ trợ Douyin, TikTok, Kuaishou, YouTube, v.v.)...&#10;https://www.douyin.com/user/MS4wLj...&#10;https://www.tiktok.com/@username" class="w-full text-xs font-mono"></textarea>
               </div>
-              <div class="field">
-                <label>Số luồng tải</label>
-                <input type="number" id="cfg-thread" min="1" max="20" value="5">
+            </div>
+
+            <!-- Card 2: Đường dẫn & Mạng / Proxy -->
+            <div class="cfg-card">
+              <div class="cfg-card-header">
+                <span class="cfg-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  Đường dẫn lưu trữ &amp; Tham số kết nối
+                </span>
               </div>
-              <div class="field">
-                <label>Số lần thử lại</label>
-                <input type="number" id="cfg-retry" min="0" max="10" value="3">
-              </div>
-              <div class="field">
-                <label>Ngày bắt đầu</label>
-                <input type="date" id="cfg-start">
-              </div>
-              <div class="field">
-                <label>Ngày kết thúc</label>
-                <input type="date" id="cfg-end">
+              <div class="flex flex-col gap-3">
+                <div class="field">
+                  <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">Thư mục xuất video tải về</label>
+                  <div class="cfg-input-btn-group">
+                    <input type="text" id="cfg-path" placeholder="./Downloaded/">
+                    <button type="button" class="btn btn-secondary cursor-pointer" onclick="browseSavePath()">
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                      Chọn thư mục
+                    </button>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div class="field">
+                    <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">Proxy mạng</label>
+                    <input type="text" id="cfg-proxy" placeholder="http://127.0.0.1:7890" class="h-[34px] w-full text-xs">
+                  </div>
+                  <div class="field">
+                    <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">Số luồng tải</label>
+                    <input type="number" id="cfg-thread" min="1" max="20" value="5" class="h-[34px] w-full text-xs">
+                  </div>
+                  <div class="field">
+                    <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">Số lần thử lại</label>
+                    <input type="number" id="cfg-retry" min="0" max="10" value="3" class="h-[34px] w-full text-xs">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
+                  <div class="field">
+                    <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">Ngày bắt đầu tải</label>
+                    <input type="date" id="cfg-start" class="h-[34px] w-full text-xs">
+                  </div>
+                  <div class="field">
+                    <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">Ngày kết thúc tải</label>
+                    <input type="date" id="cfg-end" class="h-[34px] w-full text-xs">
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">🗂 Tùy chọn lưu trữ</span>
+          <!-- Cột phụ (Right) -->
+          <div>
+            <!-- Card 3: Tùy chọn lưu trữ -->
+            <div class="cfg-card">
+              <div class="cfg-card-header">
+                <span class="cfg-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                  Tùy chọn tài nguyên kèm theo
+                </span>
+              </div>
+              <div class="cfg-storage-grid">
+                <label class="cfg-storage-item">
+                  <input type="checkbox" id="opt-music">
+                  <span>Tải nhạc nền riêng</span>
+                </label>
+                <label class="cfg-storage-item">
+                  <input type="checkbox" id="opt-cover">
+                  <span>Tải ảnh bìa (Cover)</span>
+                </label>
+                <label class="cfg-storage-item">
+                  <input type="checkbox" id="opt-json">
+                  <span>Lưu metadata JSON</span>
+                </label>
+                <label class="cfg-storage-item">
+                  <input type="checkbox" id="opt-folder">
+                  <span>Tạo thư mục tác giả</span>
+                </label>
+              </div>
             </div>
-            <div class="check-grid">
-              <label class="check-item"><input type="checkbox" id="opt-music"><span>Tải nhạc nền</span></label>
-              <label class="check-item"><input type="checkbox" id="opt-cover"><span>Tải ảnh bìa</span></label>
-              <label class="check-item"><input type="checkbox" id="opt-json"><span>Lưu metadata JSON</span></label>
-              <label class="check-item"><input type="checkbox" id="opt-folder"><span>Tạo thư mục riêng</span></label>
+
+            <!-- Card 4: Chế độ tải & Giới hạn số lượng kết hợp thông minh -->
+            <div class="cfg-card">
+              <div class="cfg-card-header">
+                <span class="cfg-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  Chế độ tải &amp; Giới hạn tối đa
+                </span>
+                <span class="text-[11px] text-slate-400">0 = Không giới hạn</span>
+              </div>
+              <div class="cfg-mode-list" id="mode-checks">
+                <div class="cfg-mode-row">
+                  <label class="cfg-mode-label">
+                    <input type="checkbox" value="post" checked class="accent-indigo-600">
+                    <span>Bài đăng (Post)</span>
+                  </label>
+                  <input type="number" id="n-post" min="0" value="0" class="cfg-mode-input" title="Số lượng tối đa">
+                </div>
+                <div class="cfg-mode-row">
+                  <label class="cfg-mode-label">
+                    <input type="checkbox" value="like" class="accent-indigo-600">
+                    <span>Video đã thích (Liked)</span>
+                  </label>
+                  <input type="number" id="n-like" min="0" value="0" class="cfg-mode-input" title="Số lượng tối đa">
+                </div>
+                <div class="cfg-mode-row">
+                  <label class="cfg-mode-label">
+                    <input type="checkbox" value="mix" class="accent-indigo-600">
+                    <span>Hợp tuyển (Mix)</span>
+                  </label>
+                  <input type="number" id="n-mix" min="0" value="0" class="cfg-mode-input" title="Số lượng tối đa">
+                </div>
+                <div class="cfg-mode-row">
+                  <label class="cfg-mode-label">
+                    <input type="checkbox" value="music" class="accent-indigo-600">
+                    <span>Bộ sưu tập nhạc</span>
+                  </label>
+                  <input type="number" id="n-music" min="0" value="0" class="cfg-mode-input" title="Số lượng tối đa">
+                </div>
+                <div class="cfg-mode-row">
+                  <label class="cfg-mode-label">
+                    <input type="checkbox" value="collect" class="accent-indigo-600">
+                    <span>Bộ sưu tập (Collect)</span>
+                  </label>
+                  <input type="number" id="n-collect" min="0" value="0" class="cfg-mode-input" title="Số lượng tối đa">
+                </div>
+                <div class="cfg-mode-row">
+                  <label class="cfg-mode-label">
+                    <input type="checkbox" value="collectmix" class="accent-indigo-600">
+                    <span>Bộ sưu tập Mix</span>
+                  </label>
+                  <input type="number" id="n-collectmix" min="0" value="0" class="cfg-mode-input" title="Số lượng tối đa">
+                </div>
+              </div>
             </div>
           </div>
-
-          <div class="card span-2">
-            <div class="card-header">
-              <span class="card-title">📋 Chế độ tải</span>
-            </div>
-            <div class="check-grid mb-12" id="mode-checks">
-              <label class="check-item"><input type="checkbox" value="post" checked><span>Bài đăng</span></label>
-              <label class="check-item"><input type="checkbox" value="like"><span>Video đã thích</span></label>
-              <label class="check-item"><input type="checkbox" value="mix"><span>Hợp tuyển</span></label>
-              <label class="check-item"><input type="checkbox" value="music"><span>Nhạc</span></label>
-              <label class="check-item"><input type="checkbox" value="collect"><span>Bộ sưu tập</span></label>
-              <label class="check-item"><input type="checkbox" value="collectmix"><span>Bộ sưu tập Mix</span></label>
-            </div>
-            <div class="section-title">Số lượng tối đa (0 = không giới hạn)</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div class="field"><label>Bài đăng</label><input type="number" id="n-post" min="0" value="0"></div>
-              <div class="field"><label>Đã thích</label><input type="number" id="n-like" min="0" value="0"></div>
-              <div class="field"><label>Bộ sưu tập</label><input type="number" id="n-collect" min="0" value="0"></div>
-              <div class="field"><label>Nhạc</label><input type="number" id="n-music" min="0" value="0"></div>
-              <div class="field"><label>Hợp tuyển</label><input type="number" id="n-mix" min="0" value="0"></div>
-              <div class="field"><label>Collect Mix</label><input type="number" id="n-collectmix" min="0" value="0"></div>
-            </div>
-          </div>
-        </div><!-- /cfg-cards -->
-
+        </div>
       </div><!-- end cfg-sec-general -->
 
-      <!-- ════════════════ SECTION 2: API & AI ════════════════ -->
-      <div id="cfg-sec-process" class="config-pane">
+      <!-- ════════════════ Legacy & Background AI Inputs (Hidden) ════════════════ -->
+      <div id="cfg-sec-process" style="display:none !important">
+        <select id="cfg-preferred-provider"><option value="auto" selected>auto</option></select>
+        <input type="checkbox" id="cfg-naming-enabled" checked>
+        <input type="password" id="cfg-gemini-key">
+        <span id="cfg-gemini-status"></span>
+        <input type="password" id="cfg-deepseek-key">
+        <span id="cfg-deepseek-status"></span>
+        <input type="password" id="cfg-openai-key">
+        <span id="cfg-openai-status"></span>
+        <input type="password" id="cfg-groq-key">
+        <input type="text" id="cfg-groq-model" value="llama-3.1-8b-instant">
+        <span id="cfg-groq-status"></span>
+        <input type="password" id="cfg-hf-token">
+        <span id="cfg-hf-status"></span>
+        <input type="password" id="cfg-elevenlabs-key">
+        <span id="cfg-elevenlabs-status"></span>
+        <input type="password" id="cfg-fish-key">
+        <span id="cfg-fish-status"></span>
+        <input type="password" id="cfg-fpt-key">
+        <span id="cfg-fpt-status"></span>
+        <input type="password" id="cfg-tmdb-key">
+        <input type="password" id="cfg-tmdb-token">
+        <span id="cfg-tmdb-status"></span>
 
-        <div class="config-section-intro">
-          <span class="ico">🔑</span>
-          <span>Nhập API key cho dịch thuật, phiên âm, TTS, sinh ảnh. Nhấn <b>Test</b> để kiểm tra hoặc rời khỏi ô để tự kiểm tra.</span>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <span class="card-title">🌐 Provider ưu tiên</span>
-            <div class="card-actions">
-              <button class="btn btn-secondary btn-sm" onclick="testAllApiKeys()">🧪 Test tất cả</button>
-            </div>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="field">
-              <label>Provider dịch thuật ưu tiên</label>
-              <select id="cfg-preferred-provider">
-                <option value="auto" selected>Auto (tự động chọn)</option>
-                <option value="deepseek">DeepSeek</option>
-                <option value="openai">OpenAI</option>
-                <option value="groq">Groq</option>
-                <option value="huggingface">HuggingFace</option>
-                <option value="google">Google Translate</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>&nbsp;</label>
-              <label class="check-item" style="width:100%;height:38px;box-sizing:border-box">
-                <input type="checkbox" id="cfg-naming-enabled" checked>
-                <span>Đặt tên file tự động (AI)</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- Hidden fields for compatibility -->
+        <!-- Hidden fields for backward compatibility -->
         <div class="hidden-fields" style="display:none">
-          <input type="password" id="cfg-deepseek-key">
-          <input type="password" id="cfg-groq-key">
-          <input type="text" id="cfg-groq-model">
-          <input type="password" id="cfg-openai-key">
-          <input type="password" id="cfg-hf-token">
-          <input type="password" id="cfg-fpt-key">
-          <input type="password" id="cfg-elevenlabs-key">
-          <input type="password" id="cfg-fish-key">
-          <input type="password" id="cfg-gemini-key">
-          <input type="password" id="cfg-tmdb-key">
-          <input type="password" id="cfg-tmdb-token">
           <input type="checkbox" id="vp-enabled" checked>
           <select id="vp-model"><option value="base" selected>base</option></select>
           <select id="vp-lang"><option value="zh" selected>zh</option></select>
@@ -177,8 +257,8 @@
           <input type="checkbox" id="vp-burn-vi" checked>
           <input type="checkbox" id="vp-voice" checked>
           <input type="checkbox" id="vp-keep-bg">
-          <select id="vp-tts-engine"><option value="fpt-ai" selected>fpt-ai</option></select>
-          <select id="vp-tts-voice"><option value="banmai">banmai</option></select>
+          <select id="vp-tts-engine"><option value="vieneu" selected>VieNeu v3 Turbo local</option></select>
+          <select id="vp-tts-voice"><option value="Minh Quân Pro">Minh Quân Pro</option></select>
           <input type="text" id="vp-tts-pitch" value="+0Hz">
           <input type="text" id="vp-tts-rate" value="+0%">
           <select id="vp-tts-emotion"><option value="default" selected>default</option></select>
@@ -198,386 +278,443 @@
           <input type="text" id="vp-hf-device" value="cpu">
           <input type="text" id="vp-hf-embeddings">
         </div>
+      </div><!-- end cfg-sec-process (hidden) -->
 
-      </div><!-- end cfg-sec-process -->
-
-      <!-- ════════════════ SECTION 3: Accounts & Upload ════════════════ -->
+      <!-- ════════════════ SECTION 3: Tài khoản & Đăng tải ════════════════ -->
       <div id="cfg-sec-integration" class="config-pane">
 
-        <div class="config-section-intro">
-          <span class="ico">🔗</span>
-          <span>Kết nối tài khoản YouTube / Facebook / TikTok và đặt mẫu mặc định khi đăng video.</span>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 items-stretch">
+          <!-- Card 1: Phần cứng & FFmpeg -->
+          <div class="cfg-card mb-0 h-full flex flex-col justify-between">
+            <div>
+              <div class="cfg-card-header">
+                <span class="cfg-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  Phần cứng &amp; Tăng tốc FFmpeg Encoder
+                </span>
+              </div>
+              <div id="hardware-info-display" class="text-xs text-slate-500 dark:text-slate-400">
+                Đang tải thông tin phần cứng...
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: YouTube API Secrets -->
+          <div class="cfg-card mb-0 h-full flex flex-col justify-between">
+            <div>
+              <div class="cfg-card-header">
+                <span class="cfg-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Xác thực YouTube API (OAuth 2.0)
+                </span>
+                <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
+                  Console ↗
+                </a>
+              </div>
+              <div class="field mb-0">
+                <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">File client_secrets.json (Google Cloud Console)</label>
+                <div class="flex items-center gap-2">
+                  <input type="file" id="yt-secrets-file" accept=".json" style="display:none" onchange="uploadClientSecrets(this)">
+                  <button type="button" class="btn btn-secondary h-[34px] w-full flex items-center justify-center gap-2 text-xs font-semibold cursor-pointer hover:border-indigo-500 transition-all" onclick="document.getElementById('yt-secrets-file').click()">
+                    <svg class="w-4 h-4 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Tải lên file client_secrets.json
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 mt-3 flex items-start gap-2">
+              <svg class="w-3.5 h-3.5 text-indigo-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <span>Tải tệp định danh OAuth Client ID từ Google Cloud Console để kích hoạt xuất bản YouTube không giới hạn.</span>
+            </div>
+          </div>
         </div>
 
-        <div class="cfg-cards">
-
-          <!-- Hardware Info -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">🖥 Phần cứng &amp; FFmpeg Preset</span>
+        <!-- Card 3: Multi-Account Management -->
+        <div class="cfg-card mb-4">
+          <div class="cfg-card-header">
+            <span class="cfg-card-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Quản lý tài khoản mạng xã hội liên kết
+            </span>
+            <div class="flex items-center gap-2">
+              <button type="button" class="btn btn-secondary h-[30px] text-xs px-3 flex items-center gap-1.5 cursor-pointer" onclick="migrateExistingAccounts()" title="Đồng bộ hồ sơ tài khoản">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Đồng bộ tài khoản
+              </button>
             </div>
-            <div class="card-body">
-              <div id="hardware-info-display">
-                <span class="text-xs text-muted">Đang tải thông tin phần cứng...</span>
-              </div>
+          </div>
+          <div id="accounts-management-panel" class="min-h-[50px]">
+            <span class="text-xs text-slate-400">Đang tải danh sách tài khoản...</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <button type="button" class="btn btn-secondary h-[34px] text-xs font-semibold px-4 flex items-center gap-2 cursor-pointer hover:border-blue-500 transition-all" onclick="addFacebookAccount()">
+              <svg class="w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              Thêm tài khoản Facebook
+            </button>
+            <button type="button" class="btn btn-secondary h-[34px] text-xs font-semibold px-4 flex items-center gap-2 cursor-pointer hover:border-rose-500 transition-all" onclick="if(typeof youtubeLogin==='function')youtubeLogin()">
+              <svg class="w-4 h-4 text-rose-600" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+              Thêm tài khoản YouTube
+            </button>
+          </div>
+        </div>
+
+        <!-- Mẫu đăng video mặc định -->
+        <div class="cfg-card mb-0">
+          <div class="cfg-card-header">
+            <span class="cfg-card-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+              Cài đặt mẫu đăng tải video mặc định
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">Nền tảng xuất bản mặc định</label>
+              <select id="cfg-upload-platform" class="h-[34px] w-full text-xs">
+                <option value="youtube" selected>YouTube</option>
+                <option value="tiktok">TikTok</option>
+                <option value="both">Cả hai nền tảng</option>
+              </select>
+            </div>
+            <div class="field mb-0 flex items-center pt-5">
+              <label class="cfg-storage-item w-full m-0 h-[34px]">
+                <input type="checkbox" id="cfg-upload-auto">
+                <span>Tự động xuất bản ngay sau khi quy trình xử lý hoàn tất</span>
+              </label>
             </div>
           </div>
 
-          <!-- YouTube API config -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">🔑 Cấu hình YouTube API</span>
-            </div>
-            <div class="field">
-              <label>File client_secrets.json (Tải từ Google Cloud Console)</label>
-              <div style="display:flex;gap:10px;align-items:center;">
-                <input type="file" id="yt-secrets-file" accept=".json" style="display:none" onchange="uploadClientSecrets(this)">
-                <button class="btn btn-secondary w-full" onclick="document.getElementById('yt-secrets-file').click()">
-                  📂 Chọn file client_secrets.json
-                </button>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- YouTube Template -->
+            <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col gap-3">
+              <div class="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                <svg class="w-4 h-4 text-rose-600" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                Mẫu mặc định YouTube
               </div>
-              <div class="text-xs text-muted mt-8">
-                * File này dùng để xác thực OAuth với YouTube.
+              <div class="field mb-0">
+                <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Template tiêu đề</label>
+                <input type="text" id="cfg-yt-title-template" placeholder="{title}" value="{title}" class="h-[34px] w-full text-xs">
               </div>
-            </div>
-          </div>
-
-          <!-- Multi-Account Management -->
-          <div class="card span-2">
-            <div class="card-header">
-              <span class="card-title">👥 Quản lý tài khoản</span>
-              <div class="card-actions">
-                <button class="btn btn-secondary btn-sm" onclick="migrateExistingAccounts()" title="Migrate tài khoản cũ sang hệ thống mới">
-                  🔄 Migrate
-                </button>
+              <div class="field mb-0">
+                <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Template mô tả</label>
+                <input type="text" id="cfg-yt-desc-template" placeholder="{title}" value="{title}" class="h-[34px] w-full text-xs">
               </div>
-            </div>
-            <div class="card-body">
-              <div id="accounts-management-panel">
-                <span class="text-xs text-muted">Đang tải...</span>
-              </div>
-              <div class="btn-group mt-12">
-                <button class="btn btn-secondary btn-sm" onclick="addFacebookAccount()">
-                  📘 Thêm Facebook
-                </button>
-                <button class="btn btn-secondary btn-sm" onclick="if(typeof youtubeLogin==='function')youtubeLogin()">
-                  📺 Thêm YouTube
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Default upload settings -->
-          <div class="card span-2">
-            <div class="card-header">
-              <span class="card-title">📤 Cài đặt đăng video mặc định</span>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="field">
-                <label>Nền tảng mặc định</label>
-                <select id="cfg-upload-platform">
-                  <option value="youtube" selected>YouTube</option>
-                  <option value="tiktok">TikTok</option>
-                  <option value="both">Cả hai</option>
+              <div class="field mb-0">
+                <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Chế độ hiển thị mặc định</label>
+                <select id="cfg-yt-privacy" class="h-[34px] w-full text-xs">
+                  <option value="private" selected>Riêng tư (Private)</option>
+                  <option value="unlisted">Không công khai (Unlisted)</option>
+                  <option value="public">Công khai (Public)</option>
                 </select>
               </div>
-              <div class="field" style="display:flex;align-items:flex-end">
-                <label class="check-item" style="width:100%">
-                  <input type="checkbox" id="cfg-upload-auto">
-                  <span>Tự động đăng sau khi xử lý</span>
-                </label>
+            </div>
+
+            <!-- TikTok Template -->
+            <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col gap-3">
+              <div class="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                <svg class="w-4 h-4 text-cyan-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+                Mẫu mặc định TikTok
+              </div>
+              <div class="field mb-0">
+                <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Template tiêu đề</label>
+                <input type="text" id="cfg-tt-title-template" placeholder="{title}" value="{title}" class="h-[34px] w-full text-xs">
+              </div>
+              <div class="field mb-0">
+                <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Template caption / hashtags</label>
+                <input type="text" id="cfg-tt-caption-template" placeholder="{title}" value="{title}" class="h-[34px] w-full text-xs">
+              </div>
+              <div class="field mb-0">
+                <label class="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Chế độ hiển thị mặc định</label>
+                <select id="cfg-tt-privacy" class="h-[34px] w-full text-xs">
+                  <option value="private" selected>Riêng tư (Private)</option>
+                  <option value="friends">Bạn bè (Friends)</option>
+                  <option value="public">Công khai (Public)</option>
+                </select>
               </div>
             </div>
           </div>
-
-          <!-- YouTube template -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">▶ YouTube — Mặc định</span>
-            </div>
-            <div class="field">
-              <label>Template tiêu đề</label>
-              <input type="text" id="cfg-yt-title-template" placeholder="{title}" value="{title}">
-            </div>
-            <div class="field">
-              <label>Template mô tả</label>
-              <input type="text" id="cfg-yt-desc-template" placeholder="{title}" value="{title}">
-            </div>
-            <div class="field">
-              <label>Chế độ riêng tư mặc định</label>
-              <select id="cfg-yt-privacy">
-                <option value="private" selected>🔒 Riêng tư</option>
-                <option value="unlisted">🔗 Ẩn</option>
-                <option value="public">🌐 Công khai</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- TikTok template -->
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">🎵 TikTok — Mặc định</span>
-            </div>
-            <div class="field">
-              <label>Template tiêu đề</label>
-              <input type="text" id="cfg-tt-title-template" placeholder="{title}" value="{title}">
-            </div>
-            <div class="field">
-              <label>Template caption</label>
-              <input type="text" id="cfg-tt-caption-template" placeholder="{title}" value="{title}">
-            </div>
-            <div class="field">
-              <label>Chế độ hiển thị mặc định</label>
-              <select id="cfg-tt-privacy">
-                <option value="private" selected>🔒 Riêng tư</option>
-                <option value="friends">👥 Bạn bè</option>
-                <option value="public">🌐 Công khai</option>
-              </select>
-            </div>
-          </div>
-
-        </div><!-- /cfg-cards -->
+        </div>
 
       </div><!-- end cfg-sec-integration -->
 
-      <!-- ════════════════ SECTION 4: Cookie ════════════════ -->
+      <!-- ════════════════ SECTION 4: Quản lý Cookie ════════════════ -->
       <div id="cfg-sec-cookies" class="config-pane">
 
-        <div class="config-section-intro">
-          <span class="ico">🍪</span>
-          <span>Quản lý cookie của các nền tảng khác nhau để hỗ trợ tải và tương tác video.</span>
-        </div>
-
-        <!-- Cookie tabs switcher -->
-        <div class="card mb-4 shadow-xs" style="padding:8px">
-          <div class="platform-tabs" style="margin:0">
-            <div class="platform-tab active cfg-cookie-tab" data-cookie-platform="tiktok" onclick="switchCfgCookieTab('tiktok')">🎵 TikTok / Douyin</div>
-            <div class="platform-tab cfg-cookie-tab" data-cookie-platform="youtube" onclick="switchCfgCookieTab('youtube')">📺 YouTube</div>
-            <div class="platform-tab cfg-cookie-tab" data-cookie-platform="facebook" onclick="switchCfgCookieTab('facebook')">👥 Facebook</div>
+        <!-- Cookie sub-tabs switcher -->
+        <div class="cfg-card p-2 mb-4">
+          <div class="flex items-center gap-2 overflow-x-auto">
+            <button type="button" class="cfg-cookie-tab active flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer bg-slate-900 text-white dark:bg-indigo-600 border-transparent shadow-xs" data-cookie-platform="douyin" onclick="switchCfgCookieTab('douyin')">
+              <svg class="w-4 h-4 text-rose-500" viewBox="0 0 24 24" fill="currentColor"><path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-5.209 1.636 2.894 2.894 0 0 1 2.313-4.664c.298 0 .585.045.855.128V9.281a6.34 6.34 0 0 0-.855-.058 6.338 6.338 0 1 0 6.341 6.338V8.675a8.212 8.212 0 0 0 3.766 1.456V6.686z"/></svg>
+              Douyin
+            </button>
+            <button type="button" class="cfg-cookie-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 transition-all cursor-pointer" data-cookie-platform="tiktok" onclick="switchCfgCookieTab('tiktok')">
+              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+              TikTok
+            </button>
+            <button type="button" class="cfg-cookie-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 transition-all cursor-pointer" data-cookie-platform="youtube" onclick="switchCfgCookieTab('youtube')">
+              <svg class="w-4 h-4 text-rose-600" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+              YouTube
+            </button>
+            <button type="button" class="cfg-cookie-tab flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 transition-all cursor-pointer" data-cookie-platform="facebook" onclick="switchCfgCookieTab('facebook')">
+              <svg class="w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              Facebook
+            </button>
           </div>
         </div>
 
-        <!-- TikTok / Douyin Cookie Panel -->
-        <div class="cfg-cookie-tab-panel" data-cookie-platform="tiktok">
-          <!-- Cookie mode toggle -->
-          <div class="cookie-mode-row">
+        <!-- 1. Douyin Cookie Panel -->
+        <div class="cfg-cookie-tab-panel" data-cookie-platform="douyin">
+          <div class="cfg-card mb-4 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div class="text-sm" id="ck-mode-desc">Sử dụng cookie mặc định từ hệ thống.</div>
+              <div class="text-xs font-bold text-slate-800 dark:text-slate-200">Chế độ Cookie Douyin</div>
+              <div class="text-[11px] text-slate-400 mt-0.5" id="ck-mode-desc">Sử dụng cookie mặc định tích hợp từ hệ thống.</div>
             </div>
-            <label class="toggle-wrap">
+            <label class="toggle-wrap m-0">
               <input type="checkbox" class="toggle-input" id="ck-mode-toggle" onchange="onCookieModeChange()">
               <div class="toggle"></div>
-              <span class="toggle-label text-sm">Cookie tùy chỉnh</span>
+              <span class="toggle-label text-xs font-semibold">Tùy chỉnh Cookie</span>
             </label>
           </div>
 
-          <div id="ck-custom-wrap" style="display:none" class="flex flex-col gap-6">
-            <div class="card shadow-xs">
-              <div class="card-header">
-                <span class="card-title">📋 Phân tích Cookie</span>
+          <div id="ck-custom-wrap" style="display:none" class="flex flex-col gap-4">
+            <!-- Phân tích Cookie thô Douyin -->
+            <div class="cfg-card">
+              <div class="cfg-card-header">
+                <span class="cfg-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  Nhập &amp; Phân tích chuỗi Cookie Douyin thô
+                </span>
               </div>
               <div class="field">
-                <label>Dán chuỗi cookie thô vào đây</label>
-                <textarea id="ck-raw" rows="3" placeholder="ttwid=xxx; odin_tt=xxx; passport_csrf_token=xxx; ..."></textarea>
+                <textarea id="ck-raw" rows="3" placeholder="Dán chuỗi cookie thô hoặc JSON vào đây (ttwid=xxx; odin_tt=xxx; passport_csrf_token=xxx; ...)" class="w-full text-xs font-mono"></textarea>
               </div>
-              <div class="btn-group mt-8">
-                <button class="btn btn-primary btn-sm" onclick="parseCookie()">🔍 Phân tích</button>
-                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-json-file')?.click()">Import JSON</button>
+              <div class="flex flex-wrap items-center gap-2 pt-1">
+                <button type="button" class="btn btn-primary h-[32px] text-xs px-3 flex items-center gap-1.5 cursor-pointer" onclick="parseCookie()">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  Phân tích tự động
+                </button>
+                <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="document.getElementById('ck-json-file')?.click()">
+                  Nhập tệp JSON
+                </button>
                 <input id="ck-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importCookieJsonFile(this)">
-                <button class="btn btn-secondary btn-sm" onclick="autoFetchCookie()">⚡ Tự động lấy</button>
+                <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="autoFetchCookie()">
+                  Tự động lấy
+                </button>
               </div>
             </div>
 
-            <div class="card shadow-xs">
-              <div class="card-header">
-                <span class="card-title">🔑 Các trường Cookie</span>
-                <div class="card-actions">
-                  <div class="status-bar" id="ck-status">
-                    <span class="dot dot-gray"></span>
-                    <span class="text-xs text-muted">Chưa kiểm tra</span>
-                  </div>
+            <!-- Các trường Cookie Douyin -->
+            <div class="cfg-card">
+              <div class="cfg-card-header">
+                <span class="cfg-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Các trường tham số Cookie Douyin
+                </span>
+                <div class="status-bar" id="ck-status">
+                  <span class="dot dot-gray"></span>
+                  <span class="text-xs text-muted">Chưa kiểm tra</span>
                 </div>
               </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="field">
-                  <label>ttwid</label>
-                  <input type="text" id="ck-ttwid" placeholder="ttwid value...">
-                </div>
-                <div class="field">
-                  <label>odin_tt</label>
-                  <input type="text" id="ck-odin_tt" placeholder="odin_tt value...">
-                </div>
-                <div class="field">
-                  <label>passport_csrf_token</label>
-                  <input type="text" id="ck-passport_csrf_token" placeholder="csrf token...">
-                </div>
-                <div class="field">
-                  <label>s_v_web_id</label>
-                  <input type="text" id="ck-s_v_web_id" placeholder="s_v_web_id value...">
-                </div>
-                <div class="field">
-                  <label>__ac_nonce</label>
-                  <input type="text" id="ck-__ac_nonce" placeholder="__ac_nonce value...">
-                </div>
-                <div class="field">
-                  <label>__ac_signature</label>
-                  <input type="text" id="ck-__ac_signature" placeholder="__ac_signature value...">
-                </div>
-                <div class="field">
-                  <label>UIFID</label>
-                  <input type="text" id="ck-UIFID" placeholder="UIFID value...">
-                </div>
-                <div class="field">
-                  <label>bd_ticket_guard_client_web_domain</label>
-                  <input type="text" id="ck-bd_ticket_guard_client_web_domain" placeholder="domain value...">
-                </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">ttwid</label><input type="text" id="ck-ttwid" placeholder="ttwid..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">odin_tt</label><input type="text" id="ck-odin_tt" placeholder="odin_tt..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">passport_csrf_token</label><input type="text" id="ck-passport_csrf_token" placeholder="csrf token..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">s_v_web_id</label><input type="text" id="ck-s_v_web_id" placeholder="s_v_web_id..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">__ac_nonce</label><input type="text" id="ck-__ac_nonce" placeholder="__ac_nonce..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">__ac_signature</label><input type="text" id="ck-__ac_signature" placeholder="__ac_signature..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">UIFID</label><input type="text" id="ck-UIFID" placeholder="UIFID..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">bd_ticket_guard_client_web_domain</label><input type="text" id="ck-bd_ticket_guard_client_web_domain" placeholder="domain..." class="h-[34px] w-full text-xs"></div>
               </div>
-              <div class="btn-group mt-12">
-                <button class="btn btn-primary" onclick="saveCookies()">💾 Lưu Cookie TikTok</button>
-                <button class="btn btn-secondary" onclick="validateCookie()">✅ Kiểm tra hợp lệ</button>
+              <div class="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button type="button" class="btn btn-primary h-[34px] text-xs px-4 cursor-pointer" onclick="saveCookies()">Lưu Cookie Douyin</button>
+                <button type="button" class="btn btn-secondary h-[34px] text-xs px-4 cursor-pointer" onclick="validateCookie()">Kiểm tra tính hợp lệ</button>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- YouTube Cookie Panel -->
-        <div class="cfg-cookie-tab-panel" data-cookie-platform="youtube" style="display:none">
-          <div class="card shadow-xs">
-            <div class="card-header">
-              <span class="card-title">📺 Cookie YouTube</span>
-            </div>
-            
-            <div class="alert-info mb-4">
-              Cấu hình Cookie YouTube giúp yt-dlp tải các video bị giới hạn độ tuổi, video riêng tư, hoặc bỏ qua bot detection của YouTube.
+        <!-- 2. TikTok Cookie Panel -->
+        <div class="cfg-cookie-tab-panel" data-cookie-platform="tiktok" style="display:none">
+          <div class="cfg-card">
+            <div class="cfg-card-header">
+              <span class="cfg-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+                Cookie xác thực TikTok (yt-dlp &amp; Web)
+              </span>
             </div>
 
-            <div class="flex flex-col gap-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Browser Cookie Source -->
-                <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-                  <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                    📡 Đọc trực tiếp từ trình duyệt (Khuyên dùng)
-                  </h4>
-                  <div class="field">
-                    <label>Trình duyệt nguồn</label>
-                    <select id="ck-yt-browser" class="w-full">
+            <div class="alert-info mb-4 text-xs leading-relaxed">
+              Cấu hình Cookie TikTok giúp yt-dlp tải các video TikTok bị giới hạn độ tuổi, video riêng tư hoặc vượt qua bot detection của TikTok.
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <!-- Nguồn Trình duyệt -->
+              <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Đọc từ trình duyệt cục bộ</h4>
+                  <div class="field mb-0">
+                    <select id="ck-tiktok-browser" class="h-[34px] w-full text-xs">
                       <option value="">-- Không sử dụng --</option>
-                      <option value="chrome">Chrome</option>
-                      <option value="edge">Edge</option>
-                      <option value="firefox">Firefox</option>
-                      <option value="brave">Brave</option>
-                      <option value="opera">Opera</option>
-                      <option value="safari">Safari</option>
+                      <option value="chrome">Google Chrome</option>
+                      <option value="edge">Microsoft Edge</option>
+                      <option value="firefox">Mozilla Firefox</option>
+                      <option value="brave">Brave Browser</option>
+                      <option value="opera">Opera Browser</option>
+                      <option value="safari">Apple Safari</option>
                     </select>
                   </div>
-                  <p class="text-xs text-muted mt-2">
-                    Lưu ý: Bạn phải đăng nhập tài khoản YouTube trên trình duyệt tương ứng trước khi sử dụng tính năng này.
-                  </p>
                 </div>
+                <p class="text-[11px] text-slate-400 mt-2">Tự động trích xuất cookie từ trình duyệt đang đăng nhập TikTok trên máy của bạn.</p>
+              </div>
 
-                <!-- Cookie File Path -->
-                <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 flex flex-col justify-between">
-                  <div>
-                    <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                      📄 Sử dụng File Cookie (Netscape .txt)
-                    </h4>
-                    <div class="field">
-                      <label>Đường dẫn File Cookie YouTube</label>
-                      <input type="text" id="ck-yt-file" placeholder="VD: C:\cookies\youtube-cookies.txt" class="w-full">
-                    </div>
+              <!-- Đường dẫn File Cookie -->
+              <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Đường dẫn tệp Cookie (.txt)</h4>
+                  <div class="field mb-0">
+                    <input type="text" id="ck-tiktok-file" placeholder="VD: tiktok_cookies.txt hoặc C:\cookies\tiktok.txt" class="h-[34px] w-full text-xs">
                   </div>
-                  <p class="text-xs text-muted mt-2">
-                    Dành cho VPS/Server hoặc khi không chạy trình duyệt ở môi trường local. Bạn có thể xuất file cookie bằng tiện ích mở rộng như <i>Get cookies.txt LOCALLY</i>.
-                  </p>
                 </div>
+                <p class="text-[11px] text-slate-400 mt-2">Cung cấp file cookie dạng Netscape .txt giúp yt-dlp tải video TikTok chất lượng cao.</p>
               </div>
-              </h4>
-              <div class="field mb-0">
-                <label>Nội dung Cookie (tự động lưu vào hệ thống)</label>
-                <textarea id="ck-yt-content" rows="4" placeholder="Nhấp chọn tất cả (Ctrl+A) trong file .txt của YouTube rồi dán vào đây...&#10;Hoặc dán chuỗi raw: visitor_info1_live=xxx; sid=xxx; ..." class="w-full text-xs font-mono"></textarea>
-              </div>
-              <div class="btn-group mt-8" style="display: flex; gap: 8px; margin-top: 10px; margin-bottom: 10px;">
-                <button class="btn btn-primary btn-sm" onclick="parseYoutubeCookie()">🔍 Phân tích</button>
-                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-yt-json-file')?.click()">Import JSON</button>
-                <input id="ck-yt-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importYoutubeJsonFile(this)">
-                <button class="btn btn-secondary btn-sm" onclick="openYoutubeLoginCookie(this)">⚡ Tự động lấy</button>
-              </div>
-              <p class="text-xs text-muted mt-2">
-                Dán toàn bộ nội dung file cookie hoặc chuỗi cookie thô vào đây. Hệ thống sẽ tự động chuyển đổi sang file cookie định dạng chuẩn cho yt-dlp mà không cần tự quản lý đường dẫn file.
-              </p>
             </div>
 
-            <div class="btn-group mt-12" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-              <button class="btn btn-primary" onclick="saveConfig()">💾 Lưu cấu hình</button>
-              <button class="btn btn-secondary" onclick="validateYoutubeCookie(this)">✅ Kiểm tra hợp lệ</button>
-              <span id="ck-yt-status" style="font-size: 13px; font-weight: 500;"></span>
+            <div class="field mb-3">
+              <label class="text-xs font-semibold mb-1.5 block">Dán nội dung Cookie TikTok thô</label>
+              <textarea id="ck-tiktok-content" rows="4" placeholder="Dán nội dung file cookie TikTok .txt hoặc chuỗi header raw (sessionid=xxx; ttwid=xxx; msToken=xxx; ...) tại đây..." class="w-full text-xs font-mono"></textarea>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 mb-4">
+              <button type="button" class="btn btn-primary h-[32px] text-xs px-3 cursor-pointer" onclick="parseTiktokCookie()">Phân tích tự động</button>
+              <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="document.getElementById('ck-tiktok-json-file')?.click()">Nhập tệp JSON</button>
+              <input id="ck-tiktok-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importTiktokJsonFile(this)">
+              <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="autoFetchTiktokCookie()">Tự động lấy</button>
+            </div>
+
+            <div class="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button type="button" class="btn btn-primary h-[34px] text-xs px-4 cursor-pointer" onclick="savePlatformConfig('tiktok')">Lưu Cookie TikTok</button>
+              <button type="button" class="btn btn-secondary h-[34px] text-xs px-4 cursor-pointer" onclick="validateTiktokCookie(this)">Kiểm tra hợp lệ</button>
+              <span id="ck-tiktok-status" class="text-xs font-semibold"></span>
             </div>
           </div>
         </div>
 
-        <!-- Facebook Cookie Panel -->
+        <!-- 2. YouTube Cookie Panel -->
+        <div class="cfg-cookie-tab-panel" data-cookie-platform="youtube" style="display:none">
+          <div class="cfg-card">
+            <div class="cfg-card-header">
+              <span class="cfg-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                Cookie xác thực YouTube (yt-dlp)
+              </span>
+            </div>
+
+            <div class="alert-info mb-4 text-xs leading-relaxed">
+              Cấu hình Cookie YouTube giúp yt-dlp tải các video bị giới hạn độ tuổi, video riêng tư, hoặc vượt qua kiểm tra bot detection của YouTube.
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <!-- Nguồn Trình duyệt -->
+              <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Đọc từ trình duyệt cục bộ</h4>
+                  <div class="field mb-0">
+                    <select id="ck-yt-browser" class="h-[34px] w-full text-xs">
+                      <option value="">-- Không sử dụng --</option>
+                      <option value="chrome">Google Chrome</option>
+                      <option value="edge">Microsoft Edge</option>
+                      <option value="firefox">Mozilla Firefox</option>
+                      <option value="brave">Brave Browser</option>
+                      <option value="opera">Opera Browser</option>
+                      <option value="safari">Apple Safari</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-2">Cần đăng nhập YouTube sẵn trên trình duyệt này.</p>
+              </div>
+
+              <!-- File Cookie Netscape -->
+              <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Đường dẫn tệp Cookie (Netscape .txt)</h4>
+                  <div class="field mb-0">
+                    <input type="text" id="ck-yt-file" placeholder="VD: C:\cookies\youtube-cookies.txt" class="h-[34px] w-full text-xs">
+                  </div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-2">Xuất file từ extension "Get cookies.txt LOCALLY".</p>
+              </div>
+            </div>
+
+            <div class="field mb-3">
+              <label class="text-xs font-semibold mb-1.5 block">Dán nội dung Cookie YouTube thô</label>
+              <textarea id="ck-yt-content" rows="4" placeholder="Dán nội dung file .txt hoặc chuỗi header raw tại đây..." class="w-full text-xs font-mono"></textarea>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 mb-4">
+              <button type="button" class="btn btn-primary h-[32px] text-xs px-3 cursor-pointer" onclick="parseYoutubeCookie()">Phân tích tự động</button>
+              <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="document.getElementById('ck-yt-json-file')?.click()">Nhập tệp JSON</button>
+              <input id="ck-yt-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importYoutubeJsonFile(this)">
+              <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="openYoutubeLoginCookie(this)">Tự động lấy</button>
+            </div>
+
+            <div class="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button type="button" class="btn btn-primary h-[34px] text-xs px-4 cursor-pointer" onclick="saveConfig()">Lưu cấu hình</button>
+              <button type="button" class="btn btn-secondary h-[34px] text-xs px-4 cursor-pointer" onclick="validateYoutubeCookie(this)">Kiểm tra hợp lệ</button>
+              <span id="ck-yt-status" class="text-xs font-semibold"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Facebook Cookie Panel -->
         <div class="cfg-cookie-tab-panel" data-cookie-platform="facebook" style="display:none">
-          <div class="card shadow-xs">
-            <div class="card-header">
-              <span class="card-title">👥 Cookie & Hồ sơ Facebook</span>
+          <div class="cfg-card">
+            <div class="cfg-card-header">
+              <span class="cfg-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                Cookie &amp; Hồ sơ trình duyệt Facebook
+              </span>
             </div>
-            
-            <div class="flex flex-col gap-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Facebook Profile Folder -->
-                <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-                  <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                    📂 Thư mục hồ sơ trình duyệt (Playwright Profile)
-                  </h4>
-                  <div class="field">
-                    <label>Đường dẫn thư mục hồ sơ</label>
-                    <input type="text" id="ck-fb-profile" placeholder="Mặc định: .facebook_profile" class="w-full">
-                  </div>
-                  <p class="text-xs text-muted mt-2">
-                    Đường dẫn lưu dữ liệu Chrome tự động của Playwright. Nhấp nút trên để mở trình duyệt, đăng nhập Facebook 1 lần duy nhất để lưu hồ sơ duyệt web tại đây.
-                  </p>
-                </div>
 
-                <!-- Facebook Cookie File Path -->
-                <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-                  <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                    📄 Đường dẫn File Cookie Facebook (Netscape .txt)
-                  </h4>
-                  <div class="field">
-                    <label>Đường dẫn File Cookie Facebook</label>
-                    <input type="text" id="ck-fb-file" placeholder="VD: C:\cookies\facebook-cookies.txt" class="w-full">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <!-- Facebook Profile Folder -->
+              <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Thư mục hồ sơ Playwright</h4>
+                  <div class="field mb-0">
+                    <input type="text" id="ck-fb-profile" placeholder="Mặc định: .facebook_profile" class="h-[34px] w-full text-xs">
                   </div>
-                  <p class="text-xs text-muted mt-2">
-                    Cung cấp file cookie dạng Netscape .txt giúp yt-dlp tải được các video Facebook chế độ HD/Riêng tư.
-                  </p>
                 </div>
+                <p class="text-[11px] text-slate-400 mt-2">Dùng để lưu phiên đăng nhập Chrome tự động khi chạy Playwright.</p>
               </div>
 
-              <!-- Paste Raw Cookie Content -->
-              <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-                <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-                  📋 Dán nội dung Cookie Facebook (Netscape .txt hoặc chuỗi Raw)
-                </h4>
-                <div class="field mb-0">
-                  <label>Nội dung Cookie Facebook</label>
-                  <textarea id="ck-fb-content" rows="4" placeholder="Dán nội dung file cookie Facebook .txt hoặc chuỗi raw ở đây..." class="w-full text-xs font-mono"></textarea>
+              <!-- Facebook Cookie File Path -->
+              <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Đường dẫn tệp Cookie (.txt)</h4>
+                  <div class="field mb-0">
+                    <input type="text" id="ck-fb-file" placeholder="VD: C:\cookies\facebook-cookies.txt" class="h-[34px] w-full text-xs">
+                  </div>
                 </div>
-                <div class="btn-group mt-8" style="display: flex; gap: 8px; margin-top: 10px; margin-bottom: 10px;">
-                  <button class="btn btn-primary btn-sm" onclick="parseFacebookCookie()">🔍 Phân tích</button>
-                  <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-fb-json-file')?.click()">Import JSON</button>
-                  <input id="ck-fb-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importFacebookJsonFile(this)">
-                  <button class="btn btn-secondary btn-sm" onclick="openFacebookLoginProfile(this)">⚡ Tự động lấy</button>
-                </div>
-                <p class="text-xs text-muted mt-2">
-                  Hỗ trợ dán trực tiếp nội dung file Netscape hoặc chuỗi header thô. Hệ thống sẽ tự động chuyển đổi định dạng và cấu hình cho yt-dlp tải video Facebook chất lượng cao.
-                </p>
+                <p class="text-[11px] text-slate-400 mt-2">Cho phép yt-dlp tải các video Facebook ở độ phân giải HD hoặc riêng tư.</p>
               </div>
             </div>
 
-            <div class="btn-group mt-12" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-              <button class="btn btn-primary" onclick="saveConfig()">💾 Lưu cấu hình</button>
-              <button class="btn btn-secondary" onclick="validateFacebookCookie(this)">✅ Kiểm tra hợp lệ</button>
-              <span id="ck-fb-status" style="font-size: 13px; font-weight: 500;"></span>
+            <div class="field mb-3">
+              <label class="text-xs font-semibold mb-1.5 block">Dán nội dung Cookie Facebook thô</label>
+              <textarea id="ck-fb-content" rows="4" placeholder="Dán nội dung file cookie Netscape hoặc chuỗi raw tại đây..." class="w-full text-xs font-mono"></textarea>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 mb-4">
+              <button type="button" class="btn btn-primary h-[32px] text-xs px-3 cursor-pointer" onclick="parseFacebookCookie()">Phân tích tự động</button>
+              <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="document.getElementById('ck-fb-json-file')?.click()">Nhập tệp JSON</button>
+              <input id="ck-fb-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importFacebookJsonFile(this)">
+              <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="openFacebookLoginProfile(this)">Tự động lấy</button>
+            </div>
+
+            <div class="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button type="button" class="btn btn-primary h-[34px] text-xs px-4 cursor-pointer" onclick="saveConfig()">Lưu cấu hình</button>
+              <button type="button" class="btn btn-secondary h-[34px] text-xs px-4 cursor-pointer" onclick="validateFacebookCookie(this)">Kiểm tra hợp lệ</button>
+              <span id="ck-fb-status" class="text-xs font-semibold"></span>
             </div>
           </div>
         </div>
@@ -587,10 +724,15 @@
     </div><!-- /config-panes -->
   </div><!-- /config-shell -->
 
-  <!-- Docked save bar -->
+  <!-- ════════════════ Docked Save Bar ════════════════ -->
   <div class="config-savebar">
-    <button class="btn btn-primary" onclick="saveConfig()" style="font-size:14px;padding:10px 24px;min-width:140px">
-      💾 Lưu cấu hình
+    <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+      <svg class="w-4 h-4 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <span>Tất cả các thay đổi sẽ có hiệu lực ngay sau khi lưu cấu hình.</span>
+    </div>
+    <button type="button" class="btn btn-primary h-[36px] text-xs font-semibold px-5 flex items-center gap-2 shadow-xs cursor-pointer" onclick="saveConfig()">
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Lưu tất cả thay đổi
     </button>
   </div>
 

@@ -114,4 +114,40 @@ def parse_cookie_header(cookie_header: str) -> Dict[str, str]:
         if not is_valid_cookie_name(key):
             continue
         parsed[key] = value.strip()
-    return parsed
+    if parsed:
+        return sanitize_cookies(parsed)
+
+    # Nhận diện thông minh khi người dùng dán các giá trị rời rạc (cách nhau bởi dấu phẩy hoặc dòng mới)
+    inferred = _infer_unlabeled_cookie_tokens(cookie_header)
+    if inferred:
+        return sanitize_cookies(inferred)
+
+    return {}
+
+
+def _infer_unlabeled_cookie_tokens(text: str) -> Dict[str, str]:
+    tokens = [t.strip().strip("'\",") for t in re.split(r"[\r\n,]+", text)]
+    tokens = [t for t in tokens if t]
+    inferred: Dict[str, str] = {}
+    for tok in tokens:
+        if "=" in tok:
+            k, v = tok.split("=", 1)
+            k, v = k.strip(), v.strip().strip("'\",")
+            if is_valid_cookie_name(k):
+                inferred[k] = v
+                continue
+        if tok.startswith("verify_"):
+            inferred["s_v_web_id"] = tok
+        elif tok.startswith("_02B4"):
+            inferred["__ac_signature"] = tok
+        elif tok.startswith("1%7C") or tok.startswith("1|"):
+            inferred["ttwid"] = tok
+        elif tok in ("1", "2", "3"):
+            inferred["bd_ticket_guard_client_web_domain"] = tok
+        elif len(tok) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", tok):
+            inferred["passport_csrf_token"] = tok
+        elif len(tok) >= 200:
+            inferred["UIFID"] = tok
+        elif 100 <= len(tok) < 200 and re.fullmatch(r"[0-9a-fA-F]+", tok):
+            inferred["odin_tt"] = tok
+    return inferred

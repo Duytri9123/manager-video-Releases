@@ -3,7 +3,7 @@
 
 Bind defaults:
   • host = FLASK_HOST or 127.0.0.1 (set 0.0.0.0 explicitly to expose on LAN)
-  • port = FLASK_PORT or 5000
+  • port = FLASK_PORT or 9123
 """
 import os
 import sys
@@ -37,6 +37,19 @@ if __name__ == "__main__":
     try:
         from templates.pages.process.route import _preload_whisper_model
         threading.Thread(target=_preload_whisper_model, daemon=True).start()
+    except Exception:
+        pass
+
+    # Warm local VieNeu in parallel with app startup. Loading is guarded by a
+    # lock, so an early user request waits for this same instance instead of
+    # starting a second expensive model load.
+    try:
+        from core.video_processor import _preload_vieneu_model
+        threading.Thread(
+            target=_preload_vieneu_model,
+            daemon=True,
+            name="vieneu-preload",
+        ).start()
     except Exception:
         pass
 

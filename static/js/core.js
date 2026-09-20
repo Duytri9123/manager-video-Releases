@@ -663,9 +663,35 @@ function toggleSidebar() {
   const sb = document.getElementById('sidebar');
   if (!sb) return;
   sb.classList.toggle('collapsed');
+  const isCollapsed = sb.classList.contains('collapsed');
   const btn = document.getElementById('sidebar-toggle-btn');
-  if (btn) btn.textContent = sb.classList.contains('collapsed') ? '▶' : '◀';
+  if (btn) {
+    const svg = btn.querySelector('svg');
+    if (svg) svg.style.transform = isCollapsed ? 'rotate(180deg)' : '';
+  }
+  const iconCollapse = document.getElementById('topbar-sidebar-icon-collapse');
+  const iconExpand = document.getElementById('topbar-sidebar-icon-expand');
+  if (iconCollapse && iconExpand) {
+    iconCollapse.style.display = isCollapsed ? 'none' : 'block';
+    iconExpand.style.display = isCollapsed ? 'block' : 'none';
+  }
+  try { localStorage.setItem('sidebar_collapsed', isCollapsed ? '1' : '0'); } catch(_) {}
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const isCollapsed = localStorage.getItem('sidebar_collapsed') === '1';
+    if (isCollapsed) {
+      document.getElementById('sidebar')?.classList.add('collapsed');
+      const iconCollapse = document.getElementById('topbar-sidebar-icon-collapse');
+      const iconExpand = document.getElementById('topbar-sidebar-icon-expand');
+      if (iconCollapse && iconExpand) {
+        iconCollapse.style.display = 'none';
+        iconExpand.style.display = 'block';
+      }
+    }
+  } catch(_) {}
+});
 
 /* ── Mobile menu ─────────────────────────────────────────────── */
 function toggleMobileMenu() {
@@ -675,15 +701,16 @@ function toggleMobileMenu() {
   ov.id = 'mobile-menu-overlay';
   ov.className = 'fixed inset-0 bg-black/40 dark:bg-black/60 z-[300] flex items-start';
   const pages = [
-    ['user','🔍','Tìm người dùng'],['process','🎬','Xử lý Video'],
-    ['transcribe','🎙','Phiên âm'],['publish','📤','Đăng video'],
-    ['content','📋','Quản lý nội dung'],
-    ['chat','🤖','Chat Bot'],
-    ['config','⚙️','Cấu hình']
+    ['user','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>','Tìm video'],
+    ['process','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>','Xử lý'],
+    ['transcribe','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>','Phiên âm'],
+    ['publish','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>','Đăng video'],
+    ['content','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>','Quản lý'],
+    ['config','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4"/></svg>','Cấu hình']
   ];
-  ov.innerHTML = `<div class="bg-white dark:bg-slate-800 w-60 h-full p-5 shadow-2xl overflow-y-auto">
-    <div class="font-bold text-base mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">📱 Menu</div>
-    ${pages.map(([p,i,l]) => `<div onclick="switchPage('${p}');document.getElementById('mobile-menu-overlay')?.remove()" class="flex items-center gap-2.5 p-3 rounded-lg cursor-pointer text-slate-500 dark:text-slate-400 font-medium mb-1 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors">${i} ${l}</div>`).join('')}
+  ov.innerHTML = `<div class="bg-white dark:bg-slate-800 w-56 h-full p-4 shadow-2xl overflow-y-auto">
+    <div class="font-bold text-[13px] mb-3 pb-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg> Menu</div>
+    ${pages.map(([p,i,l]) => `<div onclick="switchPage('${p}');document.getElementById('mobile-menu-overlay')?.remove()" class="flex items-center gap-2 p-2.5 rounded-lg cursor-pointer text-slate-500 dark:text-slate-400 font-medium mb-0.5 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors text-[12px]">${i} ${l}</div>`).join('')}
   </div>`;
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   document.body.appendChild(ov);
@@ -698,10 +725,15 @@ function toggleCard(header) {
 /* ── Sidebar collapsed CSS support ───────────────────────────── */
 const _sidebarStyle = document.createElement('style');
 _sidebarStyle.textContent = `
-  #sidebar.collapsed { width: 60px; min-width: 60px; }
+  #sidebar.collapsed { width: 52px; min-width: 52px; }
   #sidebar.collapsed .nav-label,
   #sidebar.collapsed #sidebar-logo-text,
-  #sidebar.collapsed .text-\\[10px\\] { display: none; }
+  #sidebar.collapsed .text-\\[9px\\],
+  #sidebar.collapsed .text-\\[10px\\],
+  #sidebar.collapsed #sidebar-version { display: none; }
+  #sidebar.collapsed .nav-item { justify-content: center; padding: 8px; }
+  #sidebar.collapsed .nav-icon { margin: 0; }
+  #sidebar.collapsed #sidebar-toggle-btn { display: flex; justify-content: center; }
 `;
 document.head.appendChild(_sidebarStyle);
 

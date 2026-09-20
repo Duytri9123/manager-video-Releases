@@ -33,7 +33,10 @@ faster-whisper>=1.0.0
 pyarmor>=9.2
 edge-tts>=6.1.0
 gtts>=2.5.0
-vieneu>=3.0.5
+vieneu @ git+https://github.com/pnnbao97/VieNeu-TTS.git@1ea13dba3e155fdae9b37eafcfcf25e1cb87ed74
+sea-g2p>=0.9.1
+kaldi-native-fbank>=1.20
+librosa>=0.11.0
 # elevenlabs SDK optional (install manually if needed: pip install elevenlabs)
 # Note: Windows users may need to enable Long Path support first.
 # Our implementation uses aiohttp directly and does NOT require the SDK.

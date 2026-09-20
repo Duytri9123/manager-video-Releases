@@ -228,6 +228,29 @@ Hãy trả về JSON với cấu trúc sau (không có markdown, chỉ JSON thu�
   }}
 }}"""
 
+    # Try direct Antigravity first if selected or auto
+    if provider in ("antigravity", "gemini", "auto"):
+        try:
+            from core.direct_ai_provider import dispatch_chat_completion
+            res = dispatch_chat_completion(
+                model="gemini-3.8-flash-high",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1000,
+                temperature=0.7,
+                timeout=30,
+            )
+            raw = res["choices"][0]["message"]["content"].strip()
+            raw = _re.sub(r"<thought>.*?</thought>", "", raw, flags=_re.DOTALL)
+            raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
+            if "```" in raw:
+                raw = _re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = _re.sub(r"\s*```$", "", raw)
+            result = _json.loads(raw.strip())
+            result = _sanitize_ai_content_result(result)
+            return jsonify({"ok": True, "result": result, "provider": "antigravity"})
+        except Exception as e:
+            LOGGER.info("analyze_video_content direct antigravity: %s", e)
+
     last_error = ""
     for prov in order:
         api_url, api_key, model = api_configs.get(prov, ("", "", ""))

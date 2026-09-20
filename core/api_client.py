@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import random
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
@@ -19,46 +18,16 @@ except Exception:  # pragma: no cover - optional dependency
 
 logger = setup_logger("APIClient")
 
-_USER_AGENT_POOL = [
-    (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    ),
-    (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    ),
-    (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
-    ),
-    (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
-    ),
-    (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) "
-        "Gecko/20100101 Firefox/133.0"
-    ),
-]
+_DOUYIN_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 "
+    "Safari/537.36 Edg/131.0.0.0"
+)
 
 
 class DouyinAPIClient:
     BASE_URL = "https://www.douyin.com"
-    _BROWSER_COOKIE_BLOCKLIST = {
-        "sessionid",
-        "sessionid_ss",
-        "sid_tt",
-        "sid_guard",
-        "uid_tt",
-        "uid_tt_ss",
-        "passport_auth_status",
-        "passport_auth_status_ss",
-        "passport_assist_user",
-        "passport_auth_mix_state",
-        "passport_mfa_token",
-        "login_time",
-    }
+    _BROWSER_COOKIE_BLOCKLIST = set()
 
     def __init__(self, cookies: Dict[str, str], proxy: Optional[str] = None):
         self.cookies = sanitize_cookies(cookies or {})
@@ -66,7 +35,14 @@ class DouyinAPIClient:
         self._session: Optional[aiohttp.ClientSession] = None
         self._browser_post_aweme_items: Dict[str, Dict[str, Any]] = {}
         self._browser_post_stats: Dict[str, int] = {}
-        selected_ua = random.choice(_USER_AGENT_POOL)
+        # Keep UA, query fingerprint and a_bogus signer consistent.  Randomly
+        # mixing Firefox/macOS UA values with Edge/Win32 signed parameters made
+        # an unchanged cookie work on one attempt and receive 403 on another.
+        selected_ua = _DOUYIN_USER_AGENT
+        uifid_val = (self.cookies.get("uifid") or self.cookies.get("UIFID") or "").strip()
+        if uifid_val:
+            self.cookies["uifid"] = uifid_val
+            self.cookies["UIFID"] = uifid_val
         self.headers = {
             "User-Agent": selected_ua,
             "Referer": "https://www.douyin.com/",
@@ -75,6 +51,9 @@ class DouyinAPIClient:
             "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
             "Connection": "keep-alive",
         }
+        if uifid_val:
+            self.headers["uifid"] = uifid_val
+            self.headers["UIFID"] = uifid_val
         self._signer = XBogus(self.headers["User-Agent"])
         self._ms_token_manager = MsTokenManager(user_agent=self.headers["User-Agent"])
         self._ms_token = (self.cookies.get("msToken") or "").strip()
@@ -131,6 +110,9 @@ class DouyinAPIClient:
             "channel": "channel_pc_web",
             "update_version_code": "170400",
             "pc_client_type": "1",
+            "pc_libra_divert": "Windows",
+            "support_h265": "1",
+            "support_dash": "0",
             "version_code": "290100",
             "version_name": "29.1.0",
             "cookie_enabled": "true",
@@ -138,11 +120,11 @@ class DouyinAPIClient:
             "screen_height": "1080",
             "browser_language": "zh-CN",
             "browser_platform": "Win32",
-            "browser_name": "Chrome",
-            "browser_version": "130.0.0.0",
+            "browser_name": "Edge",
+            "browser_version": "131.0.0.0",
             "browser_online": "true",
             "engine_name": "Blink",
-            "engine_version": "130.0.0.0",
+            "engine_version": "131.0.0.0",
             "os_name": "Windows",
             "os_version": "10",
             "cpu_core_num": "12",
@@ -150,7 +132,7 @@ class DouyinAPIClient:
             "platform": "PC",
             "downlink": "10",
             "effective_type": "4g",
-            "round_trip_time": "100",
+            "round_trip_time": "50",
             "msToken": ms_token,
         }
 
@@ -532,27 +514,55 @@ class DouyinAPIClient:
         )
 
         async with async_playwright() as playwright:
+            from pathlib import Path
             from utils.helpers import launch_playwright_browser_async
-            browser = await launch_playwright_browser_async(
-                playwright.chromium,
-                is_persistent=False,
-                headless=headless,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-dev-shm-usage",
-                    "--no-sandbox",
-                ],
-            )
-            context = await browser.new_context(
-                user_agent=self.headers.get("User-Agent", ""),
-                locale="zh-CN",
-                viewport={"width": 1600, "height": 900},
-            )
+            douyin_profile_dir = Path(".douyin_profile").resolve()
+            douyin_profile_dir.mkdir(parents=True, exist_ok=True)
+            browser = None
+            try:
+                context = await launch_playwright_browser_async(
+                    playwright.chromium,
+                    is_persistent=True,
+                    user_data_dir=str(douyin_profile_dir),
+                    headless=headless,
+                    viewport={"width": 1600, "height": 900},
+                    locale="zh-CN",
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-dev-shm-usage",
+                        "--no-sandbox",
+                    ],
+                )
+            except Exception as _p_err:
+                logger.debug("Persistent browser launch fallback to standard: %s", _p_err)
+                browser = await launch_playwright_browser_async(
+                    playwright.chromium,
+                    is_persistent=False,
+                    headless=headless,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-dev-shm-usage",
+                        "--no-sandbox",
+                    ],
+                )
+                context = await browser.new_context(
+                    user_agent=self.headers.get("User-Agent", ""),
+                    locale="zh-CN",
+                    viewport={"width": 1600, "height": 900},
+                )
+
+            await context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            """)
+
             cookies = self._browser_cookie_payload()
             if cookies:
-                await context.add_cookies(cookies)
+                try:
+                    await context.add_cookies(cookies)
+                except Exception as _c_err:
+                    logger.debug("Add cookies to browser context error: %s", _c_err)
 
-            page = await context.new_page()
+            page = context.pages[0] if context.pages else await context.new_page()
             pending_response_tasks: List[asyncio.Task] = []
 
             async def _handle_response(response):
@@ -638,6 +648,15 @@ class DouyinAPIClient:
                         if page.is_closed():
                             logger.warning("Browser page closed during warmup")
                             break
+                        cards = await self._extract_aweme_cards_from_page(page)
+                        for c in cards:
+                            cid = str(c.get("aweme_id") or "")
+                            if cid:
+                                if cid not in post_api_aweme_items:
+                                    post_api_aweme_items[cid] = c
+                                if cid not in seen:
+                                    seen.add(cid)
+                                    ids.append(cid)
                         _merge(await self._extract_aweme_ids_from_page(page))
                         if ids:
                             break
@@ -655,6 +674,15 @@ class DouyinAPIClient:
                         await page.wait_for_timeout(1200)
 
                         before = len(ids)
+                        cards = await self._extract_aweme_cards_from_page(page)
+                        for c in cards:
+                            cid = str(c.get("aweme_id") or "")
+                            if cid:
+                                if cid not in post_api_aweme_items:
+                                    post_api_aweme_items[cid] = c
+                                if cid not in seen:
+                                    seen.add(cid)
+                                    ids.append(cid)
                         _merge(await self._extract_aweme_ids_from_page(page))
                         if len(ids) == before:
                             stable_rounds += 1
@@ -680,8 +708,15 @@ class DouyinAPIClient:
                     self._sync_browser_cookies(browser_cookies)
                 except Exception as exc:
                     logger.debug("Sync browser cookies skipped: %s", exc)
-                await context.close()
-                await browser.close()
+                try:
+                    await context.close()
+                except Exception:
+                    pass
+                if browser is not None and browser != context:
+                    try:
+                        await browser.close()
+                    except Exception:
+                        pass
 
         selected_ids: List[str] = []
         selected_seen: set[str] = set()
@@ -719,18 +754,82 @@ class DouyinAPIClient:
     def _browser_cookie_payload(self) -> List[Dict[str, str]]:
         payload: List[Dict[str, str]] = []
         for name, value in self.cookies.items():
-            if not name:
+            if not name or value is None:
                 continue
-            if name in self._BROWSER_COOKIE_BLOCKLIST:
+            name_str = str(name).strip()
+            val_str = str(value).strip()
+            if not name_str or not val_str:
+                continue
+            if name_str in self._BROWSER_COOKIE_BLOCKLIST:
                 continue
             payload.append(
                 {
-                    "name": str(name),
-                    "value": str(value or ""),
-                    "url": f"{self.BASE_URL}/",
+                    "name": name_str,
+                    "value": val_str,
+                    "domain": ".douyin.com",
+                    "path": "/",
                 }
             )
         return payload
+
+    async def _extract_aweme_cards_from_page(self, page) -> List[Dict[str, Any]]:
+        script = """
+() => {
+  const items = [];
+  const seen = new Set();
+  const links = document.querySelectorAll("a[href*='/video/'], a[href*='/note/']");
+  for (const node of links) {
+    const href = node.getAttribute("href") || "";
+    const match = href.match(/\\/(video|note)\\/(\\d{15,22})/);
+    if (!match) continue;
+    const typeStr = match[1];
+    const aweme_id = match[2];
+    if (seen.has(aweme_id)) continue;
+    seen.add(aweme_id);
+
+    let cover = "";
+    const img = node.querySelector("img") || node.parentElement?.querySelector("img");
+    if (img) {
+      cover = img.currentSrc || img.src || img.getAttribute("data-src") || "";
+    }
+
+    let desc = node.getAttribute("title") || "";
+    if (!desc) {
+      const textEl = node.querySelector("p, span, [class*='desc'], [class*='title']");
+      if (textEl) desc = textEl.textContent.trim();
+    }
+    if (!desc && img) {
+      desc = img.getAttribute("alt") || "";
+    }
+
+    items.push({
+      aweme_id: aweme_id,
+      desc: desc || ("Video " + aweme_id),
+      cover: cover,
+      images: typeStr === "note" && cover ? [{ url_list: [cover] }] : [],
+      video: {
+        cover: { url_list: [cover] },
+        origin_cover: { url_list: [cover] },
+        duration: 0
+      },
+      statistics: {
+        play_count: 0,
+        digg_count: 0,
+        comment_count: 0
+      },
+      create_time: 0
+    });
+  }
+  return items;
+}
+"""
+        try:
+            data = await page.evaluate(script)
+            if isinstance(data, list):
+                return [d for d in data if isinstance(d, dict) and d.get("aweme_id")]
+        except Exception as exc:
+            logger.debug("Extract aweme cards from page failed: %s", exc)
+        return []
 
     async def _extract_aweme_ids_from_page(self, page) -> List[str]:
         script = """
