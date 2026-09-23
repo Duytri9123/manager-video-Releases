@@ -9,10 +9,79 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request, Response
 from flask import stream_with_context
 from core_app import load_cfg, CONFIG_FILE, ROOT, get_cookies_with_fallback, _resolve_naming_title, require_valid_license
+from templates.pages.process.frame_service import (
+    resolve_video_path,
+    extract_single_frame,
+    extract_filmstrip,
+    fetch_thumbnail_from_url,
+    pick_url,
+    extract_aweme_id,
+)
+from templates.pages.process.ai_service import (
+    clean_ai_result,
+    extract_frames_for_ai,
+    build_ai_prompt,
+    call_gemini_vision,
+    ai_thumbnail_prompt_from_frame,
+    ai_generate_thumbnail_image,
+    check_gemini_api_key,
+)
 
-LOGGER = logging.getLogger("process")
+# Compatibility aliases
+_resolve_video_path = resolve_video_path
+_ai_thumbnail_prompt_from_frame = ai_thumbnail_prompt_from_frame
+_ai_generate_thumbnail_image = ai_generate_thumbnail_image
 
 bp = Blueprint("process", __name__)
+LOGGER = logging.getLogger("process")
+
+_PROCESS_PROFILES_FILE = ROOT / "data" / "process_profiles.json"
+
+
+def _read_process_profiles():
+    try:
+        if not _PROCESS_PROFILES_FILE.exists():
+            return {}
+        data = _j.loads(_PROCESS_PROFILES_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        LOGGER.exception("Could not read process profiles")
+        return {}
+
+
+def _write_process_profiles(profiles):
+    _PROCESS_PROFILES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _PROCESS_PROFILES_FILE.with_suffix(".tmp")
+    tmp.write_text(_j.dumps(profiles, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_PROCESS_PROFILES_FILE)
+
+
+@bp.route("/api/process_profiles", methods=["GET", "POST", "DELETE"])
+def process_profiles():
+    """Persist custom Step 2 profiles outside browser localStorage."""
+    if request.method == "GET":
+        return jsonify({"ok": True, "profiles": _read_process_profiles()})
+
+    body = request.get_json(silent=True) or {}
+    name = str(body.get("name") or "").strip()
+    if not name or len(name) > 120:
+        return jsonify({"ok": False, "error": "Tên cấu hình không hợp lệ"}), 400
+
+    profiles = _read_process_profiles()
+    if request.method == "DELETE":
+        profiles.pop(name, None)
+    else:
+        profile = body.get("profile")
+        if not isinstance(profile, dict):
+            return jsonify({"ok": False, "error": "Dữ liệu cấu hình không hợp lệ"}), 400
+        profiles[name] = profile
+
+    try:
+        _write_process_profiles(profiles)
+    except Exception as exc:
+        LOGGER.exception("Could not save process profiles")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "profiles": profiles})
 
 # ── Pause/Resume state ────────────────────────────────────────────────────────
 import threading as _threading
@@ -183,491 +252,61 @@ def proc_save_ass():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-def _resolve_video_path(video_path_str: str) -> Path | None:
-    if not video_path_str:
-        return None
-    raw = str(video_path_str).strip().strip('"').strip("'")
-    if not raw:
-        return None
-    # 1. Try directly as Path
-    vp = Path(raw).expanduser()
-    if vp.exists():
-        return vp
-    # 2. Try relative to ROOT
-    if not vp.is_absolute():
-        p = ROOT / vp
-        if p.exists():
-            return p
-    # 3. Clean up backslashes and duplicated ROOT paths
-    clean_str = raw.replace("\\", "/").strip()
-    for marker in ("Downloaded/", "temp_uploads/", "Process_video/"):
-        if marker in clean_str:
-            sub = clean_str[clean_str.index(marker):]
-            p = ROOT / sub
-            if p.exists():
-                return p
-            if marker == "Process_video/":
-                p2 = ROOT / "Downloaded" / sub
-                if p2.exists():
-                    return p2
-    return None
-
-_PROBE_CACHE = {}
-
 @bp.route("/api/video_frame", methods=["POST"])
 def video_frame():
-    """Extract a frame from a video at a given timestamp and return as base64 JPEG.
-    Handles Unicode filenames by copying to temp dir with safe name."""
-    import base64
-    import subprocess
-    import shutil
-    from core.video_processor import find_ffmpeg
-    from utils.ffprobe import probe_video
-
+    """Extract a frame from a video at a given timestamp and return as base64 JPEG."""
     data = request.json or {}
     video_path_str = str(data.get("video_path") or "").strip()
     timestamp = float(data.get("timestamp") or 0.0)
-
     if not video_path_str:
         return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
 
-    vp = _resolve_video_path(video_path_str)
-    if not vp or not vp.exists():
-        return jsonify({"ok": False, "error": f"Video không tồn tại: {video_path_str}"}), 404
-
-    ffmpeg = find_ffmpeg()
-    if not ffmpeg:
-        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
-
-    # Probe duration using process-level cache to avoid slow ffprobe subprocess
-    path_key = str(vp.resolve())
-    if path_key in _PROBE_CACHE:
-        _w, _h, duration = _PROBE_CACHE[path_key]
-    else:
-        try:
-            _w, _h, duration = probe_video(vp)
-            _PROBE_CACHE[path_key] = (_w, _h, duration)
-        except Exception:
-            duration = 0.0
-
-    try:
-        with tempfile.TemporaryDirectory(prefix="vframe_") as tmpdir:
-            tmp_jpg = Path(tmpdir) / "frame.jpg"
-
-            # Try direct extraction first (fast, zero disk write for copying)
-            result = subprocess.run([
-                ffmpeg, "-ss", str(timestamp),
-                "-i", str(vp),
-                "-vframes", "1",
-                "-q:v", "2",
-                "-vf", "scale=480:-1",
-                "-strict", "-2",
-                str(tmp_jpg), "-y", "-loglevel", "error"
-            ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
-
-            # Fallback to copy method if direct run fails or outputs nothing
-            if result.returncode != 0 or not tmp_jpg.exists() or tmp_jpg.stat().st_size == 0:
-                tmp_video = Path(tmpdir) / f"input{vp.suffix}"
-                try:
-                    shutil.copy2(str(vp), str(tmp_video))
-                    subprocess.run([
-                        ffmpeg, "-ss", str(timestamp),
-                        "-i", str(tmp_video),
-                        "-vframes", "1",
-                        "-q:v", "2",
-                        "-vf", "scale=720:-1",
-                        "-strict", "-2",
-                        str(tmp_jpg), "-y", "-loglevel", "error"
-                    ], capture_output=True, timeout=30)
-                except Exception:
-                    pass
-
-            if not tmp_jpg.exists() or tmp_jpg.stat().st_size == 0:
-                err_msg = (result.stderr or "").strip()[:200] if result else ""
-                return jsonify({"ok": False, "error": f"Không thể extract frame. {err_msg}"}), 500
-
-            with open(tmp_jpg, "rb") as f:
-                img_b64 = base64.b64encode(f.read()).decode()
-
-        return jsonify({"ok": True, "image": f"data:image/jpeg;base64,{img_b64}", "duration": duration})
-
-    except subprocess.TimeoutExpired:
-        return jsonify({"ok": False, "error": "Timeout khi extract frame (>30s)"}), 500
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    ok, img_data, duration, err = extract_single_frame(video_path_str, timestamp)
+    if not ok:
+        status_code = 404 if "không tồn tại" in err else 500
+        return jsonify({"ok": False, "error": err}), status_code
+    return jsonify({"ok": True, "image": img_data, "duration": duration})
 
 
 @bp.route("/api/video_filmstrip", methods=["POST"])
 def video_filmstrip():
-    """Extract N evenly-spaced small thumbnails from a local video for the
-    editor timeline filmstrip. Returns the duration and a list of base64 JPEGs.
-
-    Body: { video_path: str, count?: int }
-    Resp: { ok, duration, count, frames: [dataURL, ...] }
-    """
-    import base64
-    import subprocess
-    import shutil
-    from core.video_processor import find_ffmpeg
-    from utils.ffprobe import probe_video
-
+    """Extract N evenly-spaced small thumbnails from a local video for the timeline filmstrip."""
     data = request.json or {}
     video_path_str = str(data.get("video_path") or "").strip()
     try:
         count = int(data.get("count") or 12)
     except (TypeError, ValueError):
         count = 12
-    count = max(4, min(40, count))
 
     if not video_path_str:
         return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
 
-    vp = _resolve_video_path(video_path_str)
-    if not vp or not vp.exists():
-        return jsonify({"ok": False, "error": f"Video không tồn tại: {video_path_str}"}), 404
-
-    ffmpeg = find_ffmpeg()
-    if not ffmpeg:
-        return jsonify({"ok": False, "error": "FFmpeg không tìm thấy"}), 500
-
-    # Duration (best effort)
-    try:
-        _w, _h, duration = probe_video(vp)
-    except Exception:
-        duration = 0.0
-    if not duration or duration <= 0:
-        duration = 0.0
-
-    try:
-        with tempfile.TemporaryDirectory(prefix="vstrip_") as tmpdir:
-            frames: list[str] = []
-
-            if duration > 0:
-                fps_expr = f"{count}/{duration:.6f}"
-                out_pat = Path(tmpdir) / "f_%03d.jpg"
-                
-                # Try direct extraction first (fast)
-                result = subprocess.run([
-                    ffmpeg, "-i", str(vp),
-                    "-vf", f"fps={fps_expr},scale=160:-1",
-                    "-frames:v", str(count),
-                    "-q:v", "5",
-                    "-strict", "-2",
-                    str(out_pat), "-y", "-loglevel", "error"
-                ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
-
-                # Fallback to copy method if direct extraction failed or didn't produce the files
-                if result.returncode != 0 or not any((Path(tmpdir) / f"f_{i:03d}.jpg").exists() for i in range(1, count + 1)):
-                    tmp_video = Path(tmpdir) / f"input{vp.suffix}"
-                    try:
-                        shutil.copy2(str(vp), str(tmp_video))
-                        subprocess.run([
-                            ffmpeg, "-i", str(tmp_video),
-                            "-vf", f"fps={fps_expr},scale=160:-1",
-                            "-frames:v", str(count),
-                            "-q:v", "5",
-                            "-strict", "-2",
-                            str(out_pat), "-y", "-loglevel", "error"
-                        ], capture_output=True, timeout=60)
-                    except Exception:
-                        pass
-
-                for i in range(1, count + 1):
-                    fp = Path(tmpdir) / f"f_{i:03d}.jpg"
-                    if fp.exists() and fp.stat().st_size > 0:
-                        with open(fp, "rb") as f:
-                            b64 = base64.b64encode(f.read()).decode()
-                        frames.append(f"data:image/jpeg;base64,{b64}")
-            else:
-                # Unknown duration: grab a few frames by seeking small offsets.
-                for i in range(count):
-                    ts = i * 2.0
-                    fp = Path(tmpdir) / f"f_{i:03d}.jpg"
-                    
-                    # Try direct run first
-                    result = subprocess.run([
-                        ffmpeg, "-ss", str(ts), "-i", str(vp),
-                        "-vframes", "1", "-q:v", "5",
-                        "-vf", "scale=160:-1",
-                        "-strict", "-2",
-                        str(fp), "-y", "-loglevel", "error"
-                    ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
-                    
-                    # Fallback to copy if direct run failed
-                    if result.returncode != 0 or not fp.exists() or fp.stat().st_size == 0:
-                        tmp_video = Path(tmpdir) / f"input{vp.suffix}"
-                        try:
-                            shutil.copy2(str(vp), str(tmp_video))
-                            subprocess.run([
-                                ffmpeg, "-ss", str(ts), "-i", str(tmp_video),
-                                "-vframes", "1", "-q:v", "5",
-                                "-vf", "scale=160:-1",
-                                "-strict", "-2",
-                                str(fp), "-y", "-loglevel", "error"
-                            ], capture_output=True, timeout=20)
-                        except Exception:
-                            pass
-
-                    if fp.exists() and fp.stat().st_size > 0:
-                        with open(fp, "rb") as f:
-                            b64 = base64.b64encode(f.read()).decode()
-                        frames.append(f"data:image/jpeg;base64,{b64}")
-
-            if not frames:
-                return jsonify({"ok": False, "error": "Không tạo được dải khung hình"}), 500
-
-        return jsonify({
-            "ok": True,
-            "duration": round(duration, 3),
-            "count": len(frames),
-            "frames": frames,
-        })
-
-    except subprocess.TimeoutExpired:
-        return jsonify({"ok": False, "error": "Timeout khi tạo filmstrip (>60s)"}), 500
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    ok, frames, duration, err = extract_filmstrip(video_path_str, count)
+    if not ok:
+        status_code = 404 if "không tồn tại" in err else 500
+        return jsonify({"ok": False, "error": err}), status_code
+    return jsonify({
+        "ok": True,
+        "duration": round(duration, 3),
+        "count": len(frames),
+        "frames": frames,
+    })
 
 
 @bp.route("/api/analyze_video_ai", methods=["POST"])
 def analyze_video_ai():
     """Analyze a local video via sampled frames and return suggested masks/title hints."""
-    import base64
-    import mimetypes
-    import re
-    import shutil
-    import subprocess
     import urllib.error
-    import urllib.request
-
-    def _clamp(v, lo, hi, default):
-        try:
-            x = float(v)
-        except Exception:
-            return default
-        return max(lo, min(hi, x))
-
-    def _json_from_text(text: str) -> dict:
-        raw = (text or "").strip()
-        if not raw:
-            return {}
-        try:
-            return _j.loads(raw)
-        except Exception:
-            pass
-        m_block = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw, flags=re.I)
-        if m_block:
-            try:
-                return _j.loads(m_block.group(1).strip())
-            except Exception:
-                pass
-        start_idx = raw.find("{")
-        if start_idx != -1:
-            end_idx = raw.rfind("}")
-            if end_idx > start_idx:
-                for i in range(end_idx, start_idx, -1):
-                    if raw[i] == "}":
-                        try:
-                            return _j.loads(raw[start_idx:i + 1].strip())
-                        except Exception:
-                            pass
-        return {}
-
-    def _clean_result(result: dict) -> dict:
-        if not isinstance(result, dict):
-            result = {}
-        zones = result.get("suggested_blur_zones") or result.get("blur_zones") or []
-        clean_zones = []
-        for idx, z in enumerate(zones if isinstance(zones, list) else []):
-            if not isinstance(z, dict):
-                continue
-            conf = _clamp(z.get("confidence", 0.8), 0, 1, 0.8)
-            if conf < 0.6:
-                continue
-            box = z.get("box_pct") if isinstance(z.get("box_pct"), dict) else {}
-            height = z.get("height_pct", box.get("h", 10))
-            position = z.get("position_pct", (float(box.get("y", 44) or 44) + float(box.get("h", 10) or 10) / 2))
-            width = z.get("width_pct", box.get("w", 70))
-            x = z.get("x_pct", (float(box.get("x", 15) or 15) + float(box.get("w", 70) or 70) / 2))
-            clean_zones.append({
-                "id": z.get("id") or f"ai-{idx + 1}",
-                "label": str(z.get("label") or z.get("type") or f"AI zone {idx + 1}")[:80],
-                "reason": str(z.get("reason") or "")[:300],
-                "height_pct": _clamp(height, 2, 35, 10),
-                "position_pct": _clamp(position, 0, 100, 50),
-                "width_pct": _clamp(width, 10, 100, 75),
-                "x_pct": _clamp(x, 0, 100, 50),
-                "start_sec": None if z.get("start_sec") in ("", None) else _clamp(z.get("start_sec"), 0, 999999, 0),
-                "end_sec": None if z.get("end_sec") in ("", None) else _clamp(z.get("end_sec"), 0, 999999, 0),
-                "confidence": conf,
-                "source": "ai",
-            })
-        result["suggested_blur_zones"] = clean_zones[:6]
-        items = result.get("needs_cover") or []
-        result["needs_cover"] = items[:10] if isinstance(items, list) else []
-        titles = result.get("title_suggestions") or {}
-        result["title_suggestions"] = titles if isinstance(titles, dict) else {}
-        for key in ("summary", "visual_style", "source_language", "analysis_notes"):
-            if key in result and result[key] is not None:
-                result[key] = str(result[key])[:1200]
-        return result
-
-    def _extract_frames(video_path: Path, count: int) -> tuple[list[dict], float]:
-        from core.video_processor import find_ffmpeg
-
-        ffmpeg = find_ffmpeg()
-        if not ffmpeg:
-            raise RuntimeError("FFmpeg khong tim thay")
-
-        try:
-            from utils.ffprobe import probe_video
-            _w, _h, duration = probe_video(video_path)
-        except Exception:
-            duration = 0.0
-        duration = float(duration or 0.0)
-
-        if count <= 0:
-            count = 6
-            if duration > 0:
-                count = max(4, min(8, int(duration / 4) + 1))
-
-        if duration > 0:
-            if count <= 1:
-                timestamps = [max(0.2, min(duration - 0.2, duration * 0.5))]
-            else:
-                timestamps = [
-                    max(0.2, min(duration - 0.2, duration * (idx + 0.5) / count))
-                    for idx in range(count)
-                ]
-        else:
-            timestamps = [1.0 + i * 3.0 for i in range(count)]
-
-        frames: list[dict] = []
-        with tempfile.TemporaryDirectory(prefix="ai_video_read_") as tmpdir:
-            tmp_video = Path(tmpdir) / f"input{video_path.suffix or '.mp4'}"
-            shutil.copy2(str(video_path), str(tmp_video))
-            for idx, ts in enumerate(timestamps):
-                out_jpg = Path(tmpdir) / f"frame_{idx}.jpg"
-                subprocess.run([
-                    ffmpeg, "-ss", f"{ts:.3f}", "-i", str(tmp_video),
-                    "-vframes", "1", "-q:v", "5", "-vf", "scale=512:-1",
-                    str(out_jpg), "-y", "-loglevel", "error",
-                ], capture_output=True, timeout=25)
-                if out_jpg.exists() and out_jpg.stat().st_size > 0:
-                    frames.append({
-                        "timestamp": round(ts, 2),
-                        "b64": base64.b64encode(out_jpg.read_bytes()).decode("ascii"),
-                    })
-        return frames, duration
-
-    def _build_prompt(language: str, target_language: str, duration: float, timestamps: list[float]) -> str:
-        lang_hint = language or "auto"
-        target_hint = target_language or "vi"
-        return f"""
-You are an expert video editing AI specializing in detecting unwanted hardcoded subtitles, watermarks, platform logos, and text overlays.
-Source language: {lang_hint}. Output language for summary & titles: {target_hint}.
-Video duration: {duration:.2f}s. Analyzed frame timestamps: {timestamps}.
-
-CRITICAL RULES:
-1. ONLY detect REAL visible text characters, hardcoded subtitles (especially in {lang_hint}), platform logos (Douyin, TikTok, Kuaishou, Xiaohongshu), author usernames, or QR codes.
-2. DO NOT hallucinate or mark normal scene objects (such as beds, blankets, pillows, clothing, furniture, floors, walls, human bodies, faces) as text/logos! If a frame has NO subtitles or logos, return empty arrays.
-3. PRECISE TIMECODES: If subtitles only appear during a portion of the video (e.g. only in the last frames), specify the exact "start_sec" and "end_sec" timestamps where they are visible. Do NOT set a global mask if subtitles are only present at the end or beginning.
-4. TIGHT BOXES: Bounding boxes must tightly cover the text area only.
-
-Return strict JSON only:
-{{
-  "summary": "concise summary of video content",
-  "visual_style": "camera style, lighting, setting",
-  "source_language": "detected language",
-  "analysis_notes": "details about text/logos found",
-  "needs_cover": [
-    {{
-      "type": "subtitle|logo|watermark|qr",
-      "label": "description of text/logo",
-      "reason": "why cover",
-      "confidence": 0.9,
-      "box_pct": {{"x": 15, "y": 75, "w": 70, "h": 10}},
-      "start_sec": 60.0,
-      "end_sec": 120.0
-    }}
-  ],
-  "suggested_blur_zones": [
-    {{
-      "label": "phụ đề gốc",
-      "reason": "che phụ đề gốc tiếng Trung",
-      "height_pct": 10,
-      "position_pct": 80,
-      "width_pct": 75,
-      "x_pct": 50,
-      "start_sec": 60.0,
-      "end_sec": 120.0,
-      "confidence": 0.9
-    }}
-  ],
-  "title_suggestions": {{
-    "short": "tiêu đề ngắn gọn",
-    "youtube": "tiêu đề YouTube hấp dẫn",
-    "tiktok": "caption TikTok thu hút",
-    "facebook": "tiêu đề Facebook"
-  }}
-}}
-If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones": [].
-""".strip()
-
-    def _call_gemini(api_key: str, model: str, prompt: str, frames: list[dict], base_url: str = "", connection=None, db_models=None) -> dict:
-        m_clean = str(model or "").split("/")[-1].lower().strip()
-        if not m_clean:
-            raise RuntimeError("Chưa chọn model Antigravity")
-
-        parts = [{"text": prompt}]
-        for f in frames:
-            parts.append({"text": f"Frame at {f['timestamp']} seconds"})
-            parts.append({"inlineData": {"mimeType": "image/jpeg", "data": f["b64"]}})
-        payload = {
-            "contents": [{"parts": parts}],
-            "generationConfig": {
-                "temperature": 0.1,
-                "maxOutputTokens": 1800,
-                "responseMimeType": "application/json",
-            },
-        }
-        models_to_try = [m_clean]
-        for db_model in (db_models or []):
-            candidate = str(db_model or "").split("/")[-1].lower().strip()
-            if candidate and candidate not in models_to_try:
-                models_to_try.append(candidate)
-
-        last_err = None
-        for m_candidate in models_to_try:
-            try:
-                from templates.pages.config.route import generate_content_direct
-                direct_connection = connection or {"api_key": api_key, "base_url": base_url}
-                data = generate_content_direct(direct_connection, m_candidate, payload, timeout=35)
-                parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
-                text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text")).strip()
-                if text:
-                    res_json = _json_from_text(text)
-                    if res_json:
-                        return res_json
-            except Exception as e:
-                LOGGER.warning("Antigravity model %s failed: %s, trying next candidate", m_candidate, e)
-                last_err = e
-                continue
-
-        if last_err:
-            raise last_err
-        raise RuntimeError("Antigravity khong tra ve noi dung phan tich")
 
     data = request.json or {}
     video_path_str = str(data.get("video_path") or "").strip()
     if not video_path_str:
-        return jsonify({"ok": False, "error": "Thieu duong dan video"}), 400
+        return jsonify({"ok": False, "error": "Thiếu đường dẫn video"}), 400
 
-    vp = _resolve_video_path(video_path_str)
+    vp = resolve_video_path(video_path_str)
     if not vp or not vp.exists():
-        return jsonify({"ok": False, "error": f"Video khong ton tai: {video_path_str}"}), 404
+        return jsonify({"ok": False, "error": f"Video không tồn tại: {video_path_str}"}), 404
 
-    cfg = load_cfg()
     requested_nine_model = str(data.get("nine_model") or data.get("model") or "").strip()
     language = str(data.get("language") or "").strip()
     target_language = str(data.get("target_language") or "vi").strip()
@@ -706,15 +345,14 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
         }), 400
 
     try:
-        frames, duration = _extract_frames(vp, sample_count)
+        frames, duration = extract_frames_for_ai(vp, sample_count)
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Khong doc duoc video: {e}"}), 500
+        return jsonify({"ok": False, "error": f"Không đọc được video: {e}"}), 500
     if not frames:
-        return jsonify({"ok": False, "error": "Khong doc duoc video hoac khong trich duoc frame"}), 500
+        return jsonify({"ok": False, "error": "Không đọc được video hoặc không trích được frame"}), 500
 
-    prompt = _build_prompt(language, target_language, duration, [f["timestamp"] for f in frames])
+    prompt = build_ai_prompt(language, target_language, duration, [f["timestamp"] for f in frames])
 
-    # ── Antigravity direct only ──────────────────────────────────
     try:
         m_target = requested_nine_model.split("/")[-1] if "/" in requested_nine_model else requested_nine_model
         gemini_model = m_target if (m_target and m_target not in ("none", "auto", "duytris", "")) else (ag_models[0].split("/")[-1] if ag_models else "")
@@ -724,7 +362,7 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
         last_error = None
         for connection in ag_conns:
             try:
-                result = _call_gemini(
+                result = call_gemini_vision(
                     str(connection.get("api_key") or ""), gemini_model, prompt, frames,
                     base_url=str(connection.get("base_url") or ""), connection=connection, db_models=ag_models,
                 )
@@ -735,7 +373,7 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
                     "account": connection.get("email") or connection.get("name") or "Antigravity",
                     "frame_count": len(frames),
                     "duration": round(duration, 3),
-                    "result": _clean_result(result),
+                    "result": clean_ai_result(result),
                 })
             except Exception as account_error:
                 last_error = account_error
@@ -760,140 +398,16 @@ def video_frame_from_url():
     """Fetch thumbnail/cover from video URL via Douyin API."""
     data = request.json or {}
     url = str(data.get("url") or "").strip()
-
     if not url:
         return jsonify({"ok": False, "error": "Chưa nhập URL video"}), 400
 
-    # Fetch thumbnail/cover from URL via Douyin API
-    thumb_result = _fetch_thumbnail_from_url(url)
-    if thumb_result:
-        return jsonify(thumb_result)
+    thumb_result = fetch_thumbnail_from_url(url)
+    if thumb_result and thumb_result.get("cover_url"):
+        return jsonify({"ok": True, **thumb_result})
 
     return jsonify({"ok": False, "error": "Không lấy được thumbnail từ URL"}), 404
 
 
-def _fetch_thumbnail_from_url(url: str) -> dict | None:
-    """Fetch video thumbnail/cover image from Douyin API given a video URL."""
-    import re
-    import base64
-    import httpx
-    from urllib.parse import urlparse, parse_qs
-
-    try:
-        from config import ConfigLoader
-        from auth import CookieManager
-        from core import DouyinAPIClient, URLParser
-
-        cfg_loader = ConfigLoader(str(CONFIG_FILE))
-        cm = CookieManager()
-        cm.set_cookies(get_cookies_with_fallback())
-
-        def _pick_url(raw: str) -> str:
-            text = str(raw or "").strip()
-            if not text:
-                return ""
-            m = re.search(r"https?://[^\s]+", text)
-            if m:
-                return m.group(0).rstrip("\"'.,;)")
-            if text.startswith("v.douyin.com/") or text.startswith("www.douyin.com/"):
-                return "https://" + text
-            return text
-
-        def _extract_aweme_id(u: str, parsed: dict | None) -> str:
-            if parsed:
-                aid = str(parsed.get("aweme_id") or "").strip()
-                if aid:
-                    return aid
-            qs = parse_qs(urlparse(u).query or "")
-            for key in ("modal_id", "item_id", "group_id", "aweme_id"):
-                val = str((qs.get(key) or [""])[0]).strip()
-                if val.isdigit():
-                    return val
-            m = re.search(r"/(?:video|note|gallery|slides|share/video)/(\d{15,20})", u)
-            if m:
-                return m.group(1)
-            return ""
-
-        async def _do_fetch():
-            from core.proxy_resolver import resolve_proxy
-            async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(cfg_loader)) as api:
-                normalized_url = _pick_url(url)
-                if not normalized_url:
-                    return None
-
-                resolved_url = normalized_url
-                if "v.douyin.com" in resolved_url:
-                    redirected = await api.resolve_short_url(resolved_url)
-                    if redirected:
-                        resolved_url = redirected
-
-                parsed = URLParser.parse(resolved_url)
-                aweme_id = _extract_aweme_id(resolved_url, parsed)
-                if not aweme_id:
-                    aweme_id = _extract_aweme_id(normalized_url, URLParser.parse(normalized_url))
-                if not aweme_id:
-                    return None
-
-                detail = await api.get_video_detail(aweme_id)
-                if not detail:
-                    return None
-
-                # Extract cover URL — prefer static images (origin_cover, cover) over animated (dynamic_cover)
-                video_info = detail.get("video") or {}
-                cover_url = ""
-                for field in ("origin_cover", "cover"):
-                    ul = (video_info.get(field) or {}).get("url_list") or []
-                    if ul:
-                        cover_url = ul[0]
-                        break
-
-                if not cover_url:
-                    # Try images (gallery post)
-                    imgs = detail.get("images") or []
-                    if imgs:
-                        ul = (imgs[0].get("url_list") or [])
-                        if ul:
-                            cover_url = ul[0]
-
-                if not cover_url:
-                    return None
-
-                return cover_url, detail.get("desc") or "video"
-
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(_do_fetch())
-        finally:
-            loop.close()
-
-        if not result:
-            return None
-
-        cover_url, title = result
-
-        # Download the cover image and convert to base64
-        with httpx.Client(timeout=10, follow_redirects=True) as client:
-            resp = client.get(cover_url)
-            if resp.status_code == 200 and len(resp.content) > 0:
-                content_type = resp.headers.get("content-type", "image/jpeg")
-                if "webp" in content_type:
-                    mime = "image/webp"
-                elif "png" in content_type:
-                    mime = "image/png"
-                else:
-                    mime = "image/jpeg"
-                img_b64 = base64.b64encode(resp.content).decode()
-                return {
-                    "ok": True,
-                    "image": f"data:{mime};base64,{img_b64}",
-                    "video_name": title,
-                    "source": "thumbnail",
-                }
-
-    except Exception:
-        pass
-
-    return None
 
 
 @require_valid_license
@@ -906,7 +420,7 @@ def upload_anti_fp_image():
     if not upload_file or not upload_file.filename:
         return jsonify({"ok": False, "error": "No file provided"}), 400
 
-    img_type = str(request.form.get("type") or "overlay")
+    img_type = request.form.get("type") or "overlay"
     safe_name = sanitize_filename(upload_file.filename)
     from core_app import TEMP_UPLOADS_DIR
     upload_dir = TEMP_UPLOADS_DIR
@@ -1201,7 +715,7 @@ def process_video():
             from urllib.parse import urlparse, parse_qs
 
             def _pick_url(raw: str) -> str:
-                text = str(raw or "").strip()
+                text = (raw or "").strip()
                 if not text:
                     return ""
                 m = re.search(r"https?://[^\s]+", text)
@@ -1218,7 +732,7 @@ def process_video():
                         return aid
                 qs = parse_qs(urlparse(url).query or "")
                 for key in ("modal_id", "item_id", "group_id", "aweme_id"):
-                    val = str((qs.get(key) or [""])[0]).strip()
+                    val = (qs.get(key) or [""])[0].strip()
                     if val.isdigit():
                         return val
                 m = re.search(r"/(?:video|note|gallery|slides|share/video)/(\d{15,20})", url)
@@ -1295,7 +809,8 @@ def process_video():
                 if parsed and parsed.get("type") not in ("video", "gallery") and not aweme_id:
                     raise RuntimeError("URL is not a video post")
 
-                aweme_data = await api.get_video_detail(aweme_id)
+                bf_cfg = cfg.get("browser_fallback") or {}
+                aweme_data = await api.get_video_detail(aweme_id, browser_fallback=bf_cfg)
                 if not aweme_data:
                     fallback_out = Path(out_dir).expanduser() if out_dir else Path(cfg.get("path") or "./Downloaded")
                     return await _download_douyin_ytdlp_fallback(resolved_url, fallback_out, aweme_id)
@@ -1355,16 +870,35 @@ def process_video():
             req = dict(data or {})
             video_path = str(req.get("video_path") or "").strip()
             video_url = str(req.get("video_url") or "").strip()
-            req.setdefault("cleanup_outputs", True)
-            req.setdefault("delete_source_after_process", False)
+
+            # Defense-in-depth: if video_url is actually a local file path, move it to video_path
+            if video_url and not (video_url.startswith("http://") or video_url.startswith("https://")):
+                if not video_path:
+                    video_path = video_url
+                video_url = ""
+                req["video_path"] = video_path
+                req["video_url"] = ""
+
+            try:
+                request.environ["eventlet.minimum_write_chunk_size"] = 0
+            except Exception:
+                pass
+            try:
+                import eventlet
+                _ev_sleep = eventlet.sleep
+            except Exception:
+                _ev_sleep = None
             import sys
-            yield _j.dumps({"log": f"🚀 Kết nối server backend thành công, bắt đầu xử lý...", "level": "info"}, ensure_ascii=False) + "\n"
+            yield (_j.dumps({"log": f"🚀 Kết nối server backend thành công, bắt đầu xử lý...", "level": "info"}, ensure_ascii=True) + "\n").encode("utf-8")
+            if _ev_sleep:
+                _ev_sleep(0.005)
             print(f"=== [BACKEND] generate() started, video_path={video_path}, video_url={video_url} ===", file=sys.stderr, flush=True)
 
-
             if not video_path and video_url:
-                yield _j.dumps({"log": f"Resolving URL: {video_url}", "level": "info"}, ensure_ascii=False) + "\n"
-                yield _j.dumps({"overall": 2, "overall_lbl": "Resolving URL..."}, ensure_ascii=False) + "\n"
+                yield (_j.dumps({"log": f"Resolving URL: {video_url}", "level": "info"}, ensure_ascii=True) + "\n").encode("utf-8")
+                yield (_j.dumps({"overall": 2, "overall_lbl": "Resolving URL..."}, ensure_ascii=True) + "\n").encode("utf-8")
+                if _ev_sleep:
+                    _ev_sleep(0.005)
                 try:
                     downloaded_path, downloaded_title = asyncio.run(
                         _download_video_from_url(video_url, str(req.get("out_dir") or "").strip())
@@ -1372,28 +906,45 @@ def process_video():
                     req["video_path"] = str(downloaded_path)
                     req["video_title"] = downloaded_title
                     req["delete_source_after_process"] = True
-                    yield _j.dumps({"log": f"Downloaded video: {downloaded_path}", "level": "success"}, ensure_ascii=False) + "\n"
-                    yield _j.dumps({"overall": 4, "overall_lbl": "Download done, start processing..."}, ensure_ascii=False) + "\n"
+                    yield (_j.dumps({"log": f"Downloaded video: {downloaded_path}", "level": "success"}, ensure_ascii=True) + "\n").encode("utf-8")
+                    yield (_j.dumps({"overall": 4, "overall_lbl": "Download done, start processing..."}, ensure_ascii=True) + "\n").encode("utf-8")
+                    if _ev_sleep:
+                        _ev_sleep(0.005)
                 except Exception as e:
-                    yield _j.dumps({"log": f"URL download failed: {e}", "level": "error"}, ensure_ascii=False) + "\n"
-                    yield _j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=False) + "\n"
+                    yield (_j.dumps({"log": f"URL download failed: {e}", "level": "error", "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
+                    yield (_j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=True) + "\n").encode("utf-8")
                     return
             elif not video_path:
-                yield _j.dumps({"log": "Please provide video_path or video_url", "level": "error"}, ensure_ascii=False) + "\n"
-                yield _j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=False) + "\n"
+                yield (_j.dumps({"log": "Please provide video_path or video_url", "level": "error", "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
+                yield (_j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=True) + "\n").encode("utf-8")
                 return
 
             for line in process_video_full(req):
-                yield line
+                # Cooperative pause: stop forwarding/advancing between pipeline
+                # events until the user resumes from Step 3.
+                while not _proc_pause_event.is_set():
+                    if _ev_sleep:
+                        _ev_sleep(0.1)
+                    else:
+                        import time as _time
+                        _time.sleep(0.1)
+                yield line.encode("utf-8") if isinstance(line, str) else line
+                if _ev_sleep:
+                    _ev_sleep(0.002)
         except Exception as e:
-            yield _j.dumps({"log": f"Fatal error: {e}", "level": "error"}, ensure_ascii=False) + "\n"
-            yield _j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=False) + "\n"
+            yield (_j.dumps({"log": f"Fatal error: {e}", "level": "error", "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
+            yield (_j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=True) + "\n").encode("utf-8")
 
-    resp = Response(stream_with_context(generate()), mimetype="application/x-ndjson")
+    try:
+        request.environ["eventlet.minimum_write_chunk_size"] = 0
+    except Exception:
+        pass
+    resp = Response(stream_with_context(generate()), mimetype="application/x-ndjson; charset=utf-8")
     resp.headers["Cache-Control"] = "no-cache, no-transform"
     resp.headers["X-Accel-Buffering"] = "no"
     resp.headers["Connection"] = "keep-alive"
     return resp
+
 
 
 @require_valid_license
@@ -1417,7 +968,7 @@ def download_original_video():
     from urllib.parse import urlparse, parse_qs
 
     def _pick_url(raw: str) -> str:
-        text = str(raw or "").strip()
+        text = (raw or "").strip()
         if not text:
             return ""
         m = re.search(r"https?://[^\s]+", text)
@@ -1434,7 +985,7 @@ def download_original_video():
                 return aid
         qs = parse_qs(urlparse(url).query or "")
         for key in ("modal_id", "item_id", "group_id", "aweme_id"):
-            val = str((qs.get(key) or [""])[0]).strip()
+            val = (qs.get(key) or [""])[0].strip()
             if val.isdigit():
                 return val
         m = re.search(r"/(?:video|note|gallery|slides|share/video)/(\d{15,20})", url)
@@ -1451,7 +1002,11 @@ def download_original_video():
             await db.initialize()
 
         # ── Nền tảng khác Douyin (Facebook/TikTok/YouTube/...) → yt-dlp ──
-        from core.multi_platform import is_douyin as _is_dy
+        from core.multi_platform import (
+            is_douyin as _is_dy,
+            detect_platform as _detect_pf,
+            cookie_opts_for as _ck_opts,
+        )
         normalized_url0 = _pick_url(video_url)
         if normalized_url0 and not _is_dy(normalized_url0):
             from core.multi_platform import download_video as _dl_generic
@@ -1462,10 +1017,6 @@ def download_original_video():
 
             fb_cookie = None
             try:
-                from core.multi_platform import (
-                    cookie_opts_for as _ck_opts,
-                    detect_platform as _detect_pf,
-                )
                 fb_cookie = (_ck_opts(_detect_pf(normalized_url0)) or {}).get("cookiefile")
             except Exception:
                 fb_cookie = None
@@ -1476,19 +1027,35 @@ def download_original_video():
                     str(out_path / "Process_video" / "_tmp_dl"),
                     cookiefile=fb_cookie,
                     proxy=_resolve_proxy(cfg),
-                    progress_hook=_make_ytdlp_progress_hook(normalized_url0),
                 )
 
             res = await asyncio.to_thread(_do_generic)
-            if not res.get("ok"):
-                raise RuntimeError(res.get("error") or "Download failed")
-
-            src = Path(res["file"])
-            raw_title = res.get("title") or src.stem or "video"
-            resolved_title = _resolve_naming_title(raw_title)
-            slug = _safe_stem(resolved_title)
-            base_name = f"{slug}_{res.get('id') or int(time.time())}"
-            save_dir = out_path / "Process_video" / base_name
+            if not res or not res.get("ok"):
+                detail = str((res or {}).get("error") or "không có phản hồi từ trình tải")
+                raise RuntimeError(
+                    f"Tải video từ URL đa nền tảng thất bại ({_detect_pf(normalized_url0)}): {detail}"
+                )
+            # multi_platform.download_video returns one downloaded path in
+            # ``file``.  Older callers used ``files``; accepting both keeps the
+            # endpoint compatible and prevents a successful download from being
+            # reported as "không tìm thấy file tải về".
+            downloaded_files = []
+            if res:
+                if res.get("file"):
+                    downloaded_files = [res["file"]]
+                elif res.get("files"):
+                    downloaded_files = list(res["files"])
+            if not downloaded_files:
+                raise RuntimeError(f"Tải video từ URL đa nền tảng thất bại ({_detect_pf(normalized_url0)}): không tìm thấy file tải về")
+            src = Path(downloaded_files[0])
+            if not src.is_file():
+                raise RuntimeError(
+                    f"Tải video từ URL đa nền tảng thất bại ({_detect_pf(normalized_url0)}): "
+                    f"file đầu ra không tồn tại: {src}"
+                )
+            resolved_title = res.get("title") or _safe_stem(src.stem)
+            base_name = _safe_stem(resolved_title) or f"video_{int(time.time())}"
+            save_dir = out_path / "Process_video"
             save_dir.mkdir(parents=True, exist_ok=True)
             save_path = save_dir / f"{base_name}.mp4"
             if save_path.exists():
@@ -1539,7 +1106,8 @@ def download_original_video():
             if parsed and parsed.get("type") not in ("video", "gallery") and not aweme_id:
                 raise RuntimeError("URL is not a video post")
 
-            aweme_data = await api.get_video_detail(aweme_id)
+            bf_cfg = cfg.get("browser_fallback") or {}
+            aweme_data = await api.get_video_detail(aweme_id, browser_fallback=bf_cfg)
             if not aweme_data:
                 fallback_out = Path(out_dir).expanduser() if out_dir else Path(cfg.get("path") or "./Downloaded")
                 return await _download_douyin_ytdlp_fallback(resolved_url, fallback_out, aweme_id)
@@ -1787,7 +1355,7 @@ def burn_subtitle_only():
     frame_title = request.form.get("frame_title") or ""
     frame_title_size_pct = float(request.form.get("frame_title_size_pct") or 5)
     frame_title_color = request.form.get("frame_title_color") or "#000000"
-    frame_blur_w_pct = float(request.form.get("frame_blur_w_pct") or 15)
+    frame_blur_w_pct = float(request.form.get("frame_blur_w_pct") or 0)
     frame_blur_opacity = float(request.form.get("frame_blur_opacity") or 0.6)
 
     out_dir_str = request.form.get("out_dir") or ""
@@ -2094,233 +1662,19 @@ def generate_thumbnail_ai():
     })
 
 
-def _ai_thumbnail_prompt_from_frame(api_key: str, frame_b64: str, title: str, subtitle: str, style: str, aspect_ratio: str, is_editing_existing_thumb: bool = False) -> str:
-    """Use Gemini Vision to analyze a video frame and generate a creative thumbnail prompt."""
-    import json as _json
-    import urllib.request
-    import urllib.error
-
-    model = "gemini-3.6-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-
-    if is_editing_existing_thumb:
-        system_instruction = f"""You are an expert thumbnail editor. 
-Analyze the provided existing thumbnail image and output a prompt for AI image generation that modifies and refines it.
-
-Rules for modification:
-- Do NOT generate a completely new composition or change the core elements.
-- Analyze the layout, colors, and key items of this existing image.
-- Write a prompt instructing the generator to add a prominent, stylish text overlay showing: '{title}'.
-- The prompt must specify to keep the existing background and elements, but enhance contrast, dramatic lighting, and add details matching the content: '{subtitle or title}'.
-- Output ONLY the prompt text to edit this image, keeping the exact style, nothing else. Keep it under 150 words."""
-    else:
-        system_instruction = f"""You are an expert thumbnail designer for {style} videos.
-Analyze the video frame and create a prompt for AI image generation that will produce an eye-catching thumbnail.
-
-Rules:
-- The thumbnail should be visually striking and click-worthy
-- Use vibrant colors, high contrast, dramatic lighting
-- Include relevant visual elements from the video content
-- Aspect ratio: {aspect_ratio}
-- If a title/brand is provided, incorporate it naturally
-- Keep the prompt concise (under 150 words)
-- Output ONLY the image generation prompt, nothing else
-
-Title/Brand: {title or 'N/A'}
-Content hint: {subtitle or 'N/A'}"""
-
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": system_instruction},
-                {"inlineData": {"mimeType": "image/jpeg", "data": frame_b64}},
-                {"text": "Generate a creative thumbnail prompt based on this video frame:"},
-            ]
-        }],
-        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 300},
-    }
-
-    try:
-        body = _json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
-
-        candidates = data.get("candidates") or []
-        if candidates:
-            parts = (candidates[0].get("content") or {}).get("parts") or []
-            for part in parts:
-                text = part.get("text", "").strip()
-                if text:
-                    return text
-    except Exception:
-        pass
-
-    # Fallback prompt
-    return (
-        f"Create a professional {style} video thumbnail. "
-        f"Eye-catching design with vibrant colors and high contrast. "
-        f"Content: {subtitle or title or 'entertaining video'}. "
-        f"Aspect ratio: {aspect_ratio}. Professional quality, click-worthy."
-    )
-
-
-def _ai_generate_thumbnail_image(api_key: str, prompt: str, reference_frame_b64: str | None, aspect_ratio: str, model: str = "gemini-3.6-flash-image") -> dict:
-    """Generate thumbnail image using Gemini native image generation."""
-    import json as _json
-    import urllib.request
-    import urllib.error
-
-    model = (model or "gemini-3.6-flash-image").strip() or "gemini-3.6-flash-image"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-
-    # Build parts — include reference frame if available
-    parts = []
-    if reference_frame_b64:
-        parts.append({"inlineData": {"mimeType": "image/jpeg", "data": reference_frame_b64}})
-        parts.append({"text": f"Based on this video frame, generate a professional thumbnail image. {prompt}"})
-    else:
-        parts.append({"text": prompt})
-
-    payload = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"],
-        },
-    }
-
-    try:
-        body = _json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
-    except urllib.error.HTTPError as e:
-        err_body = ""
-        try:
-            err_body = e.read().decode("utf-8", "replace")
-            err_json = _json.loads(err_body)
-            err_msg = err_json.get("error", {}).get("message", err_body[:300])
-        except Exception:
-            err_msg = err_body[:300] or f"HTTP {e.code}"
-        return {"ok": False, "error": f"Gemini API error: {err_msg}"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-    # Parse response — look for image in candidates
-    candidates = data.get("candidates") or []
-    for cand in candidates:
-        parts = (cand.get("content") or {}).get("parts") or []
-        for part in parts:
-            inline = part.get("inlineData") or {}
-            if inline.get("mimeType", "").startswith("image/"):
-                img_b64 = inline.get("data", "")
-                if img_b64:
-                    return {"ok": True, "image_b64": img_b64}
-
-    return {"ok": False, "error": "Gemini không trả về ảnh. Thử lại hoặc đổi prompt."}
-
-
-
-@bp.route("/api/check_gemini_api", methods=["POST"], endpoint="check_gemini_api_primary")
-def check_gemini_api():
-    """Preflight check: verify Gemini API key is valid before batch processing."""
-    import os
-    import urllib.request
-    import urllib.error
-    import json as _json
-
-    cfg = load_cfg()
-    api_key = (
-        (cfg.get("gemini_video") or {}).get("api_key", "").strip()
-        or os.environ.get("GEMINI_API_KEY", "").strip()
-    )
-    if not api_key:
-        return jsonify({"ok": False, "error": "Chưa cấu hình Gemini API key trong config.yml (gemini_video.api_key)"}), 400
-
-    # Test with a small generateContent call
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
-    payload = {
-        "contents": [{"parts": [{"text": "ping"}]}],
-        "generationConfig": {"maxOutputTokens": 5},
-    }
-    try:
-        body = _json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
-        # If we get here without exception, API is valid
-        if data.get("candidates"):
-            return jsonify({"ok": True, "model": "gemini-3.6-flash"})
-        return jsonify({"ok": False, "error": "API trả về kết quả rỗng"}), 400
-    except urllib.error.HTTPError as e:
-        err_body = ""
-        try:
-            err_body = e.read().decode("utf-8", "replace")
-            err_json = _json.loads(err_body)
-            err_msg = err_json.get("error", {}).get("message", err_body[:200])
-        except Exception:
-            err_msg = err_body[:200] or f"HTTP {e.code}"
-        return jsonify({"ok": False, "error": err_msg}), 400
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-    # Parse response — look for image in candidates
-    candidates = data.get("candidates") or []
-    for cand in candidates:
-        parts = (cand.get("content") or {}).get("parts") or []
-        for part in parts:
-            inline = part.get("inlineData") or {}
-            if inline.get("mimeType", "").startswith("image/"):
-                img_b64 = inline.get("data", "")
-                if img_b64:
-                    return {"ok": True, "image_b64": img_b64}
-
-    return {"ok": False, "error": "Gemini không trả về ảnh. Thử lại hoặc đổi prompt."}
-
-
-
 @bp.route("/api/check_gemini_api", methods=["POST"])
 def check_gemini_api():
     """Preflight check: verify Gemini API key is valid before batch processing."""
-    import os
-    import urllib.request
-    import urllib.error
-    import json as _json
-
     cfg = load_cfg()
     api_key = (
         (cfg.get("gemini_video") or {}).get("api_key", "").strip()
         or os.environ.get("GEMINI_API_KEY", "").strip()
     )
-    if not api_key:
-        return jsonify({"ok": False, "error": "Chưa cấu hình Gemini API key trong config.yml (gemini_video.api_key)"}), 400
+    ok, msg = check_gemini_api_key(api_key)
+    if ok:
+        return jsonify({"ok": True, "model": msg})
+    return jsonify({"ok": False, "error": msg}), 400
 
-    # Test with a small generateContent call
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
-    payload = {
-        "contents": [{"parts": [{"text": "ping"}]}],
-        "generationConfig": {"maxOutputTokens": 5},
-    }
-    try:
-        body = _json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = _json.loads(resp.read().decode("utf-8", "replace") or "{}")
-        # If we get here without exception, API is valid
-        if data.get("candidates"):
-            return jsonify({"ok": True, "model": "gemini-3.6-flash"})
-        return jsonify({"ok": False, "error": "API trả về kết quả rỗng"}), 400
-    except urllib.error.HTTPError as e:
-        err_body = ""
-        try:
-            err_body = e.read().decode("utf-8", "replace")
-            err_json = _json.loads(err_body)
-            err_msg = err_json.get("error", {}).get("message", err_body[:200])
-        except Exception:
-            err_msg = err_body[:200] or f"HTTP {e.code}"
-        return jsonify({"ok": False, "error": err_msg}), 400
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/ytdlp/cookie_config", methods=["GET"])

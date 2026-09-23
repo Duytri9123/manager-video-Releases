@@ -1,6 +1,7 @@
 """User Blueprint — /api/user_videos_page, /api/user_info, /api/proxy_image routes."""
 import asyncio
 from datetime import datetime
+from typing import Optional
 from flask import Blueprint, jsonify, request, Response
 from flask import stream_with_context
 from core_app import (
@@ -116,9 +117,9 @@ def user_videos_page():
         cm = CookieManager()
         cm.set_cookies(get_cookies_with_fallback())
         parsed = URLParser.parse(url)
-        if not parsed or parsed.get("type") != "user":
+        sec_uid = (parsed.get("sec_uid") or URLParser._extract_user_id(url)) if parsed else URLParser._extract_user_id(url)
+        if not sec_uid:
             return {"error": "Invalid user URL"}
-        sec_uid = parsed.get("sec_uid", "")
         async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(config)) as api:
             if cursor == 0 and offset > 0:
                 all_items = []
@@ -183,10 +184,10 @@ def user_videos():
             cm = CookieManager()
             cm.set_cookies(get_cookies_with_fallback())
             parsed = URLParser.parse(url)
-            if not parsed or parsed.get("type") != "user":
+            sec_uid = (parsed.get("sec_uid") or URLParser._extract_user_id(url)) if parsed else URLParser._extract_user_id(url)
+            if not sec_uid:
                 yield {"error": "Invalid user URL"}
                 return
-            sec_uid = parsed.get("sec_uid", "")
             cursor = 0
             page = 0
             total = 0
@@ -307,8 +308,8 @@ def user_videos_all():
         }
 
     # Hàng đợi cho cầu async → generator SSE-like
-    q: "_queue.Queue[str]" = _queue.Queue()
-    SENTINEL = object()
+    q: _queue.Queue[Optional[str]] = _queue.Queue()
+    SENTINEL: Optional[str] = None
 
     def _emit(kind: str, **payload):
         payload["kind"] = kind
@@ -323,10 +324,10 @@ def user_videos_all():
         cm = CookieManager()
         cm.set_cookies(get_cookies_with_fallback())
         parsed = URLParser.parse(url)
-        if not parsed or parsed.get("type") != "user":
+        sec_uid = (parsed.get("sec_uid") or URLParser._extract_user_id(url)) if parsed else URLParser._extract_user_id(url)
+        if not sec_uid:
             _emit("error", message="Invalid user URL")
             return
-        sec_uid = parsed.get("sec_uid", "")
 
         browser_cfg = (config.get("browser_fallback") or {}) if hasattr(config, "get") else {}
         headless = bool(browser_cfg.get("headless", False))
@@ -360,18 +361,18 @@ def user_videos_all():
             except Exception:
                 cached_items = {}
 
-            missing_ids = [aid for aid in aweme_ids if str(aid) not in known_ids]
+            missing_ids = [aid for aid in aweme_ids if aid not in known_ids]
             _emit(
                 "progress",
                 collected=len(aweme_ids),
                 missing=len(missing_ids),
-                cached=len([a for a in missing_ids if str(a) in cached_items]),
+                cached=len([a for a in missing_ids if a in cached_items]),
             )
 
             # Phát video có sẵn từ cache trước (nhanh, không tốn request)
             emitted_batch = []
             for aid in missing_ids:
-                item = cached_items.get(str(aid))
+                item = cached_items.get(aid)
                 if not item:
                     continue
                 emitted_batch.append(parse_item(item))
@@ -382,19 +383,20 @@ def user_videos_all():
                 _emit("videos", videos=emitted_batch)
                 emitted_batch = []
 
-            # Những id còn lại chưa có item → gọi API detail (nếu bị 403 WAF thì tạo fallback item an toàn)
-            remaining = [aid for aid in missing_ids if str(aid) not in cached_items]
+            # Những id còn lại chưa có item → gọi API detail với browser_fallback
+            remaining = [aid for aid in missing_ids if aid not in cached_items]
             total_remain = len(remaining)
+            bf_cfg = browser_cfg if browser_cfg.get("enabled") else {"enabled": True, "headless": headless, "wait_timeout_seconds": 30}
             for idx, aid in enumerate(remaining, start=1):
                 try:
-                    detail = await api.get_video_detail(str(aid), suppress_error=True)
+                    detail = await api.get_video_detail(aid, suppress_error=True, browser_fallback=bf_cfg)
                 except Exception:
                     detail = None
                 if detail:
                     emitted_batch.append(parse_item(detail))
                 else:
                     emitted_batch.append({
-                        "aweme_id": str(aid),
+                        "aweme_id": aid,
                         "desc": f"Video {aid}",
                         "cover": "",
                         "date": "",
@@ -427,7 +429,7 @@ def user_videos_all():
     def generate():
         while True:
             chunk = q.get()
-            if chunk is SENTINEL:
+            if chunk is None:
                 break
             yield chunk
 
@@ -511,9 +513,9 @@ def user_info():
         cm = CookieManager()
         cm.set_cookies(get_cookies_with_fallback())
         parsed = URLParser.parse(url)
-        if not parsed or parsed.get("type") != "user":
+        sec_uid = (parsed.get("sec_uid") or URLParser._extract_user_id(url)) if parsed else URLParser._extract_user_id(url)
+        if not sec_uid:
             return None, [], False
-        sec_uid = parsed.get("sec_uid", "")
         async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(config)) as api:
             info = await api.get_user_info(sec_uid)
             if not info:
@@ -567,6 +569,7 @@ def user_info():
 
         videos = [parse_item(i) for i in all_items]
         aweme_count = info.get("aweme_count", 0)
+        argus_blocked = bool(pagination_blocked and len(videos) == 0 and aweme_count > 0)
         return jsonify({
             "nickname":    info.get("nickname", ""),
             "uid":         info.get("uid", ""),
@@ -580,6 +583,7 @@ def user_info():
             "has_more":    False,
             "next_cursor": 0,
             "pagination_blocked": pagination_blocked,
+            "argus_blocked": argus_blocked,
             "fetched_count": len(videos),
         })
     except Exception as e:

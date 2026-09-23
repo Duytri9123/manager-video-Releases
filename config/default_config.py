@@ -126,7 +126,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "outline_width": 2,
         "blur_height": 15,
         "subtitle_format": "ass",
-        "max_words_per_segment": 5,  # Số từ tối đa trong 1 câu (cho tiếng Việt/Anh, 0 = không giới hạn)
+        "max_words_per_segment": 6,  # Số từ tối đa trong 1 câu (cho tiếng Việt/Anh, 0 = không giới hạn)
         "max_chars_per_segment": 15,  # Số ký tự tối đa trong 1 câu (cho tiếng Trung, ưu tiên hơn max_words, 0 = không giới hạn)
     },
     "capcut": {
@@ -136,6 +136,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "auto_open": False,
     },
     "facebook": {
+        "app_id": "",
+        "app_secret": "",
+    },
+    "threads": {
         "app_id": "",
         "app_secret": "",
     },

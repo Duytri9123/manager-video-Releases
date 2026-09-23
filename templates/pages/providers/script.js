@@ -788,6 +788,7 @@
 
             btn.disabled = true;
             try {
+                let savedConnId = editingConnectionId;
                 if (editingConnectionId) {
                     const conn = pData.connections.find(c => c.id === editingConnectionId);
                     if (conn) {
@@ -800,10 +801,13 @@
                             conn.expires_at = window._lastOAuthData.expires_at;
                             conn.project_id = window._lastOAuthData.project_id;
                             conn.email = window._lastOAuthData.email;
+                            conn.auth_type = 'oauth';
                         }
                     }
                 } else {
                     const newId = 'conn_' + Date.now();
+                    savedConnId = newId;
+                    const isOAuth = (window._lastOAuthData && window._lastOAuthData.refresh_token) || key.startsWith('ya29.');
                     const newConn = {
                         id: newId,
                         name: name,
@@ -811,7 +815,8 @@
                         base_url: url,
                         enabled: true,
                         priority: priority,
-                        status: 'active'
+                        status: 'active',
+                        auth_type: isOAuth ? 'oauth' : (pData.authType || 'api_key')
                     };
                     if (window._lastOAuthData && window._lastOAuthData.refresh_token) {
                         newConn.refresh_token = window._lastOAuthData.refresh_token;
@@ -833,7 +838,7 @@
                     closeCredentialModal();
                     loadProvidersConfig();
                     // Tự động test ngay kết nối mới vừa lưu
-                    const createdId = editingConnectionId || newId;
+                    const createdId = savedConnId;
                     if (createdId) {
                         setTimeout(() => {
                             testSingleConnectionRow(activeProviderId, createdId);
@@ -843,7 +848,7 @@
                     toast('Lỗi khi lưu kết nối', 'error');
                 }
             } catch (e) {
-                toast('Lỗi hệ thống khi lưu', 'error');
+                toast('Lỗi hệ thống khi lưu: ' + (e.message || e), 'error');
             } finally {
                 btn.disabled = false;
             }

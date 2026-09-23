@@ -36,7 +36,8 @@ function procAssReviewSkipAlways() {
     }
 
     window._step3Confirmed = true;
-    procWizGo(4);
+    // Confirmation only resumes the pipeline. Step 4 may be opened after the
+    // whole video finishes successfully, and only when auto-publish is enabled.
     _procDoResume();
   }
   async function _procDoResume() {

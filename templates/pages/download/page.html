@@ -54,7 +54,6 @@
             <option value="auto">Auto (Fallback)</option>
             <option value="openai">OpenAI</option>
             <option value="huggingface">HuggingFace</option>
-            <option value="google">Google Translate</option>
           </select>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="display:none" aria-hidden="true">
@@ -151,15 +150,15 @@
           </div>
           <div class="field" style="margin-top:12px">
             <label>Tiêu đề YouTube</label>
-            <input type="text" id="yt-title" placeholder="Lấy từ title đã dịch nếu để trống">
+            <input type="text" id="dl-yt-title" placeholder="Lấy từ title đã dịch nếu để trống">
           </div>
           <div class="field">
             <label>Mô tả</label>
-            <textarea id="yt-desc" rows="3" placeholder="Mô tả chi tiết cho video..."></textarea>
+            <textarea id="dl-yt-desc" rows="3" placeholder="Mô tả chi tiết cho video..."></textarea>
           </div>
           <div class="field">
             <label>Chế độ riêng tư</label>
-            <select id="yt-privacy">
+            <select id="dl-yt-privacy">
               <option value="private" selected>Riêng tư (Private)</option>
               <option value="unlisted">Ẩn (Unlisted)</option>
               <option value="public">Công khai (Public)</option>
@@ -170,15 +169,15 @@
         <div id="publish-tiktok-panel" style="display:none">
           <div class="field">
             <label>Nội dung</label>
-            <textarea id="tt-title" rows="3" placeholder="Nhập nội dung video..."></textarea>
+            <textarea id="dl-tt-title" rows="3" placeholder="Nhập nội dung video..."></textarea>
           </div>
           <div class="field">
             <label>Hashtags</label>
-            <input type="text" id="tt-tags" placeholder="#douyin #vietsub #viral">
+            <input type="text" id="dl-tt-tags" placeholder="#douyin #vietsub #viral">
           </div>
           <div class="field">
             <label>Chế độ hiển thị</label>
-            <select id="tt-privacy">
+            <select id="dl-tt-privacy">
               <option value="private">Riêng tư</option>
               <option value="friends">Bạn bè</option>
               <option value="public" selected>Công khai</option>

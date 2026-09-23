@@ -821,17 +821,24 @@ async function searchUser() {
     const btnLoadAll = document.getElementById('btn-load-all');
     if (info.pagination_blocked && fetched < total) {
       if (statusEl) {
-        statusEl.textContent = fetched + '/' + total + ' video (Douyin giới hạn API)';
+        if (info.argus_blocked || fetched === 0) {
+          statusEl.textContent = 'Douyin chặn API tĩnh (ArgusSecurityPlugin). Cần lấy qua trình duyệt (0/' + total + ')';
+        } else {
+          statusEl.textContent = fetched + '/' + total + ' video (Douyin giới hạn API)';
+        }
         statusEl.style.color = 'var(--yellow, #f5a623)';
       }
       if (btnLoadAll) {
         btnLoadAll.classList.remove('hidden');
         btnLoadAll.style.display = '';
-        btnLoadAll.textContent = 'Tải đủ ' + total + ' video (qua trình duyệt)';
+        btnLoadAll.textContent = '⚡ Tải đủ ' + total + ' video (qua trình duyệt Playwright)';
         btnLoadAll.disabled = false;
       }
-      if (fetched === 0 && total > 0) {
-        toast('Douyin giới hạn API. Vui lòng nhấn "Tải đủ ' + total + ' video (qua trình duyệt)" để lấy bài đăng!', 'info', 6000);
+      if (info.argus_blocked || (fetched === 0 && total > 0)) {
+        toast('Douyin chặn API tĩnh (ArgusSecurityPlugin). Đang tự động mở trình duyệt quét đủ ' + total + ' video...', 'info', 5000);
+        setTimeout(() => {
+          loadAllVideos();
+        }, 300);
       }
     } else {
       if (statusEl) {
@@ -1025,9 +1032,7 @@ async function _loadTranslationStatus() {
       const groups = {};
       status.models.forEach(m => {
         let groupName = 'Nhà cung cấp cục bộ (Local)';
-        if (m.provider === 'google') {
-          groupName = 'Google Translate';
-        } else if (m.id === 'opencode' || m.provider === 'opencode') {
+        if (m.id === 'opencode' || m.provider === 'opencode') {
           groupName = 'OpenCode Free';
         } else {
           const owned = m.owned_by || m.provider;

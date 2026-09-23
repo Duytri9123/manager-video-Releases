@@ -15,6 +15,13 @@ import core_app as _ca
 import sqlite3
 import time
 
+from core.ai_models_manager import (
+    PROVIDERS_CATALOG,
+    load_models_from_db,
+    load_providers_from_db,
+    get_provider_display_name,
+)
+
 bp = Blueprint("config", __name__)
 
 
@@ -270,52 +277,7 @@ DEFAULT_PROVIDER_MODELS = {
 }
 
 
-def load_models_from_db(provider: str = "") -> dict[str, list[dict]]:
-    conn = get_db_connection()
-    result = {}
-    try:
-        if provider:
-            cursor = conn.execute(
-                """SELECT model_id, name, type, enabled 
-                   FROM provider_models 
-                   WHERE provider = ? 
-                   ORDER BY sort_order ASC, rowid ASC""",
-                (provider,),
-            )
-            rows = cursor.fetchall()
-            result[provider] = [
-                {
-                    "id": r["model_id"],
-                    "name": r["name"],
-                    "type": r["type"],
-                    "enabled": bool(r["enabled"]),
-                }
-                for r in rows
-            ]
-        else:
-            cursor = conn.execute(
-                """SELECT model_id, provider, name, type, enabled 
-                   FROM provider_models 
-                   ORDER BY provider ASC, sort_order ASC, rowid ASC"""
-            )
-            rows = cursor.fetchall()
-            for r in rows:
-                p = r["provider"]
-                if p not in result:
-                    result[p] = []
-                result[p].append(
-                    {
-                        "id": r["model_id"],
-                        "name": r["name"],
-                        "type": r["type"],
-                        "enabled": bool(r["enabled"]),
-                    }
-                )
-    except Exception as e:
-        print("[Providers DB] Load models failed:", e)
-    finally:
-        conn.close()
-    return result
+
 
 
 def init_providers_db():
@@ -394,49 +356,7 @@ def init_providers_db():
 init_providers_db()
 
 
-def load_providers_from_db():
-    conn = get_db_connection()
-    providers = {}
-    try:
-        # Load settings
-        cursor = conn.execute("SELECT provider, strategy FROM provider_settings")
-        for row in cursor.fetchall():
-            providers[row["provider"]] = {
-                "connections": [],
-                "strategy": row["strategy"]
-            }
-            
-        # Load connections
-        cursor = conn.execute("""
-            SELECT id, provider, name, api_key, base_url, enabled, status,
-                   refresh_token, expires_at, project_id, email, auth_type
-            FROM provider_connections
-        """)
-        for row in cursor.fetchall():
-            provider = row["provider"]
-            if provider not in providers:
-                providers[provider] = {
-                    "connections": [],
-                    "strategy": "fallback"
-                }
-            providers[provider]["connections"].append({
-                "id": row["id"],
-                "name": row["name"],
-                "api_key": row["api_key"],
-                "base_url": row["base_url"],
-                "enabled": bool(row["enabled"]),
-                "status": row["status"],
-                "refresh_token": row["refresh_token"] or "",
-                "expires_at": row["expires_at"] or 0,
-                "project_id": row["project_id"] or "",
-                "email": row["email"] or "",
-                "auth_type": row["auth_type"] or "api_key"
-            })
-    except Exception as e:
-        print("[Providers DB] Load failed:", e)
-    finally:
-        conn.close()
-    return providers
+
 
 
 def save_providers_to_db(providers):
@@ -1347,6 +1267,15 @@ def _test_api_key_impl():
                 "http://localhost:8085/oauth2callback",
             ])
 
+            req_port = request.host.split(":")[-1] if ":" in request.host else ""
+            if req_port:
+                p_uri1 = f"http://localhost:{req_port}/callback"
+                p_uri2 = f"http://127.0.0.1:{req_port}/callback"
+                if p_uri1 not in uris_to_try:
+                    uris_to_try.insert(0, p_uri1)
+                if p_uri2 not in uris_to_try:
+                    uris_to_try.insert(1, p_uri2)
+
             exchange_err = None
             for red_uri in uris_to_try:
                 try:
@@ -1370,6 +1299,9 @@ def _test_api_key_impl():
                 except Exception as e:
                     exchange_err = str(e)
                     pass
+
+            if is_oauth_code:
+                return jsonify({"ok": False, "error": f"Lỗi xác thực Google OAuth: {exchange_err or 'Mã code không hợp lệ hoặc đã hết hạn'}"}), 400
 
         # 0b. Auto-resolve refresh token (1//...) → access token (ya29...) via RAM cache
         if key.startswith("1//"):
@@ -1652,6 +1584,7 @@ DEFAULT_PROVIDER_MODELS = _DynamicProviderModels()
 @bp.route("/api/providers/status", methods=["GET"])
 def get_providers_status():
     """Return all configured providers, connection counts, and models."""
+    t0 = time.perf_counter()
     provs = load_providers_from_db()
     all_models = load_models_from_db()
     data = []
@@ -1670,15 +1603,18 @@ def get_providers_status():
             "models_count": len(p_models),
             "enabled_models_count": len(enabled_models),
         })
-    return jsonify({"ok": True, "providers": data})
+    elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+    return jsonify({"ok": True, "providers": data, "elapsed_ms": elapsed_ms})
 
 
 @bp.route("/api/providers/models", methods=["GET"])
 def get_provider_models():
+    t0 = time.perf_counter()
     provider = request.args.get("provider", "").strip().lower()
     if not provider or provider == "all":
         all_models = load_models_from_db()
-        return jsonify({"ok": True, "models_by_provider": all_models})
+        elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+        return jsonify({"ok": True, "models_by_provider": all_models, "elapsed_ms": elapsed_ms})
 
     models = list(DEFAULT_PROVIDER_MODELS.get(provider, []))
     cfg = load_cfg()
@@ -1689,7 +1625,8 @@ def get_provider_models():
     for m in models:
         m["enabled"] = m["id"] not in disabled_models
 
-    return jsonify({"ok": True, "models": models, "thinking_mode": thinking_mode})
+    elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+    return jsonify({"ok": True, "models": models, "thinking_mode": thinking_mode, "elapsed_ms": elapsed_ms})
 
 
 @bp.route("/api/providers/models/toggle", methods=["POST"])
@@ -2091,116 +2028,6 @@ def get_connection_usage(connection_id):
     }), 200
 
 
-
-# ── Chatbot Compatibility Endpoints (backed by Providers DB) ─────────────────
-@bp.route("/api/chatbot/config", methods=["GET"])
-def get_chatbot_config():
-    default_model = "gemini-3.6-flash"
-    try:
-        cfg = load_cfg()
-        default_model = cfg.get("chatbot", {}).get("default_model") or cfg.get("default_model") or "gemini-3.6-flash"
-    except Exception:
-        pass
-    return jsonify({
-        "ok": True,
-        "has_key": True,
-        "default_model": default_model,
-        "provider": "antigravity"
-    })
-
-@bp.route("/api/chatbot/models", methods=["GET"])
-def get_chatbot_models():
-    models = []
-    seen = set()
-    try:
-        all_db = load_models_from_db()
-        order = ["antigravity", "codex", "deepseek", "openai", "groq", "xai", "qwen"]
-        for p in order:
-            if p == "gemini":
-                continue
-            for m in all_db.get(p, []):
-                if m.get("enabled") and m.get("id") and m.get("id") not in seen:
-                    seen.add(m.get("id"))
-                    models.append({
-                        "id": m.get("id"),
-                        "owned_by": p,
-                        "name": m.get("name") or m.get("id")
-                    })
-        for p, mlist in all_db.items():
-            if p not in order and p != "gemini":
-                for m in mlist:
-                    if m.get("enabled") and m.get("id") and m.get("id") not in seen:
-                        seen.add(m.get("id"))
-                        models.append({
-                            "id": m.get("id"),
-                            "owned_by": p,
-                            "name": m.get("name") or m.get("id")
-                        })
-    except Exception as e:
-        print("[Chatbot API] Error loading models:", e)
-
-    if not models:
-        models = [
-            {"id": "gemini-3.7-flash", "owned_by": "antigravity", "name": "Gemini 3.7 Flash"},
-            {"id": "gemini-3.6-flash", "owned_by": "antigravity", "name": "Gemini 3.6 Flash (High)"},
-            {"id": "gemini-3.6-flash-medium", "owned_by": "antigravity", "name": "Gemini 3.6 Flash (Medium)"},
-            {"id": "gemini-3-flash-agent", "owned_by": "antigravity", "name": "Gemini 3.5 Flash (High)"},
-            {"id": "gemini-pro-agent", "owned_by": "antigravity", "name": "Gemini 3.1 Pro (High)"},
-            {"id": "claude-sonnet-4-6", "owned_by": "antigravity", "name": "Claude Sonnet 4.6 (Thinking)"},
-            {"id": "gpt-oss-120b-medium", "owned_by": "antigravity", "name": "GPT-OSS 120B (Medium)"}
-        ]
-    return jsonify({"ok": True, "models": models})
-
-@bp.route("/api/chatbot/media_models", methods=["GET"])
-def get_chatbot_media_models():
-    kind = request.args.get("kind", "")
-    models = []
-    seen = set()
-    try:
-        all_db = load_models_from_db()
-        if kind in ("stt", "audio-to-text"):
-            for p in ["antigravity", "deepgram", "assemblyai", "groq", "openai"]:
-                for m in all_db.get(p, []):
-                    if m.get("enabled") and m.get("id") and m.get("id") not in seen:
-                        seen.add(m.get("id"))
-                        models.append({
-                            "id": m.get("id"),
-                            "owned_by": p,
-                            "name": m.get("name") or m.get("id")
-                        })
-        elif kind in ("vision", "image-to-text", "video"):
-            for p in ["antigravity"]:
-                for m in all_db.get(p, []):
-                    if m.get("enabled") and m.get("id") and m.get("id") not in seen:
-                        seen.add(m.get("id"))
-                        models.append({
-                            "id": m.get("id"),
-                            "owned_by": p,
-                            "name": m.get("name") or m.get("id")
-                        })
-        else:
-            for p in ["antigravity", "codex", "openai", "deepseek"]:
-                for m in all_db.get(p, []):
-                    if m.get("enabled") and m.get("id") and m.get("id") not in seen:
-                        seen.add(m.get("id"))
-                        models.append({
-                            "id": m.get("id"),
-                            "owned_by": p,
-                            "name": m.get("name") or m.get("id")
-                        })
-    except Exception:
-        pass
-
-    if not models:
-        models = [
-            {"id": "gemini-3.7-flash", "owned_by": "antigravity", "name": "Gemini 3.7 Flash"},
-            {"id": "gemini-3.6-flash", "owned_by": "antigravity", "name": "Gemini 3.6 Flash (High)"},
-            {"id": "gemini-3.6-flash-medium", "owned_by": "antigravity", "name": "Gemini 3.6 Flash (Medium)"},
-            {"id": "gemini-3-flash-agent", "owned_by": "antigravity", "name": "Gemini 3.5 Flash (High)"},
-            {"id": "claude-sonnet-4-6", "owned_by": "antigravity", "name": "Claude Sonnet 4.6 (Thinking)"},
-            {"id": "gpt-oss-120b-medium", "owned_by": "antigravity", "name": "GPT-OSS 120B (Medium)"}
-        ]
-    return jsonify({"ok": True, "models": models})
 
 
 @bp.route("/api/update_antigravity_key", methods=["POST"])

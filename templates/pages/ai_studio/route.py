@@ -28,22 +28,20 @@ import os
 import threading
 import time
 import uuid
+import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from flask import Blueprint, jsonify, request, send_file
-
 from core_app import LOGGER, ROOT, load_cfg, save_cfg
 
 bp = Blueprint("ai_studio", __name__)
 
-# ── Output dirs ───────────────────────────────────────────────────────────────
+# ── Output dirs (created on-demand when user runs generation) ──────────────────
 _VIDEO_DIR = ROOT / "Downloaded" / "ai_video"
 _IMAGE_DIR = ROOT / "Downloaded" / "ai_images"
 _IDEA2VIDEO_DIR = ROOT / "Downloaded" / "idea2video"
-_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-_IDEA2VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Task registry ─────────────────────────────────────────────────────────────
 _tasks: Dict[str, Dict[str, Any]] = {}
@@ -59,6 +57,7 @@ def _update_task(tid: str, **kwargs):
 def _get_task(tid: str) -> Optional[dict]:
     with _tasks_lock:
         return dict(_tasks[tid]) if tid in _tasks else None
+
 
 
 def _gemini_key() -> str:

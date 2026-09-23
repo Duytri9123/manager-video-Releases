@@ -1,0 +1,657 @@
+{# Chat Bot — Modern AI Assistant & Creative Studio #}
+<style>
+  /* ── Page Chat Layout Overrides ────────────────────────────── */
+  #page-chat.active {
+    display: flex !important;
+    flex-direction: row;
+    height: calc(100vh - 65px);
+    margin: -18px;
+    overflow: hidden;
+    position: relative;
+    background-color: var(--bg, #f8fafc);
+  }
+  .dark #page-chat.active {
+    background-color: #090d16;
+  }
+
+  /* Custom subtle scrollbars */
+  #chat-session-list::-webkit-scrollbar,
+  #chat-messages::-webkit-scrollbar,
+  .chat-panel-scroll::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  #chat-session-list::-webkit-scrollbar-thumb,
+  #chat-messages::-webkit-scrollbar-thumb,
+  .chat-panel-scroll::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 9999px;
+  }
+  #chat-session-list::-webkit-scrollbar-thumb:hover,
+  #chat-messages::-webkit-scrollbar-thumb:hover,
+  .chat-panel-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.55);
+  }
+
+  /* Session item active style */
+  .chat-session-item.active {
+    background: rgba(37, 99, 235, 0.1);
+    border-color: rgba(37, 99, 235, 0.35);
+    color: #2563eb;
+  }
+  .dark .chat-session-item.active {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #60a5fa;
+  }
+
+  /* Starter card hover animation */
+  .chat-starter-card {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .chat-starter-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.12), 0 8px 10px -6px rgba(37, 99, 235, 0.08);
+  }
+
+  /* AI pulse ring */
+  @keyframes ai-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.08); opacity: 1; }
+  }
+  .ai-pulse-dot {
+    animation: ai-pulse 2.2s infinite ease-in-out;
+  }
+
+  /* Code block styling in bubbles */
+  .cw-code-container {
+    position: relative;
+    margin: 10px 0;
+    border-radius: 8px;
+  }
+</style>
+
+<div id="page-chat" class="page">
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- LEFT SIDEBAR: Session History & Navigation                            -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <aside id="chat-sidebar" class="w-72 lg:w-80 flex-shrink-0 flex flex-col border-r border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md transition-all duration-200 z-20">
+    
+    <!-- Sidebar Header: New Chat Button -->
+    <div class="p-3.5 pb-2 border-b border-slate-200/60 dark:border-slate-800/60 flex flex-col gap-2.5">
+      <button onclick="chatNewSession()" class="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white font-medium rounded-xl shadow-xs hover:shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-xs">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        <span>Cuộc trò chuyện mới</span>
+      </button>
+
+      <!-- Search Sessions -->
+      <div class="relative">
+        <svg class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="chat-session-search" oninput="chatFilterSessions(this.value)" placeholder="Tìm kiếm cuộc trò chuyện..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/60 rounded-lg text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all">
+      </div>
+    </div>
+
+    <!-- Sidebar Body: Session List -->
+    <div class="flex-1 overflow-y-auto p-2 space-y-1" id="chat-session-list">
+      <div class="p-6 text-center text-slate-400 dark:text-slate-500 text-xs">
+        <div class="w-8 h-8 mx-auto mb-2 opacity-50 flex items-center justify-center rounded-full bg-slate-200/50 dark:bg-slate-800/50">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        </div>
+        Đang tải lịch sử...
+      </div>
+    </div>
+
+    <!-- Sidebar Footer: Provider Status & Settings -->
+    <div class="p-3 border-t border-slate-200/60 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" id="chat-sidebar-status-dot"></span>
+          </span>
+          <span class="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate" id="chat-sidebar-status-text">Antigravity • onl</span>
+        </div>
+        <button onclick="chatOpenSettingsModal()" class="p-1.5 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-lg transition-all" title="Cài đặt Chat & AI">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- MAIN CHAT AREA                                                        -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <main id="chat-main-area" class="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+
+    <!-- Top Navigation Bar -->
+    <header id="chat-navbar" class="h-14 border-b border-slate-200/80 dark:border-slate-800 px-4 flex items-center justify-between gap-3 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md flex-shrink-0 z-10">
+      
+      <!-- Left: Sidebar Toggle & Tool Segment Tabs -->
+      <div class="flex items-center gap-3 min-w-0">
+        <button id="chat-sidebar-toggle" onclick="chatToggleSidebar()" class="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all" title="Ẩn/hiện danh sách chat">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
+        </button>
+
+        <!-- Segmented Tool Tabs -->
+        <div class="inline-flex p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-xl text-xs font-medium border border-slate-200/60 dark:border-slate-700/60 overflow-x-auto">
+          <button class="chat-tab-btn px-3 py-1.5 rounded-lg transition-all active bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold" data-tool="chat" onclick="chatToolSwitch('chat')">
+            💬 Chat
+          </button>
+          <button class="chat-tab-btn px-3 py-1.5 rounded-lg transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200" data-tool="vision" onclick="chatToolSwitch('vision')">
+            📷 Vision
+          </button>
+          <button class="chat-tab-btn px-3 py-1.5 rounded-lg transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200" data-tool="image" onclick="chatToolSwitch('image')">
+            🎨 Image
+          </button>
+          <button class="chat-tab-btn px-3 py-1.5 rounded-lg transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200" data-tool="tts" onclick="chatToolSwitch('tts')">
+            🔊 TTS
+          </button>
+          <button class="chat-tab-btn px-3 py-1.5 rounded-lg transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200" data-tool="stt" onclick="chatToolSwitch('stt')">
+            🎙 STT
+          </button>
+          <button class="chat-tab-btn px-3 py-1.5 rounded-lg transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200" data-tool="embed" onclick="chatToolSwitch('embed')">
+            🧬 Embed
+          </button>
+        </div>
+      </div>
+
+      <!-- Right: Model Selector & Actions -->
+      <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+        
+        <!-- Active Model Selector -->
+        <div class="relative flex items-center">
+          <select id="chat-active-model" class="appearance-none pl-3 pr-8 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl text-slate-800 dark:text-slate-200 shadow-2xs hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all cursor-pointer max-w-[190px] sm:max-w-[240px] truncate">
+            <option value="">Đang tải model...</option>
+          </select>
+          <svg class="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+
+        <!-- Stream Switch -->
+        <label class="hidden sm:flex items-center gap-1.5 cursor-pointer text-xs text-slate-600 dark:text-slate-400 select-none py-1 px-2 hover:bg-slate-100 dark:hover:bg-slate-800/60 rounded-lg transition-all" title="Bật/tắt chế độ stream token thời gian thực">
+          <input type="checkbox" id="chat-stream-toggle" class="accent-blue-600 w-3.5 h-3.5 rounded" checked>
+          <span class="font-medium text-[11px]">Stream</span>
+        </label>
+
+        <!-- Settings Modal Button -->
+        <button onclick="chatOpenSettingsModal()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-200/80 dark:border-slate-700 rounded-xl transition-all shadow-2xs" title="Mở cài đặt Model, Temperature, System prompt và Smart Routing">
+          <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          <span class="hidden md:inline">Cài đặt</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- VIEW: Chat Conversation Panel                                     -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <div class="chat-tool-panel flex-1 flex flex-col min-h-0 relative overflow-hidden" data-tool="chat">
+      
+      <!-- Messages Scroll Area -->
+      <div id="chat-messages" class="flex-1 overflow-y-auto px-4 py-6 scroll-smooth">
+        <div class="max-w-4xl mx-auto w-full flex flex-col gap-5">
+          
+          <!-- Modern Empty State with 4 Quick Starter Cards -->
+          <div id="chat-empty" class="my-auto py-10 px-4 flex flex-col items-center text-center animate-fade-in">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-400 p-0.5 shadow-lg shadow-blue-500/20 mb-4 ai-pulse-dot flex items-center justify-center">
+              <div class="w-full h-full bg-white dark:bg-slate-900 rounded-[14px] flex items-center justify-center text-blue-600 dark:text-blue-400">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 7V4"/><circle cx="12" cy="3" r="1" fill="currentColor"/><circle cx="9" cy="13" r="1.4" fill="currentColor"/><circle cx="15" cy="13" r="1.4" fill="currentColor"/><path d="M9.5 16.5h5"/></svg>
+              </div>
+            </div>
+
+            <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Xin chào! Bạn muốn tạo nội dung gì hôm nay?</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 max-w-lg mb-8 leading-relaxed">
+              Trợ lý AI sẵn sàng hỗ trợ viết kịch bản, sáng tạo nội dung, dịch thuật và phân tích video với các model AI tiên tiến nhất.
+            </p>
+
+            <!-- 4 Quick Starter Prompt Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full max-w-2xl text-left">
+              
+              <div onclick="chatInsertStarterPrompt('Viết kịch bản video ngắn TikTok 60 giây review công nghệ, mở đầu bằng hook thu hút trong 3 giây đầu.')" class="chat-starter-card p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xs cursor-pointer hover:border-blue-500/40 dark:hover:border-blue-500/40">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-base">🎬</span>
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Kịch bản TikTok 60s</span>
+                </div>
+                <p class="text-[11.5px] text-slate-500 dark:text-slate-400 line-clamp-2">Review công nghệ có hook 3 giây đầu giữ chân người xem.</p>
+              </div>
+
+              <div onclick="chatInsertStarterPrompt('Tạo 5 caption hấp dẫn kèm bộ hashtag thịnh hành cho video review du lịch trải nghiệm.')" class="chat-starter-card p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xs cursor-pointer hover:border-blue-500/40 dark:hover:border-blue-500/40">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-base">✍️</span>
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Caption &amp; Hashtag Viral</span>
+                </div>
+                <p class="text-[11.5px] text-slate-500 dark:text-slate-400 line-clamp-2">Tạo tiêu đề thu hút người xem và danh sách hashtag trending.</p>
+              </div>
+
+              <div onclick="chatInsertStarterPrompt('Dịch đoạn hội thoại sau sang tiếng Anh tự nhiên và chuẩn phong cách đời thường trẻ trung:')" class="chat-starter-card p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xs cursor-pointer hover:border-blue-500/40 dark:hover:border-blue-500/40">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-base">🌐</span>
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Dịch &amp; Tối ưu Phụ đề</span>
+                </div>
+                <p class="text-[11.5px] text-slate-500 dark:text-slate-400 line-clamp-2">Dịch tự nhiên sang tiếng Anh/Hàn/Trung chuẩn ngữ cảnh video.</p>
+              </div>
+
+              <div onclick="chatInsertStarterPrompt('Gợi ý 10 ý tưởng video ngắn triệu view trong tuần này kèm góc nhìn độc đáo, ít bị cạnh tranh.')" class="chat-starter-card p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xs cursor-pointer hover:border-blue-500/40 dark:hover:border-blue-500/40">
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-base">💡</span>
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">10 Ý tưởng Video Triệu View</span>
+                </div>
+                <p class="text-[11.5px] text-slate-500 dark:text-slate-400 line-clamp-2">Khám phá chủ đề hot xu hướng và góc khai thác độc đáo.</p>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Bottom Prompt Input Dock -->
+      <div class="px-4 pb-4 pt-1 flex-shrink-0 z-10">
+        <div class="max-w-4xl mx-auto w-full">
+          
+          <!-- Image Attachment preview chip (for multimodal vision) -->
+          <div id="chat-input-attachments" class="hidden mb-2 flex flex-wrap gap-2 items-center"></div>
+
+          <!-- Main Input Card -->
+          <div class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-300/80 dark:border-slate-700/80 rounded-2xl shadow-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 p-2 flex flex-col gap-1 transition-all">
+            
+            <textarea id="chat-input" rows="1" placeholder="Hỏi AI bất cứ điều gì... (Shift+Enter xuống dòng, Enter để gửi)" class="w-full bg-transparent border-0 resize-none outline-none text-[13px] px-2.5 py-1.5 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 min-h-[44px] max-h-40 leading-relaxed font-inherit"></textarea>
+
+            <!-- Bottom Action Row in Dock -->
+            <div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80 px-1">
+              
+              <!-- Left: Vision / Attachments -->
+              <div class="flex items-center gap-1">
+                <label for="chat-inline-file" class="p-2 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition-all" title="Đính kèm ảnh cho Vision">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                  <input type="file" id="chat-inline-file" accept="image/*" class="hidden" onchange="chatAttachInlineImage(event)">
+                </label>
+                <span class="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline" id="chat-dock-model-hint">Direct AI</span>
+              </div>
+
+              <!-- Right: Send & Stop Buttons -->
+              <div class="flex items-center gap-2">
+                <button id="chat-stop-btn" onclick="chatStop()" class="hidden px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/80 font-medium rounded-xl flex items-center gap-1.5 transition-all text-xs active:scale-95 shadow-2xs">
+                  <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  <span>Dừng</span>
+                </button>
+
+                <button id="chat-send-btn" onclick="chatSend()" class="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium rounded-xl flex items-center gap-1.5 transition-all text-xs active:scale-95 shadow-sm hover:shadow">
+                  <span>Gửi</span>
+                  <svg class="w-3.5 h-3.5 -rotate-45" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- Shortcuts & Status Footer -->
+          <div class="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 px-2 mt-1.5">
+            <span id="chat-status">Sẵn sàng.</span>
+            <span class="hidden sm:inline">Phím tắt: <kbd class="px-1.5 py-0.5 bg-slate-200/60 dark:bg-slate-800 rounded text-[10px] font-mono">Enter</kbd> gửi · <kbd class="px-1.5 py-0.5 bg-slate-200/60 dark:bg-slate-800 rounded text-[10px] font-mono">Shift+Enter</kbd> xuống dòng · <kbd class="px-1.5 py-0.5 bg-slate-200/60 dark:bg-slate-800 rounded text-[10px] font-mono">Ctrl+L</kbd> cuộc mới</span>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- VIEW: Vision Panel                                                -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <div class="chat-tool-panel hidden flex-1 overflow-y-auto p-6 chat-panel-scroll" data-tool="vision">
+      <div class="max-w-3xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs">
+          <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-xl">📷</span>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Vision — Phân Tích &amp; Chat Về Ảnh</h3>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Model Vision</label>
+              <select id="chat-vision-model" class="w-full text-xs"></select>
+            </div>
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Chọn ảnh tải lên</label>
+              <input type="file" id="chat-vision-file" accept="image/*" class="w-full text-xs">
+            </div>
+          </div>
+
+          <div class="field mb-4">
+            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Câu hỏi hoặc yêu cầu phân tích</label>
+            <textarea id="chat-vision-prompt" rows="3" placeholder="VD: Mô tả chi tiết các chủ thể trong ảnh / Đọc toàn bộ chữ (OCR) / Đánh giá bố cục ảnh..." class="w-full text-xs"></textarea>
+          </div>
+
+          <button class="btn btn-primary btn-sm px-6 py-2" onclick="chatVisionSend()">📷 Gửi ảnh &amp; phân tích</button>
+
+          <div id="chat-vision-preview" class="mt-4"></div>
+          <div id="chat-vision-result" class="mt-4 text-xs leading-relaxed"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- VIEW: Image Generation Panel                                      -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <div class="chat-tool-panel hidden flex-1 overflow-y-auto p-6 chat-panel-scroll" data-tool="image">
+      <div class="max-w-3xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs">
+          <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-xl">🎨</span>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Image Generation — Sinh Ảnh AI Từ Văn Bản</h3>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Model sinh ảnh</label>
+              <select id="chat-img-model" class="w-full text-xs"></select>
+            </div>
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Số lượng ảnh</label>
+              <input type="number" id="chat-img-n" min="1" max="4" value="1" class="w-full text-xs">
+            </div>
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Kích thước</label>
+              <select id="chat-img-size" class="w-full text-xs">
+                <option value="">— mặc định —</option>
+                <option value="1024x1024">1024×1024 (Vuông)</option>
+                <option value="1792x1024">1792×1024 (Ngang 16:9)</option>
+                <option value="1024x1792">1024×1792 (Dọc 9:16)</option>
+                <option value="512x512">512×512</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field mb-4">
+            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Mô tả bức ảnh (Prompt)</label>
+            <textarea id="chat-img-prompt" rows="3" placeholder="VD: A cinematic high quality photo of a modern futuristic cyberpunk city at sunset, 8k resolution..." class="w-full text-xs"></textarea>
+          </div>
+
+          <button class="btn btn-primary btn-sm px-6 py-2" onclick="chatImageGen()">🎨 Sinh ảnh ngay</button>
+
+          <div id="chat-img-result" class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- VIEW: TTS (Text-to-Speech) Panel                                  -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <div class="chat-tool-panel hidden flex-1 overflow-y-auto p-6 chat-panel-scroll" data-tool="tts">
+      <div class="max-w-3xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs">
+          <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-xl">🔊</span>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Text-to-Speech — Chuyển Văn Bản Thành Giọng Đọc</h3>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Model TTS</label>
+              <select id="chat-tts-model" class="w-full text-xs"></select>
+            </div>
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Giọng đọc</label>
+              <select id="chat-tts-voice" class="w-full text-xs">
+                <option value="">— mặc định —</option>
+                <option value="alloy">Alloy</option>
+                <option value="echo">Echo</option>
+                <option value="fable">Fable</option>
+                <option value="onyx">Onyx</option>
+                <option value="nova">Nova</option>
+                <option value="shimmer">Shimmer</option>
+              </select>
+            </div>
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Định dạng file</label>
+              <select id="chat-tts-format" class="w-full text-xs">
+                <option value="mp3">mp3</option>
+                <option value="opus">opus</option>
+                <option value="aac">aac</option>
+                <option value="wav">wav</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field mb-4">
+            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Văn bản cần chuyển thành giọng đọc</label>
+            <textarea id="chat-tts-input" rows="4" placeholder="Nhập nội dung văn bản kịch bản cần lồng tiếng..." class="w-full text-xs"></textarea>
+          </div>
+
+          <button class="btn btn-primary btn-sm px-6 py-2" onclick="chatTtsRun()">🔊 Tạo giọng đọc</button>
+
+          <div id="chat-tts-result" class="mt-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- VIEW: STT (Speech-to-Text) Panel                                  -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <div class="chat-tool-panel hidden flex-1 overflow-y-auto p-6 chat-panel-scroll" data-tool="stt">
+      <div class="max-w-3xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs">
+          <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-xl">🎙</span>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Speech-to-Text — Phiên Âm Âm Thanh Sang Chữ</h3>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Model STT</label>
+              <select id="chat-stt-model" class="w-full text-xs"></select>
+            </div>
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Ngôn ngữ</label>
+              <input type="text" id="chat-stt-lang" placeholder="vi, en, zh..." class="w-full text-xs">
+            </div>
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Định dạng kết quả</label>
+              <select id="chat-stt-format" class="w-full text-xs">
+                <option value="text">Văn bản thuần (text)</option>
+                <option value="srt">Phụ đề SRT</option>
+                <option value="vtt">Phụ đề VTT</option>
+                <option value="json">JSON</option>
+                <option value="verbose_json">Verbose JSON (có timestamps)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field mb-4">
+            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">File âm thanh / video</label>
+            <input type="file" id="chat-stt-file" accept="audio/*,video/*" class="w-full text-xs">
+          </div>
+
+          <button class="btn btn-primary btn-sm px-6 py-2" onclick="chatSttRun()">🎙 Bắt đầu phiên âm</button>
+
+          <div id="chat-stt-result" class="mt-4 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono max-h-72 overflow-y-auto whitespace-pre-wrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- VIEW: Embeddings Panel                                            -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <div class="chat-tool-panel hidden flex-1 overflow-y-auto p-6 chat-panel-scroll" data-tool="embed">
+      <div class="max-w-3xl mx-auto w-full space-y-6">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs">
+          <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <span class="text-xl">🧬</span>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Embeddings — Vector Hóa Văn Bản</h3>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div class="field mb-0">
+              <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Model Embedding</label>
+              <select id="chat-emb-model" class="w-full text-xs"></select>
+            </div>
+            <div class="field mb-0 flex items-end">
+              <button class="btn btn-primary btn-sm w-full py-2" onclick="chatEmbRun()">🧬 Tính toán Vector Embedding</button>
+            </div>
+          </div>
+
+          <div class="field mb-4">
+            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Văn bản cần vector hoá (mỗi dòng một câu)</label>
+            <textarea id="chat-emb-input" rows="4" placeholder="Dòng 1&#10;Dòng 2..." class="w-full text-xs"></textarea>
+          </div>
+
+          <div id="chat-emb-result" class="mt-4 text-xs font-mono"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- SETTINGS MODAL: Clean Popup for Configuration & Routing               -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="chat-settings-modal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">⚙️</span>
+          <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Cài Đặt Chat Bot &amp; Model AI</h3>
+        </div>
+        <button onclick="chatCloseSettingsModal()" class="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-6 overflow-y-auto space-y-6 text-xs leading-relaxed chat-panel-scroll">
+        
+        <!-- Connection Status Banner -->
+        <div class="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <div>
+              <div class="font-bold text-slate-800 dark:text-slate-200" id="chat-cfg-status-title">Hệ thống AI Trực Tiếp (Closed System)</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400" id="chat-cfg-banner">Kết nối trực tiếp tới các AI Provider đã kích hoạt (Antigravity).</div>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-sm px-3" onclick="chatRefreshStatus(true)">↻ Kiểm tra lại</button>
+        </div>
+
+        <!-- Hidden compatibility elements to prevent breaking older functions -->
+        <span id="chat-cfg-status" class="hidden">onl</span>
+        <input type="hidden" id="chat-endpoint" value="Direct AI Provider">
+        <input type="hidden" id="chat-api-key" value="">
+
+        <!-- Default Model & Generation Hyperparameters -->
+        <div class="space-y-4">
+          <div class="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] border-b border-slate-200 dark:border-slate-800 pb-2">
+            1. Cấu hình Model Mặc Định
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="field mb-0">
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Model mặc định</label>
+              <select id="chat-default-model" class="w-full text-xs"></select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="field mb-0">
+                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Temperature</label>
+                <input type="number" id="chat-temperature" min="0" max="2" step="0.1" value="0.7" class="w-full text-xs">
+              </div>
+              <div class="field mb-0">
+                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Max tokens</label>
+                <input type="number" id="chat-max-tokens" min="64" max="32000" step="128" value="4096" class="w-full text-xs">
+              </div>
+            </div>
+          </div>
+
+          <div class="field mb-0">
+            <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">System prompt (Tuỳ chọn)</label>
+            <textarea id="chat-system-prompt" rows="2" placeholder="VD: Bạn là trợ lý sáng tạo nội dung video chuyên nghiệp, trả lời súc tích và tự nhiên bằng tiếng Việt." class="w-full text-xs"></textarea>
+          </div>
+        </div>
+
+        <!-- Smart Routing Section -->
+        <div class="space-y-4">
+          <div class="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] border-b border-slate-200 dark:border-slate-800 pb-2">
+            2. Smart Routing — Điều Phối Theo Độ Khó
+          </div>
+
+          <div class="field mb-0">
+            <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Chế độ Routing</label>
+            <select id="chat-routing-mode" class="w-full text-xs">
+              <option value="auto">Auto — Tự động chọn model theo độ dài và từ khóa</option>
+              <option value="manual">Manual — Luôn dùng model mặc định</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="field mb-0">
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">⚡ Fast (Câu hỏi ngắn)</label>
+              <select id="chat-tier-fast" class="w-full text-xs"><option value="">— chọn —</option></select>
+            </div>
+            <div class="field mb-0">
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">⚖ Balanced (Mặc định)</label>
+              <select id="chat-tier-balanced" class="w-full text-xs"><option value="">— chọn —</option></select>
+            </div>
+            <div class="field mb-0">
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">🚀 Power (Khó / Dài)</label>
+              <select id="chat-tier-power" class="w-full text-xs"><option value="">— chọn —</option></select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3">
+            <div class="field mb-0">
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Ngưỡng ngắn (ký tự)</label>
+              <input type="number" id="chat-th-fast" value="80" class="w-full text-xs">
+            </div>
+            <div class="field mb-0">
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Ngưỡng dài (ký tự)</label>
+              <input type="number" id="chat-th-power" value="1500" class="w-full text-xs">
+            </div>
+            <div class="field mb-0">
+              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">History balanced</label>
+              <input type="number" id="chat-th-history" value="4" class="w-full text-xs">
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-3">
+            <div id="chat-routing-preview" class="text-[11px] text-slate-600 dark:text-slate-300 font-mono">
+              Bấm "Test preview" để thử nghiệm thuật toán phân luồng.
+            </div>
+            <button class="btn btn-secondary btn-sm flex-shrink-0" onclick="chatPreviewRouting()">🔍 Test</button>
+          </div>
+        </div>
+
+        <!-- Output Options -->
+        <div class="space-y-3">
+          <div class="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] border-b border-slate-200 dark:border-slate-800 pb-2">
+            3. Tối Ưu Hóa Output
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label class="flex items-center gap-2 cursor-pointer text-xs">
+              <input type="checkbox" id="chat-rtk-toggle" class="accent-blue-600" onchange="chatToggleSetting('rtk_enabled', this.checked)">
+              <span class="font-medium text-slate-700 dark:text-slate-300">Nén input RTK (Tiết kiệm token)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer text-xs">
+              <input type="checkbox" id="chat-caveman-toggle" class="accent-blue-600" onchange="chatToggleSetting('caveman_enabled', this.checked)">
+              <span class="font-medium text-slate-700 dark:text-slate-300">Caveman Mode (Trả lời cực ngắn)</span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-end gap-2.5">
+        <button onclick="chatCloseSettingsModal()" class="btn btn-secondary btn-sm px-4">Đóng</button>
+        <button onclick="chatSaveConfigModal()" class="btn btn-primary btn-sm px-5">💾 Lưu cấu hình</button>
+      </div>
+
+    </div>
+  </div>
+
+</div>

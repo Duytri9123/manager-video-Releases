@@ -17,6 +17,21 @@ import core_app as _ca
 
 bp = Blueprint("download", __name__)
 
+@bp.route('/api/files/completed', methods=['GET'])
+def completed_files():
+    from core.processor.completed_outputs import list_outputs
+    base = Path(load_cfg().get('path') or './Downloaded').expanduser().resolve()
+    items = []
+    for path, completed in list_outputs():
+        try:
+            relative = str(path.relative_to(base)).replace('\\', '/')
+        except ValueError:
+            relative = str(path)
+        items.append(dict(name=path.name, path=relative, abs_path=str(path),
+                          file_type='video', is_dir=False, ext=path.suffix.lower(),
+                          size_str=_fmt_size(path.stat().st_size), completed=completed))
+    return jsonify(items=items)
+
 
 # ── /api/files — duyệt file đã tải ──────────────────────────────────────────
 @bp.route("/api/files", methods=["GET"])
@@ -49,6 +64,35 @@ def list_files():
         if ext in _SUB_EXTS:    return "subtitle"
         if ext in _DOC_EXTS:    return "document"
         return "other"
+
+    # Compact recursive video feed used by Step 3. Keep the regular directory
+    # browser unchanged for all existing callers.
+    if request.args.get("recursive") == "1" and request.args.get("type") == "video":
+        try:
+            limit = max(1, min(200, int(request.args.get("limit", "40"))))
+        except (TypeError, ValueError):
+            limit = 40
+        videos = []
+        try:
+            for entry in base_dir.rglob("*"):
+                if not entry.is_file() or entry.suffix.lower() not in _VIDEO_EXTS:
+                    continue
+                stat = entry.stat()
+                videos.append((stat.st_mtime, {
+                    "name": entry.name,
+                    "path": str(entry.relative_to(base_dir)).replace("\\", "/"),
+                    "abs_path": str(entry),
+                    "is_dir": False,
+                    "size": stat.st_size,
+                    "size_str": _fmt_size(stat.st_size),
+                    "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%d/%m %H:%M"),
+                    "ext": entry.suffix.lower(),
+                    "file_type": "video",
+                }))
+            videos.sort(key=lambda pair: pair[0], reverse=True)
+            return jsonify({"items": [item for _, item in videos[:limit]], "base": str(base_dir)})
+        except PermissionError:
+            return jsonify({"error": "Permission denied"}), 403
 
     items = []
     try:

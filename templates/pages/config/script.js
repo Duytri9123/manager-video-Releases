@@ -1182,14 +1182,12 @@ window.filterActiveProviders = async function() {
       const groups = {};
       status.models.forEach(m => {
         let owner = (m.owned_by || m.provider || 'others').toLowerCase();
-        if (m.id === 'google' || m.provider === 'google') owner = 'google';
         if (m.id === 'opencode' || m.provider === 'opencode') owner = 'oc';
         if (!groups[owner]) groups[owner] = [];
         groups[owner].push(m);
       });
 
       const providerLabels = {
-        'google': 'Google Translate',
         'oc': 'OpenCode Free',
         'ag': 'Antigravity',
         'cx': 'OpenAI Codex',
@@ -1201,7 +1199,7 @@ window.filterActiveProviders = async function() {
         'huggingface': 'HuggingFace'
       };
 
-      const sortOrder = ['google', 'oc', 'ag', 'cx', 'gc', 'openai', 'deepseek', 'groq', 'nvidia', 'huggingface'];
+      const sortOrder = ['oc', 'ag', 'cx', 'gc', 'openai', 'deepseek', 'groq', 'nvidia', 'huggingface'];
       const sortedProviders = Object.keys(groups).sort((a, b) => {
         const idxA = sortOrder.indexOf(a);
         const idxB = sortOrder.indexOf(b);
@@ -1223,12 +1221,8 @@ window.filterActiveProviders = async function() {
             const parts = displayName.split('/');
             displayName = parts[parts.length - 1];
           }
-          if (prov !== 'google') {
-            const cleanLabel = pLabel.replace(/^[^\w\sÀ-ỹ]+/, '').strip ? pLabel.replace(/^[^\w\sÀ-ỹ]+/, '').strip() : pLabel;
-            opt.textContent = `${cleanLabel.replace(/^[^\w\sÀ-ỹ]+/, '').trim()} — ${displayName}`;
-          } else {
-            opt.textContent = displayName;
-          }
+          const cleanLabel = pLabel.replace(/^[^\w\sÀ-ỹ]+/, '').strip ? pLabel.replace(/^[^\w\sÀ-ỹ]+/, '').strip() : pLabel;
+          opt.textContent = `${cleanLabel.replace(/^[^\w\sÀ-ỹ]+/, '').trim()} — ${displayName}`;
           og.appendChild(opt);
         });
         el.appendChild(og);
@@ -1245,11 +1239,7 @@ window.filterActiveProviders = async function() {
         el.appendChild(optPrompt);
       }
     } else {
-      // Offline fallback
-      const optGoogle = document.createElement('option');
-      optGoogle.value = 'google';
-      optGoogle.textContent = 'Google Translate';
-      el.appendChild(optGoogle);
+      // Offline fallback — no providers available
     }
 
     // Try to restore the selected value. If not found, default to auto.

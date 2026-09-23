@@ -2,8 +2,16 @@
 
 window._trSelectedFile = null;
 
+function _procIsAutoPublishEnabled() {
+  const step1Toggle = document.getElementById('step1-autopub-toggle');
+  const publishToggle = document.getElementById('p-autopub-enabled');
+  return step1Toggle ? step1Toggle.checked : !!publishToggle?.checked;
+}
+window._procIsAutoPublishEnabled = _procIsAutoPublishEnabled;
+
 const TTS_VOICE_PRESETS = {
   vieneu: [
+    { value: 'Minh Quân Pro', label: 'Minh Quân Pro (Nam, mặc định)' },
     { value: 'Ngọc Linh', label: 'Ngọc Linh (VieNeu - Nữ, tươi sáng)' },
     { value: 'Ngọc Lan', label: 'Ngọc Lan (VieNeu - Nữ, dịu dàng)' },
     { value: 'Mỹ Duyên', label: 'Mỹ Duyên (VieNeu - Nữ, mượt mà)' },
@@ -69,7 +77,7 @@ const TTS_VOICE_PRESETS = {
 };
 
 const TTS_DEFAULT_VOICE = {
-  vieneu: 'Ngọc Linh',
+  vieneu: 'Minh Quân Pro',
   'fpt-ai':  'banmai',
   'edge-tts': 'vi-VN-HoaiMyNeural',
   'dtr:gemini': 'Kore',
@@ -411,6 +419,34 @@ function _resolveTtsEngineVoice(base) {
   return _resolveTtsEngineVoiceEx(base + '-tts-engine', base + '-tts-voice');
 }
 
+function _isProcVoiceConvertEnabled() {
+  const ttsTgl = document.getElementById('cfg-toggle-tts');
+  if (ttsTgl) return !!ttsTgl.checked;
+  const procVoice = document.getElementById('proc-voice');
+  if (procVoice) return !!procVoice.checked;
+  try {
+    const saved = localStorage.getItem('cfg_toggle_tts');
+    if (saved !== null) return saved !== '0';
+  } catch (_) {}
+  return true;
+}
+
+function _isProcTranslateSubsEnabled() {
+  const transTgl = document.getElementById('cfg-toggle-trans');
+  const procTrans = document.getElementById('proc-translate-subs');
+  // Step 1 is the global AI switch; Step 2 is the per-output subtitle choice.
+  // Both must allow translation. This prevents Step 3 from silently ignoring
+  // the visible "Dịch" option in the editor.
+  if (transTgl && procTrans) return !!transTgl.checked && !!procTrans.checked;
+  if (transTgl) return !!transTgl.checked;
+  if (procTrans) return !!procTrans.checked;
+  try {
+    const saved = localStorage.getItem('cfg_toggle_trans');
+    if (saved !== null) return saved !== '0';
+  } catch (_) {}
+  return true;
+}
+
 function _syncVoiceOptions(engineSelectId, voiceSelectId) {
   const engineEl = document.getElementById(engineSelectId);
   const voiceEl = document.getElementById(voiceSelectId);
@@ -639,6 +675,8 @@ window._procFilesDir = window._procFilesDir || '';
 
 function _processSvgIcon(name, className = '', size = 14) {
   const paths = {
+    refresh: '<path d="M20 7v5h-5M4 17v-5h5"></path><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"></path>',
+    settings: '<path d="M4 7h16M4 17h16"></path><circle cx="9" cy="7" r="3"></circle><circle cx="15" cy="17" r="3"></circle>',
     video: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m10 9 5 3-5 3Z"></path><path d="m7 3 2 2m4-2 2 2m4-2 2 2"></path>',
     audio: '<path d="M9 18V5l10-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="16" cy="16" r="3"></circle>',
     image: '<rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="m21 15-5-5L5 20"></path>',
@@ -727,15 +765,26 @@ async function openDownloadedPreviewModal(item) {
       </div>`;
   } else {
     // Subtitles, text, json, log, documents
+    const isSubtitle = (ftype === 'subtitle') || (ext === '.ass' || ext === '.srt');
     bodyHtml = `
-      <div class="proc-preview-modal-body" style="display:flex;flex-direction:column;background:#0b0f19;min-height:320px;max-height:calc(88vh - 60px);overflow:hidden">
+      <div class="proc-preview-modal-body" style="display:flex;flex-direction:column;background:#0b0f19;min-height:380px;height:70vh;max-height:calc(88vh - 60px);overflow:hidden">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#111827;border-bottom:1px solid #1f2937">
-          <span style="font-size:11px;color:#94a3b8;font-family:monospace" id="proc-preview-lines-info">Đang tải nội dung...</span>
-          <button type="button" class="btn btn-secondary btn-sm" id="proc-copy-preview-btn" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px">
-            ${_processSvgIcon('copy', '', 12)}<span>Sao chép</span>
-          </button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:#94a3b8;font-family:monospace" id="proc-preview-lines-info">Đang tải nội dung...</span>
+            ${isSubtitle ? '<span class="badge" style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3);font-size:10px;padding:1px 6px;border-radius:4px">Chế độ chỉnh sửa phụ đề</span>' : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button type="button" class="btn btn-secondary btn-sm" id="proc-copy-preview-btn" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 8px">
+              ${_processSvgIcon('copy', '', 12)}<span>Sao chép</span>
+            </button>
+            ${isSubtitle ? `
+            <button type="button" class="btn btn-primary btn-sm" id="proc-save-sub-btn" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 10px;font-weight:600">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span>Lưu thay đổi</span>
+            </button>` : ''}
+          </div>
         </div>
-        <pre id="proc-preview-text-box" style="flex:1;margin:0;padding:14px;font-family:Consolas,Monaco,monospace;font-size:12px;line-height:1.6;color:#e2e8f0;overflow:auto;white-space:pre-wrap;word-break:break-word;user-select:text"></pre>
+        <textarea id="proc-preview-text-box" spellcheck="false" style="flex:1;width:100%;margin:0;padding:14px;font-family:Consolas,Monaco,'Courier New',monospace;font-size:12px;line-height:1.6;color:#e2e8f0;background:#080d1a;border:0;outline:none;resize:none;white-space:pre;word-break:normal;overflow:auto;box-sizing:border-box" placeholder="Nội dung file..."></textarea>
       </div>`;
   }
 
@@ -765,21 +814,60 @@ async function openDownloadedPreviewModal(item) {
     try {
       const res = await fetch(previewUrl);
       const text = await res.text();
-      textBox.textContent = text || '(File trống)';
+      textBox.value = text || '';
       const linesInfo = modal.querySelector('#proc-preview-lines-info');
       if (linesInfo) {
         const lineCount = (text.match(/\n/g) || []).length + 1;
         linesInfo.textContent = `${lineCount} dòng · ${_escapeDownloadedText(item.size_str || '')}`;
       }
+
+      textBox.addEventListener('input', () => {
+        if (linesInfo) {
+          const lineCount = (textBox.value.match(/\n/g) || []).length + 1;
+          linesInfo.textContent = `${lineCount} dòng · Chưa lưu *`;
+        }
+      });
+
       const copyBtn = modal.querySelector('#proc-copy-preview-btn');
       if (copyBtn) {
         copyBtn.addEventListener('click', () => {
-          navigator.clipboard.writeText(text);
+          navigator.clipboard.writeText(textBox.value);
           if (typeof toast === 'function') toast('Đã sao chép nội dung vào bộ nhớ tạm', 'success');
         });
       }
+
+      const saveBtn = modal.querySelector('#proc-save-sub-btn');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+          const val = textBox.value;
+          try {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span>Đang lưu...</span>';
+            const res = await fetch('/api/proc_save_ass', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: item.abs_path || item.path, content: val })
+            });
+            const data = await res.json();
+            if (data.ok) {
+              if (typeof toast === 'function') toast('✅ Đã lưu phụ đề thành công!', 'success');
+              if (linesInfo) {
+                const lineCount = (val.match(/\n/g) || []).length + 1;
+                linesInfo.textContent = `${lineCount} dòng · Đã lưu`;
+              }
+            } else {
+              if (typeof toast === 'function') toast('❌ Lỗi lưu phụ đề: ' + (data.error || 'Unknown'), 'error');
+            }
+          } catch (e) {
+            if (typeof toast === 'function') toast('❌ Lỗi: ' + e.message, 'error');
+          } finally {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>Lưu thay đổi</span>';
+          }
+        });
+      }
     } catch (err) {
-      textBox.textContent = 'Lỗi tải file: ' + err.message;
+      textBox.value = 'Lỗi tải file: ' + err.message;
     }
   }
 }
@@ -937,10 +1025,14 @@ function _renderDownloadedItems(data) {
         ${_processSvgIcon('dotsVertical', '', 14)}
       </button>
       <div class="proc-dropdown-menu" id="proc-dropdown-${index}" style="display:none;position:fixed;z-index:999999;background:var(--bg2,#ffffff);border:1px solid var(--border,#e2e8f0);border-radius:8px;box-shadow:0 12px 30px -4px rgba(0,0,0,0.25), 0 4px 12px rgba(0,0,0,0.1);min-width:170px;padding:4px 0">
-        ${!item.is_dir ? `
+        ${(!item.is_dir && (item.file_type === 'subtitle' || (item.ext && (item.ext.toLowerCase() === '.ass' || item.ext.toLowerCase() === '.srt')))) ? `
+        <button type="button" class="proc-menu-item proc-preview-downloaded" data-index="${index}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 12px;border:0;background:none;color:#10b981;font-size:12px;text-align:left;cursor:pointer">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span>Sửa phụ đề</span>
+        </button>` : (!item.is_dir ? `
         <button type="button" class="proc-menu-item proc-preview-downloaded" data-index="${index}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 12px;border:0;background:none;color:var(--text);font-size:12px;text-align:left;cursor:pointer">
           ${_processSvgIcon('eye')} <span>Xem file</span>
-        </button>` : ''}
+        </button>` : '')}
         ${item.file_type === 'video' ? `
         <button type="button" class="proc-menu-item proc-publish-downloaded" data-index="${index}" style="width:100%;display:flex;align-items:center;gap:8px;padding:7px 12px;border:0;background:none;color:var(--accent);font-size:12px;text-align:left;cursor:pointer">
           ${_processSvgIcon('upload')} <span>Đăng video</span>
@@ -1221,6 +1313,64 @@ async function loadDownloadedVideos(dir) {
 }
 window.loadDownloadedVideos = loadDownloadedVideos;
 
+async function loadStep3DownloadedVideos() {
+  const list = document.getElementById('step3-downloaded-list');
+  if (!list) return;
+  list.innerHTML = '<div class="empty-state text-xs">Đang tải danh sách...</div>';
+  try {
+    const response = await fetch('/api/files/completed');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Không đọc được danh sách');
+    const items = Array.isArray(data.items) ? data.items : [];
+    window._step3DownloadedVideos = items;
+    if (!items.length) {
+      list.innerHTML = '<div class="empty-state text-xs">Chưa có video xử lý hoàn tất được ghi nhận.</div>';
+      return;
+    }
+    list.innerHTML = items.map((item, index) => `
+      <div style="display:flex;align-items:center;gap:7px;padding:7px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg3)">
+        <button type="button" onclick="previewStep3DownloadedVideo(${index})"
+          style="min-width:0;flex:1;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--text)"
+          title="${_escapeDownloadedText(item.abs_path || item.path)}">
+          <div style="font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_processSvgIcon('video')} ${_escapeDownloadedText(item.name)}</div>
+          <div style="font-size:9.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${_escapeDownloadedText(item.path)} · ${_escapeDownloadedText(item.size_str || '')}</div>
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" style="height:26px;padding:2px 7px;font-size:10px"
+          onclick="deleteStep3DownloadedVideo(${index})" title="Xóa video">${_processSvgIcon('trash')}</button>
+      </div>`).join('');
+  } catch (error) {
+    list.innerHTML = `<div class="text-xs" style="color:var(--danger)">Không tải được: ${_escapeDownloadedText(error.message)}</div>`;
+  }
+}
+window.loadStep3DownloadedVideos = loadStep3DownloadedVideos;
+
+function previewStep3DownloadedVideo(index) {
+  const item = (window._step3DownloadedVideos || [])[index];
+  if (item) openDownloadedPreviewModal(item);
+}
+window.previewStep3DownloadedVideo = previewStep3DownloadedVideo;
+
+async function deleteStep3DownloadedVideo(index) {
+  const item = (window._step3DownloadedVideos || [])[index];
+  const targetPath = item?.path || item?.abs_path;
+  if (!item || !targetPath || !confirm(`Xóa video "${item.name}"?`)) return;
+  try {
+    const response = await fetch('/api/files/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: targetPath })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Không xóa được video');
+    if (typeof toast === 'function') toast('Đã xóa video', 'success');
+    await loadStep3DownloadedVideos();
+    if (typeof loadDownloadedVideos === 'function') loadDownloadedVideos(window._procFilesDir || '');
+  } catch (error) {
+    if (typeof toast === 'function') toast('Xóa thất bại: ' + error.message, 'error');
+  }
+}
+window.deleteStep3DownloadedVideo = deleteStep3DownloadedVideo;
+
 // Global click handler to close open dropdown menus when clicking outside
 document.addEventListener('click', e => {
   if (!e.target.closest('.proc-dropdown-wrapper')) {
@@ -1326,6 +1476,16 @@ function startProcessVideo() {
   let videoUrl = document.getElementById('proc-url')?.value?.trim();
   let selectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
 
+  // Sanitize: If videoUrl is actually a local file path, move it to videoPath
+  if (videoUrl && !/^https?:\/\//i.test(videoUrl)) {
+    if (!videoPath) videoPath = videoUrl;
+    videoUrl = '';
+    const uEl = document.getElementById('proc-url');
+    if (uEl) uEl.value = '';
+    const pEl = document.getElementById('proc-video');
+    if (pEl) pEl.value = videoPath;
+  }
+
   // Fallback: If inputs are empty but there are items in batchQueue, auto-populate from queue
   if (!videoPath && !videoUrl && !selectedFile) {
     const queueItem = (typeof window._resolveActiveQueueItem === 'function')
@@ -1394,7 +1554,7 @@ function startProcessVideo() {
       const providersToCheck = [];
       
       // 1. Check Translation API if enabled
-      const translateSubs = document.getElementById('proc-translate-subs')?.checked ?? true;
+      const translateSubs = _isProcTranslateSubsEnabled();
       if (translateSubs) {
         const transProv = _getProcessProvider('translate');
         if (['deepseek', 'groq', 'openai', 'gemini'].includes(transProv)) {
@@ -1409,7 +1569,7 @@ function startProcessVideo() {
       }
       
       // 3. Check TTS API if voice conversion is enabled
-      const voiceConvert = document.getElementById('proc-voice')?.checked ?? false;
+      const voiceConvert = _isProcVoiceConvertEnabled();
       if (voiceConvert) {
         const ttsEngine = _resolveTtsEngineVoice('proc')?.tts_engine || '';
         const ttsProv = _getTtsApiProvider(ttsEngine);
@@ -1457,7 +1617,7 @@ function startProcessVideo() {
     // --- END OF PRE-FLIGHT API CHECKS ---
 
     if (typeof window.pPubPreflightCheck === 'function'
-        && document.getElementById('p-autopub-enabled')?.checked) {
+        && _procIsAutoPublishEnabled()) {
       const ok = await window.pPubPreflightCheck({ interactive: true });
       if (!ok) {
         // User chose to cancel — stop the queue, revert task to pending.
@@ -1478,9 +1638,14 @@ function startProcessVideo() {
         return;
       }
     }
-    const latestVideoPath = document.getElementById('proc-video')?.value?.trim() || videoPath;
+    let latestVideoPath = document.getElementById('proc-video')?.value?.trim() || videoPath;
+    let latestVideoUrl = document.getElementById('proc-url')?.value?.trim() || videoUrl;
+    if (latestVideoUrl && !/^https?:\/\//i.test(latestVideoUrl)) {
+      if (!latestVideoPath) latestVideoPath = latestVideoUrl;
+      latestVideoUrl = '';
+    }
     const latestSelectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
-    _startProcessVideoInternal(latestVideoPath, videoUrl, latestSelectedFile);
+    _startProcessVideoInternal(latestVideoPath, latestVideoUrl, latestSelectedFile);
   })();
 }
 
@@ -1495,6 +1660,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     _appendProcLog('📡 Đang gửi request xử lý video tới server backend...', 'info');
   }
 
+  const originalAudioVolume = Math.max(0, parseFloat(document.getElementById('proc-vol-orig')?.value ?? '100') / 100);
   const baseFields = {
     video_path:       videoPath,
     video_url:        videoUrl || '',
@@ -1510,6 +1676,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     skip_ass:         (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
     burn_subs:        (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn')?.checked ?? true),
     blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
+    blur_by_subtitles: document.getElementById('proc-blur-by-subtitles')?.checked ?? false,
     blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
     blur_width_pct:   parseFloat(document.getElementById('proc-blur-width')?.value || '80') / 100,
     blur_y_pct:       (() => {
@@ -1529,16 +1696,19 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
       start_sec: (z.start === '' || z.start === undefined || z.start === null) ? null : Number(z.start),
       end_sec:   (z.end   === '' || z.end   === undefined || z.end   === null) ? null : Number(z.end),
     })),
-    translate_subs:   (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-translate-subs')?.checked ?? true),
+    translate_subs:   (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : _isProcTranslateSubsEnabled(),
     burn_vi_subs:     (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn-vi')?.checked ?? true),
-    voice_convert:    (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-voice')?.checked ?? false),
+    voice_convert:    (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : _isProcVoiceConvertEnabled(),
     ..._resolveTtsEngineVoice('proc'),
     tts_pitch:        _sanitizeVoiceParam(document.getElementById('proc-tts-pitch')?.value || '+0Hz'),
     tts_rate:         _sanitizeVoiceParam(document.getElementById('proc-tts-rate')?.value || '+0%'),
     tts_emotion:      document.getElementById('proc-tts-emotion')?.value || 'default',
-    keep_bg_music:    document.getElementById('proc-keep-bg')?.checked ?? false,
+    // The Step 2 Voice slider is the single source of truth: any value above
+    // zero means the original track must be mixed back into the TTS output.
+    keep_bg_music:    originalAudioVolume > 0,
+    bg_volume:        originalAudioVolume,
     ext_audio_enabled: document.getElementById('proc-ext-audio-enabled')?.checked ?? false,
-    vol_orig:          parseFloat(document.getElementById('proc-vol-orig')?.value || '100') / 100,
+    vol_orig:          originalAudioVolume,
     ext_audios:        window._procExtAudios || [],
 
     font_size:        (() => {
@@ -1588,6 +1758,8 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     capcut_auto_open: document.getElementById('proc-capcut-auto-open')?.checked ?? false,
     // Video mode: only convert when the source orientation differs from the selected mode.
     target_aspect: document.getElementById('proc-preview-aspect')?.value || 'auto',
+    output_fps: Number(document.getElementById('proc-output-fps')?.value || 0),
+    encode_device: document.getElementById('proc-encode-device')?.value || 'auto',
     // Lấp viền khi đổi khung bằng nền mờ (blur) thay vì viền đen.
     aspect_pad_blur: document.getElementById('proc-aspect-blur-bg')?.checked ?? false,
     // Frame video (step 6)
@@ -1603,7 +1775,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     frame_title_color:    document.getElementById('frame-title-color')?.value || '#000000',
     frame_title_color_2:  document.getElementById('frame-title-color-2')?.value || '#ff0000',
     frame_title_split_color: document.getElementById('frame-title-split-color')?.checked ?? true,
-    frame_blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 15),
+    frame_blur_w_pct:     parseFloat(document.getElementById('frame-blur-w')?.value || 0),
     frame_blur_top_pct:    parseFloat(document.getElementById('frame-blur-top')?.value || 0),
     frame_blur_bottom_pct: parseFloat(document.getElementById('frame-blur-bottom')?.value || 0),
     frame_blur_opacity:   parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100,
@@ -1631,15 +1803,36 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     thumb_duration:       0,
   };
 
+  // Keep an inspectable snapshot of the exact Step 2 values used by this run.
+  window._procLastSubmittedConfig = JSON.parse(JSON.stringify(baseFields));
+  _appendProcLog(`🔊 Cấu hình âm thanh: âm gốc ${Math.round((baseFields.vol_orig || 0) * 100)}% · giữ nền ${baseFields.keep_bg_music ? 'Bật' : 'Tắt'} · âm ngoài ${baseFields.ext_audio_enabled ? `Bật (${baseFields.ext_audios.length} tệp)` : 'Tắt'}`, 'info');
+
   const doRequest = (body, isFormData) => fetch('/api/process_video', {
     method: 'POST',
     headers: isFormData ? {} : { 'Content-Type': 'application/json' },
     body,
   }).then(res => {
+    if (!res.ok) {
+      return res.text().then(text => {
+        let msg = `Lỗi HTTP ${res.status}: ${res.statusText}`;
+        try {
+          const j = JSON.parse(text);
+          if (j.error || j.message) msg += ` - ${j.error || j.message}`;
+        } catch(_) {
+          if (text) msg += ` - ${text.slice(0, 200)}`;
+        }
+        _appendProcLog(msg, 'error');
+        _setProcProgress(0, 'Lỗi máy chủ');
+        if (btn) { btn.disabled = false; btn.textContent = 'Xử lý Video'; }
+        if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(false);
+        throw new Error(msg);
+      });
+    }
     const reader = res.body.getReader();
     window._procReader = reader;
     const decoder = new TextDecoder();
     let streamBuffer = '';
+    let processingFailed = false;
 
     // Show pause button
     if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(true);
@@ -1652,24 +1845,34 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
               const d = JSON.parse(streamBuffer.trim());
               if (d.log) _appendProcLog(d.log, d.level || 'info');
               if (d.overall !== undefined) _setProcProgress(d.overall, d.overall_lbl || '');
+              if (d.failed) processingFailed = true;
             } catch (_) {}
             streamBuffer = '';
           }
           if (btn) { btn.disabled = false; btn.textContent = 'Xử lý Video'; }
           if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(false);
           const doneActions = document.getElementById('proc-done-actions');
-          if (doneActions) doneActions.style.display = 'block';
+          if (doneActions) doneActions.style.display = processingFailed ? 'none' : 'block';
 
           // Frame video now runs inside the pipeline (step 6) — no need to trigger separately
-          _setProcProgress(100, 'Hoàn thành!');
+          _setProcProgress(processingFailed ? 0 : 100, processingFailed ? 'Xử lý thất bại' : 'Hoàn thành!');
+
+          if (processingFailed) {
+            window._procRunning = false;
+            if (typeof window._onProcTaskFinished === 'function') {
+              window._onProcTaskFinished(false);
+            }
+            return;
+          }
 
           // ── Auto-publish after processing ──
-          if (document.getElementById('p-autopub-enabled')?.checked) {
+          const shouldAutoPublish = _procIsAutoPublishEnabled();
+          if (shouldAutoPublish) {
             if (typeof procWizGo === 'function') procWizGo(4);
           }
 
           const autoPubPromise = (typeof pPubAutoUploadAll === 'function'
-              && document.getElementById('p-autopub-enabled')?.checked
+              && shouldAutoPublish
               && window._publishLastOutputPath)
             ? pPubAutoUploadAll(window._publishLastOutputPath).catch(() => {})
             : Promise.resolve();
@@ -1677,7 +1880,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
           // Legacy auto-upload path (different checkbox id)
           if (window._publishLastOutputPath
               && document.getElementById('publish-auto-upload')?.checked
-              && !document.getElementById('p-autopub-enabled')?.checked) {
+              && !shouldAutoPublish) {
             publishSelectedPlatform();
           }
 
@@ -1696,6 +1899,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
         lines.filter(l => l.trim()).forEach(line => {
           try {
             const d = JSON.parse(line);
+            if (d.failed) processingFailed = true;
             if (d.log) {
               _appendProcLog(d.log, d.level || 'info');
               if (d.log.includes('Antigravity STT thất bại') || d.log.includes('Chưa cấu hình khóa kết nối') || d.log.includes('hết hạn')) {
@@ -2050,36 +2254,67 @@ window.previewProcessVoice = previewProcessVoice;
 
 function _showSttKeyModal(errorMsg) {
   let modal = document.getElementById('stt-key-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'stt-key-modal';
-    modal.className = 'modal-backdrop';
-    modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
-    modal.innerHTML = `
-      <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:20px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);font-family:inherit;box-sizing:border-box">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-          <span style="font-size:24px">⚠️</span>
-          <h3 style="margin:0;font-size:17px;font-weight:700;color:#1e293b">Cập nhật API Key phiên âm (STT)</h3>
-        </div>
-        <p style="font-size:13px;color:#64748b;margin:0 0 12px;line-height:1.5">
-          Kết nối Antigravity / Gemini gặp sự cố. Bạn có thể cập nhật Gemini API Key mới hoặc nhấn Bỏ qua để xử lý tiếp.
-        </p>
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;font-size:12px;color:#991b1b;margin-bottom:12px" id="stt-modal-err"></div>
-        <div style="margin-bottom:16px">
-          <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:4px">Nhập Gemini API Key mới (dạng AIzaSy...):</label>
-          <input type="text" id="stt-modal-key-input" placeholder="AIzaSy..." style="width:100%;height:38px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;box-sizing:border-box">
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button type="button" class="btn btn-secondary" onclick="_closeSttKeyModal()" style="font-size:13px">⏭ Bỏ qua</button>
-          <button type="button" class="btn btn-secondary" onclick="window.location.href='/config'" style="font-size:13px">⚙️ Cấu hình</button>
-          <button type="button" class="btn btn-primary" onclick="_saveSttKeyModal()" style="font-size:13px;font-weight:600">💾 Lưu Key & Thử lại</button>
-        </div>
+  if (modal) {
+    modal.remove();
+  }
+
+  const currentProv = (typeof _getProcessProvider === 'function' ? _getProcessProvider('transcribe') : '') || 'antigravity';
+  const isAntigravity = currentProv === 'antigravity';
+  const isGemini = currentProv === 'gemini';
+
+  modal = document.createElement('div');
+  modal.id = 'stt-key-modal';
+  modal.className = 'modal-backdrop';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+
+  let title = 'Cập nhật kết nối phiên âm (STT)';
+  let desc = 'Kết nối phiên âm gặp sự cố. Bạn có thể kiểm tra cấu hình hoặc nhấn Bỏ qua để tiếp tục xử lý.';
+  let inputHtml = '';
+
+  if (isAntigravity) {
+    title = 'Sự cố kết nối Antigravity';
+    desc = 'Kết nối Antigravity gặp sự cố hoặc token cần làm mới. Bạn có thể mở Cấu hình để kiểm tra kết nối tài khoản Google, hoặc nhấn Bỏ qua để xử lý tiếp mà không dùng phiên âm.';
+  } else if (isGemini) {
+    title = 'Cập nhật Google Gemini API Key';
+    desc = 'Kết nối Google Gemini gặp sự cố. Bạn có thể nhập Gemini API Key mới (dạng AIzaSy...) hoặc mở Cấu hình.';
+    inputHtml = `
+      <div style="margin-bottom:16px">
+        <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:4px">Nhập Gemini API Key mới (dạng AIzaSy...):</label>
+        <input type="text" id="stt-modal-key-input" placeholder="AIzaSy..." style="width:100%;height:38px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;box-sizing:border-box">
       </div>
     `;
-    document.body.appendChild(modal);
+  } else {
+    title = 'Cập nhật API Key phiên âm';
+    desc = 'Khóa API phiên âm gặp sự cố. Bạn có thể nhập API Key mới hoặc mở Cấu hình để cập nhật.';
+    inputHtml = `
+      <div style="margin-bottom:16px">
+        <label style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:4px">Nhập API Key mới:</label>
+        <input type="text" id="stt-modal-key-input" placeholder="Nhập API Key..." style="width:100%;height:38px;padding:6px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;box-sizing:border-box">
+      </div>
+    `;
   }
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:20px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.3);font-family:inherit;box-sizing:border-box">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <h3 style="margin:0;font-size:17px;font-weight:700;color:#1e293b">${title}</h3>
+      </div>
+      <p style="font-size:13px;color:#64748b;margin:0 0 12px;line-height:1.5">
+        ${desc}
+      </p>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;font-size:12px;color:#991b1b;margin-bottom:12px" id="stt-modal-err"></div>
+      ${inputHtml}
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn btn-secondary" onclick="_closeSttKeyModal()" style="font-size:13px">Bỏ qua</button>
+        <button type="button" class="btn btn-secondary" onclick="window.location.href='/config'" style="font-size:13px">Cấu hình</button>
+        ${!isAntigravity ? '<button type="button" class="btn btn-primary" onclick="_saveSttKeyModal()" style="font-size:13px;font-weight:600">Lưu Key & Thử lại</button>' : ''}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
   const errEl = document.getElementById('stt-modal-err');
-  if (errEl) errEl.textContent = errorMsg || 'Token hết hạn hoặc lỗi kết nối Antigravity STT.';
+  if (errEl) errEl.textContent = errorMsg || 'Lỗi kết nối phiên âm.';
   modal.style.display = 'flex';
 }
 
@@ -2103,13 +2338,13 @@ async function _saveSttKeyModal() {
     }).then(r => r.json());
 
     if (res.ok) {
-      alert('✅ Đã cập nhật API Key Antigravity thành công! Bạn có thể bấm xử lý lại.');
+      alert('Đã cập nhật API Key thành công! Bạn có thể bấm xử lý lại.');
       _closeSttKeyModal();
     } else {
-      alert('❌ Lỗi: ' + (res.error || 'Không thể lưu key'));
+      alert('Lỗi: ' + (res.error || 'Không thể lưu key'));
     }
   } catch (err) {
-    alert('❌ Lỗi kết nối: ' + err.message);
+    alert('Lỗi kết nối: ' + err.message);
   }
 }
 

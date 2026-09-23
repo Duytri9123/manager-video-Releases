@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import random
+import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
@@ -18,42 +21,105 @@ except Exception:  # pragma: no cover - optional dependency
 
 logger = setup_logger("APIClient")
 
-_DOUYIN_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 "
-    "Safari/537.36 Edg/131.0.0.0"
-)
+_LOGIN_REQUIRED_STATUS_CODES = {2483}
+
+
+class LoginRequiredError(Exception):
+    """Raised when Douyin rejects a request because the session is not logged in."""
+
+    def __init__(self, status_code: int, status_msg: str, path: str):
+        self.status_code = status_code
+        self.status_msg = status_msg
+        self.path = path
+        super().__init__(f"login required (status_code={status_code}) at {path}: {status_msg}")
+
+
+class FailedPayload(dict):
+    """请求失败时回的空 payload，多带一条机器可读的失败原因。
+
+    与 ``{}`` 完全等价(``not payload``、``payload == {}`` 都成立)。
+    只有分页 walk 读 ``kind``，据此决定要不要整页重试、给用户什么文案。
+    """
+
+    REJECTED = "rejected"
+    BRIDGE_ERROR = "bridge_error"
+
+    def __init__(
+        self, kind: str, *, status: int = 0, detail: str = "", via_bridge: bool = False
+    ) -> None:
+        super().__init__()
+        self.kind = kind
+        self.status = status
+        self.detail = detail
+        self.via_bridge = via_bridge
+
+
+# ── Argus rejection detection ────────────────────────────────────────────────
+# Douyin WAF (ArgusSecurityPlugin) answers 403 with a body like:
+#   "Blocked by ArgusSecurityPlugin Uifid Not Found"
+#   "Blocked by ArgusSecurityPlugin Signature Not Found"
+# These are deterministic rejections — retrying is pointless.
+ARGUS_REJECTION_MARKER = "ArgusSecurityPlugin"
+_ARGUS_REJECTION_STATUS = 403
+_ERROR_BODY_READ_BYTES = 1024
+_ERROR_BODY_READ_TIMEOUT_SECONDS = 2.0
+_ERROR_BODY_LOG_CHARS = 120
+
+# Risk-control HTTP statuses that are transient (WAF rate-limit).
+_RISK_CONTROL_HTTP_STATUSES = frozenset({403, 429})
+
+# UA pool matching current browser versions — same approach as jiji262/douyin-downloader.
+# Using Chrome (not Edge) because ABogus fingerprint is keyed to Chrome.
+_USER_AGENT_POOL = [
+    (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+    ),
+    (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+    ),
+]
 
 
 class DouyinAPIClient:
     BASE_URL = "https://www.douyin.com"
-    _BROWSER_COOKIE_BLOCKLIST = set()
+    # Sensitive cookies that should NOT be injected into browser contexts.
+    # Ported from jiji262/douyin-downloader to prevent session leaks.
+    _BROWSER_COOKIE_BLOCKLIST = {
+        "sessionid",
+        "sessionid_ss",
+        "sid_tt",
+        "sid_guard",
+        "uid_tt",
+        "uid_tt_ss",
+        "passport_auth_status",
+        "passport_auth_status_ss",
+        "passport_assist_user",
+        "passport_auth_mix_state",
+        "passport_mfa_token",
+        "login_time",
+    }
 
-    def __init__(self, cookies: Dict[str, str], proxy: Optional[str] = None):
+    def __init__(self, cookies: Dict[str, str], proxy: Optional[str] = None, page_bridge: Optional[Any] = None):
         self.cookies = sanitize_cookies(cookies or {})
         self.proxy = str(proxy or "").strip()
+        # page_bridge: desktop-only signing channel (None in this project).
+        # Kept for duck-type compatibility with shared code (base_strategy, etc.).
+        self.page_bridge = page_bridge
         self._session: Optional[aiohttp.ClientSession] = None
         self._browser_post_aweme_items: Dict[str, Dict[str, Any]] = {}
         self._browser_post_stats: Dict[str, int] = {}
-        # Keep UA, query fingerprint and a_bogus signer consistent.  Randomly
-        # mixing Firefox/macOS UA values with Edge/Win32 signed parameters made
-        # an unchanged cookie work on one attempt and receive 403 on another.
-        selected_ua = _DOUYIN_USER_AGENT
-        uifid_val = (self.cookies.get("uifid") or self.cookies.get("UIFID") or "").strip()
-        if uifid_val:
-            self.cookies["uifid"] = uifid_val
-            self.cookies["UIFID"] = uifid_val
+        # Pick a random UA from the pool — Chrome-based to match ABogus
+        # fingerprint. Ported from jiji262/douyin-downloader approach.
+        selected_ua = random.choice(_USER_AGENT_POOL)
         self.headers = {
             "User-Agent": selected_ua,
-            "Referer": "https://www.douyin.com/",
-            "Accept": "application/json",
+            "Referer": "https://www.douyin.com/?recommend=1",
+            "Accept": "*/*",
             "Accept-Encoding": "gzip, deflate",
             "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Connection": "keep-alive",
         }
-        if uifid_val:
-            self.headers["uifid"] = uifid_val
-            self.headers["UIFID"] = uifid_val
         self._signer = XBogus(self.headers["User-Agent"])
         self._ms_token_manager = MsTokenManager(user_agent=self.headers["User-Agent"])
         self._ms_token = (self.cookies.get("msToken") or "").strip()
@@ -104,6 +170,8 @@ class DouyinAPIClient:
 
     async def _default_query(self) -> Dict[str, Any]:
         ms_token = await self._ensure_ms_token()
+        # Parameters aligned with jiji262/douyin-downloader — Chrome/139,
+        # support_dash=1, realistic screen/cpu values.
         return {
             "device_platform": "webapp",
             "aid": "6383",
@@ -111,28 +179,29 @@ class DouyinAPIClient:
             "update_version_code": "170400",
             "pc_client_type": "1",
             "pc_libra_divert": "Windows",
-            "support_h265": "1",
-            "support_dash": "0",
             "version_code": "290100",
             "version_name": "29.1.0",
             "cookie_enabled": "true",
-            "screen_width": "1920",
-            "screen_height": "1080",
+            "screen_width": "1536",
+            "screen_height": "864",
             "browser_language": "zh-CN",
             "browser_platform": "Win32",
-            "browser_name": "Edge",
-            "browser_version": "131.0.0.0",
+            "browser_name": "Chrome",
+            "browser_version": "139.0.0.0",
             "browser_online": "true",
             "engine_name": "Blink",
-            "engine_version": "131.0.0.0",
+            "engine_version": "139.0.0.0",
             "os_name": "Windows",
             "os_version": "10",
-            "cpu_core_num": "12",
+            "cpu_core_num": "16",
             "device_memory": "8",
             "platform": "PC",
             "downlink": "10",
             "effective_type": "4g",
-            "round_trip_time": "50",
+            "round_trip_time": "200",
+            "support_h265": "1",
+            "support_dash": "1",
+            "uifid": "",
             "msToken": ms_token,
         }
 
@@ -153,7 +222,7 @@ class DouyinAPIClient:
             return None
 
         try:
-            browser_fp = BrowserFingerprintGenerator.generate_fingerprint("Edge")
+            browser_fp = BrowserFingerprintGenerator.generate_fingerprint("Chrome")
             signer = ABogus(fp=browser_fp, user_agent=self.headers["User-Agent"])
             params_with_ab, _ab, ua, _body = signer.generate_abogus(query, "")
             return f"{base_url}?{params_with_ab}", ua
@@ -169,12 +238,26 @@ class DouyinAPIClient:
         suppress_error: bool = False,
         max_retries: int = 3,
     ) -> Dict[str, Any]:
+        """Make a signed GET request to Douyin API with retry and Argus detection.
+
+        Key improvements ported from jiji262/douyin-downloader:
+        - Detects ArgusSecurityPlugin rejection (403 + marker in body) and stops
+          retrying immediately since those rejections are deterministic.
+        - Handles empty 200 responses as anti-bot signals and retries.
+        - Logs detailed diagnostics for debugging.
+        """
         await self._ensure_session()
         delays = [1, 2, 5]
         last_exc: Optional[Exception] = None
 
         for attempt in range(max_retries):
+            started = time.monotonic()
             signed_url, ua = self.build_signed_path(path, params)
+            signer_used = "a_bogus" if "a_bogus=" in signed_url else "x_bogus"
+            logger.info(
+                "Douyin API request: path=%s attempt=%d/%d signer=%s",
+                path, attempt + 1, max_retries, signer_used,
+            )
             try:
                 async with self._session.get(
                     signed_url,
@@ -182,28 +265,112 @@ class DouyinAPIClient:
                     proxy=self.proxy or None,
                 ) as response:
                     if response.status == 200:
-                        data = await response.json(content_type=None)
+                        body = await response.read()
+                        elapsed = int((time.monotonic() - started) * 1000)
+
+                        # Empty 200 = anti-bot signal (from jiji262 insight)
+                        if not body:
+                            logger.warning(
+                                "Empty 200 response for %s (attempt %d/%d, %dms) — "
+                                "likely anti-bot; %s",
+                                path, attempt + 1, max_retries, elapsed,
+                                "will retry" if attempt < max_retries - 1 else "no retries left",
+                            )
+                            last_exc = RuntimeError(f"Empty 200 for {path} (anti-bot)")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(delays[min(attempt, len(delays) - 1)])
+                            continue
+
+                        try:
+                            data = await response.json(content_type=None)
+                        except Exception:
+                            import json as _json
+                            try:
+                                data = _json.loads(body)
+                            except Exception:
+                                logger.warning(
+                                    "Non-JSON 200 for %s, len=%d %dms",
+                                    path, len(body), elapsed,
+                                )
+                                return {}
+
+                        if isinstance(data, dict):
+                            logger.info(
+                                "Douyin API OK: path=%s %dms items=%s has_more=%s cursor=%s",
+                                path, elapsed,
+                                len(data.get("aweme_list") or data.get("items") or []),
+                                data.get("has_more"),
+                                data.get("max_cursor", data.get("cursor")),
+                            )
                         return data if isinstance(data, dict) else {}
-                    if response.status < 500 and response.status != 429:
-                        log_fn = logger.debug if suppress_error else logger.error
-                        log_fn(
-                            "Request failed: path=%s, status=%s",
-                            path,
-                            response.status,
+
+                    # ── Non-200 handling ──────────────────────────────
+                    elapsed = int((time.monotonic() - started) * 1000)
+
+                    # Read error body prefix for Argus detection
+                    error_body = ""
+                    try:
+                        raw_body = await asyncio.wait_for(
+                            response.read(),
+                            timeout=_ERROR_BODY_READ_TIMEOUT_SECONDS,
+                        )
+                        error_body = raw_body[:_ERROR_BODY_READ_BYTES].decode(
+                            "utf-8", "replace"
+                        )[:_ERROR_BODY_LOG_CHARS]
+                    except Exception:
+                        pass
+
+                    # ArgusSecurityPlugin deterministic rejection — do NOT retry
+                    if (
+                        response.status == _ARGUS_REJECTION_STATUS
+                        and ARGUS_REJECTION_MARKER in error_body
+                    ):
+                        logger.warning(
+                            "🛡️ ArgusSecurityPlugin REJECTION: path=%s status=%s "
+                            "body=%r %dms — retrying is pointless, returning empty",
+                            path, response.status, error_body, elapsed,
                         )
                         return {}
-                    last_exc = RuntimeError(
-                        f"HTTP {response.status} for {path}"
+
+                    # Transient rate-limit 403/429 — retry
+                    if response.status in _RISK_CONTROL_HTTP_STATUSES:
+                        logger.warning(
+                            "Rate-limit: path=%s status=%s body=%r %dms (attempt %d/%d)",
+                            path, response.status, error_body, elapsed,
+                            attempt + 1, max_retries,
+                        )
+                        last_exc = RuntimeError(f"HTTP {response.status} for {path}")
+                        if attempt < max_retries - 1:
+                            delay = delays[min(attempt, len(delays) - 1)]
+                            await asyncio.sleep(delay)
+                        continue
+
+                    # Server error (5xx) — retry
+                    if response.status >= 500:
+                        last_exc = RuntimeError(f"HTTP {response.status} for {path}")
+                        if attempt < max_retries - 1:
+                            delay = delays[min(attempt, len(delays) - 1)]
+                            await asyncio.sleep(delay)
+                        continue
+
+                    # Other client errors (4xx except 403/429) — don't retry
+                    log_fn = logger.debug if suppress_error else logger.error
+                    log_fn(
+                        "Request failed: path=%s status=%s body=%r %dms",
+                        path, response.status, error_body, elapsed,
                     )
+                    return {}
+
             except Exception as exc:
                 last_exc = exc
+                elapsed = int((time.monotonic() - started) * 1000)
+                logger.debug(
+                    "Request exception: path=%s attempt=%d/%d %dms error=%s",
+                    path, attempt + 1, max_retries, elapsed, exc,
+                )
 
             if attempt < max_retries - 1:
                 delay = delays[min(attempt, len(delays) - 1)]
-                logger.debug(
-                    "Request retry %d/%d for %s in %ds",
-                    attempt + 1, max_retries, path, delay,
-                )
                 await asyncio.sleep(delay)
 
         log_fn = logger.debug if suppress_error else logger.error
@@ -291,7 +458,11 @@ class DouyinAPIClient:
     _DETAIL_AID_CANDIDATES = ("6383", "1128")
 
     async def get_video_detail(
-        self, aweme_id: str, *, suppress_error: bool = False
+        self,
+        aweme_id: str,
+        *,
+        suppress_error: bool = False,
+        browser_fallback: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         for aid in self._DETAIL_AID_CANDIDATES:
             params = await self._default_query()
@@ -329,7 +500,140 @@ class DouyinAPIClient:
             # aweme_detail is null without a filter reason — no retry needed
             break
 
+        # API path failed — try Playwright browser fallback if configured
+        if browser_fallback is not None and browser_fallback.get("enabled"):
+            return await self.fetch_single_video_via_browser(
+                aweme_id,
+                headless=bool(browser_fallback.get("headless", False)),
+                wait_timeout_seconds=int(browser_fallback.get("wait_timeout_seconds", 30)),
+            )
+
         return None
+
+    get_aweme_detail = get_video_detail
+
+    async def fetch_single_video_via_browser(
+        self,
+        aweme_id: str,
+        *,
+        headless: bool = False,
+        wait_timeout_seconds: int = 30,
+    ) -> Optional[Dict[str, Any]]:
+        """Mở Playwright, điều hướng đến trang video, intercept aweme/detail response.
+
+        Dùng khi API bị Argus block (403 Uifid Not Found).
+        Browser thật tự generate UIFID nên request đi qua được.
+        """
+        try:
+            from playwright.async_api import async_playwright
+        except Exception as exc:
+            logger.warning("Playwright not available, single-video browser fallback disabled: %s", exc)
+            return None
+
+        target_url = f"{self.BASE_URL}/video/{aweme_id}"
+        timeout_ms = max(15, int(wait_timeout_seconds)) * 1000
+        result: Optional[Dict[str, Any]] = None
+        detail_event: asyncio.Event = asyncio.Event()
+
+        logger.warning(
+            "API bị Argus block, khởi động browser fallback để tải video đơn lẻ: "
+            "aweme_id=%s headless=%s timeout_s=%s",
+            aweme_id, headless, wait_timeout_seconds,
+        )
+
+        async with async_playwright() as playwright:
+            if not headless:
+                import sys, threading, subprocess
+                if sys.platform == "win32":
+                    def _minimize():
+                        try:
+                            subprocess.run(
+                                ["powershell", "-Command",
+                                 "Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;"
+                                 "public class W{[DllImport(\"user32.dll\")]"
+                                 "public static extern bool ShowWindow(IntPtr h,int n);}';"
+                                 "Start-Sleep -Milliseconds 600;"
+                                 "Get-Process chrome,msedge,brave -ErrorAction SilentlyContinue"
+                                 "| Where-Object {$_.MainWindowHandle -ne 0}"
+                                 "| Sort-Object StartTime -Descending | Select-Object -First 3"
+                                 "| ForEach-Object { [W]::ShowWindow($_.MainWindowHandle, 6) }"
+                                 ],
+                                capture_output=True, timeout=4
+                            )
+                        except Exception:
+                            pass
+                    threading.Thread(target=_minimize, daemon=True).start()
+
+            browser = await playwright.chromium.launch(
+                headless=headless,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                ],
+            )
+            context = await browser.new_context(
+                user_agent=self.headers.get("User-Agent", ""),
+                locale="zh-CN",
+                viewport={"width": 1600, "height": 900},
+            )
+            cookies = self._browser_cookie_payload()
+            if cookies:
+                await context.add_cookies(cookies)
+
+            page = await context.new_page()
+
+            async def _handle_response(response):
+                nonlocal result
+                url = response.url or ""
+                if "/aweme/v1/web/aweme/detail/" not in url:
+                    return
+                try:
+                    data = await response.json()
+                except Exception:
+                    return
+                if not isinstance(data, dict):
+                    return
+                detail = data.get("aweme_detail")
+                if isinstance(detail, dict) and detail.get("aweme_id"):
+                    result = detail
+                    logger.info(
+                        "Browser fallback intercepted aweme/detail: aweme_id=%s",
+                        detail.get("aweme_id"),
+                    )
+                    detail_event.set()
+
+            page.on("response", lambda r: asyncio.create_task(_handle_response(r)))
+
+            try:
+                try:
+                    await page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
+                except Exception as exc:
+                    logger.warning("Browser goto error (continuing): %s", exc)
+                try:
+                    await asyncio.wait_for(detail_event.wait(), timeout=wait_timeout_seconds)
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Browser fallback timeout waiting for aweme/detail: aweme_id=%s",
+                        aweme_id,
+                    )
+            finally:
+                try:
+                    browser_cookies = await context.cookies(self.BASE_URL)
+                    self._sync_browser_cookies(browser_cookies)
+                except Exception as exc:
+                    logger.debug("Sync browser cookies skipped: %s", exc)
+                await context.close()
+                await browser.close()
+
+        if result:
+            logger.warning(
+                "Browser fallback thành công: aweme_id=%s desc=%r",
+                aweme_id, str(result.get("desc", ""))[:80],
+            )
+        else:
+            logger.warning("Browser fallback không lấy được aweme_detail: aweme_id=%s", aweme_id)
+        return result
 
     async def get_user_post(
         self, sec_uid: str, max_cursor: int = 0, count: int = 20
@@ -519,6 +823,35 @@ class DouyinAPIClient:
             douyin_profile_dir = Path(".douyin_profile").resolve()
             douyin_profile_dir.mkdir(parents=True, exist_ok=True)
             browser = None
+
+            # Minimize the browser window immediately after launch on Windows
+            # so it runs in the background without occupying the screen.
+            def _minimize_browser_window():
+                import sys
+                if sys.platform != "win32":
+                    return
+                try:
+                    import subprocess
+                    subprocess.run(
+                        ["powershell", "-Command",
+                         "Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;"
+                         "public class W{[DllImport(\"user32.dll\")]"
+                         "public static extern bool ShowWindow(IntPtr h,int n);}';"
+                         "Start-Sleep -Milliseconds 600;"
+                         "Get-Process chrome,msedge,brave -ErrorAction SilentlyContinue"
+                         "| Where-Object {$_.MainWindowHandle -ne 0}"
+                         "| Sort-Object StartTime -Descending | Select-Object -First 3"
+                         "| ForEach-Object { [W]::ShowWindow($_.MainWindowHandle, 6) }"
+                         ],
+                        capture_output=True, timeout=4
+                    )
+                except Exception:
+                    pass
+
+            if not headless:
+                import threading
+                threading.Thread(target=_minimize_browser_window, daemon=True).start()
+
             try:
                 context = await launch_playwright_browser_async(
                     playwright.chromium,

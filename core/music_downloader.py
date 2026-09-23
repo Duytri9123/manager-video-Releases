@@ -3,13 +3,19 @@ from __future__ import annotations
 import json
 import posixpath
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
+from core import item_reasons
 from core.downloader_base import BaseDownloader, DownloadResult
+from core.metadata import build_author_home_url, extract_author_sec_uid
 from utils.logger import setup_logger
-from utils.validators import sanitize_filename
+from utils.naming import (
+    DEFAULT_FILE_TEMPLATE,
+    DEFAULT_FOLDER_TEMPLATE,
+    build_music_context,
+    render_template,
+)
 
 logger = setup_logger("MusicDownloader")
 
@@ -36,15 +42,26 @@ class MusicDownloader(BaseDownloader):
                 self._progress_advance_item("success", str(music_id))
             else:
                 result.failed += 1
-                self._progress_advance_item("failed", str(music_id))
+                self._progress_advance_item("failed", str(music_id), item_reasons.FAIL_MUSIC_AUDIO)
             return result
 
-        # 回退：音乐详情无法直接拿到音频链接时，尝试下载该音乐下的首条作品
+        # 回退：音乐详情无法直接拿到音频链接时，尝试下载该音乐下的首条作品。
+        # 这条作品的跳过 / 失败原因由 _should_download / _download_aweme_assets 记下。
         aweme = await self._get_first_music_aweme(str(music_id))
         if aweme and aweme.get("aweme_id"):
             if not await self._should_download(str(aweme.get("aweme_id"))):
-                result.skipped += 1
-                self._progress_advance_item("skipped", str(aweme.get("aweme_id")))
+                aweme_author = (aweme.get("author") or {}).get("nickname", "music")
+                saved = await self._collect_comments_for_existing_aweme(
+                    aweme,
+                    aweme_author,
+                    mode="music",
+                )
+                if saved:
+                    result.success += 1
+                    self._progress_advance_item("success", str(aweme.get("aweme_id")))
+                else:
+                    result.skipped += 1
+                    self._progress_advance_item("skipped", str(aweme.get("aweme_id")))
                 return result
 
             aweme_author = (aweme.get("author") or {}).get("nickname", "music")
@@ -59,7 +76,7 @@ class MusicDownloader(BaseDownloader):
 
         logger.error("No playable music source found for music_id=%s", music_id)
         result.failed += 1
-        self._progress_advance_item("failed", str(music_id))
+        self._progress_advance_item("failed", str(music_id), item_reasons.FAIL_MUSIC_NO_SOURCE)
         return result
 
     async def _download_music_asset(
@@ -75,14 +92,32 @@ class MusicDownloader(BaseDownloader):
             or f"music_{music_id}"
         )
         author_name = (
-            detail.get("author_name")
-            or (detail.get("owner") or {}).get("nickname")
-            or "music"
+            detail.get("author_name") or (detail.get("owner") or {}).get("nickname") or "music"
         )
         publish_date = datetime.now().strftime("%Y-%m-%d")
         record_id = f"music_{music_id}"
-        file_stem = sanitize_filename(f"{publish_date}_{title}_{record_id}")
+        template_context = build_music_context(
+            music_id=str(music_id),
+            title=title,
+            author_name=author_name,
+            publish_date=publish_date,
+        )
+        filename_template = self.config.get("filename_template") or DEFAULT_FILE_TEMPLATE
+        folder_template = self.config.get("folder_template") or DEFAULT_FOLDER_TEMPLATE
+        file_stem = render_template(
+            filename_template,
+            template_context,
+            fallback=f"{publish_date}_{record_id}",
+        )
+        folder_name = render_template(
+            folder_template,
+            template_context,
+            fallback=f"{publish_date}_{record_id}",
+        )
 
+        # 让「打开输出文件夹」落到该作者目录而不是下载根目录。
+        author_dir_style = self.config.get("author_dir") or "nickname"
+        self._report_author_output_dir(author_name, None, author_dir_style)
         save_dir = self.file_manager.get_save_path(
             author_name=author_name,
             mode="music",
@@ -90,6 +125,10 @@ class MusicDownloader(BaseDownloader):
             aweme_id=record_id,
             folderstyle=self.config.get("folderstyle", True),
             download_date=publish_date,
+            folder_name=folder_name,
+            author_sec_uid=None,
+            author_dir_style=author_dir_style,
+            group_by_mode=self.config.get("group_by_mode", True),
         )
 
         music_ext = self._infer_audio_extension(music_url)
@@ -107,15 +146,15 @@ class MusicDownloader(BaseDownloader):
         if not success:
             return False
 
-        cover_url = self._extract_first_url(
+        cover_source = (
             detail.get("cover_large")
             or detail.get("cover_thumb")
             or (detail.get("music") or {}).get("cover_large")
         )
-        if cover_url and self.config.get("cover"):
+        if self._extract_urls(cover_source) and self.config.get("cover"):
             cover_path = save_dir / f"{file_stem}_cover.jpg"
-            await self._download_with_retry(
-                cover_url,
+            await self._download_first_available(
+                cover_source,
                 cover_path,
                 session,
                 headers=self._download_headers(),
@@ -127,6 +166,7 @@ class MusicDownloader(BaseDownloader):
                 detail or {"music_id": music_id}, save_dir / f"{file_stem}_data.json"
             )
 
+        author_sec_uid = extract_author_sec_uid(detail)
         if self.database:
             await self.database.add_aweme(
                 {
@@ -138,7 +178,9 @@ class MusicDownloader(BaseDownloader):
                     "create_time": None,
                     "file_path": str(save_dir),
                     "metadata": json.dumps(detail or {}, ensure_ascii=False),
-                }
+                    "job_id": self.job_id or "",
+                },
+                author_sec_uid=author_sec_uid,
             )
 
         await self.metadata_handler.append_download_manifest(
@@ -147,6 +189,8 @@ class MusicDownloader(BaseDownloader):
                 "date": publish_date,
                 "aweme_id": record_id,
                 "author_name": author_name,
+                "author_sec_uid": author_sec_uid or "",
+                "author_url": build_author_home_url(author_sec_uid) or "",
                 "desc": title,
                 "media_type": "music",
                 "file_names": [music_path.name],

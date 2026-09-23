@@ -13,6 +13,14 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
+try:
+    import eventlet
+    import eventlet.wsgi
+    eventlet.wsgi.MINIMUM_CHUNK_SIZE = 0
+    eventlet.wsgi.HttpProtocol.minimum_chunk_size = 0
+except Exception:
+    pass
+
 from extensions import create_app
 from core_app import socketio
 

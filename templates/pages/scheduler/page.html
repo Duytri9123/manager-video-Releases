@@ -1,0 +1,344 @@
+<div id="page-scheduler" class="page">
+  <style>
+    .sch-shell { max-width: 1560px; margin: auto; }
+    .sch-card { background: var(--bg2, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 14px; transition: all 0.2s ease; }
+    .dark .sch-card { background: var(--bg2, #1e293b); border-color: var(--border, #334155); }
+    .sch-stat { padding: 14px 16px; border-radius: 12px; }
+    .sch-stat b { display: block; font-size: 24px; font-weight: 700; line-height: 1.2; margin-top: 4px; }
+    .sch-grid { display: grid; grid-template-columns: 440px 1fr; gap: 16px; align-items: start; }
+    .sch-form { padding: 18px; position: sticky; top: 10px; }
+    .sch-form-section { border-bottom: 1px solid var(--border, #f1f5f9); padding-bottom: 14px; margin-bottom: 14px; }
+    .dark .sch-form-section { border-bottom-color: #334155; }
+    .sch-form-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .sch-sec-title { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; display: flex; items-center; gap: 6px; margin-bottom: 8px; }
+    .dark .sch-sec-title { color: #94a3b8; }
+    .sch-form label { display: block; font-size: 11px; font-weight: 600; margin: 8px 0 4px; color: inherit; }
+    .sch-form textarea, .sch-form input[type="text"], .sch-form input[type="datetime-local"], .sch-form select, .sch-toolbar select, .sch-toolbar input {
+      width: 100%; border: 1px solid var(--border, #cbd5e1); border-radius: 8px; background: var(--bg3, #ffffff); padding: 7px 10px; color: inherit; font-size: 12px;
+    }
+    .dark .sch-form textarea, .dark .sch-form input, .dark .sch-form select, .dark .sch-toolbar select, .dark .sch-toolbar input {
+      background: #0f172a; border-color: #334155; color: #f8fafc;
+    }
+    .sch-tabs { display: flex; gap: 4px; background: var(--bg3, #f1f5f9); padding: 3px; border-radius: 8px; margin-bottom: 10px; }
+    .dark .sch-tabs { background: #0f172a; }
+    .sch-tab-btn { flex: 1; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; border: none; background: transparent; color: #64748b; transition: all 0.2s; }
+    .sch-tab-btn.active { background: var(--bg2, #ffffff); color: #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .dark .sch-tab-btn.active { background: #1e293b; color: #60a5fa; }
+    .sch-list { display: flex; flex-direction: column; gap: 12px; }
+    .sch-item { padding: 16px; display: flex; flex-direction: column; gap: 10px; border-left: 4px solid #cbd5e1; }
+    .sch-item.status-draft { border-left-color: #94a3b8; }
+    .sch-item.status-planned { border-left-color: #3b82f6; }
+    .sch-item.status-processing { border-left-color: #f59e0b; }
+    .sch-item.status-ready { border-left-color: #10b981; }
+    .sch-item.status-publishing { border-left-color: #8b5cf6; }
+    .sch-item.status-published { border-left-color: #059669; }
+    .sch-item.status-failed { border-left-color: #ef4444; }
+    
+    .sch-badge-platform { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .sch-badge-yt { background: #fee2e2; color: #dc2626; }
+    .sch-badge-tt { background: #f1f5f9; color: #0f172a; }
+    .dark .sch-badge-tt { background: #334155; color: #f8fafc; }
+    .sch-badge-fb { background: #dbeafe; color: #1d4ed8; }
+    
+    .sch-badge-status { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; }
+    .sch-meta-tag { display: inline-flex; align-items: center; gap: 4px; background: rgba(148, 163, 184, 0.12); padding: 2px 7px; border-radius: 5px; font-size: 11px; color: #64748b; }
+    .dark .sch-meta-tag { color: #94a3b8; }
+    .sch-caption-preview { background: var(--bg3, #f8fafc); border: 1px solid var(--border, #e2e8f0); border-radius: 7px; padding: 8px 10px; font-size: 11px; color: #475569; line-height: 1.5; white-space: pre-wrap; max-height: 80px; overflow-y: auto; }
+    .dark .sch-caption-preview { background: #0f172a; border-color: #334155; color: #cbd5e1; }
+    .sch-progress-bar { height: 5px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 4px; }
+    .dark .sch-progress-bar { background: #334155; }
+    .sch-progress-bar i { display: block; height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+    .sch-ai-box { background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%); border: 1px solid #c7d2fe; border-radius: 12px; padding: 12px; }
+    .dark .sch-ai-box { background: linear-gradient(135deg, #172554 0%, #2e1065 100%); border-color: #4338ca; }
+    
+    /* Edit Modal */
+    .sch-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 9999; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .sch-modal-backdrop.active { display: flex; }
+    .sch-modal-box { background: var(--bg2, #ffffff); border-radius: 16px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 22px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); }
+    .dark .sch-modal-box { background: #1e293b; color: #f8fafc; }
+
+    @media (max-width: 1080px) {
+      .sch-grid { grid-template-columns: 1fr; }
+      .sch-form { position: static; }
+    }
+  </style>
+
+  <div class="sch-shell space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <h1 class="text-xl font-bold flex items-center gap-2">
+          <span>🗓️ Trung tâm lịch đăng bài</span>
+        </h1>
+        <p class="text-slate-500 dark:text-slate-400 text-xs mt-1">
+          Nguồn nội dung ➔ Xử lý video tự động bằng Processor ➔ Phân công tài khoản ➔ Đăng bài &amp; Lên lịch đa kênh
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-secondary text-xs flex items-center gap-1.5" onclick="schedulerLoad()">
+          <span>↻</span> Đồng bộ dữ liệu
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats summary -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" id="sch-stats"></div>
+
+    <!-- Main Workspace -->
+    <div class="sch-grid">
+      <!-- Cột Trái: Cấu hình thêm bài & Lập lịch -->
+      <section class="sch-card sch-form">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold text-sm flex items-center gap-1.5">
+            <span>⚙️ Thêm nội dung &amp; Lập lịch</span>
+          </h2>
+          <span class="text-[11px] font-semibold text-blue-600 bg-blue-50 dark:bg-blue-950 dark:text-blue-400 px-2 py-0.5 rounded-full" id="sch-count-badge">
+            Tối đa 100 video
+          </span>
+        </div>
+
+        <!-- 1. NGUỒN ĐẦU VÀO -->
+        <div class="sch-form-section">
+          <div class="sch-sec-title"><span>📥 1. Nguồn đầu vào (Inputs)</span></div>
+          <div class="sch-tabs">
+            <button type="button" class="sch-tab-btn active" id="sch-tab-url-btn" onclick="schedulerSwitchInputTab('url')">Dán danh sách link</button>
+            <button type="button" class="sch-tab-btn" id="sch-tab-file-btn" onclick="schedulerSwitchInputTab('file')">Chọn video trên máy</button>
+          </div>
+
+          <!-- URL Box -->
+          <div id="sch-input-url-box">
+            <textarea id="sch-urls" rows="4" placeholder="Mỗi dòng một link TikTok, Douyin, YouTube Shorts, Facebook Reels..."></textarea>
+            <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+              <span>Hỗ trợ TikTok, Douyin, YouTube, Facebook...</span>
+              <span id="sch-url-counter" class="font-semibold text-blue-500">0 link</span>
+            </div>
+          </div>
+
+          <!-- File Local Box -->
+          <div id="sch-input-file-box" style="display:none">
+            <div class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-4 text-center">
+              <input type="file" id="sch-file-input" accept="video/mp4,video/quicktime,video/mkv" class="hidden" onchange="schedulerHandleFileSelected(this)">
+              <button type="button" class="btn btn-secondary text-xs" onclick="document.getElementById('sch-file-input').click()">
+                📂 Chọn file video (.mp4, .mov)
+              </button>
+              <div id="sch-selected-file-name" class="text-xs text-slate-500 mt-2 truncate">Chưa chọn file</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. CẤU HÌNH XỬ LÝ (PROCESSOR INTEGRATION) -->
+        <div class="sch-form-section">
+          <div class="sch-sec-title"><span>⚡ 2. Cấu hình xử lý (Processor Core)</span></div>
+          <label>Preset từ tab Xử lý Video</label>
+          <select id="sch-preset" onchange="schedulerPresetChanged()">
+            <option value="">-- Mặc định (Tùy biến nhanh) --</option>
+          </select>
+
+          <label>Tỷ lệ khung hình</label>
+          <select id="sch-ratio">
+            <option value="9:16">Dọc 9:16 (Shorts, TikTok, Reels)</option>
+            <option value="16:9">Ngang 16:9 (YouTube thường)</option>
+            <option value="original">Giữ nguyên kích thước gốc</option>
+          </select>
+
+          <div class="grid grid-cols-2 gap-2 text-xs mt-3">
+            <label class="!m-0 flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="sch-sub" class="!w-auto" checked> Tạo phụ đề (Whisper)
+            </label>
+            <label class="!m-0 flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="sch-translate" class="!w-auto" checked> Dịch sang Tiếng Việt
+            </label>
+            <label class="!m-0 flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="sch-voice" class="!w-auto" checked> Lồng tiếng AI (TTS)
+            </label>
+            <label class="!m-0 flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="sch-watermark" class="!w-auto" checked> Xóa logo &amp; Lách bản quyền
+            </label>
+          </div>
+        </div>
+
+        <!-- 3. PHÂN PHỐI TÀI KHOẢN -->
+        <div class="sch-form-section">
+          <div class="sch-sec-title"><span>📢 3. Phân phối đăng &amp; Tài khoản</span></div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label>Nền tảng đăng</label>
+              <select id="sch-platform" onchange="schedulerAccounts()">
+                <option value="youtube">YouTube (Shorts)</option>
+                <option value="tiktok">TikTok</option>
+                <option value="facebook">Facebook (Reels)</option>
+              </select>
+            </div>
+            <div>
+              <label>Tài khoản</label>
+              <select id="sch-account">
+                <option value="">Chọn sau / Chưa gán</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-2.5">
+            <label class="!m-0 flex items-center gap-2 cursor-pointer text-xs text-blue-600 dark:text-blue-400 font-semibold">
+              <input type="checkbox" id="sch-round-robin" class="!w-auto"> Xoay vòng đa tài khoản (Round-robin)
+            </label>
+            <div class="text-[10px] text-slate-400 mt-0.5">Tự động chia đều các video cho các kênh đã kết nối khi đăng hàng loạt.</div>
+          </div>
+        </div>
+
+        <!-- 4. LẬP LỊCH & THỜI GIAN ĐĂNG -->
+        <div class="sch-form-section">
+          <div class="sch-sec-title"><span>⏱️ 4. Thời gian đăng (Schedule)</span></div>
+          <div class="sch-tabs">
+            <button type="button" class="sch-tab-btn active" id="sch-mode-single-btn" onclick="schedulerSwitchSchedMode('single')">Một mốc giờ</button>
+            <button type="button" class="sch-tab-btn" id="sch-mode-batch-btn" onclick="schedulerSwitchSchedMode('batch')">Rải lịch theo lô (Batch)</button>
+          </div>
+
+          <div>
+            <label id="sch-time-lbl">Thời gian bắt đầu đăng</label>
+            <input type="datetime-local" id="sch-time">
+          </div>
+
+          <div id="sch-batch-settings" style="display:none" class="mt-2">
+            <label>Quy tắc rải lịch</label>
+            <select id="sch-batch-rule" onchange="schedulerUpdateBatchPreview()">
+              <option value="golden">Khung giờ vàng AI (11:30 trưa &amp; 19:30 tối)</option>
+              <option value="12">Cách nhau 12 giờ (2 video/ngày)</option>
+              <option value="24">Cách nhau 24 giờ (1 video/ngày)</option>
+              <option value="6">Cách nhau 6 giờ (4 video/ngày)</option>
+              <option value="3">Cách nhau 3 giờ</option>
+            </select>
+            <div id="sch-batch-preview" class="text-[11px] text-blue-600 dark:text-blue-400 mt-2 p-2 bg-blue-50 dark:bg-blue-950/40 rounded border border-blue-200 dark:border-blue-900">
+              ⏱️ Dự kiến: Chọn link và giờ để xem lịch rải.
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. CONTENT & HASHTAGS -->
+        <div class="sch-form-section">
+          <div class="sch-sec-title"><span>📝 5. Content &amp; Hashtags</span></div>
+          <label>Tone giọng viết Caption AI</label>
+          <select id="sch-tone">
+            <option value="Hấp dẫn, bắt trend, kích thích tương tác">Hấp dẫn, bắt trend, giật tít (Viral)</option>
+            <option value="Hài hước, dí dỏm, duyên dáng">Hài hước, vui vẻ, dí dỏm</option>
+            <option value="Kịch tính, bí ẩn, gợi mở tò mò">Kịch tính, bất ngờ, gợi mở</option>
+            <option value="Chia sẻ kiến thức, review chân thực">Chia sẻ kiến thức, review chân thực</option>
+            <option value="Chuyên nghiệp, súc tích">Chuyên nghiệp, ngắn gọn</option>
+          </select>
+
+          <label>Hashtag thương hiệu mặc định (Ghép vào cuối)</label>
+          <input type="text" id="sch-hashtags" placeholder="#xuhuong #fyp #DuyTriTool #Review">
+          <div class="text-[10px] text-slate-400 mt-1">Hệ thống sẽ kết hợp 3-5 hashtag AI + hashtag mặc định này.</div>
+        </div>
+
+        <!-- SUBMIT BUTTONS -->
+        <button class="btn btn-primary w-full py-2.5 font-bold text-sm shadow-sm" onclick="schedulerAdd()">
+          ＋ Thêm vào lịch đăng bài
+        </button>
+
+        <!-- AI AUTO-PLANNER -->
+        <div class="sch-ai-box mt-3">
+          <div class="flex gap-2 items-center">
+            <span class="text-xl">✦</span>
+            <div>
+              <b class="text-xs">AI lập lịch &amp; Viết Caption tự động</b>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">Đọc nội dung video, tối ưu tiêu đề, mô tả và chia đều giờ vàng</div>
+            </div>
+          </div>
+          <button id="sch-ai-btn" class="btn btn-secondary w-full mt-2.5 text-xs font-semibold py-2" onclick="schedulerAIPlan()">
+            ✦ Phân tích link &amp; Lập lịch bằng AI
+          </button>
+        </div>
+      </section>
+
+      <!-- Cột Phải: Danh sách bài đăng & Quản lý -->
+      <section class="space-y-3">
+        <!-- Toolbar filter -->
+        <div class="sch-card p-3 sch-toolbar flex gap-2 items-center flex-wrap">
+          <select id="sch-filter" onchange="schedulerLoad()" style="width:160px">
+            <option value="">Tất cả trạng thái</option>
+            <option value="draft">Bản nháp</option>
+            <option value="planned">Đã lên lịch</option>
+            <option value="processing">Đang xử lý</option>
+            <option value="ready">Sẵn sàng</option>
+            <option value="publishing">Đang đăng</option>
+            <option value="published">Đã đăng</option>
+            <option value="failed">Lỗi</option>
+          </select>
+          <input id="sch-search" oninput="schedulerRender()" placeholder="Tìm theo tiêu đề, link, tài khoản, hashtag..." style="flex:1;min-width:200px">
+          <button class="btn btn-secondary text-xs" onclick="schedulerLoad()">Làm mới</button>
+        </div>
+
+        <!-- List containers -->
+        <div id="sch-list" class="sch-list">
+          <div class="sch-card p-8 text-center text-slate-400">Đang tải danh sách bài đăng...</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- MODAL CHỈNH SỬA NHANH BÀI ĐĂNG -->
+  <div id="sch-edit-modal" class="sch-modal-backdrop" onclick="schedulerCloseModal(event)">
+    <div class="sch-modal-box space-y-3" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between border-b pb-2 border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-base flex items-center gap-1.5">
+          <span>✏️ Chỉnh sửa bài đăng</span>
+        </h3>
+        <button class="text-slate-400 hover:text-slate-600 text-lg" onclick="schedulerCloseModal()">✕</button>
+      </div>
+      <input type="hidden" id="sch-edit-id">
+
+      <div>
+        <label class="text-xs font-semibold block mb-1">Tiêu đề bài đăng</label>
+        <input type="text" id="sch-edit-title" class="w-full border rounded p-2 text-xs bg-transparent">
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold block mb-1">Nội dung Caption</label>
+        <textarea id="sch-edit-caption" rows="3" class="w-full border rounded p-2 text-xs bg-transparent"></textarea>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold block mb-1">Hashtags</label>
+        <input type="text" id="sch-edit-hashtags" class="w-full border rounded p-2 text-xs bg-transparent">
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs font-semibold block mb-1">Nền tảng</label>
+          <select id="sch-edit-platform" class="w-full border rounded p-2 text-xs bg-transparent">
+            <option value="youtube">YouTube</option>
+            <option value="tiktok">TikTok</option>
+            <option value="facebook">Facebook</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold block mb-1">Tài khoản</label>
+          <input type="text" id="sch-edit-acc-name" class="w-full border rounded p-2 text-xs bg-transparent">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs font-semibold block mb-1">Thời gian đăng</label>
+          <input type="datetime-local" id="sch-edit-time" class="w-full border rounded p-2 text-xs bg-transparent">
+        </div>
+        <div>
+          <label class="text-xs font-semibold block mb-1">Trạng thái</label>
+          <select id="sch-edit-status" class="w-full border rounded p-2 text-xs bg-transparent">
+            <option value="draft">Bản nháp</option>
+            <option value="planned">Đã lên lịch</option>
+            <option value="processing">Đang xử lý</option>
+            <option value="ready">Sẵn sàng</option>
+            <option value="publishing">Đang đăng</option>
+            <option value="published">Đã đăng</option>
+            <option value="failed">Lỗi</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-700">
+        <button class="btn btn-secondary text-xs" onclick="schedulerCloseModal()">Hủy</button>
+        <button class="btn btn-primary text-xs" onclick="schedulerSaveEdit()">Lưu thay đổi</button>
+      </div>
+    </div>
+  </div>
+</div>

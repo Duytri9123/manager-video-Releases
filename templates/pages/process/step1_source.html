@@ -1,18 +1,5 @@
 <!-- ═════════════════ STEP 1: Nguồn & cấu hình dùng chung ═════════════════ -->
 <section class="proc-step" data-proc-step="1">
-  <div class="proc-step-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-    <div>
-      <h2 class="proc-step-title" style="display:flex;align-items:center;gap:6px">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent,#6366f1)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span>Nguồn video &amp; cấu hình sử dụng</span>
-      </h2>
-      <p class="proc-step-sub" style="margin:2px 0 0 0">Chọn video đầu vào, thiết lập mô hình AI dùng chung và quản lý hàng chờ tải.</p>
-    </div>
-    <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(1)" title="Lưu cấu hình dùng chung" style="display:inline-flex;align-items:center;gap:4px">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      <span>Lưu cấu hình</span>
-    </button>
-  </div>
 
   <style>
     .step1-grid-layout {
@@ -20,16 +7,19 @@
       grid-template-columns: 1fr;
       gap: 16px;
     }
+
     @media (min-width: 1024px) {
       .step1-grid-layout {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) 380px;
       }
     }
+
     @media (min-width: 1280px) {
       .step1-grid-layout {
         grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.25fr) 430px;
       }
     }
+
     @media (min-width: 1536px) {
       .step1-grid-layout {
         grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) 450px;
@@ -38,33 +28,48 @@
   </style>
 
   <div class="step1-grid-layout" id="step1-grid-container">
-    
+
     <!-- COL 1: Video đầu vào + File đã tải (ở dưới Video đầu vào) -->
-    <div class="flex flex-col gap-4 min-w-0">
+    <div class="flex flex-col  min-w-0">
       <!-- Card: Video đầu vào -->
-      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4">
+      <div
+        class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4">
         <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
           <span class="text-indigo-500 flex items-center">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
           </span>
-          <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Video đầu vào</h3>
+          <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Video đầu vào
+          </h3>
         </div>
-        
+
         <div class="flex flex-col gap-3">
           <!-- Import file video -->
           <div class="field mb-0">
-            <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block truncate h-3.5 leading-[14px]">Import file video</label>
+            <!-- <label
+              class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block truncate h-3.5 leading-[14px]">Import
+              file video</label> -->
             <div class="input-btn-group">
               <input type="text" id="proc-video" readonly placeholder="Chọn file video...">
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('proc-file').click()" title="Chọn file">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('proc-file').click()"
+                title="Chọn file">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                </svg>
               </button>
-              <input type="file" id="proc-file" accept="video/*" style="display:none" multiple onchange="_onProcFileSelected(this)">
+              <input type="file" id="proc-file" accept="video/*" style="display:none" multiple
+                onchange="_onProcFileSelected(this)">
             </div>
             <div class="text-[10px] text-slate-400 mt-0.5 italic truncate" id="proc-file-name">Chưa chọn file</div>
             <div id="proc-file-progress" style="display:none;margin-top:4px">
               <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden;margin-bottom:4px">
-                <div id="proc-file-progress-bar" style="background:var(--primary);height:100%;width:0%;transition:width .3s"></div>
+                <div id="proc-file-progress-bar"
+                  style="background:var(--primary);height:100%;width:0%;transition:width .3s"></div>
               </div>
               <div style="display:flex;align-items:center;gap:6px">
                 <div class="loader-spinner"></div>
@@ -75,66 +80,213 @@
 
           <!-- URL video -->
           <div class="field mb-0">
-            <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block truncate h-3.5 leading-[14px]">URL video</label>
-            <input type="text" id="proc-url" placeholder="Douyin · TikTok · YouTube · Facebook..." class="w-full text-[11px] h-[34px] rounded-lg">
+            <!-- <label
+              class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block truncate h-3.5 leading-[14px]">URL
+              video</label> -->
+            <input type="text" id="proc-url" placeholder="Douyin · TikTok · YouTube · Facebook..."
+              class="w-full text-[11px] h-[34px] rounded-lg">
           </div>
 
           <!-- Thư mục xuất -->
-          <div class="field mb-0">
+          <!-- <div class="field mb-0">
             <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 block truncate h-3.5 leading-[14px]">Thư mục xuất (mặc định: cùng video)</label>
             <input type="text" id="proc-out" placeholder="Để trống = cùng thư mục video" class="w-full text-[11px] h-[34px] rounded-lg">
-          </div>
+          </div> -->
 
           <!-- Button thêm hàng chờ -->
-          <button type="button" class="btn btn-primary w-full py-1.5 font-semibold text-[11px] flex justify-center items-center gap-1.5 mt-1 h-[34px]" id="btn-proc" onclick="_addCurrentToQueue()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <button type="button"
+            class="btn btn-primary w-full py-1.5 font-semibold text-[11px] flex justify-center items-center gap-1.5 mt-1 h-[34px]"
+            id="btn-proc" onclick="_addCurrentToQueue()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
             <span>Thêm vào hàng chờ</span>
           </button>
         </div>
       </div>
 
-      <!-- Card: File đã tải (ở dưới Video đầu vào, mở rộng) -->
-      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex flex-col" id="proc-step1-right">
+      <!-- Card: ĐĂNG BÀI TỰ ĐỘNG (MẠNG XÃ HỘI) -->
+      <div
+        class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4"
+        id="proc-step1-autopub-card">
+        <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100 dark:border-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="text-rose-500 flex items-center">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            </span>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Đăng bài tự
+              động (Mạng xã hội)</h3>
+          </div>
+          <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt tự động đăng bài sau khi xử lý">
+            <input type="checkbox" class="toggle-input" id="step1-autopub-toggle" checked
+              onchange="_onStep1AutoPubToggle(this.checked)">
+            <div class="toggle"></div>
+          </label>
+        </div>
+
+        <div id="step1-autopub-body" class="flex flex-col gap-2">
+          <!-- Platform Tabs / Pills -->
+          <div class="grid grid-cols-3 gap-1.5">
+            <!-- YouTube Pill -->
+            <button type="button" id="step1-pub-pill-yt" onclick="_step1TogglePubPlatform('youtube')"
+              class="flex items-center justify-between px-2 py-1.5 rounded-lg border border-red-200 dark:border-red-900/40 bg-red-50/60 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-[10.5px] font-semibold transition-all cursor-pointer">
+              <span class="flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                  <path
+                    d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                </svg>
+                <span>YouTube</span>
+              </span>
+              <span id="step1-pub-check-yt"
+                class="w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
+            </button>
+
+            <!-- TikTok Pill -->
+            <button type="button" id="step1-pub-pill-tt" onclick="_step1TogglePubPlatform('tiktok')"
+              class="flex items-center justify-between px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 text-slate-800 dark:text-slate-200 text-[10.5px] font-semibold transition-all cursor-pointer">
+              <span class="flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                  <path
+                    d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1.04-.1z" />
+                </svg>
+                <span>TikTok</span>
+              </span>
+              <span id="step1-pub-check-tt"
+                class="w-4 h-4 rounded-full bg-slate-700 dark:bg-slate-600 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
+            </button>
+
+            <!-- Facebook Pill -->
+            <button type="button" id="step1-pub-pill-fb" onclick="_step1TogglePubPlatform('facebook')"
+              class="flex items-center justify-between px-2 py-1.5 rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 text-[10.5px] font-semibold transition-all cursor-pointer">
+              <span class="flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                  <path
+                    d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                </svg>
+                <span>Facebook</span>
+              </span>
+              <span id="step1-pub-check-fb"
+                class="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
+            </button>
+          </div>
+
+          <!-- YouTube Account select -->
+          <div id="step1-yt-pub-row" class="field mb-0">
+            <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Tài khoản YouTube</label>
+            <select id="step1-yt-account-select" onchange="_step1SyncAccountToMain('youtube', this.value)"
+              class="w-full text-[10.5px] h-[28px] rounded px-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              <option value="">Chưa có tài khoản</option>
+            </select>
+          </div>
+
+          <!-- Facebook Account & Page selects -->
+          <div id="step1-fb-pub-row" class="grid grid-cols-2 gap-1.5">
+            <div class="field mb-0">
+              <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Tài khoản Facebook</label>
+              <select id="step1-fb-account-select" onchange="_step1SyncAccountToMain('facebook', this.value)"
+                class="w-full text-[10.5px] h-[28px] rounded px-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <option value="">Chưa có tài khoản</option>
+              </select>
+            </div>
+            <div class="field mb-0">
+              <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Đăng lên Page</label>
+              <select id="step1-fb-page-select" onchange="_step1SyncPageToMain(this.value)"
+                class="w-full text-[10.5px] h-[28px] rounded px-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <option value="">-- Chọn Page --</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card: File đã tải (ở dưới Đăng bài tự động, mở rộng) -->
+      <div
+        class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex flex-col"
+        id="proc-step1-right">
         <div class="flex justify-between items-center mb-2 pb-2 border-b border-slate-100 dark:border-slate-700">
           <div class="flex items-center gap-2">
             <span class="text-indigo-500 flex items-center">
-              <svg class="proc-svg-icon" width="14" height="14" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h7l2 2h9l-2 11H3Z"></path></svg>
+              <svg class="proc-svg-icon" width="14" height="14" aria-hidden="true" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h7l2 2h9l-2 11H3Z"></path>
+              </svg>
             </span>
-            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">File đã tải</h3>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">File đã tải
+            </h3>
           </div>
           <div class="flex items-center gap-1.5">
             <!-- Nút xóa nhiều mục đã chọn -->
-            <button type="button" id="proc-batch-del-btn" class="btn btn-danger text-[9px] py-0.5 px-2 flex items-center gap-1 font-medium shadow-sm transition-all" style="display:none;background:#ef4444;color:#ffffff;border-radius:6px" onclick="deleteSelectedDownloadedFiles()" title="Xóa tất cả mục đã chọn">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <button type="button" id="proc-batch-del-btn"
+              class="flex items-center gap-1 font-semibold text-[10px] shadow-none transition-all cursor-pointer"
+              style="display:none;background:#ef4444;color:#ffffff;border-radius:6px;height:26px;min-height:26px;padding:0 8px;line-height:26px;border:none"
+              onclick="deleteSelectedDownloadedFiles()" title="Xóa tất cả mục đã chọn">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
               <span id="proc-batch-del-count">Xóa (0)</span>
             </button>
 
             <!-- Chuyển đổi chế độ xem Danh sách / Lưới (Grid) -->
-            <div class="inline-flex rounded-md border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-900/60 p-0.5" id="proc-view-toggle-wrap">
-              <button type="button" id="proc-view-btn-list" onclick="setDownloadedViewMode('list')" class="px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 shadow-xs transition-all" title="Xem dạng danh sách">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <div
+              class="inline-flex rounded-md border border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-900/60 p-0.5 h-[26px] items-center"
+              id="proc-view-toggle-wrap">
+              <button type="button" id="proc-view-btn-list" onclick="setDownloadedViewMode('list')"
+                class="px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 shadow-xs transition-all h-[22px] flex items-center"
+                title="Xem dạng danh sách">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="8" y1="6" x2="21" y2="6" />
+                  <line x1="8" y1="12" x2="21" y2="12" />
+                  <line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" />
+                  <line x1="3" y1="12" x2="3.01" y2="12" />
+                  <line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
               </button>
-              <button type="button" id="proc-view-btn-grid" onclick="setDownloadedViewMode('grid')" class="px-1.5 py-0.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all" title="Xem dạng lưới (Grid)">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+              <button type="button" id="proc-view-btn-grid" onclick="setDownloadedViewMode('grid')"
+                class="px-1.5 py-0.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all h-[22px] flex items-center"
+                title="Xem dạng lưới (Grid)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                </svg>
               </button>
             </div>
 
-            <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2 flex items-center gap-1" onclick="loadDownloadedVideos()">
+            <button type="button" class="btn btn-secondary text-[10px] flex items-center gap-1 font-medium"
+              style="height:26px;min-height:26px;padding:0 8px;line-height:26px" onclick="loadDownloadedVideos()">
               <span>↻ Làm mới</span>
             </button>
           </div>
+
         </div>
 
         <div class="flex items-center justify-between mb-2 flex-wrap gap-2 text-[11px]">
-          <div id="proc-files-breadcrumb" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text2)">
-            <span style="color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:5px"><svg class="proc-svg-icon" width="13" height="13" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h7l2 2h9l-2 11H3Z"></path></svg> Downloaded</span>
+          <div id="proc-files-breadcrumb"
+            style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text2)">
+            <span style="color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:5px"><svg
+                class="proc-svg-icon" width="13" height="13" aria-hidden="true" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h7l2 2h9l-2 11H3Z"></path>
+              </svg> Downloaded</span>
           </div>
-          <label class="inline-flex items-center gap-1.5 text-[10.5px] text-slate-600 dark:text-slate-300 cursor-pointer select-none font-medium ml-auto" id="proc-select-all-wrap">
-            <input type="checkbox" id="proc-select-all-files" onchange="toggleSelectAllDownloadedFiles(this.checked)" class="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 scale-90 cursor-pointer">
+          <label
+            class="inline-flex items-center gap-1.5 text-[10.5px] text-slate-600 dark:text-slate-300 cursor-pointer select-none font-medium ml-auto"
+            id="proc-select-all-wrap">
+            <input type="checkbox" id="proc-select-all-files" onchange="toggleSelectAllDownloadedFiles(this.checked)"
+              class="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 scale-90 cursor-pointer">
             <span>Chọn tất cả</span>
           </label>
         </div>
-        <div id="proc-downloaded-list" style="max-height:420px;min-height:220px;overflow-y:auto" class="flex-1">
+        <div id="proc-downloaded-list" style="max-height:360px;min-height:160px;overflow-y:auto" class="flex-1">
           <div class="empty-state text-xs">Đang tải danh sách...</div>
         </div>
       </div>
@@ -143,79 +295,122 @@
     <!-- COL 2: Hàng chờ tải & xử lý -->
     <div class="flex flex-col gap-4 min-w-0 flex-1">
       <!-- Card: Hàng chờ tải & xử lý (mở rộng toàn bộ chiều cao) -->
-      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex flex-col" id="step1-queue-card">
+      <div
+        class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex flex-col"
+        id="step1-queue-card">
         <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
           <div class="flex items-center gap-2">
             <span class="text-indigo-500 flex items-center">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+              </svg>
             </span>
-            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Hàng chờ tải &amp; xử lý (<span id="batch-count" class="text-indigo-500 font-bold">0</span>)</h3>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Hàng chờ tải
+              &amp; xử lý (<span id="batch-count" class="text-indigo-500 font-bold">0</span>)</h3>
           </div>
-          <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2 flex items-center gap-1" onclick="window._batchQueue=[];_renderBatchQueue()">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2 flex items-center gap-1"
+            onclick="window._batchQueue=[];_renderBatchQueue()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
             <span>Xóa tất cả</span>
           </button>
         </div>
 
         <!-- 4 Quick Option Checkboxes: 1 hàng ngang duy nhất -->
         <div class="grid grid-cols-4 gap-1 mb-2.5 pb-2 border-b border-slate-100 dark:border-slate-700/60">
-          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]" title="Tự động hóa toàn bộ quy trình sau khi tải">
+          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
+            title="Tự động hóa toàn bộ quy trình sau khi tải">
             <input type="checkbox" id="proc-auto-flow" class="accent-indigo-500">
             <span class="truncate">Tự động hóa</span>
           </label>
-          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]" title="Bỏ qua phụ đề ASS">
+          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
+            title="Bỏ qua phụ đề ASS">
             <input type="checkbox" id="step3-skip-ass" onchange="_onStep3SkipChange()" class="accent-indigo-500">
             <span class="truncate">Bỏ qua ASS</span>
           </label>
-          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]" title="Bỏ qua phụ đề">
-            <input type="checkbox" id="proc-skip-transcription" onchange="_onSkipTranscriptionChange()" class="accent-indigo-500">
+          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
+            title="Bỏ qua phụ đề">
+            <input type="checkbox" id="proc-skip-transcription" onchange="_onSkipTranscriptionChange()"
+              class="accent-indigo-500">
             <span class="truncate">Bỏ qua phụ đề</span>
           </label>
-          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]" title="Chỉ tải video gốc về máy">
+          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
+            title="Chỉ tải video gốc về máy">
             <input type="checkbox" id="proc-download-only" class="accent-indigo-500">
             <span class="truncate">Chỉ tải video</span>
           </label>
         </div>
 
         <!-- Video Queue List (tối ưu mở rộng theo chiều cao) -->
-        <div id="batch-queue-list" style="display:flex;flex-direction:column;gap:6px;max-height:460px;min-height:240px;overflow-y:auto;margin-bottom:8px" class="flex-1">
+        <div id="batch-queue-list"
+          style="display:flex;flex-direction:column;gap:6px;max-height:460px;min-height:240px;overflow-y:auto;margin-bottom:8px"
+          class="flex-1">
           <div class="empty-state text-xs">Chưa có video nào trong hàng chờ.</div>
         </div>
 
         <!-- Download area -->
-        <div id="step1-download-area" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div id="step1-download-area"
+          style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-            <button type="button" class="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1.5 h-[30px]" id="btn-step1-download" onclick="window._step1Downloading=false;_runStep1QueueDownload()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <button type="button" class="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1.5 h-[30px]"
+              id="btn-step1-download" onclick="window._step1Downloading=false;_runStep1QueueDownload()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
               <span>Tải hàng chờ</span>
             </button>
             <span class="text-[10px] text-slate-400" id="step1-dl-status">Nhấn để tải video gốc từ URL.</span>
           </div>
-          <div id="step1-dl-log" style="max-height:120px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:monospace;color:var(--text);display:none"></div>
+          <div id="step1-dl-log"
+            style="max-height:120px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:monospace;color:var(--text);display:none">
+          </div>
         </div>
 
         <!-- Next button -->
         <div class="mt-2" id="step1-next-btn-wrap" style="display:none">
-          <button type="button" class="btn btn-primary w-full py-1.5 font-semibold text-[11px] flex justify-center items-center gap-1.5 h-[34px]" onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
+          <button type="button"
+            class="btn btn-primary w-full py-1.5 font-semibold text-[11px] flex justify-center items-center gap-1.5 h-[34px]"
+            onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
             <span>Tiếp tục sang Bước 2</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
           </button>
         </div>
       </div>
 
       <!-- Card: Lịch sử tải xuống (đã ẩn theo yêu cầu) -->
-      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex-col" id="proc-history-card" style="display:none">
+      <div
+        class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-4 flex-1 flex-col"
+        id="proc-history-card" style="display:none">
         <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
           <div class="flex items-center gap-2">
             <span class="text-indigo-500 flex items-center">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
             </span>
-            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Lịch sử tải xuống</h3>
+            <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Lịch sử tải
+              xuống</h3>
           </div>
           <span class="text-[10px] text-slate-400 font-medium" id="proc-history-count"></span>
         </div>
 
-        <div id="proc-download-history" style="display:flex;flex-direction:column;gap:5px;max-height:360px;min-height:180px;overflow-y:auto" class="flex-1">
+        <div id="proc-download-history"
+          style="display:flex;flex-direction:column;gap:5px;max-height:360px;min-height:180px;overflow-y:auto"
+          class="flex-1">
           <div class="text-[10px] text-slate-400 italic">Đang tải lịch sử...</div>
         </div>
       </div>
@@ -223,29 +418,100 @@
 
     <!-- COL 3: Cấu hình sử dụng (trong cùng bên phải, khung thu nhỏ gọn) -->
     <div class="flex flex-col gap-4 min-w-0">
-      <div class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-3" id="proc-shared-config-card">
+      <div
+        class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-3"
+        id="proc-shared-config-card">
         <div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-100 dark:border-slate-700">
           <span class="text-indigo-500 flex items-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4" />
+            </svg>
           </span>
-          <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Cấu hình sử dụng</h3>
+          <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Cấu hình sử dụng
+          </h3>
         </div>
 
         <div class="flex flex-col gap-1.5">
           <!-- Ngôn ngữ đầu vào / đầu ra -->
           <div class="grid grid-cols-2 gap-1.5 items-start">
             <div class="field mb-0 flex flex-col">
-              <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5 block truncate h-3 leading-[12px]">Ngôn ngữ đầu vào</label>
+              <label
+                class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5 block truncate h-3 leading-[12px]">Ngôn
+                ngữ đầu vào</label>
               <select id="proc-lang" class="w-full text-[11px] h-[30px] rounded-lg px-2">
                 <option value="zh" selected>Tiếng Trung</option>
+                <option value="vi">Tiếng Việt</option>
                 <option value="en">Tiếng Anh</option>
                 <option value="ja">Tiếng Nhật</option>
                 <option value="ko">Tiếng Hàn</option>
+                <option value="th">Tiếng Thái</option>
+                <option value="id">Tiếng Indonesia</option>
+                <option value="ms">Tiếng Mã Lai</option>
+                <option value="tl">Tiếng Philippines</option>
+                <option value="es">Tiếng Tây Ban Nha</option>
+                <option value="pt">Tiếng Bồ Đào Nha</option>
+                <option value="fr">Tiếng Pháp</option>
+                <option value="de">Tiếng Đức</option>
+                <option value="it">Tiếng Ý</option>
+                <option value="nl">Tiếng Hà Lan</option>
+                <option value="ru">Tiếng Nga</option>
+                <option value="uk">Tiếng Ukraina</option>
+                <option value="pl">Tiếng Ba Lan</option>
+                <option value="cs">Tiếng Séc</option>
+                <option value="sk">Tiếng Slovak</option>
+                <option value="ro">Tiếng Romania</option>
+                <option value="hu">Tiếng Hungary</option>
+                <option value="bg">Tiếng Bulgaria</option>
+                <option value="sr">Tiếng Serbia</option>
+                <option value="hr">Tiếng Croatia</option>
+                <option value="sl">Tiếng Slovenia</option>
+                <option value="el">Tiếng Hy Lạp</option>
+                <option value="tr">Tiếng Thổ Nhĩ Kỳ</option>
+                <option value="ar">Tiếng Ả Rập</option>
+                <option value="he">Tiếng Do Thái</option>
+                <option value="fa">Tiếng Ba Tư</option>
+                <option value="hi">Tiếng Hindi</option>
+                <option value="bn">Tiếng Bengal</option>
+                <option value="ur">Tiếng Urdu</option>
+                <option value="ta">Tiếng Tamil</option>
+                <option value="te">Tiếng Telugu</option>
+                <option value="ml">Tiếng Malayalam</option>
+                <option value="mr">Tiếng Marathi</option>
+                <option value="gu">Tiếng Gujarati</option>
+                <option value="kn">Tiếng Kannada</option>
+                <option value="ne">Tiếng Nepal</option>
+                <option value="sv">Tiếng Thụy Điển</option>
+                <option value="no">Tiếng Na Uy</option>
+                <option value="da">Tiếng Đan Mạch</option>
+                <option value="fi">Tiếng Phần Lan</option>
+                <option value="is">Tiếng Iceland</option>
+                <option value="et">Tiếng Estonia</option>
+                <option value="lv">Tiếng Latvia</option>
+                <option value="lt">Tiếng Litva</option>
+                <option value="ca">Tiếng Catalan</option>
+                <option value="gl">Tiếng Galicia</option>
+                <option value="eu">Tiếng Basque</option>
+                <option value="af">Tiếng Afrikaans</option>
+                <option value="sw">Tiếng Swahili</option>
+                <option value="cy">Tiếng Wales</option>
+                <option value="hy">Tiếng Armenia</option>
+                <option value="az">Tiếng Azerbaijan</option>
+                <option value="be">Tiếng Belarus</option>
+                <option value="bs">Tiếng Bosnia</option>
+                <option value="kk">Tiếng Kazakhstan</option>
+                <option value="mk">Tiếng Macedonia</option>
+                <option value="mi">Tiếng Māori</option>
               </select>
             </div>
             <div class="field mb-0 flex flex-col">
-              <label class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5 block truncate h-3 leading-[12px]">Ngôn ngữ đầu ra</label>
-              <select id="proc-target-lang" onchange="_onTargetLangChange()" class="w-full text-[11px] h-[30px] rounded-lg px-2">
+              <label
+                class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5 block truncate h-3 leading-[12px]">Ngôn
+                ngữ đầu ra</label>
+              <select id="proc-target-lang" onchange="_onTargetLangChange()"
+                class="w-full text-[11px] h-[30px] rounded-lg px-2">
                 <option value="vi" selected>Tiếng Việt</option>
                 <option value="en">English</option>
                 <option value="ja">日本語</option>
@@ -259,26 +525,87 @@
                 <option value="ru">Русский</option>
                 <option value="ar">العربية</option>
                 <option value="hi">हिन्दी</option>
+                <option value="zh">中文</option>
+                <option value="ms">Bahasa Melayu</option>
+                <option value="tl">Filipino</option>
+                <option value="it">Italiano</option>
+                <option value="nl">Nederlands</option>
+                <option value="uk">Українська</option>
+                <option value="pl">Polski</option>
+                <option value="cs">Čeština</option>
+                <option value="sk">Slovenčina</option>
+                <option value="ro">Română</option>
+                <option value="hu">Magyar</option>
+                <option value="bg">Български</option>
+                <option value="sr">Српски</option>
+                <option value="hr">Hrvatski</option>
+                <option value="sl">Slovenščina</option>
+                <option value="el">Ελληνικά</option>
+                <option value="tr">Türkçe</option>
+                <option value="he">עברית</option>
+                <option value="fa">فارسی</option>
+                <option value="bn">বাংলা</option>
+                <option value="ur">اردو</option>
+                <option value="ta">தமிழ்</option>
+                <option value="te">తెలుగు</option>
+                <option value="ml">മലയാളം</option>
+                <option value="mr">मराठी</option>
+                <option value="gu">ગુજરાતી</option>
+                <option value="kn">ಕನ್ನಡ</option>
+                <option value="ne">नेपाली</option>
+                <option value="sv">Svenska</option>
+                <option value="no">Norsk</option>
+                <option value="da">Dansk</option>
+                <option value="fi">Suomi</option>
+                <option value="is">Íslenska</option>
+                <option value="et">Eesti</option>
+                <option value="lv">Latviešu</option>
+                <option value="lt">Lietuvių</option>
+                <option value="ca">Català</option>
+                <option value="gl">Galego</option>
+                <option value="eu">Euskara</option>
+                <option value="af">Afrikaans</option>
+                <option value="sw">Kiswahili</option>
+                <option value="cy">Cymraeg</option>
+                <option value="hy">Հայերեն</option>
+                <option value="az">Azərbaycanca</option>
+                <option value="be">Беларуская</option>
+                <option value="bs">Bosanski</option>
+                <option value="kk">Қазақша</option>
+                <option value="mk">Македонски</option>
+                <option value="mi">Māori</option>
               </select>
             </div>
           </div>
 
           <!-- Feature 1: Dịch phụ đề -->
-          <div class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+          <div
+            class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  class="text-indigo-500">
+                  <path d="M5 8l6 6" />
+                  <path d="M4 14l6-6 2-3" />
+                  <path d="M2 5h12" />
+                  <path d="M7 2h1" />
+                  <path d="M22 22l-5-10-5 10" />
+                  <path d="M14 18h6" />
+                </svg>
                 <span>Dịch phụ đề</span>
               </span>
               <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt dịch phụ đề">
-                <input type="checkbox" class="toggle-input" id="cfg-toggle-trans" checked onchange="cfgToggleFeature('trans', this.checked)">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-trans" checked
+                  onchange="cfgToggleFeature('trans', this.checked)">
                 <div class="toggle"></div>
               </label>
             </div>
             <div id="cfg-wrap-trans" class="grid grid-cols-2 gap-1.5">
               <div class="field mb-0">
                 <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Provider</label>
-                <select id="proc-translation-provider" onchange="onTranslationProviderChanged();if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                <select id="proc-translation-provider"
+                  onchange="onTranslationProviderChanged();if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                  class="w-full text-[10.5px] h-[28px] rounded px-1.5">
                   <option value="antigravity" selected>Antigravity</option>
                   <option value="google">Google Translate</option>
                   <option value="groq">Groq</option>
@@ -289,7 +616,10 @@
               </div>
               <div class="field mb-0">
                 <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Model</label>
-                <select id="proc-trans-provider-model" onfocus="if(this.options.length<=1)onTranslationProviderChanged(true)" onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                <select id="proc-trans-provider-model"
+                  onfocus="if(this.options.length<=1)onTranslationProviderChanged(true)"
+                  onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                  class="w-full text-[10.5px] h-[28px] rounded px-1.5">
                   <option value="">Tự động theo Provider</option>
                   <option value="gemini-3.7-flash" selected>Gemini 3.7 Flash</option>
                   <option value="gemini-3.8-flash-high">Gemini 3.8 Flash (High)</option>
@@ -309,50 +639,80 @@
           </div>
 
           <!-- Feature 2: Đọc ảnh / Video -->
-          <div class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+          <div
+            class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  class="text-indigo-500">
+                  <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+                  <line x1="7" y1="2" x2="7" y2="22" />
+                  <line x1="17" y1="2" x2="17" y2="22" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                </svg>
                 <span>Đọc ảnh / Video</span>
               </span>
               <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt đọc ảnh/video">
-                <input type="checkbox" class="toggle-input" id="cfg-toggle-video-ai" checked onchange="cfgToggleFeature('video-ai', this.checked)">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-video-ai" checked
+                  onchange="cfgToggleFeature('video-ai', this.checked)">
                 <div class="toggle"></div>
               </label>
             </div>
             <div id="cfg-wrap-video-ai" class="grid grid-cols-2 gap-1.5">
               <div class="field mb-0">
                 <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Provider</label>
-                <select id="proc-ai-video-provider" disabled class="w-full text-[10.5px] h-[28px] rounded px-1.5"><option value="antigravity">Antigravity</option></select>
+                <select id="proc-ai-video-provider" disabled class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                  <option value="antigravity">Antigravity</option>
+                </select>
               </div>
               <div class="field mb-0" id="proc-ai-video-nine-model-row">
                 <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Model</label>
-                <select id="proc-ai-video-nine-model" onfocus="loadProcAiVideoModels()" onchange="if(typeof _syncAiVideoModel==='function')_syncAiVideoModel(this.value);if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5"><option value="none">Tắt</option></select>
+                <select id="proc-ai-video-nine-model" onfocus="loadProcAiVideoModels()"
+                  onchange="if(typeof _syncAiVideoModel==='function')_syncAiVideoModel(this.value);if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                  class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                  <option value="none">Tắt</option>
+                </select>
                 <input type="checkbox" id="proc-ai-video-auto" style="display:none" checked>
               </div>
             </div>
           </div>
 
           <!-- Feature 3: Phiên âm STT -->
-          <div class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+          <div
+            class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  class="text-indigo-500">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
                 <span>Phiên âm STT</span>
               </span>
               <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt phiên âm">
-                <input type="checkbox" class="toggle-input" id="cfg-toggle-stt" checked onchange="cfgToggleFeature('stt', this.checked)">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-stt" checked
+                  onchange="cfgToggleFeature('stt', this.checked)">
                 <div class="toggle"></div>
               </label>
             </div>
             <div id="cfg-wrap-stt" class="grid grid-cols-2 gap-1.5">
               <div class="field mb-0">
                 <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Provider</label>
-                <select id="proc-transcribe-provider-model" onchange="onTranscribeProviderChanged();if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5"><option value="antigravity" selected>Antigravity</option><option value="groq">Groq</option><option value="model">Whisper local</option></select>
+                <select id="proc-transcribe-provider-model"
+                  onchange="onTranscribeProviderChanged();if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                  class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                  <option value="antigravity" selected>Antigravity</option>
+                  <option value="groq">Groq</option>
+                  <option value="model">Whisper local</option>
+                </select>
               </div>
               <div class="field mb-0">
                 <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Model</label>
-                <select id="proc-model" onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                <select id="proc-model"
+                  onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                  class="w-full text-[10.5px] h-[28px] rounded px-1.5">
                   <option value="gemini-3.8-flash-high" selected>Gemini 3.8 Flash (High)</option>
                   <option value="gemini-3.8-flash-medium">Gemini 3.8 Flash (Medium)</option>
                   <option value="gemini-3.8-flash-low">Gemini 3.8 Flash (Low)</option>
@@ -365,32 +725,95 @@
           </div>
 
           <!-- Feature 4: Lồng tiếng TTS -->
-          <div class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+          <div
+            class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
             <div class="flex items-center justify-between mb-1">
               <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  class="text-indigo-500">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
                 <span>Lồng tiếng (TTS)</span>
               </span>
               <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt lồng tiếng">
-                <input type="checkbox" class="toggle-input" id="cfg-toggle-tts" checked onchange="cfgToggleFeature('tts', this.checked)">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-tts" checked
+                  onchange="cfgToggleFeature('tts', this.checked)">
                 <div class="toggle"></div>
               </label>
+              <input type="checkbox" id="proc-voice" style="display:none;" checked>
             </div>
             <div id="cfg-wrap-tts" class="grid grid-cols-2 gap-1.5">
               <div class="field mb-0">
                 <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Engine</label>
-                <select id="proc-tts-engine" onchange="_syncVoiceOptions('proc-tts-engine','proc-tts-voice');if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5"><option value="vieneu" selected>VieNeu v3 Turbo</option></select>
+                <select id="proc-tts-engine"
+                  onchange="_syncVoiceOptions('proc-tts-engine','proc-tts-voice');if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                  class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                  <option value="vieneu" selected>VieNeu v3 Turbo</option>
+                </select>
               </div>
               <div class="field mb-0">
                 <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Giọng đọc</label>
-                <select id="proc-tts-voice" onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()" class="w-full text-[10.5px] h-[28px] rounded px-1.5">
+                <select id="proc-tts-voice"
+                  onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                  class="w-full text-[10.5px] h-[28px] rounded px-1.5">
                   <option value="vi-VN-Standard-A" selected>Mặc định (Nữ)</option>
                 </select>
               </div>
             </div>
           </div>
 
-          <div style="display:none"><select id="proc-transcribe-provider-ai"><option value="groq" selected>Groq</option></select><select id="proc-trans-provider-ai"><option value="antigravity" selected>Antigravity</option></select></div><div id="proc-ai-panel" style="display:none"></div><div id="proc-model-panel" style="display:none"></div>
+          <!-- Feature 5: Cấu hình video -->
+          <div
+            class="cfg-feature-block p-1.5 rounded-lg border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10.5px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  class="text-indigo-500">
+                  <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+                  <polygon points="10 8 16 12 10 16 10 8" />
+                </svg>
+                <span>Cấu hình video</span>
+              </span>
+              <label class="toggle-wrap m-0 scale-75" title="Bật/Tắt cấu hình video">
+                <input type="checkbox" class="toggle-input" id="cfg-toggle-video" checked
+                  onchange="cfgToggleFeature('video', this.checked)">
+                <div class="toggle"></div>
+              </label>
+            </div>
+            <div id="cfg-wrap-video" class="flex flex-col gap-1.5">
+              <div class="field mb-0">
+                <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Cấu hình video đã lưu</label>
+                <div class="flex items-center gap-1">
+                  <select id="step1-profile-select"
+                    onchange="if(typeof pe2ApplyNamedProfile==='function')pe2ApplyNamedProfile(this.value)"
+                    class="w-full text-[10.5px] h-[28px] rounded px-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <option value="">Cấu hình đã lưu…</option>
+                  </select>
+                  <button type="button"
+                    class="btn btn-secondary btn-sm h-[28px] px-2 flex items-center justify-center shrink-0"
+                    onclick="if(typeof pe2ApplyNamedProfile==='function')pe2ApplyNamedProfile(document.getElementById('step1-profile-select')?.value)"
+                    title="Áp dụng cấu hình">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <input type="hidden" id="step1-video-aspect" value="auto">
+              <input type="hidden" id="step1-video-pad-mode" value="blur">
+            </div>
+          </div>
+
+          <div style="display:none"><select id="proc-transcribe-provider-ai">
+              <option value="groq" selected>Groq</option>
+            </select><select id="proc-trans-provider-ai">
+              <option value="antigravity" selected>Antigravity</option>
+            </select></div>
+          <div id="proc-ai-panel" style="display:none"></div>
+          <div id="proc-model-panel" style="display:none"></div>
         </div>
       </div>
     </div>
@@ -398,6 +821,119 @@
   </div>
 
   <script>
+    function _syncStep1VideoAspect(val) {
+      const aspectSel = document.getElementById('proc-preview-aspect');
+      if (aspectSel) {
+        aspectSel.value = val;
+        if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
+        if (typeof pe2SetAspect === 'function') pe2SetAspect(val);
+      }
+      try { localStorage.setItem('step1_video_aspect', val); } catch (_) { }
+      if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
+    }
+    window._syncStep1VideoAspect = _syncStep1VideoAspect;
+
+    function _syncStep1VideoPadMode(val) {
+      const padChk = document.getElementById('proc-aspect-blur-bg');
+      if (padChk) {
+        padChk.checked = (val === 'blur');
+        if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+      }
+      try { localStorage.setItem('step1_video_pad_mode', val); } catch (_) { }
+      if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
+    }
+    window._syncStep1VideoPadMode = _syncStep1VideoPadMode;
+
+    function _onStep1AutoPubToggle(enabled) {
+      const body = document.getElementById('step1-autopub-body');
+      if (body) body.style.display = enabled ? 'flex' : 'none';
+      const publishToggle = document.getElementById('p-autopub-enabled');
+      if (publishToggle) publishToggle.checked = !!enabled;
+      try { localStorage.setItem('step1_autopub_enabled', enabled ? '1' : '0'); } catch (_) { }
+    }
+    window._onStep1AutoPubToggle = _onStep1AutoPubToggle;
+
+    function _step1TogglePubPlatform(platform) {
+      if (typeof pPubTogglePlatform === 'function') {
+        pPubTogglePlatform(platform);
+      } else {
+        window._pPubEnabled = window._pPubEnabled || { youtube: true, tiktok: true, facebook: true };
+        window._pPubEnabled[platform] = !window._pPubEnabled[platform];
+      }
+      _syncStep1PubUI();
+    }
+    window._step1TogglePubPlatform = _step1TogglePubPlatform;
+
+    function _syncStep1PubUI() {
+      const enabled = window._pPubEnabled || { youtube: true, tiktok: true, facebook: true };
+      ['youtube', 'tiktok', 'facebook'].forEach(p => {
+        const shortId = p === 'youtube' ? 'yt' : (p === 'tiktok' ? 'tt' : 'fb');
+        const pill = document.getElementById(`step1-pub-pill-${shortId}`);
+        const check = document.getElementById(`step1-pub-check-${shortId}`);
+        const isOn = enabled[p] !== false;
+        if (check) {
+          check.textContent = isOn ? '✓' : '✕';
+          check.className = isOn
+            ? `w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold ${p === 'youtube' ? 'bg-red-500' : (p === 'tiktok' ? 'bg-slate-700 dark:bg-slate-600' : 'bg-blue-600')}`
+            : 'w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-600 dark:text-slate-300 flex items-center justify-center text-[9px] font-bold';
+        }
+        if (pill) {
+          pill.style.opacity = isOn ? '1' : '0.45';
+        }
+      });
+      const ytRow = document.getElementById('step1-yt-pub-row');
+      if (ytRow) ytRow.style.display = (enabled.youtube !== false) ? 'block' : 'none';
+      const fbRow = document.getElementById('step1-fb-pub-row');
+      if (fbRow) fbRow.style.display = (enabled.facebook !== false) ? 'grid' : 'none';
+    }
+    window._syncStep1PubUI = _syncStep1PubUI;
+
+    function _step1SyncAccountToMain(platform, val) {
+      if (platform === 'youtube') {
+        const main = document.getElementById('p-yt-account-select');
+        if (main) { main.value = val; main.dispatchEvent(new Event('change')); }
+        const top = document.getElementById('yt-account-select');
+        if (top) { top.value = val; if (typeof onAccountSelectChange === 'function') onAccountSelectChange('youtube', top); }
+      } else if (platform === 'facebook') {
+        const main = document.getElementById('p-fb-account-select');
+        if (main) { main.value = val; main.dispatchEvent(new Event('change')); }
+        const top = document.getElementById('fb-account-select');
+        if (top) { top.value = val; if (typeof onAccountSelectChange === 'function') onAccountSelectChange('facebook', top); }
+      }
+    }
+    window._step1SyncAccountToMain = _step1SyncAccountToMain;
+
+    function _step1SyncPageToMain(val) {
+      const main = document.getElementById('p-fb-page-select');
+      if (main) { main.value = val; main.dispatchEvent(new Event('change')); }
+      const top = document.getElementById('pub-fb-page-select');
+      if (top) { top.value = val; top.dispatchEvent(new Event('change')); }
+    }
+    window._step1SyncPageToMain = _step1SyncPageToMain;
+
+    function _step1SyncSelectorsFromPublish() {
+      const mirror = (srcId, dstId) => {
+        const src = document.getElementById(srcId);
+        const dst = document.getElementById(dstId);
+        if (!src || !dst) return;
+        if (dst.dataset.lastHtml !== src.innerHTML) {
+          const prev = dst.value;
+          dst.innerHTML = src.innerHTML;
+          dst.dataset.lastHtml = src.innerHTML;
+          if (prev && [...dst.options].some(o => o.value === prev)) dst.value = prev;
+          else if (src.value) dst.value = src.value;
+        }
+      };
+      mirror('p-yt-account-select', 'step1-yt-account-select');
+      mirror('yt-account-select', 'step1-yt-account-select');
+      mirror('p-fb-account-select', 'step1-fb-account-select');
+      mirror('fb-account-select', 'step1-fb-account-select');
+      mirror('p-fb-page-select', 'step1-fb-page-select');
+      mirror('pub-fb-page-select', 'step1-fb-page-select');
+      _syncStep1PubUI();
+    }
+    window._step1SyncSelectorsFromPublish = _step1SyncSelectorsFromPublish;
+
     function cfgToggleFeature(feat, enabled) {
       const wrap = document.getElementById('cfg-wrap-' + feat);
       if (wrap) wrap.style.display = enabled ? (wrap.classList.contains('grid-2') || wrap.classList.contains('grid') ? 'grid' : 'block') : 'none';
@@ -407,17 +943,30 @@
           skipChk.checked = !enabled;
           if (typeof _onSkipTranscriptionChange === 'function') _onSkipTranscriptionChange();
         }
+      } else if (feat === 'tts') {
+        const pv = document.getElementById('proc-voice');
+        if (pv && pv.checked !== !!enabled) pv.checked = !!enabled;
+      } else if (feat === 'trans') {
+        const pt = document.getElementById('proc-translate-subs');
+        if (pt && pt.checked !== !!enabled) pt.checked = !!enabled;
       } else if (feat === 'video-ai') {
         const vidSel = document.getElementById('proc-ai-video-nine-model');
         if (!enabled && vidSel) vidSel.value = 'none';
+      } else if (feat === 'video') {
+        const aspectSel = document.getElementById('step1-video-aspect');
+        if (!enabled) {
+          _syncStep1VideoAspect('auto');
+        } else if (aspectSel) {
+          _syncStep1VideoAspect(aspectSel.value);
+        }
       }
-      try { localStorage.setItem('cfg_toggle_' + feat, enabled ? '1' : '0'); } catch(_) {}
+      try { localStorage.setItem('cfg_toggle_' + feat, enabled ? '1' : '0'); } catch (_) { }
       if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
     }
     window.cfgToggleFeature = cfgToggleFeature;
 
     document.addEventListener('DOMContentLoaded', () => {
-      ['trans', 'video-ai', 'stt', 'tts'].forEach(f => {
+      ['trans', 'video-ai', 'stt', 'tts', 'video'].forEach(f => {
         try {
           const val = localStorage.getItem('cfg_toggle_' + f);
           if (val !== null) {
@@ -428,8 +977,53 @@
               cfgToggleFeature(f, isEnabled);
             }
           }
-        } catch(_) {}
+        } catch (_) { }
       });
+
+      const pv = document.getElementById('proc-voice');
+      if (pv) {
+        pv.addEventListener('change', () => {
+          const tgl = document.getElementById('cfg-toggle-tts');
+          if (tgl && tgl.checked !== pv.checked) {
+            tgl.checked = pv.checked;
+            cfgToggleFeature('tts', pv.checked);
+          }
+        });
+      }
+      const pt = document.getElementById('proc-translate-subs');
+      if (pt) {
+        pt.addEventListener('change', () => {
+          const tgl = document.getElementById('cfg-toggle-trans');
+          if (tgl && tgl.checked !== pt.checked) {
+            tgl.checked = pt.checked;
+            cfgToggleFeature('trans', pt.checked);
+          }
+        });
+      }
+
+      try {
+        const savedAspect = localStorage.getItem('step1_video_aspect');
+        if (savedAspect) {
+          const el = document.getElementById('step1-video-aspect');
+          if (el) el.value = savedAspect;
+          _syncStep1VideoAspect(savedAspect);
+        }
+        const savedPadMode = localStorage.getItem('step1_video_pad_mode');
+        if (savedPadMode) {
+          const el = document.getElementById('step1-video-pad-mode');
+          if (el) el.value = savedPadMode;
+          _syncStep1VideoPadMode(savedPadMode);
+        }
+        const savedAutoPub = localStorage.getItem('step1_autopub_enabled');
+        if (savedAutoPub !== null) {
+          const isPub = savedAutoPub === '1';
+          const pubChk = document.getElementById('step1-autopub-toggle');
+          if (pubChk) {
+            pubChk.checked = isPub;
+            _onStep1AutoPubToggle(isPub);
+          }
+        }
+      } catch (_) { }
 
       if (typeof loadDownloadedVideos === 'function') loadDownloadedVideos('');
       if (typeof loadProcessDownloadHistory === 'function') loadProcessDownloadHistory();
@@ -437,6 +1031,11 @@
       if (typeof _syncVoiceOptions === 'function') _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
       if (typeof loadProcAiVideoModels === 'function') loadProcAiVideoModels();
       if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
+      if (typeof pe2PopulateProfileSelects === 'function') pe2PopulateProfileSelects();
+
+      _step1SyncSelectorsFromPublish();
+      setInterval(_step1SyncSelectorsFromPublish, 3000);
+
       setTimeout(() => { if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary(); }, 400);
       setTimeout(() => { if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary(); }, 1200);
     });

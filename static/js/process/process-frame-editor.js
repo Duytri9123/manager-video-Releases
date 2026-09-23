@@ -1,22 +1,30 @@
 function subPreviewUpdate() {
-    const fsInput = document.getElementById('proc-font-size');
-    const fsSlider = document.getElementById('proc-font-size-slider');
-    if (fsInput && fsSlider && fsSlider.value !== fsInput.value) {
-      fsSlider.value = fsInput.value || 4.5;
-    }
-
-    if (document.getElementById('frame-enabled')?.checked) {
-      framePreviewUpdate(); // re-draw canvas including subtitle
-    } else {
-      _renderSubOverlay();
-    }
-    if (window.pe2RenderRanges) window.pe2RenderRanges();
+  const fsInput = document.getElementById('proc-font-size');
+  const fsSlider = document.getElementById('proc-font-size-slider');
+  if (fsInput && fsSlider && fsSlider.value !== fsInput.value) {
+    fsSlider.value = fsInput.value || 4.5;
   }
-  function ovSelectLayer(id, open, skipSubUpdate) {
-    const ov = _ovFind(id);
-    if (!ov) return;
-    const wasSelected = window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id);
-    let needsRender = !wasSelected;
+
+  const player = document.getElementById('pe2-video-player');
+  const playerVisible = !!(player && player.style.display !== 'none');
+  const frameEnabled = document.getElementById('frame-enabled')?.checked || false;
+
+  // Khi video player đang hoạt động (đang phát hoặc tạm dừng), luôn cập nhật DOM overlay trên video
+  if (playerVisible) {
+    if (typeof _renderSubOverlay === 'function') _renderSubOverlay();
+  } else if (frameEnabled) {
+    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+  } else {
+    if (typeof _renderSubOverlay === 'function') _renderSubOverlay();
+  }
+  if (window.pe2RenderRanges) window.pe2RenderRanges();
+}
+
+function ovSelectLayer(id, open, skipSubUpdate) {
+  const ov = _ovFind(id);
+  if (!ov) return;
+  const wasSelected = window._pe2Sel && window._pe2Sel.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id);
+  let needsRender = !wasSelected;
     window._videoOverlays.forEach(x => {
       if (!open) return;
       const shouldOpen = String(x.id) === String(id);
@@ -77,7 +85,8 @@ function subPreviewUpdate() {
     if (window.pe2RenderRanges) window.pe2RenderRanges();
   }
   window.addEventListener('resize', () => {
-    if (document.getElementById('sub-preview-img')?.style.display !== 'none') _renderSubOverlay();
+    if (document.getElementById('sub-preview-img')?.style.display !== 'none'
+        || (window.pe2IsLivePlayback && window.pe2IsLivePlayback())) _renderSubOverlay();
     framePreviewUpdate();
   });
   function _frameAnimLoop(ts) {
@@ -118,8 +127,12 @@ function subPreviewUpdate() {
   }
   function framePreviewUpdate() {
     if (!document.getElementById('frame-enabled')?.checked) return;
-    const srcImg = document.getElementById('sub-preview-img');
-    if (!srcImg || !srcImg.complete || !srcImg.naturalWidth) return;
+    const player = document.getElementById('pe2-video-player');
+    const liveSource = player && player.style.display !== 'none' && player.readyState >= 2
+      && player.videoWidth && player.videoHeight ? player : null;
+    const srcImg = liveSource || document.getElementById('sub-preview-img');
+    const sourceW = srcImg ? (srcImg.videoWidth || srcImg.naturalWidth || 0) : 0;
+    if (!srcImg || (!liveSource && !srcImg.complete) || !sourceW) return;
     _drawFramePreview(srcImg);
   }
   function _drawFramePreview(srcImg) {
@@ -138,7 +151,7 @@ function subPreviewUpdate() {
     const titleColor  = document.getElementById('frame-title-color')?.value || '#000000';
     const titleColor2 = document.getElementById('frame-title-color-2')?.value || '#ff0000';
     const titleSplit  = document.getElementById('frame-title-split-color')?.checked ?? true;
-    const blurWPct    = parseFloat(document.getElementById('frame-blur-w')?.value || 15) / 100;
+    const blurWPct    = parseFloat(document.getElementById('frame-blur-w')?.value || 0) / 100;
     const blurOpacity = parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100;
     const logoSizeRaw = parseFloat(document.getElementById('frame-logo-size')?.value);
     const logoSizePct = (isNaN(logoSizeRaw) || logoSizeRaw <= 0 ? (document.getElementById('frame-logo-path')?.value ? 12 : 0) : logoSizeRaw) / 100;
@@ -149,11 +162,11 @@ function subPreviewUpdate() {
     const blurTopPct    = parseFloat(document.getElementById('frame-blur-top')?.value || 0) / 100;
     const blurBottomPct = parseFloat(document.getElementById('frame-blur-bottom')?.value || 0) / 100;
 
-    const srcNW = srcImg.naturalWidth  || 640;
-    const srcNH = srcImg.naturalHeight || 360;
+    const srcNW = srcImg.videoWidth || srcImg.naturalWidth  || 640;
+    const srcNH = srcImg.videoHeight || srcImg.naturalHeight || 360;
     const wrap  = document.getElementById('sub-preview-wrap');
     // Dùng độ phân giải video làm gốc vẽ (ổn định, không phụ thuộc kích thước hiển thị)
-    const wrapW = srcImg.naturalWidth || wrap?.offsetWidth || 640;
+    const wrapW = srcImg.videoWidth || srcImg.naturalWidth || wrap?.offsetWidth || 640;
 
     // Title bar chỉ chiếm chỗ khi thật sự có nội dung tiêu đề.
     const titleFontPx = hasTitle ? Math.max(10, Math.round(wrapW * titleSizePct / 100)) : 0;
@@ -469,7 +482,8 @@ function subPreviewUpdate() {
 
     canvas.style.position = 'absolute';
     canvas.style.inset = '0';
-    canvas.style.zIndex = '2';
+    canvas.style.zIndex = '4';
+    canvas.style.pointerEvents = 'auto';
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.maxWidth = '100%';
@@ -548,22 +562,30 @@ function subPreviewUpdate() {
     const _blurBg = document.getElementById('proc-aspect-blur-bg')?.checked || false;
     const _bgEl = document.getElementById('sub-preview-bgblur');
     const _frameEnabled = document.getElementById('frame-enabled')?.checked || false;
+    const _player = document.getElementById('pe2-video-player');
+    const _playerActive = !!(_player && _player.style.display !== 'none');
 
     if (subWrap) {
       if (_shouldConvert) {
         subWrap.style.aspectRatio = isVertical ? '9 / 16' : '16 / 9';
         subWrap.dataset.letterbox = '1';
         if (_imgEl) {
-          _imgEl.style.width     = 'auto';
-          _imgEl.style.height    = 'auto';
-          _imgEl.style.maxWidth  = '100%';
-          _imgEl.style.maxHeight = '100%';
-          _imgEl.style.objectFit = 'contain';
-          _imgEl.style.position  = _frameEnabled ? 'absolute' : 'relative';
-          _imgEl.style.inset     = _frameEnabled ? '0' : '';
-          _imgEl.style.opacity   = _frameEnabled ? '0' : '';
-          _imgEl.style.pointerEvents = _frameEnabled ? 'none' : '';
-          _imgEl.style.zIndex    = '1';
+          if (_playerActive) {
+            _imgEl.style.display = 'none';
+            _imgEl.style.opacity = '0';
+            _imgEl.style.visibility = 'hidden';
+          } else {
+            _imgEl.style.width     = 'auto';
+            _imgEl.style.height    = 'auto';
+            _imgEl.style.maxWidth  = '100%';
+            _imgEl.style.maxHeight = '100%';
+            _imgEl.style.objectFit = 'contain';
+            _imgEl.style.position  = _frameEnabled ? 'absolute' : 'relative';
+            _imgEl.style.inset     = _frameEnabled ? '0' : '';
+            _imgEl.style.opacity   = _frameEnabled ? '0' : '';
+            _imgEl.style.pointerEvents = _frameEnabled ? 'none' : '';
+            _imgEl.style.zIndex    = '1';
+          }
         }
         // Nền mờ: hiện ảnh nền (mờ) lấp viền thay cho nền đen.
         if (_bgEl) {
@@ -579,18 +601,33 @@ function subPreviewUpdate() {
         subWrap.style.aspectRatio = _origAspect;
         subWrap.dataset.letterbox = '';
         if (_imgEl) {
-          _imgEl.style.width     = '100%';
-          _imgEl.style.height    = '';
-          _imgEl.style.maxWidth  = '';
-          _imgEl.style.maxHeight = '';
-          _imgEl.style.objectFit = '';
-          _imgEl.style.position  = _frameEnabled ? 'absolute' : '';
-          _imgEl.style.inset     = _frameEnabled ? '0' : '';
-          _imgEl.style.opacity   = _frameEnabled ? '0' : '';
-          _imgEl.style.pointerEvents = _frameEnabled ? 'none' : '';
-          _imgEl.style.zIndex    = '';
+          if (_playerActive) {
+            _imgEl.style.display = 'none';
+            _imgEl.style.opacity = '0';
+            _imgEl.style.visibility = 'hidden';
+          } else {
+            _imgEl.style.width     = '100%';
+            _imgEl.style.height    = '';
+            _imgEl.style.maxWidth  = '';
+            _imgEl.style.maxHeight = '';
+            _imgEl.style.objectFit = '';
+            _imgEl.style.position  = _frameEnabled ? 'absolute' : '';
+            _imgEl.style.inset     = _frameEnabled ? '0' : '';
+            _imgEl.style.opacity   = _frameEnabled ? '0' : '';
+            _imgEl.style.pointerEvents = _frameEnabled ? 'none' : '';
+            _imgEl.style.zIndex    = '';
+          }
         }
         if (_bgEl) { _bgEl.style.display = 'none'; _bgEl.removeAttribute('src'); }
+      }
+
+      if (_playerActive) {
+        const _fc = document.getElementById('frame-preview-canvas');
+        if (_fc) {
+          _fc.style.display = _frameEnabled ? 'block' : 'none';
+          _fc.style.zIndex = _frameEnabled ? '4' : '2';
+          _fc.style.pointerEvents = _frameEnabled ? 'auto' : 'none';
+        }
       }
     }
     // Sync với window._procActiveAspect để các logic khác dùng
@@ -621,7 +658,8 @@ function subPreviewUpdate() {
         canvas.style.display = 'block';
         canvas.style.position = 'absolute';
         canvas.style.inset = '0';
-        canvas.style.zIndex = '2';
+        canvas.style.zIndex = '4';
+        canvas.style.pointerEvents = 'auto';
       }
       const bg = document.getElementById('sub-preview-bgblur');
       if (bg) {

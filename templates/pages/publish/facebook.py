@@ -1127,3 +1127,70 @@ def fb_diagnose():
 
     all_ok = all(c["ok"] for c in checks)
     return jsonify({"ok": True, "all_ok": all_ok, "checks": checks})
+
+
+# ── /api/facebook/delete_video ───────────────────────────────────────────────
+
+@bp.route("/api/facebook/delete_video", methods=["POST"])
+def fb_delete_video():
+    """Delete a video or reel post from a Facebook Page using Graph API."""
+    td = _load_fb_token()
+    if not td:
+        return jsonify({"ok": False, "error": "Chưa kết nối Facebook"}), 401
+
+    data = request.json or {}
+    video_id = str(data.get("video_id") or "").strip()
+    page_id = str(data.get("page_id") or "").strip()
+
+    if not video_id:
+        return jsonify({"ok": False, "error": "Thiếu video_id"}), 400
+
+    # Clean video_id if user pasted a full URL
+    import re
+    m_url = re.search(r'(?:videos/|reel/|story\.php\?story_fbid=)(\d+)', video_id)
+    if m_url:
+        video_id = m_url.group(1)
+
+    # Resolve page token
+    page_token = ""
+    if page_id:
+        page_token, perr = _resolve_page_token(td, page_id)
+        if perr:
+            page_token = ""
+
+    # Build token candidates to try
+    tokens_to_try = []
+    if page_token:
+        tokens_to_try.append(page_token)
+    for p in td.get("pages", []) or []:
+        pt = str(p.get("access_token") or "").strip()
+        if pt and pt not in tokens_to_try:
+            tokens_to_try.append(pt)
+    ut = str(td.get("user_token") or "").strip()
+    if ut and ut not in tokens_to_try:
+        tokens_to_try.append(ut)
+
+    import urllib.request
+    import urllib.parse
+    import urllib.error
+
+    last_err = "Không tìm thấy token hợp lệ của Page để xóa"
+    for tok in tokens_to_try:
+        url = f"{FB_API_BASE}/{video_id}?access_token={urllib.parse.quote(tok)}"
+        try:
+            req = urllib.request.Request(url, method="DELETE")
+            with urllib.request.urlopen(req, timeout=15) as r:
+                res_data = _j.loads(r.read().decode())
+                if res_data.get("success") or res_data.get("ok"):
+                    return jsonify({"ok": True, "message": f"Đã xóa video {video_id} thành công trên Facebook."})
+        except urllib.error.HTTPError as e:
+            try:
+                body = _j.loads(e.read().decode())
+                last_err = (body.get("error") or {}).get("message", str(e))
+            except Exception:
+                last_err = str(e)
+        except Exception as e:
+            last_err = str(e)
+
+    return jsonify({"ok": False, "error": f"Không thể xóa video trên Facebook: {last_err}"}), 400
+

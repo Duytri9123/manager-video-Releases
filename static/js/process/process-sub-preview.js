@@ -221,6 +221,7 @@ async function initDynamicAiProviders() {
       onTranslationProviderChanged(true);
     }
   } catch (_) {}
+}
 window.onTranscribeProviderChanged = onTranscribeProviderChanged;
 window.onTranslationProviderChanged = onTranslationProviderChanged;
 window.initDynamicAiProviders = initDynamicAiProviders;
@@ -240,6 +241,39 @@ if (document.readyState === 'loading') {
     });
   }
 
+  window.pe2GetPreviewMediaLayout = function () {
+    const wrap = document.getElementById('sub-preview-wrap');
+    if (!wrap) return { boxW: 360, boxH: 640, dispW: 360, dispH: 640, imgOffX: 0, imgOffY: 0, imgW: 1280, imgH: 720, playerVisible: false };
+
+    const boxW = wrap.clientWidth || wrap.offsetWidth || 360;
+    const boxH = wrap.clientHeight || wrap.offsetHeight || 640;
+
+    const player = document.getElementById('pe2-video-player');
+    const playerVisible = !!(player && player.style.display !== 'none');
+    const img = document.getElementById('sub-preview-img');
+
+    let imgW = 1280;
+    let imgH = 720;
+    if (playerVisible && player.videoWidth && player.videoHeight) {
+      imgW = player.videoWidth;
+      imgH = player.videoHeight;
+    } else if (img && img.naturalWidth && img.naturalHeight) {
+      imgW = img.naturalWidth;
+      imgH = img.naturalHeight;
+    }
+
+    const mediaRatio = imgW / imgH;
+    const boxRatio = boxW / boxH;
+    const shownW = boxRatio > mediaRatio ? boxH * mediaRatio : boxW;
+    const shownH = boxRatio > mediaRatio ? boxH : boxW / mediaRatio;
+    const imgOffX = Math.max(0, Math.round((boxW - shownW) / 2));
+    const imgOffY = Math.max(0, Math.round((boxH - shownH) / 2));
+    const dispW = Math.max(1, Math.round(shownW));
+    const dispH = Math.max(1, Math.round(shownH));
+
+    return { boxW, boxH, dispW, dispH, imgOffX, imgOffY, imgW, imgH, playerVisible };
+  };
+
   function _renderSubOverlayActual() {
     const wrap    = document.getElementById('sub-preview-wrap');
     const overlay = document.getElementById('sub-preview-text');
@@ -250,7 +284,11 @@ if (document.readyState === 'loading') {
     const burnOn   = document.getElementById('proc-burn')?.checked ?? true;
     const burnViOn = document.getElementById('proc-burn-vi')?.checked ?? true;
 
-    // Khi frame mode bật, subtitle + vùng che được vẽ trên canvas → bỏ DOM overlay
+    const player = document.getElementById('pe2-video-player');
+    const playerVisible = !!(player && player.style.display !== 'none');
+
+    // Chế độ khung luôn dùng cùng một canvas, cả trước, trong và sau khi phát.
+    // Nhờ vậy hình hiển thị và vùng tương tác không đổi khi chuyển trạng thái.
     if (document.getElementById('frame-enabled')?.checked) {
       if (overlay) overlay.style.display = 'none';
       if (blurEl)  blurEl.style.display  = 'none';
@@ -262,82 +300,69 @@ if (document.readyState === 'loading') {
       return;
     }
 
-    const img = document.getElementById('sub-preview-img');
-    if (!img || img.style.display === 'none') {
-      wrap.querySelectorAll('.video-overlay-el').forEach(el => el.remove());
-      return; // no frame yet
+    function _parseSafeFloat(val, fallback = 0) {
+      if (val === null || val === undefined || val === '') return fallback;
+      const s = String(val).replace(',', '.').trim();
+      const n = parseFloat(s);
+      return isNaN(n) ? fallback : n;
     }
 
-    const sample   = document.getElementById('sub-preview-sample')?.value || 'Phụ đề mẫu';
-    const fontSize = parseInt(document.getElementById('proc-font-size')?.value || 32);
+    const img = document.getElementById('sub-preview-img');
+    const media = playerVisible ? player : img;
+    const mediaReady = playerVisible
+      ? (player.readyState >= 1 && player.videoWidth > 0)
+      : !!(img && img.style.display !== 'none' && img.complete && img.naturalWidth > 0);
+
+    const sample   = document.getElementById('sub-preview-sample')?.value || '';
+    const fontSize = _parseSafeFloat(document.getElementById('proc-font-size')?.value, 4.5);
     const color    = document.getElementById('proc-font-color')?.value || 'white';
-    const marginV  = parseInt(document.getElementById('proc-margin-v')?.value || 20);
+    const marginV  = _parseSafeFloat(document.getElementById('proc-margin-v')?.value, 3);
     const pos      = document.getElementById('proc-sub-pos')?.value || 'bottom';
     const blurOn   = document.getElementById('proc-blur-original')?.checked || false;
 
-    // Actual rendered image dimensions — use getBoundingClientRect for accuracy
-    const imgW = img.naturalWidth  || 1280;
-    const imgH = img.naturalHeight || 720;
-    const rect  = img.getBoundingClientRect();
-    // getBoundingClientRect returns 0 if element not visible — fallback to offsetWidth
-    const dispW = (rect.width  > 0 ? rect.width  : img.offsetWidth)  || wrap.offsetWidth || 640;
-    const dispH = (rect.height > 0 ? rect.height : img.offsetHeight) || Math.round(dispW * imgH / imgW);
-
-    // Lệch của ảnh bên trong khung wrap. ≠0 chỉ khi letterbox (đổi khung 9:16/16:9):
-    // ảnh được đặt giữa, chừa viền → overlay phải bám theo vùng ẢNH, không phải wrap.
-    const _wrapRectO = wrap.getBoundingClientRect();
-    const imgOffX = (rect.width  > 0) ? Math.max(0, Math.round(rect.left - _wrapRectO.left)) : 0;
-    const imgOffY = (rect.height > 0) ? Math.max(0, Math.round(rect.top  - _wrapRectO.top )) : 0;
+    // Tọa độ và kích thước layout chuẩn (CSS pixels, không bị ảnh hưởng bởi zoom)
+    const layout = window.pe2GetPreviewMediaLayout();
+    const { dispW, dispH, imgOffX, imgOffY, imgW, imgH } = layout;
 
     // font_size and margin_v are % of video height.
     // Apply same % to dispH → preview always matches real video proportionally.
-    const fontPct   = parseFloat(document.getElementById('proc-font-size')?.value || 4.5);
-    const marginPct = parseFloat(document.getElementById('proc-margin-v')?.value  || 3);
-    const scaledFont   = Math.max(6, Math.round(dispH * fontPct   / 100));
-    const scaledMargin = Math.max(2, Math.round(dispH * marginPct / 100));
+    const scaledFont = Math.max(8, Math.round(dispH * (fontSize / 100)));
+    const scaledMargin = Math.round(dispH * (marginV / 100));
 
-    const colorMap = { white: '#ffffff', yellow: '#ffff00', cyan: '#00ffff' };
-    const cssColor = (typeof _getSubtitleColor === 'function')
-      ? _getSubtitleColor()
-      : (colorMap[color] || '#ffffff');
-
-    // ── Blur zone: covers original subtitle area ──
-    const blurH    = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
-    const blurW    = parseFloat(document.getElementById('proc-blur-width')?.value || 80) / 100;
-    const blurYOverride = document.getElementById('proc-blur-y')?.value?.trim();
-    const blurXOverride = document.getElementById('proc-blur-x')?.value?.trim();
-    // Calculate blur position
-    const videoH = imgH || 720;
-    const subHeightPx = Math.round(videoH * fontPct / 100) + 4;
-    const marginVPx   = Math.round(videoH * marginPct / 100);
-
-    let blurCenterY = 0.5;
-    if (blurYOverride !== '' && blurYOverride !== undefined) {
-      blurCenterY = parseFloat(blurYOverride) / 100;
+    // Position subtitle text
+    overlay.style.top = '';
+    overlay.style.bottom = '';
+    if (pos === 'top') {
+      overlay.style.top = (imgOffY + scaledMargin) + 'px';
     } else {
-      // Auto: center around subtitle position
-      if (pos === 'bottom') {
-        const subY = videoH - marginVPx - Math.round(subHeightPx / 2);
-        blurCenterY = subY / videoH;
-      } else {
-        const subY = marginVPx + Math.round(subHeightPx / 2);
-        blurCenterY = subY / videoH;
-      }
+      overlay.style.bottom = (imgOffY + scaledMargin) + 'px';
     }
 
-    let blurCenterX = 0.5;
-    if (blurXOverride !== '' && blurXOverride !== undefined) {
-      blurCenterX = parseFloat(blurXOverride) / 100;
-    }
+    // Subtitle background blur box
+    // Reads custom height, width, and position (percentage of video height/width)
+    const bhInput = document.getElementById('proc-blur-height');
+    const bwInput = document.getElementById('proc-blur-width');
+    const byInput = document.getElementById('proc-blur-y');
+    const bxInput = document.getElementById('proc-blur-x');
+    const blurHPct = _parseSafeFloat(bhInput?.value, 15) / 100;
+    const blurWPct = _parseSafeFloat(bwInput?.value, 80) / 100;
 
-    // Tự động co dãn khi kéo sát/vượt mép biên để tránh bị chặn, kẹt hoặc lỗi toạ độ
-    const leftPct = Math.max(0, blurCenterX - blurW / 2);
-    const rightPct = Math.min(1, blurCenterX + blurW / 2);
+    // Vị trí tâm vùng che: nếu người dùng đã chỉnh x/y thì dùng giá trị đó,
+    // ngược lại fallback theo pos ('top' hoặc 'bottom')
+    const hasCustomY = byInput && byInput.value !== '' && byInput.value !== undefined;
+    const blurCenterY = hasCustomY
+      ? (_parseSafeFloat(byInput.value, 50) / 100)
+      : (pos === 'top' ? blurHPct / 2 + 0.06 : 1 - blurHPct / 2 - 0.06);
+
+    const hasCustomX = bxInput && bxInput.value !== '' && bxInput.value !== undefined;
+    const blurCenterX = hasCustomX ? (_parseSafeFloat(bxInput.value, 50) / 100) : 0.5;
+
+    const bW = Math.round(dispW * blurWPct);
+    const leftPct = Math.max(0, blurCenterX - blurWPct / 2);
     const bLeft = Math.round(dispW * leftPct);
-    const bW = Math.round(dispW * Math.max(0.01, rightPct - leftPct));
 
-    const topPct = Math.max(0, blurCenterY - blurH / 2);
-    const bottomPct = Math.min(1, blurCenterY + blurH / 2);
+    const topPct = Math.max(0, blurCenterY - blurHPct / 2);
+    const bottomPct = Math.min(1, blurCenterY + blurHPct / 2);
     const bTop = Math.round(dispH * topPct);
     const bH = Math.round(dispH * Math.max(0.01, bottomPct - topPct));
 
@@ -353,33 +378,11 @@ if (document.readyState === 'loading') {
     };
 
     const isMainBlurSelected = window._pe2Sel && window._pe2Sel.type === 'blur';
-    if (blurOn && canvas && img.complete && img.naturalWidth > 0 && typeof composedFrameCanvas === 'undefined') {
-      canvas.width  = bW;
-      canvas.height = bH;
-      canvas.style.display = 'block';
-      _posBlur(canvas);
-
-      // Vùng nguồn theo toạ độ ảnh gốc. Canvas đặt tại (imgOffX+bLeft, imgOffY+bTop)
-      // → toạ độ so với chính ảnh là (bLeft, bTop).
-      const scaleX  = imgW / (rect.width  || dispW);
-      const scaleY  = imgH / (rect.height || dispH);
-      const sx = Math.round(bLeft * scaleX);
-      const sy = Math.round(bTop  * scaleY);
-      const sw = Math.round(bW * scaleX);
-      const sh = Math.round(bH * scaleY);
-
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, bW, bH);
-      ctx.filter = 'blur(10px)';
-      ctx.drawImage(img, Math.max(0,sx), Math.max(0,sy), Math.max(1,sw), Math.max(1,sh),
-                    -10, -10, bW + 20, bH + 20);
-      ctx.filter = 'none';
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(0, 0, bW, bH);
+    if (blurOn) {
       if (blurEl) {
         blurEl.style.display = 'block';
         _posBlur(blurEl);
-        const hasCanvas = canvas && img.complete && img.naturalWidth > 0;
+        const hasCanvas = canvas && mediaReady;
         blurEl.style.background = hasCanvas ? 'transparent' : 'rgba(0,0,0,0.55)';
         blurEl.style.border = 'none';
         blurEl.style.boxShadow = 'none';
@@ -393,37 +396,61 @@ if (document.readyState === 'loading') {
           });
         }
       }
-    } else if (blurOn && blurEl) {
-      blurEl.style.display = 'block';
-      _posBlur(blurEl);
-      blurEl.style.background = 'rgba(0,0,0,0.55)';
-      blurEl.style.zIndex = isMainBlurSelected ? '10' : '4';
-      if (canvas) canvas.style.display = 'none';
+      if (canvas && mediaReady && typeof composedFrameCanvas === 'undefined') {
+        canvas.width  = bW;
+        canvas.height = bH;
+        canvas.style.display = 'block';
+        _posBlur(canvas);
+
+        const scaleX  = imgW / (dispW || 1);
+        const scaleY  = imgH / (dispH || 1);
+        const sx = Math.round(bLeft * scaleX);
+        const sy = Math.round(bTop  * scaleY);
+        const sw = Math.round(bW * scaleX);
+        const sh = Math.round(bH * scaleY);
+
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, bW, bH);
+        ctx.filter = 'blur(10px)';
+        try {
+          ctx.drawImage(media, Math.max(0,sx), Math.max(0,sy), Math.max(1,sw), Math.max(1,sh),
+                        -10, -10, bW + 20, bH + 20);
+        } catch (_) {}
+        ctx.filter = 'none';
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(0, 0, bW, bH);
+      } else if (canvas) {
+        canvas.style.display = 'none';
+      }
     } else {
       if (blurEl) blurEl.style.display = 'none';
       if (canvas) canvas.style.display = 'none';
     }
 
     // ── Subtitle text: positioned by margin_v from edge, above blur zone ──
+    const cssColor = (typeof _getSubtitleColor === 'function') ? _getSubtitleColor() : '#ffffff';
     overlay.style.display    = (burnOn && burnViOn) ? 'block' : 'none';
     overlay.style.fontSize   = scaledFont + 'px';
     overlay.style.color      = cssColor;
-    // Outline via text-shadow (matches FFmpeg outline rendering)
-    const outlineW = parseInt(document.getElementById('proc-outline-width')?.value || 2);
+    overlay.style.zIndex     = '5';
+
+    // Vector outline with paint-order so small zoom doesn't blur or muddy text
+    const outlineW = _parseSafeFloat(document.getElementById('proc-outline-width')?.value, 2);
     const wSel = document.getElementById('proc-font-weight');
     const boldOn = wSel ? (wSel.value === 'bold') : (document.getElementById('proc-font-bold')?.checked ?? true);
-    const shadowSteps = [];
-    if (outlineW > 0) {
-      for (let dx = -outlineW; dx <= outlineW; dx++) {
-        for (let dy = -outlineW; dy <= outlineW; dy++) {
-          if (dx !== 0 || dy !== 0) {
-            shadowSteps.push(`${dx}px ${dy}px 0px #000`);
-          }
-        }
-      }
+
+    const strokeWidth = outlineW > 0 ? Math.max(0.6, Math.round(outlineW * (scaledFont / 36) * 10) / 10) : 0;
+    if (strokeWidth > 0) {
+      overlay.style.webkitTextStroke = `${strokeWidth}px #000000`;
+      overlay.style.paintOrder = 'stroke fill';
+    } else {
+      overlay.style.webkitTextStroke = 'none';
+      overlay.style.paintOrder = 'normal';
     }
-    shadowSteps.push('0 2px 4px rgba(0,0,0,0.8)');
-    overlay.style.textShadow = shadowSteps.join(',');
+    overlay.style.webkitTextFillColor = cssColor;
+    overlay.style.textShadow = '0 1px 2px rgba(0,0,0,0.7)';
+    overlay.style.webkitFontSmoothing = 'antialiased';
+    overlay.style.textRendering = 'geometricPrecision';
     overlay.style.fontWeight  = boldOn ? '700' : '400';
     overlay.style.fontFamily  = 'Arial, sans-serif';
     overlay.style.lineHeight  = '1.3';
@@ -481,7 +508,6 @@ if (document.readyState === 'loading') {
         const div = document.createElement('div');
         div.className = 'extra-blur-zone';
         div.dataset.zoneId = zone.id;
-        
         const zIndex = isExtraSelected ? 10 : 4;
         div.style.cssText = `position:absolute;left:${imgOffX + ezLeft}px;top:${imgOffY + ezTop}px;width:${ezW}px;height:${ezH}px;background:rgba(0,0,0,0.45);pointer-events:auto;cursor:move;border-radius:2px;backdrop-filter:blur(6px);z-index:${zIndex};border:1px dashed rgba(255,255,255,0.35);`;
         ['nw','n','ne','e','se','s','sw','w'].forEach(function(edge){
@@ -504,6 +530,11 @@ if (document.readyState === 'loading') {
     const img = document.getElementById('sub-preview-img');
     const ph  = document.getElementById('sub-preview-placeholder');
     const btn = document.querySelector('[onclick="subPreviewFetchFrame()"]');
+    const player = document.getElementById('pe2-video-player');
+    if (player) {
+      player.pause();
+      player.style.display = 'none';
+    }
 
     if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
     if (ph)  ph.textContent = 'Đang tải frame...';
@@ -515,7 +546,6 @@ if (document.readyState === 'loading') {
         endpoint = '/api/video_frame';
         body = { video_path: source.val, timestamp: ts };
       } else {
-        // URL: find latest downloaded mp4 in Downloaded folder
         endpoint = '/api/video_frame_from_url';
         body = { url: source.val, timestamp: ts };
       }
@@ -529,7 +559,6 @@ if (document.readyState === 'loading') {
       if (data.ok && data.image) {
         if (img) {
           img.onload = () => {
-            // ── Detect aspect ratio of source video and auto-apply preset ──
             try {
               const w = img.naturalWidth || 0;
               const h = img.naturalHeight || 0;
@@ -539,56 +568,47 @@ if (document.readyState === 'loading') {
                 const target   = (override === 'auto') ? detected : override;
                 if (target !== window._procActiveAspect) {
                   window._procActiveAspect = target;
-                  // Auto-apply matching preset (silent if not yet saved)
                   if (typeof _applyPresetForActiveAspect === 'function') {
                     _applyPresetForActiveAspect({ silent: true });
                   }
                 }
                 if (typeof _updateAspectBadge === 'function') _updateAspectBadge();
               }
-
-              // (Layout khung/letterbox áp lần cuối sau khối if/else bên dưới,
-              //  vì nhánh subtitle có reset img.style.position.)
             } catch (_) {}
 
             const frameOn = document.getElementById('frame-enabled')?.checked;
             const cv = document.getElementById('frame-preview-canvas');
             if (frameOn) {
-              // Frame mode: hide img visually but keep it rendered for naturalWidth
               img.style.display = 'block';
               img.style.position = 'absolute';
               img.style.opacity = '0';
               img.style.pointerEvents = 'none';
               if (cv) cv.style.display = 'block';
-              framePreviewUpdate();
+              if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
             } else {
-              // Subtitle mode: show img normally
               img.style.display = 'block';
               img.style.position = '';
-              img.style.opacity = '';
+              img.style.opacity = '1';
+              img.style.visibility = 'visible';
               img.style.pointerEvents = '';
               if (cv) cv.style.display = 'none';
-              _renderSubOverlay();
+              if (typeof _renderSubOverlay === 'function') _renderSubOverlay();
             }
-            // Áp khung đích / letterbox / nền mờ lần cuối (sau khi style ảnh đã reset),
-            // cho cả mode 'auto' lẫn khi chọn 16:9 / 9:16 thủ công.
             if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
           };
           img.src = data.image;
           img.style.display = 'block';
-          // Lưu ảnh gốc không có logo để dùng lại cho preview.
+          img.style.opacity = '1';
+          img.style.visibility = 'visible';
           if (data.image && data.image.startsWith('data:image/')) {
             window._rawFrameB64 = data.image.split(',')[1] || null;
           } else {
             window._rawFrameB64 = null;
           }
-          // Cập nhật duration từ response nếu có (chỉ cho video file)
           if (data.duration && data.duration > 0) {
             window._pe2Duration = data.duration;
             if (typeof window.pe2SyncPlayhead === 'function') window.pe2SyncPlayhead();
-            if (typeof window._pe2RenderRuler === 'function') {
-              window._pe2RenderRuler();
-            }
+            if (typeof window._pe2RenderRuler === 'function') window._pe2RenderRuler();
           }
         }
         if (ph) ph.style.display = 'none';
@@ -607,5 +627,9 @@ if (document.readyState === 'loading') {
     }
   }
 
-
-
+  window.subPreviewFetchFrame = subPreviewFetchFrame;
+  window._renderSubOverlay = _renderSubOverlay;
+  window._renderSubOverlayActual = _renderSubOverlayActual;
+  window._syncColorPicker = _syncColorPicker;
+  window._onColorPickerChange = _onColorPickerChange;
+  window._getSubtitleColor = _getSubtitleColor;

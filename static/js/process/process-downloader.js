@@ -47,6 +47,7 @@ async function _runStep1QueueDownload() {
         if (data.ok) {
           pending.status = 'ready';
           pending.val = data.path; // update to local path
+          pending.type = 'file';
           pending.desc = data.title || data.path.split(/[\\/]/).pop();
           _step1Log('✅ Tải xong: ' + (data.title || pending.desc), 'success');
           if (data.path) _step1Log('📁 Đường dẫn: ' + data.path, 'info');

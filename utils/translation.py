@@ -8,25 +8,23 @@ import sqlite3
 
 
 def load_db_connections() -> List[dict]:
-    import sqlite3
-    from pathlib import Path
-
-    db_path = Path(__file__).parent.parent / ".state" / "providers.db"
-    if not db_path.exists():
-        return []
     try:
+        from core.ai_models_manager import get_active_provider_connections
+        conns = get_active_provider_connections()
+        return [dict(c) for c in conns]
+    except Exception:
+        pass
+    try:
+        from pathlib import Path
+        import sqlite3
+        db_path = Path(__file__).parent.parent / ".state" / "providers.db"
+        if not db_path.exists():
+            return []
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT id, provider, name, api_key, base_url, enabled, status FROM provider_connections WHERE enabled != 0").fetchall()
+        rows = conn.execute("SELECT * FROM provider_connections WHERE enabled != 0").fetchall()
         conn.close()
-        res = []
-        for r in rows:
-            d = dict(r)
-            prov = (d.get("provider") or "").lower()
-            if prov not in ["opencode", "opencodefree", "google"] and not (d.get("api_key") or "").strip():
-                continue
-            res.append(d)
-        return res
+        return [dict(r) for r in rows]
     except Exception:
         return []
 
@@ -128,7 +126,9 @@ def _llm_translate(
         "fr": "French", "de": "German", "ru": "Russian", "ar": "Arabic",
         "hi": "Hindi", "zh": "Chinese",
     }
-    target_lang_name = _LANG_FULL.get(target_lang, "Vietnamese")
+    # Unknown/new ISO language codes must remain explicit in the prompt.  The
+    # old fallback silently translated every newly-added language to Vietnamese.
+    target_lang_name = _LANG_FULL.get(target_lang, target_lang)
 
     all_results: List[str] = [""] * len(texts)
 
@@ -347,14 +347,6 @@ def get_enabled_models_for_provider(provider_id: str, provider_alias: str) -> Li
 
 def get_translation_models(trans_cfg: Dict, full_cfg: Dict | None = None) -> List[Dict]:
     models = []
-    
-    # 1. Google Translate (always active)
-    models.append({
-        "id": "google",
-        "name": "Google Translate",
-        "provider": "google",
-        "owned_by": "google"
-    })
 
     db_conns = load_db_connections()
     db_providers = {c["provider"] for c in db_conns}
@@ -430,7 +422,7 @@ def get_translation_providers(trans_cfg: Dict, full_cfg: Dict | None = None) -> 
         providers.append("huggingface")
 
     if "google" not in providers:
-        providers.append("google")
+        pass  # Google Translate removed — use AI providers only
     return providers
 
 
@@ -556,7 +548,13 @@ def _translate_with_antigravity(
                     timeout=timeout
                 )
             else:
-                resp_data, _ = antigravity_generate_content(conn, clean_model, req_body, timeout=timeout)
+                resp_data, updates = antigravity_generate_content(conn, clean_model, req_body, timeout=timeout)
+                if updates and conn.get("id"):
+                    try:
+                        from core.direct_ai_provider import update_db_connection
+                        update_db_connection(conn["id"], updates)
+                    except Exception:
+                        pass
 
             candidates = resp_data.get("candidates") or []
             if not candidates or "content" not in candidates[0]:

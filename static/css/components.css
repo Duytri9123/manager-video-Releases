@@ -1379,48 +1379,51 @@
         order:3;
         flex:0 0 420px;
         width:420px;
-        min-width:320px;
+        min-width:380px;
         max-width:720px;
         background:var(--bg2,#fff);
         border-left:1px solid var(--border,#e3e3e8);
-        display:flex;
-        flex-direction:row;
+        display:grid;
+        grid-template-columns:minmax(0,1fr) 42px;
+        grid-template-rows:auto auto auto minmax(0,1fr) auto;
         position:relative;
         min-height:0;
       }
       .pe2-panel-main{
-        flex:1 1 auto;
-        min-width:0;
-        display:flex;
-        flex-direction:column;
-        min-height:0;
-        overflow:hidden;
+        display:contents;
       }
       .pe2-panel-head{
+        grid-column:1 / -1;
+        grid-row:1;
         display:flex; align-items:center; justify-content:space-between; gap:8px;
-        padding:8px 10px; border-bottom:1px solid var(--border,#e3e3e8); flex-wrap:wrap;
+        padding:7px 10px; border-bottom:1px solid var(--border,#e3e3e8); flex-wrap:nowrap;
       }
-      .pe2-panel-title{ font-size:14px; font-weight:700; color:var(--text,#1f2430); }
-      .pe2-panel-actions{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      .pe2-panel-title{ font-size:13px; font-weight:700; color:var(--text,#1f2430); }
+      .pe2-panel-actions{ display:flex; align-items:center; gap:5px; flex-wrap:nowrap; }
+      .pe2-profile-compact-bar{ grid-column:1; grid-row:2; }
+      .pe2-profile-drawer{ grid-column:1; grid-row:3; }
+      .pe2-panel-body{ grid-column:1; grid-row:4; min-height:0; }
+      .pe2-panel-footer{ grid-column:1; grid-row:5; padding:8px 10px !important; }
 
       /* ── Vertical tabs on the right edge ── */
       .pe2-tabs-vertical{
-        width:46px;
-        flex:0 0 46px;
+        grid-column:2;
+        grid-row:2 / 6;
+        width:42px;
         border-left:1px solid var(--border,#e3e3e8);
         background:var(--bg3,#f8f9fa);
         display:flex;
         flex-direction:column;
         align-items:center;
-        padding:8px 4px;
-        gap:6px;
+        padding:7px 4px;
+        gap:5px;
         user-select:none;
         overflow-y:auto;
         z-index:5;
       }
       .pe2-vtab{
-        width:38px;
-        height:38px;
+        width:34px;
+        height:34px;
         border-radius:8px;
         border:1px solid transparent;
         background:transparent;
@@ -1495,10 +1498,10 @@
       .pe2-tab:hover{ background:var(--bg2,#fff); color:var(--text,#1f2430); }
       .pe2-tab.active{ background:var(--bg2,#fff); color:var(--accent,#1a73e8); border-color:var(--accent2,#9cc3ff); font-weight:700; }
 
-      .pe2-panel-body{ padding:10px; overflow-y:auto; flex:1 1 auto; }
+      .pe2-panel-body{ padding:8px; overflow-y:auto; }
       .pe2-grp{
-        font-size:10px; text-transform:uppercase; letter-spacing:0.06em;
-        color:var(--text-muted,#8a8a93); font-weight:700; margin:11px 0 6px;
+        font-size:9px; text-transform:uppercase; letter-spacing:0.055em;
+        color:var(--text-muted,#8a8a93); font-weight:700; margin:8px 0 5px;
       }
       .pe2-grp:first-child{ margin-top:0; }
 
@@ -1506,8 +1509,8 @@
       .pe2-aspect-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:4px; }
       .pe2-aspect-btn{
         display:flex; flex-direction:column; align-items:center; gap:6px;
-        padding:7px 5px; border-radius:8px; border:1px solid var(--border,#d8d8de);
-        background:var(--bg2,#fff); color:var(--text,#333); font-size:11px; cursor:pointer; transition:all .15s;
+        padding:5px 4px; border-radius:7px; border:1px solid var(--border,#d8d8de);
+        background:var(--bg2,#fff); color:var(--text,#333); font-size:10px; cursor:pointer; transition:all .15s;
       }
       .pe2-aspect-btn .box{
         border:2px solid var(--text-muted,#9a9aa3); border-radius:3px; background:var(--bg3,#f0f0f2);
@@ -1519,14 +1522,17 @@
       /* ── Option cards (thẻ chọn có tích góc) ── */
       .pe2-opts{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
       .pe2-opts.pe2-opts-compact{ grid-template-columns:repeat(4,minmax(58px,1fr)); gap:6px; }
+      .pe2-opts.pe2-opts-compact.pe2-opts-five{ grid-template-columns:repeat(5,minmax(0,1fr)); gap:5px; }
+      .pe2-opts-five .pe2-optcard{ min-width:0; padding-left:2px; padding-right:2px; }
+      .pe2-opts-five .pe2-optcard-badge{ width:14px; height:14px; top:4px; right:4px; font-size:9px; }
       .pe2-optcard{
         position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
-        padding:9px 6px; border-radius:9px; border:1px solid var(--border,#d8d8de);
-        background:var(--bg2,#fff); cursor:pointer; text-align:center; transition:all .15s; min-height:62px;
+        padding:6px 4px; border-radius:8px; border:1px solid var(--border,#d8d8de);
+        background:var(--bg2,#fff); cursor:pointer; text-align:center; transition:all .15s; min-height:52px;
       }
       .pe2-optcard input{ position:absolute; opacity:0; width:0; height:0; }
-      .pe2-optcard-ic{ line-height:1; display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; color:var(--accent,#1a73e8); }
-      .pe2-optcard-lbl{ font-size:12px; font-weight:600; color:var(--text,#1f2430); line-height:1.25; }
+      .pe2-optcard-ic{ line-height:1; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; color:var(--accent,#1a73e8); }
+      .pe2-optcard-lbl{ font-size:10px; font-weight:600; color:var(--text,#1f2430); line-height:1.2; }
       .pe2-optcard-badge{
         position:absolute; top:5px; right:5px; width:16px; height:16px; border-radius:50%;
         border:2px solid var(--border,#cfcfd6); background:var(--bg2,#fff);
@@ -1537,23 +1543,23 @@
       .pe2-optcard input:checked ~ .pe2-optcard-badge{ background:var(--accent,#1a73e8); border-color:var(--accent,#1a73e8); color:#fff; }
 
       /* ── Center (timeline + video) ── */
-      .pe2-center{ order:1; flex:1 1 auto; min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--bg2,#fff); }
+      .pe2-center{ order:1; flex:1 1 auto; min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--bg2,#fff); overflow:hidden; position:relative; }
       .pe2-tlabel{ font-size:11px; color:var(--text-muted,#6b7280); margin:0; flex-shrink:0; }
       .pe2-flex{ flex:1; }
       .pe2-screen{
-        flex:1 1 auto; min-height:0; display:flex; align-items:center; justify-content:center;
-        padding:16px; overflow:auto;
+        flex:1 1 0%; min-height:0; display:flex; align-items:center; justify-content:center;
+        padding:16px; overflow:auto; position:relative;
         background:#0f172a;
         background-image:radial-gradient(circle, rgba(255,255,255,.04) 1px, transparent 1px);
         background-size:18px 18px;
         user-select:none; -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none;
       }
       .pe2-screen #proc-preview-col{
-        height:100%; width:auto; max-width:100%; min-width:0 !important; flex:0 1 auto !important;
+        height:100%; width:auto; min-width:0 !important; flex:0 1 auto !important;
         display:flex; align-items:center; justify-content:center;
       }
       .pe2-screen #proc-preview-row{ height:100%; align-items:center; justify-content:center; }
-      .pe2-screen #sub-preview-wrap{ height:100% !important; width:auto !important; max-width:100%; }
+      .pe2-screen #sub-preview-wrap{ height:100% !important; width:auto !important; }
       .pe2-screen #sub-preview-wrap{ box-shadow:0 6px 18px rgba(0,0,0,.15); border:1px solid var(--border,#d8d8de); background:var(--bg3,#eef0f2) !important; }
       /* Khi đổi khung (letterbox) → nền đen mô phỏng viền đen lúc xuất video */
       .pe2-screen #sub-preview-wrap[data-letterbox="1"]{ background:#000 !important; }
@@ -1635,8 +1641,16 @@
       }
       .pe2-hint{ font-size:12px; color:var(--text-muted,#8a8a93); }
 
-      /* ── Timeline (filmstrip + ruler + playhead) — đặt phía trên video ── */
-      .pe2-timeline{ border-bottom:1px solid var(--border,#e3e3e8); background:var(--bg2,#fff); }
+      /* ── Timeline (filmstrip + ruler + playhead) — đặt phía dưới video ── */
+      .pe2-timeline{
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        border-top: 1px solid var(--border,#e3e3e8);
+        border-bottom: none;
+        background: var(--bg2,#fff);
+        position: relative;
+        z-index: 10;
+      }
       .pe2-tl-controls{
         display:flex; align-items:center; gap:10px; padding:8px 14px; flex-wrap:wrap;
         border-bottom:1px solid var(--border,#ececed);
@@ -1681,10 +1695,10 @@
 
       /* ── Form controls: dùng style mặc định (light) của app, chỉ canh layout ── */
       .pe2-editor .field{ display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
-      .pe2-editor .field>label{ font-size:11px; color:var(--text-muted,#6b7280); margin:0; line-height:1.2; white-space:nowrap; flex:0 0 auto; min-width:60px; }
+      .pe2-editor .field>label{ font-size:10px; color:var(--text-muted,#6b7280); margin:0; line-height:1.2; white-space:nowrap; flex:0 0 auto; min-width:54px; }
       .pe2-editor .field input[type=text],
       .pe2-editor .field input[type=number],
-      .pe2-editor .field select{ height:34px; box-sizing:border-box; flex:1 1 0%; min-width:0; }
+      .pe2-editor .field select{ height:32px; box-sizing:border-box; flex:1 1 0%; min-width:0; font-size:11px; }
       .pe2-panel #frame-controls > div[style*="grid"]{ grid-template-columns:repeat(2,1fr) !important; }
       .pe2-frame-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:10px; }
       .pe2-frame-grid .wide{ grid-column:1 / -1; }
@@ -2343,12 +2357,23 @@
 .pe2-view-btn:hover { color: var(--text); }
 .pe2-view-btn.active { background: var(--bg2); color: var(--accent); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .pe2-editor[data-layout="expanded"] .pe2-panel { flex: 0 0 280px; }
+.pe2-editor[data-layout="expanded"] .pe2-panel { width: 280px; min-width: 280px; }
+.pe2-editor[data-layout="expanded"] .pe2-panel-head { align-items: flex-start; }
+.pe2-editor[data-layout="expanded"] .pe2-panel-actions { gap: 4px; }
+.pe2-editor[data-layout="expanded"] .pe2-view-btn span { display: none; }
+.pe2-editor[data-layout="expanded"] .pe2-opts.pe2-opts-compact { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .pe2-editor[data-layout="expanded"] .pe2-tab > span:not(.ic) { display: none !important; }
 .pe2-editor[data-layout="cinema"] .pe2-panel { display: none; }
 .pe2-editor[data-layout="cinema"] .pe2-center { flex: 1 1 100%; }
-.pe2-editor[data-layout="dual"] .pe2-panel { flex: 0 0 680px; }
+.pe2-editor[data-layout="dual"] .pe2-panel { flex: 0 0 min(680px,52vw); width:min(680px,52vw); min-width:560px; }
 .pe2-editor[data-layout="dual"] .pe2-panel-body { display: grid; grid-template-columns: 300px 1fr; gap: 12px; }
 .pe2-editor[data-layout="dual"] .pe2-pane[data-pe2pane="tracks"] { display: block !important; border-right: 1px solid var(--border); padding-right: 12px; }
+
+@media (max-width: 1180px) {
+  .pe2-editor[data-layout="dual"] .pe2-panel { flex-basis: 50%; width:50%; min-width:420px; }
+  .pe2-editor[data-layout="dual"] .pe2-panel-body { grid-template-columns: 1fr; }
+  .pe2-editor[data-layout="dual"] .pe2-pane[data-pe2pane="tracks"] { border-right:0; padding-right:0; border-bottom:1px solid var(--border); padding-bottom:10px; }
+}
 
 /* ══════════════ STEP 3 BENTO & ADAPTIVE LAYOUT ══════════════ */
 .step3-view-switcher { display: inline-flex; align-items: center; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 2px; gap: 2px; }

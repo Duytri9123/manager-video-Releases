@@ -434,13 +434,31 @@ def download_video(
 
     ydl_opts: Dict[str, Any] = {
         "outtmpl": os.path.join(out_dir, filename_tmpl),
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        # YouTube increasingly exposes high quality video and audio as separate
+        # streams.  Do not require a progressive MP4 as the final fallback:
+        # many perfectly public videos (including 1080p60 uploads) do not have
+        # one, which previously caused "Requested format is not available".
+        "format": (
+            "bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/"
+            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+            "bestvideo+bestaudio/best"
+        ),
         "merge_output_format": "mp4",
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
         "ignoreerrors": False,
     }
+    # Point yt-dlp at the same bundled FFmpeg used by the processing pipeline.
+    # This keeps Step 2 working even when ffmpeg.exe is not installed on PATH.
+    try:
+        from core.ffmpeg import resolve_ffmpeg_path
+
+        ffmpeg_path = resolve_ffmpeg_path()
+        if ffmpeg_path:
+            ydl_opts["ffmpeg_location"] = ffmpeg_path
+    except Exception:
+        pass
     if cookiefile and os.path.exists(cookiefile):
         ydl_opts["cookiefile"] = cookiefile
     else:
@@ -461,6 +479,9 @@ def download_video(
         return {
             "ok": True,
             "file": final,
+            # Backward compatibility for endpoints that historically consumed
+            # a list even though this function downloads exactly one video.
+            "files": [final],
             "title": info.get("title") or "",
             "id": str(info.get("id") or ""),
         }

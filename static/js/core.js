@@ -573,7 +573,7 @@ function switchPage(name) {
   const el = document.getElementById('topbar-title');
   const titles = {
     user:'Tìm người dùng', process:'Xử lý Video', transcribe:'Phiên âm', subtitle:'Phụ đề & Khung',
-    publish:'Đăng video', content:'Quản lý bài đăng', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
+    publish:'Đăng video', content:'Quản lý bài đăng', scheduler:'Lịch đăng bài', history:'Lịch sử', config:'Cấu hình', cookies:'Cookies',
     movie:'Review phim', story:'Truyện → Video', proxies:'Proxy & Router', chat:'Chat Bot', providers:'AI Providers',
     videogen:'Video AI', ai_studio:'AI Studio', n8n:'Điều phối n8n', sales:'Video bán hàng', ads:'Video quảng cáo',
     quota: 'Quota Tracker',
@@ -602,6 +602,7 @@ function switchPage(name) {
   }
   if (name === 'history') { loadHistory(); if (typeof loadFiles === 'function') loadFiles(''); }
   if (name === 'content') cptSwitch('files');
+  if (name === 'scheduler' && typeof window.schedulerLoad === 'function') window.schedulerLoad();
   if (name === 'publish') {
     if (typeof window._pubQueueRefresh === 'function') window._pubQueueRefresh();
   }

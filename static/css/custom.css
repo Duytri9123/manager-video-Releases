@@ -1767,3 +1767,20 @@ tr:hover td {
 .proc-downloaded-history-row.proc-item-selected {
   background: rgba(99, 102, 241, 0.08) !important;
 }
+
+/* Keep per-item selection controls quiet until the user targets a row/card.
+   A checked box remains visible so the selected state is never ambiguous. */
+.proc-downloaded-history-row > .proc-file-checkbox,
+.proc-file-card .proc-file-checkbox {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+.proc-downloaded-history-row:hover > .proc-file-checkbox,
+.proc-downloaded-history-row:focus-within > .proc-file-checkbox,
+.proc-file-card:hover .proc-file-checkbox,
+.proc-file-card:focus-within .proc-file-checkbox,
+.proc-file-checkbox:checked {
+  opacity: 1;
+  visibility: visible;
+}

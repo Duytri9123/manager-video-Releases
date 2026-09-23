@@ -1,11 +1,11 @@
 {
-  "user_token": "EAAS5DC5i6TwBR3G2w5p1rV8qfu0W7bd85ywf6QgZBnP5YspyzlPPJqozFZAONZCOGCGeDnWEWMrTXyt3i9iTeiQCsAc1w5ICddaWqxSAT6XeuWixZA7fwX51cWnwW9ymxal6RZACr14oQC2NsvKuoQRXGmpUd2GRD6oYLqEML0uSZAlRSF9aFRJqDfMTvl0wOFpqZARtiqgZBH2iuIyKt8G1Y1jKVRFV42GwAvUvG2tRHwGDxxyM2yceseYYSQA5ZBRciw0LZCdmI28BVewM2tqz2b",
+  "user_token": "EAAS5DC5i6TwBSolVlyRCZBrUJFuaZBlCL0PiU6C2soWgGzRybN2iGpuZCfozRbBYXe23u5v4rY8tW2CbRcKKpTw9cZAeRD3swsdxFnRYxfVH3dmnTCWZAxfmYdG4uRhO0Y4pMOF024OkGoXRmPELl8mL37Rvc1Qk0YRaU2B74qyYLQ2Juwn3ihatRR26lCd77",
   "user_id": "1509611477502530",
   "user_name": "Nguyễn Duy Trí",
   "token_type": "USER",
-  "is_long_lived": false,
-  "token_expires_at": 1783342800,
-  "token_saved_at": 1783336919,
+  "is_long_lived": true,
+  "token_expires_at": 0,
+  "token_saved_at": 1790104332,
   "granted_perms": [
     "business_management",
     "catalog_management",
@@ -21,8 +21,8 @@
   "pages": [
     {
       "id": "1111623275360249",
-      "name": "Gió Sông",
-      "access_token": "EAAS5DC5i6TwBR1dAiV2gVrXVINAnIJIKtSeL8ZBEDjvvkLhhv0CuZB1Cib1iOPmG43w7eE5AhbwOGmwk7X6m33Ha1L8v0ubSZBbFqtM5USMOQPGBYaSI8tGW8lzp4t7PxJNZB3PcdahX5M7kbR1QGaSu7JXGPD8AFaolxM34ZBqzvM3SGjpdESOpgG6tyuYd5nkCueUydZAZAXo1CCmlFABLOFsWBMONQByqkTDuFoZD",
+      "name": "Cơ điện DGP",
+      "access_token": "EAAS5DC5i6TwBSkUP0ZBRwBrzqujgooE0TzapVsjCPFyZCdbf0P0L75ihu1jEILFPsqAZCL4bO2ilAXZA1dqd0BBTRUXgvaBdnXZCJcoTkTHOZA3ZCE8oXOWIMDLSRCChHutvWWjuKUxf4yyHIcPSIMHKy5qtzS0UBpetKcGuvbNhv082bBPCUwk8QkWZCZBM65RZCC5GZBHJZCfW",
       "category": "Product/service",
       "tasks": [
         "MODERATE",
@@ -30,13 +30,14 @@
         "ANALYZE",
         "ADVERTISE",
         "CREATE_CONTENT",
-        "MANAGE"
+        "MANAGE",
+        "MANAGE_LEADS"
       ]
     },
     {
       "id": "813278198533042",
       "name": "Trạm Giải Trí",
-      "access_token": "EAAS5DC5i6TwBRZCN21XZA3LXQmZBZAPnu5eCqltP2xacrwC30HaWbKlrZCiTmZBn1EMkcx4zgYhgfyiP6MMPC08VSf2727udJ73QnxI0qVHj0bfSRIs4OujIw38G7I8irL82d6iJ90b1TLed0tIhtWOU33D4YMMtnHZB465JGh39vbMASM43BcRorZARiUIttqxqjR9xNuLKkDG4bVN8i41tbuIH9g0tZBdPnT57cw9AZD",
+      "access_token": "EAAS5DC5i6TwBSm68XeaQdbfDZAfg16jJfZBa9m8m98xXHQRk7zxW3pYQ0eGZBuoeb2oZB52xO4Ha482fuMmLE3FDQp0ZBMAZBza03VFXANTJGmrP8F6OZBbEKcGywFZBCXOLkDTczm3pJWs9Gnet8gTdsTODNvvExdjfNyY79LZBrIVDYIU9By6ZBKgVoYtUywJljZBfyTlGWJe",
       "category": "Just for fun",
       "tasks": [
         "MODERATE",
@@ -44,13 +45,14 @@
         "ANALYZE",
         "ADVERTISE",
         "CREATE_CONTENT",
-        "MANAGE"
+        "MANAGE",
+        "MANAGE_LEADS"
       ]
     },
     {
       "id": "255717904302451",
       "name": "Ẩm Thực Douyin",
-      "access_token": "EAAS5DC5i6TwBR2wkxACQ6HM3ZB3oDZApIUicDlYzFq6jT2bqDNnB2YAAmcZBQnP5MZBPDyUivEW1F1avdaSp6pbdyd2ZCXRaGCSFGWxHEdX8K7wmg8hofjfgwuQsdz4dZARs4HdOtND5jXtMQAx7c0Li6fZCEmsl2HLv0nSL8ZBFX2wmIyxhfIZCSAIStaAVVFKl6Dqo5wpAZAe5nIQVtmPF4Aexn8dCTbC5N9ua0ZA0AZDZD",
+      "access_token": "EAAS5DC5i6TwBStZCnMCAt6EP3j1SzYulgWuBWHPZBPO9xLFoc5YhnOeq51Ov4njKrk8ZCv97WJoQDKmwr0mhRPAh4gbZC0wwWwwcBAqYSAtoxs4TW7YiiVZCAWAXx6EPzJZCuD7kyZAjRQZBUPvmbbVbGFoprWRXBWGNuSnduMLI7luaavXdBZBsbaheSOMAHtJtXwie2k0AZD",
       "category": "Commercial and industrial",
       "tasks": [
         "MODERATE",
@@ -58,7 +60,8 @@
         "ANALYZE",
         "ADVERTISE",
         "CREATE_CONTENT",
-        "MANAGE"
+        "MANAGE",
+        "MANAGE_LEADS"
       ]
     }
   ]

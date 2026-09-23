@@ -174,223 +174,7 @@ def _write_outputs(segments: list[dict], video_path: Path, out_dir: Path,
         srt_path.write_text("\n".join(srt_blocks), encoding="utf-8")
     return txt_path, srt_path
 
-
-class AntigravityTranscriber:
-    """Speech-to-text via Antigravity provider connection with multi-key and model fallbacks."""
-
-    def __init__(self, api_key: str = "", language: str = "zh", model_name: str = ""):
-        self.api_key = (api_key or "").strip()
-        self.language = language
-        m = (model_name or "").strip()
-        if not m or m in ["tiny", "base", "small", "medium", "large", "auto", "model", "none"]:
-            m = "gemini-3.8-flash-high"
-        self.model_name = m
-
-    def transcribe(self, video_path: Path, ffmpeg_bin: str, tmp_srt_path: Path | None = None) -> list[dict]:
-        import subprocess, base64, urllib.request, urllib.error, json, os, re
-        video_path = Path(video_path)
-        temp_audio = video_path.parent / f"{video_path.stem}_temp_stt.mp3"
-        try:
-            candidates_keys = []
-            if self.api_key:
-                candidates_keys.append({"key": self.api_key, "base_url": ""})
-
-            try:
-                from templates.pages.config.route import load_providers_from_db
-                all_provs = load_providers_from_db()
-                p_data = all_provs.get("antigravity") or all_provs.get("gemini") or {}
-                conns = [c for c in p_data.get("connections", []) if c.get("enabled")] or p_data.get("connections", [])
-                for conn in conns:
-                    k = (conn.get("api_key") or "").strip()
-                    b = (conn.get("base_url") or "").strip()
-                    p_id = (conn.get("project_id") or "").strip() or "aicode-consumers"
-                    if k and not any(ck["key"] == k for ck in candidates_keys):
-                        candidates_keys.append({"key": k, "base_url": b, "project_id": p_id, "conn": conn})
-            except Exception:
-                pass
-
-            env_key = os.getenv("ANTIGRAVITY_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
-            if env_key and not any(ck["key"] == env_key for ck in candidates_keys):
-                candidates_keys.append({"key": env_key, "base_url": "", "project_id": "aicode-consumers"})
-
-            if not candidates_keys:
-                from core.video_processor import FasterWhisperTranscriber
-                fw = FasterWhisperTranscriber(model_name="base", language=self.language, use_vad=True)
-                segs = []
-                for step in fw.transcribe(video_path, ffmpeg_bin, tmp_srt_path or (video_path.parent / f"{video_path.stem}.srt")):
-                    if isinstance(step, tuple) and step[0] == "result":
-                        segs = step[1]
-                return segs
-
-            cmd = [ffmpeg_bin, "-y", "-i", str(video_path), "-vn", "-ar", "16000", "-ac", "1", "-b:a", "64k", str(temp_audio)]
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            audio_bytes = temp_audio.read_bytes()
-            b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
-
-            lang_names = {"zh": "Tiếng Trung", "en": "Tiếng Anh", "vi": "Tiếng Việt", "ja": "Tiếng Nhật", "ko": "Tiếng Hàn", "th": "Tiếng Thái"}
-            target_lang = lang_names.get(self.language, self.language)
-
-            prompt = (
-                f"Hãy nghe âm thanh và phiên âm toàn bộ lời nói sang {target_lang}.\n"
-                "QUY TẮC MỐC THỜI GIAN SRT:\n"
-                "- BẮT BUỘC định dạng SRT chuẩn: HH:MM:SS,mmm --> HH:MM:SS,mmm (Giờ:Phút:Giây,Miligiây).\n"
-                "- TUYỆT ĐỐI KHÔNG dùng dấu ngoặc vuông [] quanh mốc thời gian.\n"
-                "- TUYỆT ĐỐI KHÔNG gộp nhiều câu hoặc nhiều mốc thời gian vào cùng 1 dòng text.\n"
-                "- Bắt buộc mỗi câu là 1 block SRT riêng biệt có số thứ tự tăng dần, cách nhau 1 dòng trống:\n"
-                "1\n"
-                "00:00:01,000 --> 00:00:04,000\n"
-                "Nội dung câu 1\n\n"
-                "2\n"
-                "00:00:04,500 --> 00:00:07,000\n"
-                "Nội dung câu 2\n\n"
-                "- Thời gian bắt đầu luôn nhỏ hơn thời gian kết thúc, khớp chính xác với âm thanh phát ra trong video.\n"
-                "- TUYỆT ĐỐI KHÔNG SUY NGHĨ (no thinking, no reasoning), không thêm suy nghĩ hay giải thích.\n"
-                "- Chỉ xuất trực tiếp duy nhất khối nội dung SRT hoàn chỉnh."
-            )
-
-            models_to_try = []
-            if self.model_name:
-                m_lower = self.model_name.lower()
-                if not any(bad in m_lower for bad in ["thinking", "claude", "gpt-oss"]):
-                    models_to_try.append(self.model_name)
-
-            if not models_to_try:
-                try:
-                    from templates.pages.config.route import load_models_from_db
-                    db_models = load_models_from_db("antigravity").get("antigravity", [])
-                    for dm in db_models:
-                        if dm.get("enabled") and dm.get("id"):
-                            mid = str(dm["id"]).lower()
-                            if not any(bad in mid for bad in ["thinking", "claude", "gpt-oss"]):
-                                models_to_try.append(dm["id"])
-                                break
-                except Exception:
-                    pass
-
-            if not models_to_try:
-                models_to_try = ["gemini-3.7-flash", "gemini-3.8-flash-high"]
-            else:
-                # Chỉ thử 1 model đầu tiên người dùng chọn, tối đa thêm 1 fallback nếu 404
-                primary = models_to_try[0]
-                models_to_try = [primary]
-                if primary not in ("gemini-3.8-flash-high", "gemini-3.8-flash"):
-                    models_to_try.append("gemini-3.8-flash-high")
-
-            srt_text = ""
-            for conn_item in candidates_keys:
-                k = conn_item["key"]
-                b_url = conn_item.get("base_url") or ""
-                from core.direct_ai_provider import detect_key_type, antigravity_generate_content, ProviderError
-                key_type = detect_key_type(k)
-
-                c_obj = conn_item.get("conn") or {
-                    "api_key": k,
-                    "refresh_token": (conn_item.get("conn") or {}).get("refresh_token") or (k if k.startswith("1//") else ""),
-                    "base_url": b_url,
-                    "project_id": conn_item.get("project_id", "aicode-consumers")
-                }
-
-                for model in models_to_try:
-                    try:
-                        if key_type in ("oauth_token", "refresh_token") or "cloudcode" in b_url:
-                            req_body = {
-                                "contents": [{
-                                    "parts": [
-                                        {"text": prompt},
-                                        {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
-                                    ]
-                                }],
-                                "generationConfig": {
-                                    "thinkingConfig": {"thinkingBudget": 0}
-                                }
-                            }
-                            resp_data, _ = antigravity_generate_content(c_obj, model, req_body, timeout=50)
-                        elif key_type == "api_key":
-                            base_endpoint = (b_url or "https://generativelanguage.googleapis.com").rstrip("/")
-                            url = f"{base_endpoint}/v1beta/models/{model}:generateContent?key={k}"
-                            headers = {"Content-Type": "application/json"}
-                            payload = json.dumps({
-                                "contents": [{
-                                    "parts": [
-                                        {"text": prompt},
-                                        {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
-                                    ]
-                                }],
-                                "generationConfig": {
-                                    "thinkingConfig": {"thinkingBudget": 0}
-                                }
-                            }).encode("utf-8")
-                            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-                            with urllib.request.urlopen(req, timeout=40) as resp:
-                                r_json = json.loads(resp.read().decode("utf-8"))
-                                resp_data = r_json.get("response") if isinstance(r_json.get("response"), dict) else r_json
-                        else:
-                            base_endpoint = (b_url or "https://generativelanguage.googleapis.com").rstrip("/")
-                            url = f"{base_endpoint}/v1beta/models/{model}:generateContent"
-                            headers = {
-                                "Content-Type": "application/json",
-                                "Authorization": f"Bearer {k}"
-                            }
-                            payload = json.dumps({
-                                "contents": [{
-                                    "parts": [
-                                        {"text": prompt},
-                                        {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
-                                    ]
-                                }],
-                                "generationConfig": {
-                                    "thinkingConfig": {"thinkingBudget": 0}
-                                }
-                            }).encode("utf-8")
-                            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-                            with urllib.request.urlopen(req, timeout=40) as resp:
-                                r_json = json.loads(resp.read().decode("utf-8"))
-                                resp_data = r_json.get("response") if isinstance(r_json.get("response"), dict) else r_json
-
-                        candidates = resp_data.get("candidates") or []
-                        if candidates and "content" in candidates[0]:
-                            parts = candidates[0]["content"].get("parts") or []
-                            text_parts = []
-                            for p in parts:
-                                if isinstance(p, dict):
-                                    if p.get("thought") is True:
-                                        continue
-                                    t = p.get("text") or ""
-                                    if t:
-                                        text_parts.append(t)
-                                elif isinstance(p, str):
-                                    text_parts.append(p)
-                            srt_text = "".join(text_parts)
-                            srt_text = re.sub(r'<thought>.*?</thought>', '', srt_text, flags=re.DOTALL)
-                            srt_text = re.sub(r'<think>.*?</think>', '', srt_text, flags=re.DOTALL).strip()
-                            if srt_text:
-                                break
-                    except ProviderError:
-                        break  # Đổi sang tài khoản tiếp theo ngay lập tức
-                    except urllib.error.HTTPError as he:
-                        if he.code in (401, 403, 429):
-                            break
-                        if he.code == 404:
-                            continue
-                        break
-                    except Exception:
-                        break
-
-                if srt_text:
-                    break
-
-            if srt_text:
-                return _parse_srt_to_segments(srt_text)
-            return []
-        except Exception as e:
-            print("[AntigravityTranscriber] Error:", e)
-            return []
-        finally:
-            if temp_audio.exists():
-                try: temp_audio.unlink()
-                except Exception: pass
-
+from core.processor.transcription import AntigravityTranscriber
 
 def _parse_srt_to_segments(srt_text: str, video_dur: float | None = None) -> list[dict]:
     try:
@@ -536,14 +320,15 @@ def transcribe():
                 return
 
             # ── Build transcriber ──
-            if provider == "antigravity" or provider == "gemini":
-                from templates.pages.config.route import load_providers_from_db
-                all_provs = load_providers_from_db()
-                ag_data = all_provs.get("antigravity") or {}
-                ag_conns = [c for c in ag_data.get("connections", []) if c.get("enabled")] or ag_data.get("connections", [])
-                ag_key = ag_conns[0].get("api_key", "").strip() if ag_conns else ""
-                yield send(log=f"ℹ Dùng Antigravity Multimodal AI (Model: {model_name})", level="info")
-                transcriber = AntigravityTranscriber(api_key=ag_key, language=language, model_name=model_name)
+            if provider == "antigravity":
+                yield send(log=f"Dùng Antigravity Multimodal AI (Model: {model_name})", level="info")
+                transcriber = AntigravityTranscriber(language=language, model_name=model_name)
+            elif provider == "gemini":
+                from core.ai_models_manager import get_active_provider_connections
+                g_conns = get_active_provider_connections("gemini")
+                g_key = (g_conns[0].get("api_key") or "").strip() if g_conns else ""
+                yield send(log=f"Dùng Google Gemini Multimodal AI (Model: {model_name})", level="info")
+                transcriber = AntigravityTranscriber(api_key=g_key, language=language, model_name=model_name)
             elif provider == "model":
                 yield send(log=f"ℹ Đang load Whisper local: {model_name}…", level="info")
                 try:
@@ -616,10 +401,20 @@ def transcribe():
                     target_dir.mkdir(parents=True, exist_ok=True)
 
                     yield send(file=40, file_lbl="đang phiên âm…")
-                    segments = transcriber.transcribe(v, ffmpeg, tmp_srt)
+                    res = transcriber.transcribe(v, ffmpeg, tmp_srt)
+                    if isinstance(res, list):
+                        segments = res
+                    else:
+                        segments = []
+                        for item in res:
+                            if isinstance(item, tuple) and len(item) >= 2:
+                                if item[0] == "log":
+                                    yield send(log=item[1], level=item[2] if len(item) > 2 else "info")
+                                elif item[0] == "result":
+                                    segments = item[1]
                     if not segments:
                         fail_c += 1
-                        yield send(log="⚠ Không phát hiện giọng nói", level="warning")
+                        yield send(log="Không phát hiện giọng nói", level="warning")
                     else:
                         yield send(file=80, file_lbl="đang ghi file…")
                         txt_path, srt_path = _write_outputs(

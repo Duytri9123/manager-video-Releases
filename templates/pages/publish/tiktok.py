@@ -60,6 +60,8 @@ def _new_session() -> Dict[str, Any]:
         "log": [],
         "error": "",
         "done": False,
+        "copyright_status": "checking",  # checking | clean | warning | skipped
+        "copyright_warning": False,
         "created_at": time.time(),
         "updated_at": time.time(),
         "stop_event": threading.Event(),
@@ -287,6 +289,117 @@ async def _try_set_privacy(page, privacy: str, sid: str):
                 pass
 
     _log(sid, f"⚠ Đã mở dropdown nhưng không click được \"{targets[0]}\". Hãy chọn tay.", "warning")
+
+
+async def _check_tiktok_copyright(page, sid: str) -> str:
+    """Trigger and inspect TikTok Studio's built-in sound copyright check.
+    
+    Returns: 'clean' | 'warning' | 'skipped'
+    """
+    _log(sid, "🔍 Đang kiểm tra bản quyền âm thanh trên TikTok Studio...", "info")
+    try:
+        # Step 1: Look for the copyright check switch / toggle
+        copyright_selectors = [
+            'button[role="switch"][aria-label*="copyright" i]',
+            'button[role="switch"][aria-label*="bản quyền" i]',
+            'label:has-text("copyright") input[type="checkbox"]',
+            'label:has-text("bản quyền") input[type="checkbox"]',
+            '//div[contains(translate(text(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "copyright") or contains(text(), "bản quyền")]/following::button[@role="switch"][1]',
+            '//div[contains(translate(text(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "copyright") or contains(text(), "bản quyền")]/following::input[@type="checkbox"][1]',
+        ]
+        
+        for sel in copyright_selectors:
+            try:
+                el = await page.query_selector(sel)
+                if el and await el.is_visible():
+                    aria_checked = await el.get_attribute("aria-checked")
+                    is_checked = await el.is_checked() if hasattr(el, 'is_checked') else False
+                    if aria_checked == "false" or not is_checked:
+                        await el.click()
+                        _log(sid, "🔘 Đã bật tính năng 'Kiểm tra bản quyền' trên TikTok Studio", "info")
+                    else:
+                        _log(sid, "ℹ Tính năng 'Kiểm tra bản quyền' đã bật sẵn", "info")
+                    break
+            except Exception:
+                pass
+
+        # Step 2: Wait for TikTok's client-side acoustic model to check the audio
+        await asyncio.sleep(6)
+
+        # Step 3: Scan the page content for copyright warnings / notices
+        warning_keywords = [
+            "phát hiện bản quyền",
+            "vi phạm bản quyền",
+            "âm thanh có thể bị tắt",
+            "âm thanh bị tắt",
+            "copyright issue",
+            "issues detected",
+            "sound may be muted",
+            "sounds in your video may be muted",
+            "copyright infringement",
+            "unlicensed music",
+            "bị hạn chế do bản quyền",
+        ]
+        clean_keywords = [
+            "không phát hiện thấy vấn đề",
+            "không phát hiện vấn đề",
+            "no issues detected",
+            "chưa phát hiện sự cố",
+            "kiểm tra hoàn tất",
+            "check completed",
+        ]
+
+        page_text = ""
+        try:
+            page_text = await page.evaluate("() => document.body.innerText || ''")
+            page_text_lower = page_text.lower()
+        except Exception:
+            page_text_lower = ""
+
+        # Check for warning
+        found_warning = None
+        for kw in warning_keywords:
+            if kw in page_text_lower:
+                found_warning = kw
+                break
+
+        if found_warning:
+            _log(sid, f"⚠ CẢNH BÁO BẢN QUYỀN: TikTok phát hiện âm thanh có thể dính bản quyền ('{found_warning}')!", "error")
+            _log(sid, "🚨 Video này có nguy cơ bị tắt tiếng hoặc hạn chế sau khi đăng. Hãy cân nhắc đổi nhạc!", "warning")
+            with _sessions_lock:
+                if sid in _sessions:
+                    _sessions[sid]["copyright_status"] = "warning"
+                    _sessions[sid]["copyright_warning"] = True
+            return "warning"
+
+        # Check for clean pass
+        found_clean = None
+        for kw in clean_keywords:
+            if kw in page_text_lower:
+                found_clean = kw
+                break
+
+        if found_clean:
+            _log(sid, "✓ Bản quyền âm thanh: TikTok không phát hiện vấn đề bản quyền nào.", "success")
+            with _sessions_lock:
+                if sid in _sessions:
+                    _sessions[sid]["copyright_status"] = "clean"
+                    _sessions[sid]["copyright_warning"] = False
+            return "clean"
+
+        _log(sid, "ℹ Kiểm tra bản quyền: Không phát hiện cảnh báo vi phạm bản quyền rõ ràng trên TikTok Studio.", "info")
+        with _sessions_lock:
+            if sid in _sessions:
+                _sessions[sid]["copyright_status"] = "clean"
+                _sessions[sid]["copyright_warning"] = False
+        return "clean"
+
+    except Exception as exc:
+        _log(sid, f"ℹ Không thể hoàn tất quét bản quyền tự động: {exc}", "info")
+        with _sessions_lock:
+            if sid in _sessions:
+                _sessions[sid]["copyright_status"] = "skipped"
+        return "skipped"
 
 
 def _cleanup_profile_locks(profile_dir: Path):
@@ -780,6 +893,9 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
                 _log(sid, f"📅 Đặt lịch đăng: {scheduled_time}")
                 await _try_enable_schedule(page, scheduled_time, sid)
 
+            # ── Copyright Check: Tự động kích hoạt & kiểm tra bản quyền âm thanh ──
+            await _check_tiktok_copyright(page, sid)
+
             _set_status(sid, "ready")
             _log(sid, "✅ Sẵn sàng. Kiểm tra lại rồi nhấn Post trong cửa sổ TikTok.", "success")
 
@@ -907,6 +1023,8 @@ def tt_prepare_status():
             "log": s["log"][-200:],      # cap response size
             "done": s["done"],
             "error": s["error"],
+            "copyright_status": s.get("copyright_status", "checking"),
+            "copyright_warning": s.get("copyright_warning", False),
         })
 
 

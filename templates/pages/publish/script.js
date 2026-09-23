@@ -398,7 +398,20 @@ async function pubUploadYouTube() {
         try {
           const d = JSON.parse(t);
           if (d.log) log(d.log, d.level || 'info');
-          if (d.url) { log('🎉 ' + d.url, 'success'); toast('✅ Đăng YouTube thành công!', 'success', 6000); }
+          if (d.url) {
+            log('🎉 ' + d.url, 'success');
+            toast('✅ Đăng YouTube thành công!', 'success', 6000);
+            const vid = d.video_id || (d.url.match(/(?:youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/) || [])[1];
+            if (vid) {
+              const ytLogBox = document.getElementById('yt-upload-log');
+              if (ytLogBox) {
+                const btnDiv = document.createElement('div');
+                btnDiv.style.marginTop = '6px';
+                btnDiv.innerHTML = `<button class="btn btn-xs btn-danger" onclick="pubDeleteYouTubeVideo('${vid}')">🗑 Thu hồi video YouTube</button>`;
+                ytLogBox.appendChild(btnDiv);
+              }
+            }
+          }
         } catch (_) { log(t, 'info'); }
       }
     }
@@ -899,7 +912,19 @@ async function _pubFbUploadOnce(endpoint, form) {
         try {
           const d = JSON.parse(t);
           if (d.log) _pubFbLog(d.log, d.level || 'info');
-          if (d.url) _pubFbLog('🔗 ' + d.url, 'success');
+          if (d.url) {
+            _pubFbLog('🔗 ' + d.url, 'success');
+            const vid = d.video_id || (d.url.match(/(?:videos\/|reel\/)(\d+)/) || [])[1];
+            if (vid) {
+              const fbLogBox = document.getElementById('fb-upload-log');
+              if (fbLogBox) {
+                const btnDiv = document.createElement('div');
+                btnDiv.style.marginTop = '6px';
+                btnDiv.innerHTML = `<button class="btn btn-xs btn-danger" onclick="pubDeleteFacebookVideo('${vid}')">🗑 Thu hồi video Facebook</button>`;
+                fbLogBox.appendChild(btnDiv);
+              }
+            }
+          }
           if (d.ok)  gotOk = true;
           if (d.token_error) {
             out.tokenError = true;
@@ -980,3 +1005,100 @@ document.addEventListener('DOMContentLoaded', async () => {
   pubFbInit();
   pubSwitchTab('youtube');
 });
+
+/* ── Video Revocation / Deletion Handlers ── */
+async function pubDeleteYouTubeVideo(videoId) {
+  if (!videoId) return false;
+  if (!confirm(`Bạn có chắc chắn muốn XÓA / THU HỒI video YouTube (${videoId}) vĩnh viễn không?`)) return false;
+  try {
+    toast('⏳ Đang xóa video trên YouTube...', 'info');
+    const res = await fetch('/api/youtube_video_delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_id: videoId })
+    });
+    const d = await res.json();
+    if (d.ok) {
+      toast(`✅ Đã xóa video ${videoId} khỏi YouTube thành công!`, 'success', 6000);
+      return true;
+    } else {
+      toast(`❌ Xóa video thất bại: ${d.error || 'Lỗi không xác định'}`, 'error', 8000);
+      return false;
+    }
+  } catch (e) {
+    toast(`❌ Lỗi kết nối khi xóa video: ${e.message}`, 'error', 8000);
+    return false;
+  }
+}
+
+async function pubDeleteFacebookVideo(videoId, pageId) {
+  if (!videoId) return false;
+  if (!confirm(`Bạn có chắc chắn muốn XÓA / THU HỒI video Facebook (${videoId}) vĩnh viễn không?`)) return false;
+  try {
+    toast('⏳ Đang xóa video trên Facebook...', 'info');
+    const res = await fetch('/api/facebook/delete_video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_id: videoId, page_id: pageId || '' })
+    });
+    const d = await res.json();
+    if (d.ok) {
+      toast(`✅ Đã xóa video ${videoId} khỏi Facebook thành công!`, 'success', 6000);
+      return true;
+    } else {
+      toast(`❌ Xóa video thất bại: ${d.error || 'Lỗi không xác định'}`, 'error', 8000);
+      return false;
+    }
+  } catch (e) {
+    toast(`❌ Lỗi kết nối khi xóa video: ${e.message}`, 'error', 8000);
+    return false;
+  }
+}
+
+async function pubRevokeVideoById() {
+  const platform = document.getElementById('pub-revoke-platform')?.value || 'youtube';
+  const rawId = document.getElementById('pub-revoke-id')?.value?.trim() || '';
+  const logEl = document.getElementById('pub-revoke-log');
+
+  if (!rawId) {
+    toast('⚠ Vui lòng nhập Video ID hoặc link video cần thu hồi', 'warning');
+    return;
+  }
+
+  // Parse ID if full link
+  let cleanId = rawId;
+  if (platform === 'youtube') {
+    const m = rawId.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([a-zA-Z0-9_-]{11})/);
+    if (m) cleanId = m[1];
+  } else if (platform === 'facebook') {
+    const m = rawId.match(/(?:videos\/|reel\/|story\.php\?story_fbid=)(\d+)/);
+    if (m) cleanId = m[1];
+  }
+
+  if (logEl) {
+    logEl.style.display = 'block';
+    logEl.style.background = 'rgba(239, 68, 68, 0.1)';
+    logEl.style.color = '#ef4444';
+    logEl.innerHTML = `⏳ Đang gửi yêu cầu thu hồi video <b>${cleanId}</b> trên ${platform === 'youtube' ? 'YouTube' : 'Facebook'}...`;
+  }
+
+  let ok = false;
+  if (platform === 'youtube') {
+    ok = await pubDeleteYouTubeVideo(cleanId);
+  } else {
+    ok = await pubDeleteFacebookVideo(cleanId);
+  }
+
+  if (logEl) {
+    if (ok) {
+      logEl.style.background = 'rgba(34, 197, 94, 0.1)';
+      logEl.style.color = '#22c55e';
+      logEl.innerHTML = `✅ Đã thu hồi & xóa thành công video <b>${cleanId}</b>.`;
+      const input = document.getElementById('pub-revoke-id');
+      if (input) input.value = '';
+    } else {
+      logEl.innerHTML = `❌ Thu hồi thất bại cho video <b>${cleanId}</b>. Hãy kiểm tra quyền hoặc tài khoản đã đăng video.`;
+    }
+  }
+}
+

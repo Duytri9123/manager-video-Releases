@@ -34,9 +34,11 @@ _BLUEPRINTS: List[Tuple[str, str, str]] = [
     ("templates.pages.publish.facebook",   "bp", "facebook"),
     ("templates.pages.publish.accounts",   "bp", "accounts"),
     ("templates.pages.publish.tiktok",     "bp", "tiktok"),
+    ("templates.pages.scheduler.route",  "bp", "scheduler"),
     ("templates.pages.proxies.route",    "bp", "proxies"),
     ("templates.pages.ai_studio.route",  "bp", "ai_studio"),
     ("templates.pages.n8n.route",        "bp", "n8n"),
+    ("templates.pages.chat.route",       "bp", "chatbot"),
 ]
 
 _REGISTERED: List[str] = []

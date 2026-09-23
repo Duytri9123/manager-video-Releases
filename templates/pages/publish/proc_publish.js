@@ -1150,7 +1150,12 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
     }
     if (!reachedReady && data.status === 'ready') {
       reachedReady = true;
-      toast('✅ TikTok đã sẵn sàng — hãy kiểm tra và nhấn Post trong cửa sổ đang mở', 'success', 8000);
+      if (data.copyright_warning) {
+        toast('🚨 CẢNH BÁO BẢN QUYỀN: TikTok phát hiện âm thanh có thể dính bản quyền! Hãy kiểm tra kỹ trên cửa sổ TikTok trước khi bấm Post.', 'error', 12000);
+        _appendProcLog?.('🚨 [TT] CẢNH BÁO: Âm thanh video có dấu hiệu vi phạm bản quyền trên TikTok Studio! Cân nhắc thay nhạc trước khi Post.', 'error');
+      } else {
+        toast('✅ TikTok đã sẵn sàng — hãy kiểm tra và nhấn Post trong cửa sổ đang mở', 'success', 8000);
+      }
       return;
     }
     if (data.done) {

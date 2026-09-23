@@ -50,9 +50,19 @@ def page_publish():
     return _render_spa("publish")
 
 
+@bp.route("/scheduler")
+def page_scheduler():
+    return _render_spa("scheduler")
+
+
 @bp.route("/proxies")
 def page_proxies():
     return _render_spa("proxies")
+
+
+@bp.route("/chat")
+def page_chat():
+    return _render_spa("chat")
 
 
 @bp.route("/callback")

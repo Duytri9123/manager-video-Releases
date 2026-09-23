@@ -40,7 +40,8 @@ ANTIGRAVITY_CLIENT_SECRET = os.environ.get("ANTIGRAVITY_CLIENT_SECRET", _DEFAULT
 ANTIGRAVITY_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v1/userinfo?alt=json"
-ANTIGRAVITY_API_BASE = "https://daily-cloudcode-pa.googleapis.com"
+ANTIGRAVITY_API_BASE = os.environ.get("ANTIGRAVITY_API_BASE", "https://cloudcode-pa.googleapis.com")
+ANTIGRAVITY_API_FALLBACK = "https://daily-cloudcode-pa.googleapis.com"
 ANTIGRAVITY_PROJECT_BASE = "https://cloudcode-pa.googleapis.com"
 ANTIGRAVITY_USER_AGENT = "antigravity/ide/2.11.0 darwin/arm64"
 ANTIGRAVITY_SCOPES = (
@@ -316,11 +317,20 @@ def complete_antigravity_login(code: str, redirect_uri: str) -> dict[str, Any]:
     access_token = str(tokens.get("access_token") or "")
     if not access_token:
         raise ProviderError("Google không trả về access token")
-    user = get_google_userinfo(access_token)
-    project_id, tier_id = load_antigravity_project(access_token)
+    user = {}
+    try:
+        user = get_google_userinfo(access_token)
+    except Exception:
+        pass
+    project_id = ""
+    try:
+        project_id, tier_id = load_antigravity_project(access_token)
+        if not project_id:
+            project_id = onboard_antigravity(access_token, tier_id)
+    except Exception as exc:
+        LOGGER.warning("Could not load/onboard antigravity project: %s", exc)
     if not project_id:
-        # The onboarding call can create/return the companion project.
-        project_id = onboard_antigravity(access_token, tier_id)
+        project_id = "aicode-consumers"
     return {
         "access_token": access_token,
         "refresh_token": str(tokens.get("refresh_token") or ""),
@@ -391,25 +401,36 @@ def antigravity_generate_content(
         "request": request_payload,
     }
     data = None
-    for attempt in range(4):
-        try:
-            data = _json_request(
-                f"{ANTIGRAVITY_API_BASE}/v1internal:generateContent",
-                method="POST",
-                headers=_antigravity_headers(access_token),
-                payload=envelope,
-                timeout=timeout,
-            )
+    last_err = None
+    bases_to_try = [ANTIGRAVITY_API_BASE]
+    if ANTIGRAVITY_API_FALLBACK not in bases_to_try:
+        bases_to_try.append(ANTIGRAVITY_API_FALLBACK)
+
+    for api_base in bases_to_try:
+        for attempt in range(3):
+            try:
+                data = _json_request(
+                    f"{api_base}/v1internal:generateContent",
+                    method="POST",
+                    headers=_antigravity_headers(access_token),
+                    payload=envelope,
+                    timeout=timeout,
+                )
+                break
+            except ProviderError as exc:
+                last_err = exc
+                if exc.status not in {409, 429, 500, 502, 503, 504} or attempt >= 2:
+                    break
+                delay = exc.retry_after or min(8.0, 1.25 * (2 ** attempt))
+                time.sleep(delay + secrets.randbelow(500) / 1000.0)
+            except Exception as exc:
+                last_err = exc
+                break
+        if data is not None:
             break
-        except ProviderError as exc:
-            if exc.status not in {409, 429, 500, 502, 503, 504} or attempt >= 3:
-                raise
-            # Tôn trọng Retry-After; nếu upstream không gửi thì exponential backoff
-            # kèm jitter nhỏ để nhiều tài khoản không retry cùng thời điểm.
-            delay = exc.retry_after or min(8.0, 1.25 * (2 ** attempt))
-            time.sleep(delay + secrets.randbelow(500) / 1000.0)
+
     if data is None:
-        raise ProviderError("Antigravity không trả về dữ liệu sau khi retry")
+        raise ProviderError(f"Antigravity không trả về dữ liệu ({last_err or 'lỗi kết nối'})")
     return (data.get("response") if isinstance(data.get("response"), dict) else data), updates
 
 

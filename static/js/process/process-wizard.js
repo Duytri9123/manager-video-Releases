@@ -59,6 +59,7 @@
         if (typeof _step3RefreshStartCard === 'function') _step3RefreshStartCard();
         // Refresh queue panel when entering step 3
         if (typeof _step3RenderQueue === 'function') _step3RenderQueue();
+        if (typeof loadStep3DownloadedVideos === 'function') loadStep3DownloadedVideos();
         if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
 
         // Sync checkboxes from Step 1 to Step 3
@@ -162,7 +163,8 @@
       const elTrans = document.getElementById('step3-config-translate');
       if (elTrans) {
         const transTgl = document.getElementById('cfg-toggle-trans');
-        if (transTgl && !transTgl.checked) {
+        const step2TransTgl = document.getElementById('proc-translate-subs');
+        if ((transTgl && !transTgl.checked) || (step2TransTgl && !step2TransTgl.checked)) {
           elTrans.textContent = 'Tắt';
           elTrans.title = 'Tắt dịch phụ đề';
           elTrans.classList.add('text-slate-400');
@@ -220,6 +222,46 @@
           elVoice.classList.add('text-slate-800', 'dark:text-slate-200');
         }
       }
+
+      // 6. Cấu hình video
+      const elAspect = document.getElementById('step3-config-aspect');
+      if (elAspect) {
+        const vidTgl = document.getElementById('cfg-toggle-video');
+        if (vidTgl && !vidTgl.checked) {
+          elAspect.textContent = 'Gốc (Không đổi)';
+          elAspect.title = 'Giữ nguyên tỷ lệ gốc';
+          elAspect.classList.add('text-slate-400');
+          elAspect.classList.remove('text-slate-800', 'dark:text-slate-200');
+        } else {
+          // Step 2 is the final editor and is also the source used by the
+          // processing request, so its values take precedence in this summary.
+          const aspectVal = document.getElementById('proc-preview-aspect')?.value || document.getElementById('step1-video-aspect')?.value || 'auto';
+          const padVal = document.getElementById('proc-aspect-blur-bg')?.checked ? 'blur' : 'pad';
+          let aspectLabel = 'Gốc (Tự động)';
+          if (aspectVal === '9x16') aspectLabel = '9:16 (Dọc)';
+          else if (aspectVal === '16x9') aspectLabel = '16:9 (Ngang)';
+          const padLabel = (aspectVal !== 'auto') ? (padVal === 'blur' ? ' · Nền mờ' : ' · Viền đen') : '';
+          const txt = `${aspectLabel}${padLabel}`;
+          elAspect.textContent = txt;
+          elAspect.title = txt;
+          elAspect.classList.remove('text-slate-400');
+          elAspect.classList.add('text-slate-800', 'dark:text-slate-200');
+        }
+      }
+
+      // 7. Âm thanh: exact values submitted by Step 2.
+      const elAudio = document.getElementById('step3-config-audio');
+      if (elAudio) {
+        const volume = Math.max(0, Math.min(200, Number(document.getElementById('proc-vol-orig')?.value ?? 100)));
+        const keepOriginal = document.getElementById('proc-keep-bg')?.checked ?? false;
+        const extEnabled = document.getElementById('proc-ext-audio-enabled')?.checked ?? false;
+        const extCount = Array.isArray(window._procExtAudios) ? window._procExtAudios.length : 0;
+        const originalLabel = volume <= 0 ? 'Âm gốc: Tắt' : `Âm gốc: ${volume}%${keepOriginal ? ' (giữ nền)' : ''}`;
+        const externalLabel = extEnabled ? `Âm ngoài: Bật${extCount ? ` (${extCount} tệp)` : ''}` : 'Âm ngoài: Tắt';
+        const txt = `${originalLabel} · ${externalLabel}`;
+        elAudio.textContent = txt;
+        elAudio.title = txt;
+      }
     }
     window.refreshSharedConfigSummary = refreshSharedConfigSummary;
 
@@ -228,11 +270,15 @@
        'proc-trans-provider-model', 'cfg-toggle-video-ai', 'proc-ai-video-provider',
        'proc-ai-video-nine-model', 'cfg-toggle-stt', 'proc-transcribe-provider-model',
        'proc-model', 'cfg-toggle-tts', 'proc-tts-engine', 'proc-tts-voice',
-       'proc-skip-transcription', 'step3-skip-transcription-step3'].forEach(function(id){
+       'proc-skip-transcription', 'step3-skip-transcription-step3',
+       'cfg-toggle-video', 'step1-video-aspect', 'step1-video-pad-mode',
+       'proc-preview-aspect', 'proc-aspect-blur-bg', 'proc-translate-subs',
+       'proc-keep-bg', 'proc-ext-audio-enabled', 'proc-vol-orig'].forEach(function(id){
         var el = document.getElementById(id);
         if (el) {
           el.addEventListener('change', refreshSharedConfigSummary);
         }
+
       });
       setTimeout(refreshSharedConfigSummary, 400);
     });
