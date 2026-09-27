@@ -43,6 +43,16 @@ class AudioMixer:
         if not tts_clips:
             return False, "No TTS clips"
 
+        previous_end = 0.0
+        for clip in sorted(tts_clips, key=lambda c: float(c['start'])):
+            start = float(clip['start'])
+            duration = float(clip.get('duration') or _get_audio_duration(self.ffmpeg, Path(clip['path'])))
+            if duration <= 0:
+                return False, "Không đo được thời lượng giọng đọc"
+            if start < previous_end - 0.001:
+                return False, "Các câu giọng đọc bị chồng thời gian; cần căn lại trước khi ghép"
+            previous_end = start + duration
+
         video_path = Path(video_path)
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +65,8 @@ class AudioMixer:
             video_duration = get_media_duration_seconds(self.ffmpeg, tmp_video)
             if video_duration <= 0:
                 video_duration = max(float(c.get("start", 0.0)) for c in tts_clips) + 8.0
+            if previous_end > video_duration + 0.01:
+                return False, "Giọng đọc vượt thời lượng video; cần rút gọn câu hoặc chỉnh mốc ASS"
 
             # Create a silent base track so amix always has stable timeline from t=0.
             silent_path = tmpdir / "silent.wav"

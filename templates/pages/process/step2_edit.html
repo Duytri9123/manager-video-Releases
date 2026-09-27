@@ -139,7 +139,7 @@
                 <span>Thứ tự lớp</span>
                 <button type="button" class="btn btn-secondary btn-sm"
                   style="font-size:10px;padding:2px 8px;height:24px"
-                  onclick="window._pe2LayerOrder=['video','frame','blur','logo','overlays','subs'];window._pe2TrackVisibility={video:true,frame:true,blur:true,logo:true,overlays:true,subs:true};if(window.pe2RenderTracksUI)window.pe2RenderTracksUI();if(typeof framePreviewUpdate==='function')framePreviewUpdate();toast('✓ Đã khôi phục thứ tự lớp mặc định','info');">
+                  onclick="window._pe2LayerOrder=['video','frame','blur','logo','overlays','subs'];window._pe2TrackVisibility={video:true,frame:true,blur:true,logo:true,overlays:true,subs:true};if(window.pe2RenderTracksUI)window.pe2RenderTracksUI();if(typeof framePreviewUpdate==='function')framePreviewUpdate();toast('Đã khôi phục thứ tự lớp mặc định','info');">
                   ↺ Mặc định
                 </button>
               </div>
@@ -213,7 +213,7 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Dịch</span>
-                  <span class="pe2-optcard-badge">✓</span>
+                  <span class="pe2-optcard-badge">+</span>
                 </label>
                 <label class="pe2-optcard" title="Ghi phụ đề vào video">
                   <input type="checkbox" id="proc-burn-vi" checked onchange="subPreviewUpdate()">
@@ -224,7 +224,7 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Ghi sub</span>
-                  <span class="pe2-optcard-badge">✓</span>
+                  <span class="pe2-optcard-badge">+</span>
                 </label>
                 <label class="pe2-optcard" title="Che phụ đề gốc">
                   <input type="checkbox" id="proc-blur-original" checked onchange="subPreviewUpdate()">
@@ -235,7 +235,7 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Che gốc</span>
-                  <span class="pe2-optcard-badge">✓</span>
+                  <span class="pe2-optcard-badge">+</span>
                 </label>
                 <label class="pe2-optcard" title="Lấp viền bằng nền mờ khi đổi tỉ lệ ngang và dọc">
                   <input type="checkbox" id="proc-aspect-blur-bg"
@@ -249,7 +249,7 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Nền mờ</span>
-                  <span class="pe2-optcard-badge">✓</span>
+                  <span class="pe2-optcard-badge">+</span>
                 </label>
                 <label class="pe2-optcard" title="Chỉ che vùng phụ đề gốc trong các khoảng thời gian có nội dung ASS/SRT; không dùng OCR">
                   <input type="checkbox" id="proc-blur-by-subtitles" onchange="subPreviewUpdate()">
@@ -261,7 +261,7 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Che theo sub</span>
-                  <span class="pe2-optcard-badge">✓</span>
+                  <span class="pe2-optcard-badge">+</span>
                 </label>
               </div>
 
@@ -2540,7 +2540,7 @@
           logoSeg.style.fontSize = '9px';
           logoSeg.style.color = '#93c5fd';
           logoSeg.style.pointerEvents = 'none';
-          logoSeg.textContent = '🖼 Logo: ' + (logoPath.split(/[\\/]/).pop() || logoPath);
+          logoSeg.textContent = 'Logo: ' + (logoPath.split(/[\\/]/).pop() || logoPath);
           bindTrack(logoSeg, {type:'frame-logo'}, 0, dur);
           box.appendChild(logoSeg);
         }
@@ -2569,7 +2569,7 @@
           seg.style.fontSize = '9px';
           seg.style.color = '#fdba74';
           var lab = document.createElement('span');
-          lab.textContent = '🌫 ' + _fmt(s) + '→' + _fmt(e);
+          lab.textContent = 'Che: ' + _fmt(s) + '→' + _fmt(e);
           bindTrack(seg, {type:'extra', id:z.id}, s, e);
           seg.appendChild(lab);
           box.appendChild(seg);
@@ -2602,7 +2602,7 @@
           seg.style.padding = '0 4px';
           seg.style.fontSize = '9px';
           seg.style.color = color;
-          var icon = ov.type === 'text' ? '🔤 ' : (ov.type === 'image' ? '🖼 ' : '▭ ');
+          var icon = ov.type === 'text' ? 'Text: ' : (ov.type === 'image' ? 'Ảnh: ' : 'Khối: ');
           var name = ov.type === 'text' ? (ov.text || 'Text') : (ov.type === 'image' ? (ov.name || 'Ảnh') : 'Khối');
           var lab = document.createElement('span');
           lab.textContent = icon + (name.length > 15 ? name.slice(0, 15) + '…' : name) + ' (' + _fmt(s) + '→' + _fmt(e) + ')';
@@ -2627,7 +2627,7 @@
         vidAudioLine.style.paddingLeft = '4px';
 
         var vidAudioIcon = document.createElement('span');
-        vidAudioIcon.textContent = '🔊 Âm thanh video gốc';
+        vidAudioIcon.textContent = 'Âm thanh video gốc';
         vidAudioIcon.style.fontSize = '9px';
         vidAudioIcon.style.color = 'rgb(34,197,94)';
         vidAudioIcon.style.lineHeight = '12px';
@@ -2679,7 +2679,7 @@
               segIcon.style.display = 'inline-flex';
               segIcon.style.alignItems = 'center';
               segIcon.style.color = '#ffffff';
-              segIcon.textContent = '♫ ' + (track.path.split(/[\\/]/).pop() || 'Âm thanh ngoài');
+              segIcon.textContent = (track.path.split(/[\\/]/).pop() || 'Âm thanh ngoài');
               seg.appendChild(segIcon);
               bindTrack(seg, {type:'audio', id:tIdx}, s, e);
 
@@ -2789,7 +2789,7 @@
         var empty = document.getElementById('pe2-tl-empty');
         if (_stripPending.has(source.val)) return;
         _stripPending.add(source.val);
-        if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tạo...'; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Đang tạo...'; }
         try {
           var data = automatic && _stripCache.get(source.val);
           if (!data) {
@@ -2830,7 +2830,7 @@
             }
             pe2SyncPlayhead();
             if (window.pe2RenderRanges) pe2RenderRanges();
-            if (!automatic && window.toast) toast('✓ Đã tạo dải thời gian', 'success');
+            if (!automatic && window.toast) toast('Đã tạo dải thời gian', 'success');
           } else {
             if (window.toast) toast('Không tạo được dải: ' + (data.error || ''), 'error');
           }
@@ -2838,7 +2838,7 @@
           if (window.toast) toast('Lỗi: ' + err.message, 'error');
         } finally {
           _stripPending.delete(source.val);
-          if (btn) { btn.disabled = false; btn.textContent = '🎞 Tạo dải thời gian'; }
+          if (btn) { btn.disabled = false; btn.textContent = 'Tạo dải thời gian'; }
         }
       };
 
@@ -2913,7 +2913,7 @@
         var btn = document.getElementById('pe2-play-btn');
         if (!btn) return;
         if (playing) {
-          btn.innerHTML = '<span>⏸</span><span>Tạm dừng</span>';
+          btn.innerHTML = '<span>Tạm dừng</span>';
           btn.classList.remove('btn-primary');
           btn.classList.add('btn-warning');
         } else {
@@ -3117,12 +3117,12 @@
       var cur = sel.value;
       sel.innerHTML = '';
       if (items.length === 0) {
-        sel.innerHTML = '<option value="">📋 Chọn video hàng chờ…</option>';
+        sel.innerHTML = '<option value="">Chọn video hàng chờ…</option>';
       }
       items.forEach(function (t) {
         var rawLabel = t.desc || t.val || t.id || '';
         var label = rawLabel.split(/[\\/]/).pop() || rawLabel;
-        var badge = t.status === 'done' ? ' ✓' : '';
+        var badge = t.status === 'done' ? ' +' : '';
         var opt = document.createElement('option');
         opt.value = t.id;
         opt.textContent = label + badge;
@@ -3182,7 +3182,7 @@
       if (typeof subPreviewFetchFrame === 'function') {
         setTimeout(function () { subPreviewFetchFrame(); }, 100);
       }
-      if (window.toast) toast('📋 Đã chọn: ' + (t.desc || t.val.split(/[\\/]/).pop()), 'info');
+      if (window.toast) toast('Đã chọn: ' + (t.desc || t.val.split(/[\\/]/).pop()), 'info');
     };
 
     // Patch _renderBatchQueue inside DOMContentLoaded to ensure window._renderBatchQueue has been declared in scripts.html

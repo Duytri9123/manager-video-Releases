@@ -292,7 +292,7 @@
     window._procAiAnalyzing = true;
     if (window.subPreviewUpdate) window.subPreviewUpdate();
     if (window.framePreviewUpdate) window.framePreviewUpdate();
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ AI đang đọc...'; }
+    if (btn) { btn.disabled = true; btn.textContent = ' AI đang đọc...'; }
     _procAiSetStatus('AI đang đọc video và kiểm tra chữ/logo cần che...', 'info');
     try {
       const sampleValue = document.getElementById('proc-ai-video-samples')?.value || 'full';
@@ -342,7 +342,7 @@
       window._procAiAnalyzing = false;
       if (window.subPreviewUpdate) window.subPreviewUpdate();
       if (window.framePreviewUpdate) window.framePreviewUpdate();
-      if (btn) { btn.disabled = false; btn.textContent = '🤖 Phân tích video'; }
+      if (btn) { btn.disabled = false; btn.textContent = ' Phân tích video'; }
     }
   }
   function procMaybeAnalyzeVideoAI() {

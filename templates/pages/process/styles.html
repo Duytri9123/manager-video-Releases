@@ -1,4 +1,4 @@
-  
+
 
 
 <style>
@@ -58,5 +58,36 @@
     #page-process [data-proc-step="4"] input,
     #page-process [data-proc-step="4"] select,
     #page-process [data-proc-step="4"] textarea { max-width:100%;min-width:0;box-sizing:border-box; }
+  }
+</style>
+
+<style>
+  #page-process .step3-queue-columns { grid-template-columns:minmax(0,1fr) !important; }
+  #page-process .step3-queue-columns > div + div { border-left:0 !important;padding-left:0 !important;border-top:1px solid var(--border);padding-top:12px; }
+  #page-process #step3-top-grid { display:flex;flex-direction:column;flex-shrink:0; }
+  #page-process #step3-start-card, #page-process #step3-config-card { height:auto;flex-shrink:0; }
+  #page-process .step1-grid-layout > :first-child > .card { flex-shrink:0; }
+  #page-process #step3-log { overflow-y:auto;overflow-wrap:anywhere;min-height:0; }
+  #page-process .proc-reuse-card input, #page-process .proc-reuse-card select { width:100%;min-width:0; }
+  @media (min-width:1024px) {
+    #page-process .step1-grid-layout,
+    #page-process .step3-layout,
+    #page-process .proc-step5-grid {
+      display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+      height:calc(100dvh - 145px);min-height:480px;gap:16px;align-items:stretch;
+    }
+    #page-process .step1-grid-layout > *,
+    #page-process .step3-layout > *,
+    #page-process .proc-step5-grid > * { min-height:0;min-width:0;overflow-y:auto; }
+    #page-process .step1-grid-layout > :first-child > :last-child { flex:1 0 auto;min-height:280px; }
+    #page-process .step1-grid-layout > :last-child > .card { flex-shrink:0; }
+    #page-process #step1-queue-card { height:100%;box-sizing:border-box; }
+    #page-process #step3-log-card { min-height:0;height:100%;box-sizing:border-box; }
+    #page-process #step3-log { flex:1; }
+    #page-process #step3-workspace > :last-child { overflow:hidden; }
+  }
+  @media (max-width:1023px) {
+    #page-process .proc-step5-grid { display:grid;grid-template-columns:minmax(0,1fr);gap:16px; }
+    #page-process #step3-log { height:55dvh;flex:auto; }
   }
 </style>

@@ -9,7 +9,7 @@
 
     const dur = await _getAudioDuration(file);
     if (!dur || dur <= 0) {
-      if (typeof toast === 'function') toast('✗ Không thể đọc được thời lượng của file âm thanh này', 'error');
+      if (typeof toast === 'function') toast(' Không thể đọc được thời lượng của file âm thanh này', 'error');
       return;
     }
 
@@ -22,7 +22,7 @@
     const tempId = 'aud-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 5);
     const newTrack = {
       id: tempId,
-      name: '⏳ Đang tải (0%): ' + file.name,
+      name: ' Đang tải (0%): ' + file.name,
       path: '',
       duration: dur,
       vid_start: 'đầu',
@@ -37,17 +37,17 @@
 
     _uploadFileWithProgress(file, 'audio',
       function(pct) {
-        newTrack.name = '⏳ Đang tải (' + pct + '%): ' + file.name;
+        newTrack.name = ' Đang tải (' + pct + '%): ' + file.name;
         procRenderExtAudios();
       },
       function(d) {
         if (d.ok && d.path) {
           newTrack.name = file.name;
           newTrack.path = d.path;
-          if (typeof toast === 'function') toast('✓ Đã tải lên: ' + file.name, 'success');
+          if (typeof toast === 'function') toast('+ Đã tải lên: ' + file.name, 'success');
         } else {
           window._procExtAudios = window._procExtAudios.filter(x => x.id !== tempId);
-          if (typeof toast === 'function') toast('✗ Tải file thất bại: ' + (d.error || ''), 'error');
+          if (typeof toast === 'function') toast(' Tải file thất bại: ' + (d.error || ''), 'error');
         }
         procRenderExtAudios();
         _syncExtAudiosHidden();
@@ -55,7 +55,7 @@
       },
       function(err) {
         window._procExtAudios = window._procExtAudios.filter(x => x.id !== tempId);
-        if (typeof toast === 'function') toast('✗ Lỗi kết nối khi tải âm thanh', 'error');
+        if (typeof toast === 'function') toast(' Lỗi kết nối khi tải âm thanh', 'error');
         procRenderExtAudios();
         _syncExtAudiosHidden();
         if (window.subPreviewUpdate) window.subPreviewUpdate();
@@ -79,7 +79,7 @@
       if (!isNaN(numVal)) {
         if (numVal > track.duration) {
           numVal = track.duration;
-          if (typeof toast === 'function') toast(`⚠️ Thời lượng file tối đa là ${track.duration.toFixed(2)}s, tự động giới hạn`, 'warning');
+          if (typeof toast === 'function') toast(` Thời lượng file tối đa là ${track.duration.toFixed(2)}s, tự động giới hạn`, 'warning');
         }
         track[key] = numVal.toFixed(2);
       } else {
@@ -128,15 +128,13 @@
         <div class="ov-layer-card" style="padding:10px;background:var(--bg2,#f7f9ff);border-radius:6px;border:1px solid var(--border,#e2e8f0);margin-bottom:8px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <span style="font-size:11px;font-weight:700;word-break:break-all;color:var(--text,#1e293b);flex:1;margin-right:8px">
-              🎵 ${track.name}
+               ${track.name}
             </span>
             <span style="font-size:10px;color:var(--accent,#1a73e8);background:rgba(26,115,232,0.1);padding:1px 5px;border-radius:4px;white-space:nowrap;margin-right:6px">
               Tối đa: ${track.duration.toFixed(2)}s
             </span>
             <button type="button" style="border:none;background:transparent;padding:2px 6px;cursor:pointer;font-size:13px;color:#ef4444;line-height:1" 
-              onclick="procRemoveExtAudio('${track.id}')" title="Xóa">
-              🗑️
-            </button>
+              onclick="procRemoveExtAudio('${track.id}')" title="Xóa">Xóa</button>
           </div>
 
           <!-- Timeline Range on Video -->
@@ -205,14 +203,14 @@
   function _onExtAudioFileSelected(input) {
     const file = input.files?.[0];
     if (!file) return;
-    
+
     // Display filename while uploading
     const pathEl = document.getElementById('proc-ext-audio-path');
-    if (pathEl) pathEl.value = '⏳ Đang tải (0%): ' + file.name;
+    if (pathEl) pathEl.value = ' Đang tải (0%): ' + file.name;
 
     _uploadFileWithProgress(file, 'audio',
       function(pct) {
-        if (pathEl) pathEl.value = '⏳ Đang tải (' + pct + '%): ' + file.name;
+        if (pathEl) pathEl.value = ' Đang tải (' + pct + '%): ' + file.name;
       },
       function(d) {
         if (d.ok && d.path) {
@@ -221,7 +219,7 @@
             pathEl.dataset.serverPath = d.path;
           }
           if (typeof toast === 'function') {
-            toast('✓ Đã tải lên âm thanh: ' + file.name, 'success');
+            toast('+ Đã tải lên âm thanh: ' + file.name, 'success');
           }
         } else {
           if (pathEl) {
@@ -229,7 +227,7 @@
             pathEl.dataset.serverPath = '';
           }
           if (typeof toast === 'function') {
-            toast('✗ Tải lên âm thanh thất bại: ' + (d.error || ''), 'error');
+            toast(' Tải lên âm thanh thất bại: ' + (d.error || ''), 'error');
           }
         }
       },
@@ -239,7 +237,7 @@
           pathEl.dataset.serverPath = '';
         }
         if (typeof toast === 'function') {
-          toast('✗ Lỗi kết nối khi tải âm thanh', 'error');
+          toast(' Lỗi kết nối khi tải âm thanh', 'error');
         }
       }
     );
@@ -248,34 +246,34 @@
     const file = input.files?.[0];
     if (!file) return;
     window._frameLogoFile = file;
-    
+
     // Display filename while uploading
-    document.getElementById('frame-logo-path').value = '⏳ Đang tải (0%): ' + file.name;
+    document.getElementById('frame-logo-path').value = ' Đang tải (0%): ' + file.name;
 
     _uploadFileWithProgress(file, 'logo',
       function(pct) {
-        document.getElementById('frame-logo-path').value = '⏳ Đang tải (' + pct + '%): ' + file.name;
+        document.getElementById('frame-logo-path').value = ' Đang tải (' + pct + '%): ' + file.name;
       },
       function(d) {
         if (d.ok && d.path) {
           // Store server path as data attribute
           document.getElementById('frame-logo-path').dataset.serverPath = d.path;
-          
+
           // Construct URL from path (path is like "temp_uploads/anti-fp-logo-xxx.png")
           // We need to serve it as /temp_uploads/anti-fp-logo-xxx.png
           const pathParts = d.path.split(/[\\/]/);  // Handle both / and \
           const filename = pathParts[pathParts.length - 1];
           const url = d.url || '/temp_uploads/' + encodeURIComponent(filename);
-          
+
           // Save to localStorage for persistence
           try {
             localStorage.setItem('proc_frame_logo_path', d.path);
             localStorage.setItem('proc_frame_logo_url', url);
           } catch (_) {}
-          
+
           // Update display to show filename only (not full path)
           document.getElementById('frame-logo-path').value = filename;
-          
+
           // Ensure size is visible
           const szInp = document.getElementById('frame-logo-size');
           if (szInp && (!szInp.value || parseFloat(szInp.value) <= 0)) {
@@ -283,10 +281,10 @@
           }
 
           if (typeof toast === 'function') {
-            toast('✓ Logo đã lưu: ' + file.name, 'success');
+            toast('+ Logo đã lưu: ' + file.name, 'success');
           }
           if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
-          
+
           // Load the new logo image for preview
           const img = new Image();
           img.onload = () => {
@@ -298,7 +296,7 @@
           document.getElementById('frame-logo-path').value = '';
           document.getElementById('frame-logo-path').dataset.serverPath = '';
           if (typeof toast === 'function') {
-            toast('✗ Upload logo thất bại', 'error');
+            toast(' Upload logo thất bại', 'error');
           }
         }
       },
@@ -306,7 +304,7 @@
         document.getElementById('frame-logo-path').value = '';
         document.getElementById('frame-logo-path').dataset.serverPath = '';
         if (typeof toast === 'function') {
-          toast('✗ Lỗi upload logo', 'error');
+          toast(' Lỗi upload logo', 'error');
         }
       }
     );
@@ -330,24 +328,24 @@
   function _loadFrameLogoDefault() {
     const pathInput = document.getElementById('frame-logo-path');
     if (!pathInput) return;
-    
+
     try {
       // Try to load saved logo path from localStorage
       const savedPath = localStorage.getItem('proc_frame_logo_path');
       const savedUrl = localStorage.getItem('proc_frame_logo_url');
-      
+
       if (savedPath && savedUrl) {
         // Extract filename from path for display
         const pathParts = savedPath.split(/[\\/]/);
         const filename = pathParts[pathParts.length - 1];
         pathInput.value = filename;
         pathInput.dataset.serverPath = savedPath;
-        
+
         const szInp = document.getElementById('frame-logo-size');
         if (szInp && (!szInp.value || parseFloat(szInp.value) <= 0)) {
           szInp.value = '12';
         }
-        
+
         // Load the image for preview using URL
         const img = new Image();
         img.onload = () => {
@@ -371,7 +369,7 @@
         return;
       }
     } catch (_) {}
-    
+
     // No saved logo: keep empty. The pipeline only uses a user-selected logo.
     pathInput.value = '';
     pathInput.dataset.serverPath = '';

@@ -12,6 +12,7 @@
 
     // ── Per-step enter hook ──────────────────────────────────────────────────
     function _procWizEnterStep(n) {
+      if (n === 4 && typeof procLoadReusableVideos === 'function') procLoadReusableVideos();
       if (n === 2) {
         // Step 2: Sync proc-video from the ACTIVE queue item, then refresh frame preview.
         // Must resolve the task currently being processed (or the next one waiting) —
@@ -105,7 +106,7 @@
       var next = document.getElementById('proc-wiz-next');
       var hint = document.getElementById('proc-wiz-hint');
       if (prev) prev.style.visibility = (n === 1) ? 'hidden' : 'visible';
-      if (next) next.textContent = (n === MAX) ? '✓ Hoàn tất' : 'Tiếp theo →';
+      if (next) next.textContent = (n === MAX) ? '+ Hoàn tất' : 'Tiếp theo →';
       if (hint) hint.textContent = 'Bước ' + n + ' / ' + MAX;
       var c = document.getElementById('content'); if (c) c.scrollTop = 0;
 

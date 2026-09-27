@@ -18,10 +18,10 @@ async function _runStep1QueueDownload() {
       if (pending.type === 'url') {
         pending.status = 'downloading';
         _renderBatchQueue();
-        _step1Log('📥 Bắt đầu tải: ' + pending.val, 'info');
+        _step1Log(' Bắt đầu tải: ' + pending.val, 'info');
 
         const dlStatus = document.getElementById('step1-dl-status');
-        if (dlStatus) dlStatus.textContent = '📥 Đang tải video gốc...';
+        if (dlStatus) dlStatus.textContent = ' Đang tải video gốc...';
 
         const res = await fetch('/api/download_original_video', {
           method: 'POST',
@@ -49,17 +49,17 @@ async function _runStep1QueueDownload() {
           pending.val = data.path; // update to local path
           pending.type = 'file';
           pending.desc = data.title || data.path.split(/[\\/]/).pop();
-          _step1Log('✅ Tải xong: ' + (data.title || pending.desc), 'success');
-          if (data.path) _step1Log('📁 Đường dẫn: ' + data.path, 'info');
-          toast('📥 Đã tải video gốc: ' + (data.title || ''), 'success');
-          
+          _step1Log(' Tải xong: ' + (data.title || pending.desc), 'success');
+          if (data.path) _step1Log(' Đường dẫn: ' + data.path, 'info');
+          toast(' Đã tải video gốc: ' + (data.title || ''), 'success');
+
           // Fetch preview frame for Step 2
           setTimeout(() => { if (typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame(); }, 300);
 
           // Auto-flow: skip Step 2, jump directly to Step 3
           if (document.getElementById('proc-auto-flow')?.checked && !_step1DownloadOnlyEnabled()) {
-            _step1Log('🔁 Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
-            
+            _step1Log(' Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
+
             // Apply task custom configuration to inputs
             const globalAuto = document.getElementById('proc-auto-flow');
             const globalSkipAss = document.getElementById('step3-skip-ass');
@@ -84,7 +84,7 @@ async function _runStep1QueueDownload() {
             if (pathEl) pathEl.value = pending.val;
             if (urlEl2) urlEl2.value = '';
             if (document.getElementById('proc-ai-video-auto')?.checked !== false && typeof procAnalyzeVideoAI === 'function') {
-              _step1Log('🤖 AI đang phân tích video trước khi xử lý...', 'info');
+              _step1Log(' AI đang phân tích video trước khi xử lý...', 'info');
               await procAnalyzeVideoAI({ force:false });
             }
             procWizGo(3);
@@ -94,13 +94,13 @@ async function _runStep1QueueDownload() {
       } else {
         // File type — already on disk, just mark ready
         pending.status = 'ready';
-        _step1Log('📄 File video sẵn sàng: ' + (pending.desc || pending.val.split(/[\\/]/).pop()), 'success');
-        toast('📄 File video sẵn sàng', 'success');
+        _step1Log(' File video sẵn sàng: ' + (pending.desc || pending.val.split(/[\\/]/).pop()), 'success');
+        toast(' File video sẵn sàng', 'success');
         setTimeout(() => { if (typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame(); }, 300);
 
         // Auto-flow
         if (document.getElementById('proc-auto-flow')?.checked && !_step1DownloadOnlyEnabled()) {
-          _step1Log('🔁 Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
+          _step1Log(' Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
 
           // Apply task custom configuration to inputs
           const globalAuto = document.getElementById('proc-auto-flow');
@@ -126,7 +126,7 @@ async function _runStep1QueueDownload() {
           if (pathEl) pathEl.value = pending.val;
           if (urlEl2) urlEl2.value = '';
           if (document.getElementById('proc-ai-video-auto')?.checked !== false && typeof procAnalyzeVideoAI === 'function') {
-            _step1Log('🤖 AI đang phân tích video trước khi xử lý...', 'info');
+            _step1Log(' AI đang phân tích video trước khi xử lý...', 'info');
             await procAnalyzeVideoAI({ force:false });
           }
           procWizGo(3);
@@ -137,8 +137,8 @@ async function _runStep1QueueDownload() {
       pending.status = 'error';
       const message = String(e.message || 'Không rõ lỗi');
       pending.desc = 'Lỗi: ' + message;
-      _step1Log('❌ Tải video thất bại: ' + message, 'error');
-      toast('❌ Tải video lỗi: ' + message, 'error');
+      _step1Log(' Tải video thất bại: ' + message, 'error');
+      toast(' Tải video lỗi: ' + message, 'error');
       const low = message.toLowerCase();
       const isCookieErr = low.includes('confirm you’re not a bot') ||
                           low.includes('confirm you\'re not a bot') ||
@@ -173,7 +173,7 @@ async function _runStep1QueueDownload() {
 
     // Wait for any in-progress file upload before reading paths
     if (window._procUploadPromise) {
-      toast('⏳ Đang upload file... vui lòng đợi', 'info');
+      toast(' Đang upload file... vui lòng đợi', 'info');
       try { await window._procUploadPromise; } catch(_) {}
     }
 
@@ -187,13 +187,13 @@ async function _runStep1QueueDownload() {
     if (url) {
       window._batchQueue.push(buildNewTask('url', url));
       urlEl.value = '';
-      toast('✅ Đã thêm URL vào hàng chờ', 'success');
+      toast(' Đã thêm URL vào hàng chờ', 'success');
     } else {
       window._batchQueue.push(buildNewTask('file', path));
       if (pathEl) pathEl.value = '';
       const nameEl = document.getElementById('proc-file-name');
       if (nameEl) nameEl.textContent = '--';
-      toast('✅ Đã thêm file vào hàng chờ', 'success');
+      toast(' Đã thêm file vào hàng chờ', 'success');
     }
     _renderBatchQueue();
     if (typeof _step1UpdateDownloadArea === 'function') {
@@ -242,13 +242,13 @@ async function _runStep1QueueDownload() {
     let friendlyMsg = '';
     const low = cleanErr.toLowerCase();
     if (low.includes('confirm you’re not a bot') || low.includes('confirm you\'re not a bot') || low.includes('sign in to confirm')) {
-      friendlyMsg = `🤖 <b>Phát hiện bot / Yêu cầu xác thực:</b><br>
+      friendlyMsg = ` <b>Phát hiện bot / Yêu cầu xác thực:</b><br>
       Nền tảng <b>${label}</b> đã chặn yêu cầu tải vì nghi ngờ là công cụ tự động (bot). Bạn cần cung cấp Cookie đăng nhập để tiếp tục tải.`;
     } else if (low.includes('could not copy chrome cookie database') || low.includes('cookie database')) {
-      friendlyMsg = `🔒 <b>Lỗi khóa tệp Cookie của trình duyệt:</b><br>
+      friendlyMsg = ` <b>Lỗi khóa tệp Cookie của trình duyệt:</b><br>
       Trình duyệt bạn chọn hiện đang mở nên tệp tin Cookie bị khóa. Vui lòng tắt trình duyệt đó đi hoặc dùng file cookie thủ công.`;
     } else {
-      friendlyMsg = `⚠️ <b>Cần Cookie đăng nhập:</b><br>
+      friendlyMsg = ` <b>Cần Cookie đăng nhập:</b><br>
       Tải thất bại do nền tảng yêu cầu tài khoản/cookie hợp lệ để xem hoặc tải video.`;
     }
     if (friendlyEl) friendlyEl.innerHTML = friendlyMsg;
@@ -303,7 +303,7 @@ async function _runStep1QueueDownload() {
       modal.classList.add('hidden');
       modal.style.display = 'none';
     }
-    
+
     const failedItem = window._ytdlpCookieFailedItem;
     window._ytdlpCookieFailedItem = null;
     window._step1DownloadPaused = false;
@@ -322,7 +322,7 @@ async function _runStep1QueueDownload() {
     buttons.forEach(btn => btn.disabled = true);
 
     if (statusEl) {
-      statusEl.textContent = '⏳ Đang lưu cấu hình và khởi chạy lại...';
+      statusEl.textContent = ' Đang lưu cấu hình và khởi chạy lại...';
       statusEl.style.color = 'var(--text)';
     }
 
@@ -335,7 +335,7 @@ async function _runStep1QueueDownload() {
       const data = await res.json();
       if (data.ok) {
         if (statusEl) {
-          statusEl.textContent = '✅ Đã lưu! Đang kết nối lại để tải video...';
+          statusEl.textContent = ' Đã lưu! Đang kết nối lại để tải video...';
           statusEl.style.color = 'var(--success, green)';
         }
 
@@ -366,7 +366,7 @@ async function _runStep1QueueDownload() {
             failedItem.status = 'pending';
             failedItem.desc = 'Đang thử lại...';
             _renderBatchQueue();
-            
+
             // Trigger download queue
             window._step1Downloading = false;
             _runStep1QueueDownload();
@@ -374,14 +374,14 @@ async function _runStep1QueueDownload() {
         }, 1200);
       } else {
         if (statusEl) {
-          statusEl.textContent = '❌ Lỗi: ' + (data.error || 'Unknown error');
+          statusEl.textContent = ' Lỗi: ' + (data.error || 'Unknown error');
           statusEl.style.color = 'var(--danger, red)';
         }
         buttons.forEach(btn => btn.disabled = false);
       }
     } catch (e) {
       if (statusEl) {
-        statusEl.textContent = '❌ Lỗi kết nối: ' + e.message;
+        statusEl.textContent = ' Lỗi kết nối: ' + e.message;
         statusEl.style.color = 'var(--danger, red)';
       }
       buttons.forEach(btn => btn.disabled = false);

@@ -9,6 +9,22 @@
     </div> -->
 
   <div class="proc-step5-grid">
+    <div class="card proc-reuse-card">
+      <div class="card-header"><span class="card-title">Video đã xử lý &amp; phụ đề</span></div>
+      <div class="card-body">
+        <div class="field"><label for="proc-reuse-video">Chọn video đã xử lý</label>
+          <select id="proc-reuse-video" onchange="procSelectReusableVideo()"><option value="">Chọn video...</option></select>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="procLoadReusableVideos()">Làm mới danh sách</button>
+        <div class="field mt-8"><label for="proc-reuse-ass">ASS của video</label>
+          <select id="proc-reuse-ass" onchange="if(document.getElementById('p-autopub-enabled').checked)procPrepareReusableVideo()"><option value="">Chọn phụ đề...</option></select>
+        </div>
+        <p class="text-xs text-muted">Dùng video đã hoàn tất để tạo thông tin đăng khi trước đó chưa bật tự động đăng.</p>
+        <button type="button" class="btn btn-primary mt-8" id="proc-reuse-prepare" onclick="procPrepareReusableVideo()">Tạo thông tin từ ASS</button>
+        <button type="button" class="btn btn-secondary mt-8" onclick="procPublishReusableVideo()">Đăng video đã chọn</button>
+        <div id="proc-reuse-status" role="status" class="text-xs mt-8"></div>
+      </div>
+    </div>
     <!-- ═══════════════════════════════════════════════════════════
            AUTO-PUBLISH (after processing completes)
       ═══════════════════════════════════════════════════════════ -->
@@ -25,7 +41,7 @@
         <div class="card-actions" onclick="event.stopPropagation()">
           <label class="toggle-wrap">
             <input type="checkbox" class="toggle-input" id="p-autopub-enabled" aria-label="Bật tự động đăng sau khi xử lý"
-              onchange="const sourceToggle=document.getElementById('step1-autopub-toggle');if(sourceToggle)sourceToggle.checked=this.checked;try{localStorage.setItem('step1_autopub_enabled',this.checked?'1':'0')}catch(_e){}">
+              onchange="const sourceToggle=document.getElementById('step1-autopub-toggle');if(sourceToggle)sourceToggle.checked=this.checked;try{localStorage.setItem('step1_autopub_enabled',this.checked?'1':'0')}catch(_e){};if(this.checked){if(document.getElementById('proc-reuse-video').value)procPrepareReusableVideo();else procGenerateCurrentMetadata().catch(error=>toast(error.message,'error'))}">
             <div class="toggle"></div>
             <span class="toggle-label text-sm">Bật</span>
           </label>
@@ -35,7 +51,7 @@
 
         <!-- ── Batch schedule distribution ── -->
         <div class="alert-info mb-12" style="font-size:12px">
-          AI sẽ đọc nội dung từ file phụ đề (ASS) và tự động điền tiêu đề/mô tả/hashtag khi bạn xác nhận.
+          AI sẽ đọc nội dung từ file phụ đề (ASS) và tự động điền tiêu đề/mô tả/hashtag khi bật tính năng.
           <br>Khi video xử lý xong, hệ thống tự đăng lên các nền tảng đã bật.
         </div>
 
@@ -68,7 +84,7 @@
               </svg>
             </span>
             <span>YouTube</span>
-            <div class="tab-toggle" id="p-toggle-yt" onclick="event.stopPropagation();pPubTogglePlatform('youtube')">✓
+            <div class="tab-toggle" id="p-toggle-yt" onclick="event.stopPropagation();pPubTogglePlatform('youtube')">+
             </div>
           </div>
           <div class="platform-tab" id="p-tab-tt" title="TikTok" onclick="pPubSwitchTab('tiktok')">
@@ -79,7 +95,7 @@
               </svg>
             </span>
             <span>TikTok</span>
-            <div class="tab-toggle" id="p-toggle-tt" onclick="event.stopPropagation();pPubTogglePlatform('tiktok')">✓
+            <div class="tab-toggle" id="p-toggle-tt" onclick="event.stopPropagation();pPubTogglePlatform('tiktok')">+
             </div>
           </div>
           <div class="platform-tab" id="p-tab-fb" title="Facebook" onclick="pPubSwitchTab('facebook')">
@@ -90,7 +106,7 @@
               </svg>
             </span>
             <span>Facebook</span>
-            <div class="tab-toggle" id="p-toggle-fb" onclick="event.stopPropagation();pPubTogglePlatform('facebook')">✓
+            <div class="tab-toggle" id="p-toggle-fb" onclick="event.stopPropagation();pPubTogglePlatform('facebook')">+
             </div>
           </div>
         </div>

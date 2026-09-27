@@ -655,8 +655,8 @@ function _onProcFileSelected(input) {
     let successCount = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      if (nameEl) nameEl.textContent = `📁 [${i+1}/${files.length}] Đang tải lên: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
-      if (pathEl) pathEl.value = `⏳ [${i+1}/${files.length}] Đang tải lên: ${file.name}`;
+      if (nameEl) nameEl.textContent = ` [${i+1}/${files.length}] Đang tải lên: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
+      if (pathEl) pathEl.value = ` [${i+1}/${files.length}] Đang tải lên: ${file.name}`;
       if (progressBar) progressBar.style.width = '0%';
       if (progressText) progressText.textContent = '0%';
 
@@ -700,22 +700,22 @@ function _onProcFileSelected(input) {
           if (typeof _step1UpdateDownloadArea === 'function') _step1UpdateDownloadArea();
         }
       } catch (err) {
-        if (nameEl) nameEl.textContent = `❌ Lỗi tải lên ${file.name}: ${err.message}`;
-        if (typeof toast === 'function') toast(`❌ Lỗi tải lên ${file.name}: ${err.message}`, 'danger');
+        if (nameEl) nameEl.textContent = ` Lỗi tải lên ${file.name}: ${err.message}`;
+        if (typeof toast === 'function') toast(` Lỗi tải lên ${file.name}: ${err.message}`, 'danger');
       }
     }
 
     // Done all uploads
     if (pathEl) pathEl.value = '';
-    if (nameEl) nameEl.textContent = `✅ Đã tải lên thành công ${successCount}/${files.length} file video`;
+    if (nameEl) nameEl.textContent = ` Đã tải lên thành công ${successCount}/${files.length} file video`;
     if (progressBar) progressBar.style.width = '100%';
-    if (progressText) progressText.textContent = '✅ Hoàn thành';
-    if (typeof toast === 'function') toast(`✅ Đã tải lên và thêm vào hàng chờ ${successCount} file video`, 'success');
+    if (progressText) progressText.textContent = ' Hoàn thành';
+    if (typeof toast === 'function') toast(` Đã tải lên và thêm vào hàng chờ ${successCount} file video`, 'success');
     setTimeout(() => { if (progressWrap) progressWrap.style.display = 'none'; }, 2000);
-    
+
     // Clear input value so same files can be re-selected if needed
     input.value = '';
-    
+
     // Clear the active file upload state
     window._procSelectedFile = null;
     window._procUploadedPath = null;
@@ -920,16 +920,16 @@ async function openDownloadedPreviewModal(item) {
             });
             const data = await res.json();
             if (data.ok) {
-              if (typeof toast === 'function') toast('✅ Đã lưu phụ đề thành công!', 'success');
+              if (typeof toast === 'function') toast(' Đã lưu phụ đề thành công!', 'success');
               if (linesInfo) {
                 const lineCount = (val.match(/\n/g) || []).length + 1;
                 linesInfo.textContent = `${lineCount} dòng · Đã lưu`;
               }
             } else {
-              if (typeof toast === 'function') toast('❌ Lỗi lưu phụ đề: ' + (data.error || 'Unknown'), 'error');
+              if (typeof toast === 'function') toast(' Lỗi lưu phụ đề: ' + (data.error || 'Unknown'), 'error');
             }
           } catch (e) {
-            if (typeof toast === 'function') toast('❌ Lỗi: ' + e.message, 'error');
+            if (typeof toast === 'function') toast(' Lỗi: ' + e.message, 'error');
           } finally {
             saveBtn.disabled = false;
             saveBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>Lưu thay đổi</span>';
@@ -1598,19 +1598,19 @@ function startProcessVideo() {
     const logBox3 = document.getElementById('step3-log');
     if (logBox3) logBox3.innerHTML = '';
     if (typeof _appendProcLog === 'function') {
-      _appendProcLog('🚀 Khởi động tiến trình xử lý...', 'info');
+      _appendProcLog(' Khởi động tiến trình xử lý...', 'info');
     }
 
     if (window._procUploadPromise) {
       try {
         if (typeof _appendProcLog === 'function') {
-          _appendProcLog('⏳ Đang chờ hoàn tất upload file import...', 'info');
+          _appendProcLog(' Đang chờ hoàn tất upload file import...', 'info');
         }
         await window._procUploadPromise;
       } catch (e) {
         toast('Upload file import chưa hoàn tất: ' + (e.message || e), 'error');
         if (typeof _appendProcLog === 'function') {
-          _appendProcLog('❌ File import tải lên thất bại.', 'error');
+          _appendProcLog(' File import tải lên thất bại.', 'error');
         }
         if (typeof window._onProcTaskFinished === 'function') {
           window._onProcTaskFinished(false);
@@ -1622,7 +1622,7 @@ function startProcessVideo() {
     // --- PRE-FLIGHT API CHECKS ---
     try {
       const providersToCheck = [];
-      
+
       // 1. Check Translation API if enabled
       const translateSubs = _isProcTranslateSubsEnabled();
       if (translateSubs) {
@@ -1631,13 +1631,13 @@ function startProcessVideo() {
           providersToCheck.push(transProv);
         }
       }
-      
+
       // 2. Check Transcription API if enabled
       const transcribeProv = _getProcessProvider('transcribe');
       if (['groq', 'openai', 'gemini'].includes(transcribeProv)) {
         providersToCheck.push(transcribeProv);
       }
-      
+
       // 3. Check TTS API if voice conversion is enabled
       const voiceConvert = _isProcVoiceConvertEnabled();
       if (voiceConvert) {
@@ -1647,31 +1647,31 @@ function startProcessVideo() {
           providersToCheck.push(ttsProv);
         }
       }
-      
+
       // Filter out duplicate providers
       const uniqueProviders = [...new Set(providersToCheck)];
-      
+
       if (uniqueProviders.length > 0 && typeof checkApiBeforeAction === 'function') {
         if (typeof _appendProcLog === 'function') {
-          _appendProcLog('🔍 Đang kiểm tra trạng thái các API key cần thiết...', 'info');
+          _appendProcLog(' Đang kiểm tra trạng thái các API key cần thiết...', 'info');
         }
         for (const provider of uniqueProviders) {
           if (typeof _appendProcLog === 'function') {
-            _appendProcLog(`🧪 Đang xác minh API key cho: ${provider}...`, 'info');
+            _appendProcLog(` Đang xác minh API key cho: ${provider}...`, 'info');
           }
           const key = getApiKeyForProvider(provider);
           await new Promise((resolve, reject) => {
             checkApiBeforeAction(provider, key, resolve, () => reject(new Error(`Hủy bỏ hoặc xác minh API ${provider} thất bại.`)));
           });
           if (typeof _appendProcLog === 'function') {
-            _appendProcLog(`✅ API key cho: ${provider} hoạt động tốt.`, 'success');
+            _appendProcLog(` API key cho: ${provider} hoạt động tốt.`, 'success');
           }
         }
       }
     } catch (err) {
       console.warn('API Preflight check failed:', err);
       if (typeof _appendProcLog === 'function') {
-        _appendProcLog(`❌ Tiến trình bị hủy hoặc lỗi preflight check: ${err.message || err}`, 'error');
+        _appendProcLog(` Tiến trình bị hủy hoặc lỗi preflight check: ${err.message || err}`, 'error');
       }
       // Reset task status in queue to pending so user can fix and retry
       if (window._procCurrentTaskId) {
@@ -1792,7 +1792,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     font_bold:        document.getElementById('proc-font-bold')?.checked ?? true,
     tts_speed:        parseFloat(document.getElementById('proc-tts-speed')?.value || '1.0'),
     auto_speed:       document.getElementById('proc-auto-speed')?.checked ?? true,
-    sync_sub_to_voice: document.getElementById('proc-sync-sub-voice')?.checked ?? true,
+    sync_sub_to_voice: true,
     multi_speaker:     document.getElementById('proc-multi-speaker')?.checked ?? false,
     tts_voice_male:    document.getElementById('proc-tts-voice-male')?.value || '',
     tts_voice_female:  document.getElementById('proc-tts-voice-female')?.value || '',
@@ -1872,6 +1872,9 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
 window.collectProcessConfig = collectProcessConfig;
 
 function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
+  window._publishLastOutputPath = '';
+  window._publishLastSubtitlePath = '';
+  window._procReusePrepared = null;
 
   const btn = document.getElementById('btn-proc');
   if (btn) { btn.disabled = true; btn.textContent = 'Đang xử lý...'; }
@@ -1879,14 +1882,14 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
   // Reset UI (logBox is already cleared in startProcessVideo)
   _setProcProgress(0, 'Khởi chạy...');
   if (typeof _appendProcLog === 'function') {
-    _appendProcLog('📡 Đang gửi request xử lý video tới server backend...', 'info');
+    _appendProcLog(' Đang gửi request xử lý video tới server backend...', 'info');
   }
 
   const baseFields = collectProcessConfig(videoPath, videoUrl);
 
   // Keep an inspectable snapshot of the exact Step 2 values used by this run.
   window._procLastSubmittedConfig = JSON.parse(JSON.stringify(baseFields));
-  _appendProcLog(`🔊 Cấu hình âm thanh: âm gốc ${Math.round((baseFields.vol_orig || 0) * 100)}% · giữ nền ${baseFields.keep_bg_music ? 'Bật' : 'Tắt'} · âm ngoài ${baseFields.ext_audio_enabled ? `Bật (${baseFields.ext_audios.length} tệp)` : 'Tắt'}`, 'info');
+  _appendProcLog(` Cấu hình âm thanh: âm gốc ${Math.round((baseFields.vol_orig || 0) * 100)}% · giữ nền ${baseFields.keep_bg_music ? 'Bật' : 'Tắt'} · âm ngoài ${baseFields.ext_audio_enabled ? `Bật (${baseFields.ext_audios.length} tệp)` : 'Tắt'}`, 'info');
 
   const doRequest = (body, isFormData) => fetch('/api/process_video', {
     method: 'POST',
@@ -1955,7 +1958,10 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
           const autoPubPromise = (typeof pPubAutoUploadAll === 'function'
               && shouldAutoPublish
               && window._publishLastOutputPath)
-            ? pPubAutoUploadAll(window._publishLastOutputPath).catch(() => {})
+            ? procGenerateCurrentMetadata().then(info => {
+                if (!info) throw new Error('Chưa tạo được thông tin đăng từ ASS');
+                return pPubAutoUploadAll(window._publishLastOutputPath);
+              }).catch(error => _appendProcLog('Chưa đăng video: ' + error.message, 'error'))
             : Promise.resolve();
 
           // Legacy auto-upload path (different checkbox id)
@@ -1991,7 +1997,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
               if (d.level === 'error') {
                 window._procRunning = false;
                 const btn = document.getElementById('btn-proc');
-                if (btn) { btn.disabled = false; btn.textContent = '🚀 Bắt đầu xử lý (Thử lại)'; }
+                if (btn) { btn.disabled = false; btn.textContent = ' Bắt đầu xử lý (Thử lại)'; }
                 const btn3 = document.getElementById('btn-start-proc');
                 if (btn3) { btn3.disabled = false; btn3.textContent = '▶ Thử lại xử lý'; }
               }
@@ -2103,7 +2109,7 @@ function sendLastProcessedToPublish() {
   // Navigate to wizard step 4 (Đăng tự động — embedded in process wizard)
   if (typeof procWizGo === 'function') {
     procWizGo(4);
-    toast('✅ Video xử lý xong — hãy cấu hình đăng ở bước 4', 'success');
+    toast(' Video xử lý xong — hãy cấu hình đăng ở bước 4', 'success');
   } else {
     // Fallback: switch to publish page
     sendToPublish(window._publishLastOutputPath);
@@ -2121,7 +2127,7 @@ async function _procImportAndAICaption() {
   }
 
   const btn = event?.currentTarget;
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ AI đang viết caption...'; }
+  if (btn) { btn.disabled = true; btn.textContent = ' AI đang viết caption...'; }
 
   try {
     // Read ASS content if available
@@ -2148,12 +2154,12 @@ async function _procImportAndAICaption() {
     if ((assContent || hasVideoAi) && typeof pPubAnalyzeFromAss === 'function') {
       await pPubAnalyzeFromAss(assContent);
     } else {
-      _appendProcLog('⚠ Không có ASS hoặc phân tích video để AI phân tích — chuyển sang bước 4 để nhập thủ công', 'warning');
+      _appendProcLog(' Không có ASS hoặc phân tích video để AI phân tích — chuyển sang bước 4 để nhập thủ công', 'warning');
     }
   } catch (e) {
-    _appendProcLog('❌ AI caption thất bại: ' + e.message, 'error');
+    _appendProcLog(' AI caption thất bại: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🤖 Import & AI viết Caption → Đăng (Bước 4)'; }
+    if (btn) { btn.disabled = false; btn.textContent = ' Import & AI viết Caption → Đăng (Bước 4)'; }
   }
 
   // Navigate to step 4
@@ -2175,7 +2181,7 @@ function sendToPublish(videoPath) {
         autoDetectSubtitles(videoPath);
       }
     }
-    
+
     // Clear previous info
     ['yt-title', 'yt-desc', 'yt-tags', 'tt-title', 'tt-tags', 'fb-title', 'fb-tags', 'pub-content-input'].forEach(id => {
       const el = document.getElementById(id);
@@ -2189,7 +2195,7 @@ function sendToPublish(videoPath) {
       }
     });
 
-    toast('✅ Đã thêm dữ liệu vào Đăng video', 'success');
+    toast(' Đã thêm dữ liệu vào Đăng video', 'success');
     switchPage('publish');
   }
 }
@@ -2207,7 +2213,7 @@ async function autoDetectSubtitles(videoPath) {
       const subInput = document.getElementById('pub-sub-path');
       if (subInput && (!subInput.value || subInput.value.trim() === '')) {
         subInput.value = data.best_match;
-        toast('✨ Đã tự động tìm thấy phụ đề: ' + data.best_match.split(/[\\\/]/).pop(), 'success');
+        toast(' Đã tự động tìm thấy phụ đề: ' + data.best_match.split(/[\\\/]/).pop(), 'success');
       }
     }
   } catch (e) {
@@ -2216,6 +2222,7 @@ async function autoDetectSubtitles(videoPath) {
 }
 
 function _appendProcLog(msg, level) {
+  msg = String(msg ?? '').replace(/[\u{1F300}-\u{1FAFF}\u2300-\u23FF\u2600-\u27BF\uFE0F\u200D]/gu, '').trim();
   const box = document.getElementById('proc-log');
   const box3 = document.getElementById('step3-log');
   if (!box && !box3) return;
@@ -2441,3 +2448,88 @@ window._showSttKeyModal = _showSttKeyModal;
 window._closeSttKeyModal = _closeSttKeyModal;
 window._saveSttKeyModal = _saveSttKeyModal;
 
+
+
+async function procLoadReusableVideos() {
+  const select = document.getElementById('proc-reuse-video');
+  if (!select || window._procReuseLoading) return;
+  window._procReuseLoading = true;
+  const previous = select.value;
+  try {
+    const response = await fetch('/api/files/completed');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Không tải được video');
+    window._procReusableVideos = data.items || [];
+    select.replaceChildren(new Option('Chọn video...', ''));
+    window._procReusableVideos.forEach(item => select.add(new Option(item.name, item.abs_path)));
+    select.value = previous;
+  } catch (error) {
+    document.getElementById('proc-reuse-status').textContent = error.message;
+  } finally { window._procReuseLoading = false; }
+}
+function procSelectReusableVideo() {
+  const path = document.getElementById('proc-reuse-video').value;
+  const item = (window._procReusableVideos || []).find(row => row.abs_path === path);
+  const select = document.getElementById('proc-reuse-ass');
+  select.replaceChildren(new Option('Chọn phụ đề của video...', ''));
+  (item?.subtitles || []).forEach(path => select.add(new Option(path.split(/[\\/]/).pop(), path)));
+  select.value = item?.subtitle_path || '';
+  window._procReusePrepared = null;
+  document.getElementById('proc-reuse-status').textContent = item ? 'Chọn ASS, sau đó tạo thông tin.' : '';
+  if (select.value && document.getElementById('p-autopub-enabled')?.checked) procPrepareReusableVideo();
+}
+async function procGenerateCurrentMetadata(options = {}) {
+  if (!document.getElementById('p-autopub-enabled')?.checked) return null;
+  const path = window._publishLastSubtitlePath;
+  if (!path) return await pPubAnalyzeFromAss('', options);
+  const response = await fetch('/api/proc_read_ass', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path})
+  });
+  const data = await response.json();
+  if (!response.ok || !data.content) throw new Error(data.error || 'Không đọc được ASS');
+  return await pPubAnalyzeFromAss(data.content, options);
+}
+async function procPrepareReusableVideo() {
+  const video = document.getElementById('proc-reuse-video').value;
+  const ass = document.getElementById('proc-reuse-ass').value;
+  const status = document.getElementById('proc-reuse-status');
+  const button = document.getElementById('proc-reuse-prepare');
+  if (button.disabled) return;
+  if (window._procRunning) { status.textContent = 'Chờ hàng xử lý hiện tại hoàn tất trước khi chọn video khác.'; return; }
+  if (!video || !ass) { status.textContent = 'Hãy chọn video và ASS tương ứng.'; return; }
+  button.disabled = true;
+  document.getElementById('proc-reuse-video').disabled = true;
+  document.getElementById('proc-reuse-ass').disabled = true;
+  window._procReusePrepared = null;
+  status.textContent = 'AI đang tạo thông tin từ ASS...';
+  try {
+    window._publishLastOutputPath = video;
+    window._publishLastSubtitlePath = ass;
+    document.getElementById('p-autopub-enabled').checked = true;
+    const source = document.getElementById('step1-autopub-toggle');
+    if (source) source.checked = true;
+    // This action prepares metadata only. Publishing requires its own button.
+    const result = await procGenerateCurrentMetadata({ignoreVideoAnalysis: true});
+    if (!result) throw new Error('Chưa tạo được thông tin. Vui lòng thử lại.');
+    window._procReusePrepared = {video, ass};
+    status.textContent = 'Đã tạo thông tin. Kiểm tra nội dung và tài khoản trước khi đăng.';
+  } catch (error) { status.textContent = error.message; }
+  finally {
+    button.disabled = false;
+    document.getElementById('proc-reuse-video').disabled = false;
+    document.getElementById('proc-reuse-ass').disabled = false;
+  }
+}
+async function procPublishReusableVideo() {
+  const video = document.getElementById('proc-reuse-video').value;
+  const ass = document.getElementById('proc-reuse-ass').value;
+  const status = document.getElementById('proc-reuse-status');
+  if (window._procReusePrepared?.video !== video || window._procReusePrepared?.ass !== ass) {
+    status.textContent = 'Tạo thông tin từ ASS cho video đã chọn trước khi đăng.'; return;
+  }
+  if (window._procReusePublishing) return;
+  window._procReusePublishing = true;
+  try { await pPubAutoUploadAll(video); }
+  catch (error) { status.textContent = error.message; }
+  finally { window._procReusePublishing = false; }
+}

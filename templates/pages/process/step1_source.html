@@ -146,7 +146,7 @@
                 <span>YouTube</span>
               </span>
               <span id="step1-pub-check-yt"
-                class="w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
+                class="w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px] font-bold">+</span>
             </button>
 
             <!-- TikTok Pill -->
@@ -160,7 +160,7 @@
                 <span>TikTok</span>
               </span>
               <span id="step1-pub-check-tt"
-                class="w-4 h-4 rounded-full bg-slate-700 dark:bg-slate-600 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
+                class="w-4 h-4 rounded-full bg-slate-700 dark:bg-slate-600 text-white flex items-center justify-center text-[9px] font-bold">+</span>
             </button>
 
             <!-- Facebook Pill -->
@@ -174,7 +174,7 @@
                 <span>Facebook</span>
               </span>
               <span id="step1-pub-check-fb"
-                class="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
+                class="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold">+</span>
             </button>
           </div>
 
@@ -779,7 +779,7 @@
                   <span>Căn thời gian phụ đề theo giọng đọc</span>
                 </label>
                 <label class="toggle-wrap m-0 scale-75">
-                  <input type="checkbox" class="toggle-input" id="proc-sync-sub-voice" checked>
+                  <input type="checkbox" class="toggle-input" id="proc-sync-sub-voice" checked disabled title="Luôn đồng bộ giọng đọc và phụ đề để tránh chồng tiếng">
                   <div class="toggle"></div>
                 </label>
               </div>
@@ -925,7 +925,7 @@
         const check = document.getElementById(`step1-pub-check-${shortId}`);
         const isOn = enabled[p] !== false;
         if (check) {
-          check.textContent = isOn ? '✓' : '✕';
+          check.textContent = isOn ? '+' : '×';
           check.className = isOn
             ? `w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold ${p === 'youtube' ? 'bg-red-500' : (p === 'tiktok' ? 'bg-slate-700 dark:bg-slate-600' : 'bg-blue-600')}`
             : 'w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-600 dark:text-slate-300 flex items-center justify-center text-[9px] font-bold';

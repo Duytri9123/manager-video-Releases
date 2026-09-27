@@ -37,7 +37,7 @@ function pPubTogglePlatform(platform) {
   const on = window._pPubEnabled[platform];
 
   if (toggle) {
-    toggle.textContent = on ? '✓' : '✕';
+    toggle.textContent = on ? '+' : '×';
     toggle.style.background = on ? 'var(--accent)' : 'var(--text-muted)';
   }
   if (tab) tab.style.opacity = on ? '1' : '0.4';
@@ -148,20 +148,20 @@ function _pVideoAiAnalysisHint() {
   ].filter(Boolean).join('\n');
 }
 
-async function pPubAnalyzeFromAss(assContent) {
+async function pPubAnalyzeFromAss(assContent, options = {}) {
   if (!document.getElementById('p-autopub-enabled')?.checked) return null;
   const plain = _pExtractPlainFromAss(assContent || '');
-  const visualAnalysis = _pVideoAiAnalysisHint();
+  const visualAnalysis = options.ignoreVideoAnalysis ? '' : _pVideoAiAnalysisHint();
   if (!plain && !visualAnalysis) {
-    _appendProcLog?.('⚠ ASS trống và chưa có phân tích video — bỏ qua AI phân tích', 'warning');
+    _appendProcLog?.(' ASS trống và chưa có phân tích video — bỏ qua AI phân tích', 'warning');
     return null;
   }
 
   const provider = document.getElementById('p-pub-ai-provider')?.value || 'deepseek';
   const targetLang = document.getElementById('proc-target-lang')?.value || 'vi';
   _appendProcLog?.(visualAnalysis
-    ? '🤖 AI đang dùng phân tích video + ASS để tạo tiêu đề/hashtag...'
-    : '🤖 AI đang phân tích nội dung ASS để tạo tiêu đề/hashtag...', 'info');
+    ? ' AI đang dùng phân tích video + ASS để tạo tiêu đề/hashtag...'
+    : ' AI đang phân tích nội dung ASS để tạo tiêu đề/hashtag...', 'info');
 
   try {
     const res = await fetch('/api/analyze_video_content', {
@@ -179,10 +179,10 @@ async function pPubAnalyzeFromAss(assContent) {
 
     const info = data.result || {};
     pPubApplyAIResult(info);
-    _appendProcLog?.('✅ AI đã tạo nội dung đăng video', 'success');
+    _appendProcLog?.(' AI đã tạo nội dung đăng video', 'success');
     return info;
   } catch (e) {
-    _appendProcLog?.('❌ AI phân tích thất bại: ' + e.message, 'error');
+    _appendProcLog?.(' AI phân tích thất bại: ' + e.message, 'error');
     return null;
   }
 }
@@ -288,7 +288,7 @@ function pBschedRecalcPreview() {
   const first = new Date(startMs);
   const last  = new Date(startMs + (n - 1) * intervalH * 3600 * 1000);
   const fmt = d => d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
-  el.innerHTML = `📅 <b>${n}</b> video, cách nhau <b>${intervalH.toFixed(2)}h</b>. Video đầu: <b>${fmt(first)}</b>, cuối: <b>${fmt(last)}</b>.`;
+  el.innerHTML = ` <b>${n}</b> video, cách nhau <b>${intervalH.toFixed(2)}h</b>. Video đầu: <b>${fmt(first)}</b>, cuối: <b>${fmt(last)}</b>.`;
 }
 
 function pBschedComputeAt(index) {
@@ -319,7 +319,7 @@ function pBschedComputeAt(index) {
 async function pPubAutoUploadAll(videoPath) {
   if (!document.getElementById('p-autopub-enabled')?.checked) return;
   if (!videoPath) {
-    _appendProcLog?.('⚠ Không tìm thấy video để đăng', 'warning');
+    _appendProcLog?.(' Không tìm thấy video để đăng', 'warning');
     return;
   }
 
@@ -330,7 +330,7 @@ async function pPubAutoUploadAll(videoPath) {
   if (idx === 0) {
     const ok = await pPubPreflightCheck({ interactive: true });
     if (!ok) {
-      _appendProcLog?.('⏹ Đã hủy đăng do user chọn', 'warning');
+      _appendProcLog?.(' Đã hủy đăng do user chọn', 'warning');
       return;
     }
   } else {
@@ -354,7 +354,7 @@ async function pPubAutoUploadAll(videoPath) {
     const action = await _pPubUploadWithRetry(plat, videoPath, scheduledDate, videoName);
     if (action === 'cancel') {
       window._pPubCancelled = true;
-      _appendProcLog?.('🛑 User đã huỷ pipeline đăng video', 'error');
+      _appendProcLog?.(' User đã huỷ pipeline đăng video', 'error');
       break;
     }
   }
@@ -402,7 +402,7 @@ async function _pPubUploadWithRetry(platform, videoPath, scheduledDate, videoNam
     });
 
     if (action === 'retry') {
-      _appendProcLog?.(`  [${PLATFORM_LABELS[platform]}] 🔄 Thử lại lần ${attempt + 1}...`, 'info');
+      _appendProcLog?.(`  [${PLATFORM_LABELS[platform]}]  Thử lại lần ${attempt + 1}...`, 'info');
       continue;
     }
     if (action === 'skip') {
@@ -454,7 +454,7 @@ async function pPubPreflightCheck({ interactive = true } = {}) {
             platform: 'facebook', label: 'Facebook', severity: 'blocker',
             message: 'Token Facebook đã hết hạn.',
             fix: d.has_app_credentials
-              ? 'Nhấn nút "🔄 Gia hạn token" trong tab Đăng video → Facebook.'
+              ? 'Nhấn nút " Gia hạn token" trong tab Đăng video → Facebook.'
               : 'Vào Graph API Explorer lấy token mới rồi kết nối lại.',
           });
         } else if (d.days_left !== null && d.days_left !== undefined && d.days_left <= 7) {
@@ -462,7 +462,7 @@ async function pPubPreflightCheck({ interactive = true } = {}) {
             platform: 'facebook', label: 'Facebook', severity: 'warning',
             message: `Token Facebook sắp hết hạn (còn ${d.days_left} ngày).`,
             fix: d.has_app_credentials
-              ? 'Nhấn "🔄 Gia hạn token" để gia hạn thêm 60 ngày.'
+              ? 'Nhấn " Gia hạn token" để gia hạn thêm 60 ngày.'
               : 'Lấy token mới từ Graph API Explorer trước khi hết hạn.',
           });
         }
@@ -487,7 +487,7 @@ async function pPubPreflightCheck({ interactive = true } = {}) {
               ? 'Chưa chọn Page để đăng.'
               : 'Tài khoản Facebook không quản lý Page nào.',
             fix: pages.length
-              ? 'Chọn Page trong dropdown "📄 Đăng lên Page".'
+              ? 'Chọn Page trong dropdown " Đăng lên Page".'
               : 'Cần làm admin ít nhất 1 Page, rồi sinh token với pages_show_list + pages_manage_posts.',
           });
         } else {
@@ -545,7 +545,7 @@ async function pPubPreflightCheck({ interactive = true } = {}) {
     for (const iss of issues) {
       if (iss.severity === 'blocker') {
         window._pPubEnabled[iss.platform] = false;
-        _appendProcLog?.(`⚠ ${iss.label}: ${iss.message} — bỏ qua`, 'warning');
+        _appendProcLog?.(` ${iss.label}: ${iss.message} — bỏ qua`, 'warning');
       }
     }
     return true;
@@ -567,14 +567,14 @@ function _pPubShowPreflightModal(issues) {
     const rows = issues.map((iss, i) => {
       const color = iss.severity === 'blocker' ? '#d32f2f'
                   : iss.severity === 'warning' ? '#f57c00' : '#1976d2';
-      const icon  = iss.severity === 'blocker' ? '❌' : iss.severity === 'warning' ? '⚠' : 'ℹ';
+      const icon  = iss.severity === 'blocker' ? '' : iss.severity === 'warning' ? '' : 'ℹ';
       const actionBtn = iss.action === 'tiktok_login'
-        ? `<button class="btn btn-primary btn-sm" data-action="tiktok_login" style="margin-top:6px;margin-right:8px">🔐 Đăng nhập TikTok ngay</button>`
+        ? `<button class="btn btn-primary btn-sm" data-action="tiktok_login" style="margin-top:6px;margin-right:8px"> Đăng nhập TikTok ngay</button>`
         : '';
       return `
         <div style="border-left:3px solid ${color};padding:10px 12px;margin-bottom:8px;background:#fafafa;border-radius:4px" data-issue-index="${i}">
           <div style="font-weight:600;color:${color};margin-bottom:4px">${icon} ${iss.label} — ${iss.message}</div>
-          ${iss.fix ? `<div style="font-size:12px;color:#666">💡 ${iss.fix}</div>` : ''}
+          ${iss.fix ? `<div style="font-size:12px;color:#666"> ${iss.fix}</div>` : ''}
           ${actionBtn}
           ${iss.severity === 'blocker'
             ? `<label style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;cursor:pointer">
@@ -587,7 +587,7 @@ function _pPubShowPreflightModal(issues) {
 
     modal.innerHTML = `
       <div style="background:#fff;border-radius:8px;max-width:560px;width:100%;max-height:80vh;overflow:auto;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.25)">
-        <h3 style="margin:0 0 12px;font-size:16px">🔎 Kiểm tra trước khi đăng</h3>
+        <h3 style="margin:0 0 12px;font-size:16px"> Kiểm tra trước khi đăng</h3>
         <div style="font-size:13px;color:#555;margin-bottom:12px">
           Phát hiện ${issues.length} vấn đề. Chọn cách xử lý rồi tiếp tục:
         </div>
@@ -619,23 +619,23 @@ function _pPubShowPreflightModal(issues) {
     modal.querySelectorAll('[data-action="tiktok_login"]').forEach(btn => {
       btn.onclick = async () => {
         btn.disabled = true;
-        btn.textContent = '⏳ Đang mở cửa sổ đăng nhập...';
+        btn.textContent = ' Đang mở cửa sổ đăng nhập...';
         try {
           const r = await fetch('/api/tiktok/open_login', { method: 'POST' });
           const d = await r.json();
           if (!d.ok) {
-            toast('❌ ' + (d.error || 'Không mở được cửa sổ đăng nhập'), 'error');
+            toast(' ' + (d.error || 'Không mở được cửa sổ đăng nhập'), 'error');
             btn.disabled = false;
-            btn.textContent = '🔐 Đăng nhập TikTok ngay';
+            btn.textContent = ' Đăng nhập TikTok ngay';
             return;
           }
           if (d.already_logged_in) {
-            toast('✅ Đã đăng nhập sẵn — tiếp tục được rồi', 'success');
+            toast(' Đã đăng nhập sẵn — tiếp tục được rồi', 'success');
             const row = btn.closest('[data-issue-index]');
             if (row) row.remove();
             return;
           }
-          btn.textContent = '⏳ Chờ bạn đăng nhập trong cửa sổ...';
+          btn.textContent = ' Chờ bạn đăng nhập trong cửa sổ...';
           const sid = d.session_id;
           const deadline = Date.now() + 10 * 60 * 1000;
           while (Date.now() < deadline) {
@@ -648,24 +648,24 @@ function _pPubShowPreflightModal(issues) {
             if (!s.ok) continue;
             if (s.done) {
               if (s.error) {
-                toast('❌ ' + s.error, 'error');
+                toast(' ' + s.error, 'error');
                 btn.disabled = false;
-                btn.textContent = '🔐 Đăng nhập TikTok ngay';
+                btn.textContent = ' Đăng nhập TikTok ngay';
                 return;
               }
-              toast('✅ Đăng nhập TikTok thành công', 'success');
+              toast(' Đăng nhập TikTok thành công', 'success');
               const row = btn.closest('[data-issue-index]');
               if (row) row.remove();
               return;
             }
           }
-          toast('⏱ Hết thời gian chờ đăng nhập', 'warning');
+          toast(' Hết thời gian chờ đăng nhập', 'warning');
           btn.disabled = false;
-          btn.textContent = '🔐 Đăng nhập TikTok ngay';
+          btn.textContent = ' Đăng nhập TikTok ngay';
         } catch (e) {
-          toast('❌ ' + e.message, 'error');
+          toast(' ' + e.message, 'error');
           btn.disabled = false;
-          btn.textContent = '🔐 Đăng nhập TikTok ngay';
+          btn.textContent = ' Đăng nhập TikTok ngay';
         }
       };
     });
@@ -677,7 +677,7 @@ window.pPubPreflightCheck = pPubPreflightCheck;
 async function pPubUploadYouTube(videoPath, scheduledDate) {
   const title = _pYtTruncateTitle(document.getElementById('p-yt-title')?.value || '');
   if (!title) {
-    _appendProcLog?.('⚠ YouTube: chưa có tiêu đề — bỏ qua', 'warning');
+    _appendProcLog?.(' YouTube: chưa có tiêu đề — bỏ qua', 'warning');
     return;
   }
 
@@ -692,7 +692,7 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
   if (scheduledDate) {
     privacy = 'private';
     publishAt = scheduledDate.toISOString().replace(/\.\d{3}Z$/, '.000Z');
-    _appendProcLog?.(`🗓 YouTube: đặt lịch lúc ${scheduledDate.toLocaleString('vi-VN')}`, 'info');
+    _appendProcLog?.(` YouTube: đặt lịch lúc ${scheduledDate.toLocaleString('vi-VN')}`, 'info');
   }
 
   const payload = {
@@ -706,7 +706,7 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
     publish_at:     publishAt
   };
 
-  _appendProcLog?.('🚀 Đang đăng lên YouTube...', 'info');
+  _appendProcLog?.(' Đang đăng lên YouTube...', 'info');
   try {
     const res = await fetch('/api/youtube_upload', {
       method: 'POST',
@@ -722,9 +722,9 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
       const tokenErr = res.status === 401 || /not authenticated|token|expired|oauth/i.test(errMsg);
       window._pPubLastError = { error: errMsg, errorCode: res.status, tokenError: tokenErr };
       if (tokenErr) {
-        _appendProcLog?.('❌ YouTube: chưa đăng nhập. Vào tab Đăng video → Đăng nhập YouTube', 'error');
+        _appendProcLog?.(' YouTube: chưa đăng nhập. Vào tab Đăng video → Đăng nhập YouTube', 'error');
       } else {
-        _appendProcLog?.('❌ YouTube: ' + errMsg, 'error');
+        _appendProcLog?.(' YouTube: ' + errMsg, 'error');
       }
       return;
     }
@@ -751,7 +751,7 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
             _appendProcLog?.('[YT] ' + d.log, d.level || 'info');
             if (d.level === 'error') lastErrLog = d.log;
           }
-          if (d.url) { _appendProcLog?.('🎉 [YT] ' + d.url, 'success'); uploadOk = true; }
+          if (d.url) { _appendProcLog?.(' [YT] ' + d.url, 'success'); uploadOk = true; }
           if (d.video_id) uploadOk = true;
         } catch (_) { _appendProcLog?.('[YT] ' + t, 'info'); }
       }
@@ -763,7 +763,7 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
     }
   } catch (e) {
     window._pPubLastError = { error: e.message };
-    _appendProcLog?.('❌ YouTube: ' + e.message, 'error');
+    _appendProcLog?.(' YouTube: ' + e.message, 'error');
   }
 }
 
@@ -781,7 +781,7 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
     }
   }
   if (!pageId) {
-    _appendProcLog?.('⚠ Facebook: chưa chọn Page — bỏ qua', 'warning');
+    _appendProcLog?.(' Facebook: chưa chọn Page — bỏ qua', 'warning');
     return;
   }
 
@@ -795,9 +795,9 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
     const minFuture = new Date(Date.now() + 10 * 60 * 1000);
     if (scheduledDate > minFuture) {
       scheduledTime = Math.floor(scheduledDate.getTime() / 1000).toString();
-      _appendProcLog?.(`🗓 Facebook: đặt lịch lúc ${scheduledDate.toLocaleString('vi-VN')}`, 'info');
+      _appendProcLog?.(` Facebook: đặt lịch lúc ${scheduledDate.toLocaleString('vi-VN')}`, 'info');
     } else {
-      _appendProcLog?.('⚠ Facebook: lịch gần quá — đăng ngay', 'warning');
+      _appendProcLog?.(' Facebook: lịch gần quá — đăng ngay', 'warning');
     }
   }
 
@@ -812,7 +812,7 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
       const d = await r.json();
       if (d.is_vertical_9_16 && d.ok) {
         postType = 'reel';
-        _appendProcLog?.(`🎬 Auto: video ${d.width}x${d.height} → đăng dạng Reel`, 'info');
+        _appendProcLog?.(` Auto: video ${d.width}x${d.height} → đăng dạng Reel`, 'info');
       } else {
         postType = 'video';
         if (d.error) {
@@ -840,7 +840,7 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
     return form;
   };
 
-  _appendProcLog?.(`🚀 Đang đăng lên Facebook (${postType === 'reel' ? 'Reel' : 'Video'})...`, 'info');
+  _appendProcLog?.(` Đang đăng lên Facebook (${postType === 'reel' ? 'Reel' : 'Video'})...`, 'info');
 
   for (let attempt = 1; attempt <= 5; attempt++) {
     const result = await _pFbUploadOnce(endpoint, buildForm());
@@ -882,7 +882,7 @@ async function _pFbUploadOnce(endpoint, form) {
         tokenError = !!errData.token_error;
       } catch (_) {}
       if (res.status === 401) tokenError = true;
-      _appendProcLog?.('❌ Facebook: ' + errMsg, 'error');
+      _appendProcLog?.(' Facebook: ' + errMsg, 'error');
       out.errorMsg = errMsg;
       out.tokenError = tokenError;
       return out;
@@ -906,7 +906,7 @@ async function _pFbUploadOnce(endpoint, form) {
         try {
           const d = JSON.parse(t);
           if (d.log) _appendProcLog?.('[FB] ' + d.log, d.level || 'info');
-          if (d.url) _appendProcLog?.('🎉 [FB] ' + d.url, 'success');
+          if (d.url) _appendProcLog?.(' [FB] ' + d.url, 'success');
           if (d.ok)  gotOk = true;
           if (d.token_error) {
             out.tokenError = true;
@@ -920,7 +920,7 @@ async function _pFbUploadOnce(endpoint, form) {
     out.success = gotOk;
     return out;
   } catch (e) {
-    _appendProcLog?.('❌ Facebook: ' + e.message, 'error');
+    _appendProcLog?.(' Facebook: ' + e.message, 'error');
     out.errorMsg = e.message;
     return out;
   }
@@ -935,14 +935,14 @@ function _pFbShowTokenModal(errMsg) {
     const btn   = document.getElementById('btn-fb-token-modal-save');
     if (!modal) { resolve('cancel'); return; }
     if (errEl) {
-      if (errMsg) { errEl.style.display = 'block'; errEl.textContent = '❌ ' + errMsg; }
+      if (errMsg) { errEl.style.display = 'block'; errEl.textContent = ' ' + errMsg; }
       else        { errEl.style.display = 'none'; }
     }
     if (warnEl) warnEl.style.display = 'none';
     const diagEl = document.getElementById('fb-token-modal-diag');
     if (diagEl) diagEl.style.display = 'none';
     if (input) input.value = '';
-    if (btn)   { btn.disabled = false; btn.textContent = '🔄 Lưu & Thử lại'; }
+    if (btn)   { btn.disabled = false; btn.textContent = ' Lưu & Thử lại'; }
     window._fbTokenModalForceRetry = false;
     modal.style.display = 'flex';
     window._fbTokenModalResolve = resolve;
@@ -962,16 +962,16 @@ async function fbTokenModalDiagnose() {
   const box = document.getElementById('fb-token-modal-diag');
   if (!box) return;
   box.style.display = 'block';
-  box.innerHTML = '⏳ Đang chẩn đoán...';
+  box.innerHTML = ' Đang chẩn đoán...';
   try {
     const r = await fetch('/api/facebook/diagnose');
     const d = await r.json();
     if (!d.ok) {
-      box.innerHTML = '❌ ' + (d.error || 'Lỗi chẩn đoán');
+      box.innerHTML = ' ' + (d.error || 'Lỗi chẩn đoán');
       return;
     }
     const rows = (d.checks || []).map(c => {
-      const icon = c.ok ? '✅' : '❌';
+      const icon = c.ok ? '' : '';
       const det  = c.detail ? ` <span style="color:#6b8cba">— ${c.detail}</span>` : '';
       return `<div>${icon} <b>${c.label}</b>${det}</div>`;
     }).join('');
@@ -980,7 +980,7 @@ async function fbTokenModalDiagnose() {
       : '<b style="color:#c0392b">Có vấn đề — xem chi tiết:</b>';
     box.innerHTML = header + '<div style="margin-top:6px">' + rows + '</div>';
   } catch (e) {
-    box.innerHTML = '❌ ' + e.message;
+    box.innerHTML = ' ' + e.message;
   }
 }
 
@@ -1009,12 +1009,12 @@ async function fbTokenModalSave() {
   const btn   = document.getElementById('btn-fb-token-modal-save');
   const token = input?.value?.trim();
   if (!token) {
-    if (errEl) { errEl.style.display = 'block'; errEl.textContent = '❌ Vui lòng nhập token'; }
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = ' Vui lòng nhập token'; }
     return;
   }
   if (errEl) errEl.style.display = 'none';
   if (warnEl) warnEl.style.display = 'none';
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang kết nối...'; }
+  if (btn) { btn.disabled = true; btn.textContent = ' Đang kết nối...'; }
   try {
     const res = await fetch('/api/facebook/connect', {
       method: 'POST',
@@ -1026,7 +1026,7 @@ async function fbTokenModalSave() {
       const warnings = data.warnings || [];
       if (warnings.length && warnEl) {
         warnEl.style.display = 'block';
-        warnEl.innerHTML = '<b>⚠ Cảnh báo:</b><ul style="margin:4px 0 0 16px;padding:0;list-style:disc">'
+        warnEl.innerHTML = '<b> Cảnh báo:</b><ul style="margin:4px 0 0 16px;padding:0;list-style:disc">'
           + warnings.map(w => '<li>' + w + '</li>').join('')
           + '</ul>';
       }
@@ -1040,15 +1040,15 @@ async function fbTokenModalSave() {
 
       const missing = data.missing_perms || [];
       if (missing.length) {
-        toast(`⚠ Token thiếu quyền: ${missing.join(', ')}`, 'warning', 8000);
-        if (btn) { btn.disabled = false; btn.textContent = '🔄 Vẫn thử đăng'; }
+        toast(` Token thiếu quyền: ${missing.join(', ')}`, 'warning', 8000);
+        if (btn) { btn.disabled = false; btn.textContent = ' Vẫn thử đăng'; }
         window._fbTokenModalForceRetry = true;
         return;
       }
 
       const modal = document.getElementById('fb-token-modal');
       if (modal) modal.style.display = 'none';
-      toast(`✅ Kết nối lại Facebook (${(data.pages || []).length} Page)`, 'success');
+      toast(` Kết nối lại Facebook (${(data.pages || []).length} Page)`, 'success');
       if (window._fbTokenModalResolve) {
         window._fbTokenModalResolve('retry');
         window._fbTokenModalResolve = null;
@@ -1056,13 +1056,13 @@ async function fbTokenModalSave() {
     } else {
       if (errEl) {
         errEl.style.display = 'block';
-        errEl.textContent = '❌ ' + (data.error || 'Token không hợp lệ');
+        errEl.textContent = ' ' + (data.error || 'Token không hợp lệ');
       }
     }
   } catch (e) {
-    if (errEl) { errEl.style.display = 'block'; errEl.textContent = '❌ ' + e.message; }
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = ' ' + e.message; }
   } finally {
-    if (btn && !window._fbTokenModalForceRetry) { btn.disabled = false; btn.textContent = '🔄 Lưu & Thử lại'; }
+    if (btn && !window._fbTokenModalForceRetry) { btn.disabled = false; btn.textContent = ' Lưu & Thử lại'; }
   }
 }
 
@@ -1088,7 +1088,7 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
   const fullCaption = _pBuildCaption(caption, hashtags);
 
   if (!videoPath) {
-    _appendProcLog?.('⚠ TikTok: chưa có file video để upload', 'warning');
+    _appendProcLog?.(' TikTok: chưa có file video để upload', 'warning');
     return;
   }
 
@@ -1097,7 +1097,7 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
     const minFuture = new Date(Date.now() + 15 * 60 * 1000);
     if (scheduledDate > minFuture) {
       scheduledTime = scheduledDate.toISOString();
-      _appendProcLog?.(`🗓 TikTok: đặt lịch lúc ${scheduledDate.toLocaleString('vi-VN')}`, 'info');
+      _appendProcLog?.(` TikTok: đặt lịch lúc ${scheduledDate.toLocaleString('vi-VN')}`, 'info');
     }
   }
 
@@ -1105,7 +1105,7 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
     try { await navigator.clipboard.writeText(fullCaption); } catch (_) {}
   }
 
-  _appendProcLog?.('🎬 TikTok: mở trình duyệt để chuẩn bị bài đăng...', 'info');
+  _appendProcLog?.(' TikTok: mở trình duyệt để chuẩn bị bài đăng...', 'info');
 
   let startResp;
   try {
@@ -1123,7 +1123,7 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
     const msg = e.message || 'TikTok lỗi';
     const tokenErr = /login|session|expired|not.*logged/i.test(msg);
     window._pPubLastError = { error: msg, tokenError: tokenErr };
-    _appendProcLog?.('❌ TikTok: ' + msg, 'error');
+    _appendProcLog?.(' TikTok: ' + msg, 'error');
     return;
   }
 
@@ -1141,7 +1141,7 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
       data = await r.json();
     } catch (_) { continue; }
     if (!data.ok) {
-      _appendProcLog?.('❌ TikTok: ' + (data.error || 'status lỗi'), 'error');
+      _appendProcLog?.(' TikTok: ' + (data.error || 'status lỗi'), 'error');
       return;
     }
     const newLogs = (data.log || []).slice(seenLogs);
@@ -1152,19 +1152,19 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
     if (!reachedReady && data.status === 'ready') {
       reachedReady = true;
       if (data.copyright_warning) {
-        toast('🚨 CẢNH BÁO BẢN QUYỀN: TikTok phát hiện âm thanh có thể dính bản quyền! Hãy kiểm tra kỹ trên cửa sổ TikTok trước khi bấm Post.', 'error', 12000);
-        _appendProcLog?.('🚨 [TT] CẢNH BÁO: Âm thanh video có dấu hiệu vi phạm bản quyền trên TikTok Studio! Cân nhắc thay nhạc trước khi Post.', 'error');
+        toast(' CẢNH BÁO BẢN QUYỀN: TikTok phát hiện âm thanh có thể dính bản quyền! Hãy kiểm tra kỹ trên cửa sổ TikTok trước khi bấm Post.', 'error', 12000);
+        _appendProcLog?.(' [TT] CẢNH BÁO: Âm thanh video có dấu hiệu vi phạm bản quyền trên TikTok Studio! Cân nhắc thay nhạc trước khi Post.', 'error');
       } else {
-        toast('✅ TikTok đã sẵn sàng — hãy kiểm tra và nhấn Post trong cửa sổ đang mở', 'success', 8000);
+        toast(' TikTok đã sẵn sàng — hãy kiểm tra và nhấn Post trong cửa sổ đang mở', 'success', 8000);
       }
       return;
     }
     if (data.done) {
-      if (data.error) _appendProcLog?.('❌ TikTok: ' + data.error, 'error');
+      if (data.error) _appendProcLog?.(' TikTok: ' + data.error, 'error');
       return;
     }
   }
-  _appendProcLog?.('⏱ TikTok: timeout chờ chuẩn bị (15 phút)', 'warning');
+  _appendProcLog?.(' TikTok: timeout chờ chuẩn bị (15 phút)', 'warning');
 }
 
 /* ── ACCOUNT SELECTOR MIRRORING ── */

@@ -74,7 +74,7 @@ function procAssReviewSkipAlways() {
     modal.innerHTML = `
       <div style="width:min(680px,96vw);max-height:86vh;background:var(--surface,#fff);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.28);overflow:hidden">
         <div style="padding:15px 18px;background:#fff7ed;border-bottom:1px solid #fed7aa;display:flex;align-items:center;gap:10px">
-          <div style="font-size:18px">⚠</div>
+          <div style="font-size:18px"></div>
           <div style="flex:1">
             <div style="font-weight:800;color:#9a3412">TTS chưa đọc đủ đoạn</div>
             <div style="font-size:12px;color:#c2410c">Đã tạo ${data.success_count || 0}/${data.total_count || 0}, còn thiếu ${missing.length} đoạn.</div>
@@ -89,7 +89,7 @@ function procAssReviewSkipAlways() {
           <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px">
             <button class="btn btn-secondary" onclick="procTtsFailCancel()">Bỏ lồng tiếng</button>
             <button class="btn btn-secondary" onclick="procTtsFailContinue()">Tiếp tục dù thiếu</button>
-            <button class="btn btn-primary" onclick="procTtsFailRetry()">🔄 Thử lại đoạn thiếu</button>
+            <button class="btn btn-primary" onclick="procTtsFailRetry()"> Thử lại đoạn thiếu</button>
           </div>
         </div>
       </div>`;
@@ -101,7 +101,7 @@ function procAssReviewSkipAlways() {
     if (!window._procPaused) {
       window._procPaused = true;
       if (btn) { btn.textContent = '▶ Tiếp tục'; btn.style.background = 'var(--success)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--success)'; }
-      toast('⏸ Đã dừng — bấm Tiếp tục để tiếp tục', 'info');
+      toast(' Đã dừng — bấm Tiếp tục để tiếp tục', 'info');
       // Signal server to pause
       fetch('/api/proc_resume', { method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,7 +109,7 @@ function procAssReviewSkipAlways() {
       }).catch(() => {});
     } else {
       window._procPaused = false;
-      if (btn) { btn.textContent = '⏸ Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; }
+      if (btn) { btn.textContent = ' Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; }
       toast('▶ Tiếp tục xử lý', 'info');
       fetch('/api/proc_resume', { method: 'POST',
         headers: { 'Content-Type': 'application/json' },

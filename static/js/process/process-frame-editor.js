@@ -770,9 +770,21 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       if (Array.isArray(savedOrder) && savedOrder.length >= 4) {
         window._pe2LayerOrder = savedOrder;
       }
+      if (!window._pe2LayerOrder.includes('overlays')) {
+        const subIdx = window._pe2LayerOrder.indexOf('subs');
+        if (subIdx !== -1) {
+          window._pe2LayerOrder.splice(subIdx, 0, 'overlays');
+        } else {
+          window._pe2LayerOrder.push('overlays');
+        }
+      }
       const savedVis = JSON.parse(localStorage.getItem('pe2_track_visibility') || 'null');
       if (savedVis && typeof savedVis === 'object') {
         window._pe2TrackVisibility = savedVis;
+      }
+      window._pe2TrackVisibility = window._pe2TrackVisibility || {};
+      if (window._pe2TrackVisibility.overlays === undefined) {
+        window._pe2TrackVisibility.overlays = true;
       }
     } catch (_) {}
   }
@@ -791,7 +803,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
       if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
       if (window.pe2RenderRanges) window.pe2RenderRanges();
-      if (typeof toast === 'function') toast('✓ Đã đưa lớp [' + (TRACK_DEFINITIONS[layerId]?.name || layerId) + '] lên trên', 'info', { duration: 1500 });
+      if (typeof toast === 'function') toast('Đã đưa lớp [' + (TRACK_DEFINITIONS[layerId]?.name || layerId) + '] lên trên', 'info', { duration: 1500 });
     }
   };
 
@@ -808,7 +820,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       if (window.pe2RenderTracksUI) window.pe2RenderTracksUI();
       if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
       if (window.pe2RenderRanges) window.pe2RenderRanges();
-      if (typeof toast === 'function') toast('✓ Đã đưa lớp [' + (TRACK_DEFINITIONS[layerId]?.name || layerId) + '] xuống dưới', 'info', { duration: 1500 });
+      if (typeof toast === 'function') toast('Đã đưa lớp [' + (TRACK_DEFINITIONS[layerId]?.name || layerId) + '] xuống dưới', 'info', { duration: 1500 });
     }
   };
 

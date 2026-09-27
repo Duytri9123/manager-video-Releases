@@ -93,7 +93,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         data["frame_title"] = next((str(suggestions[k]) for k in ("short", "tiktok", "youtube", "facebook") if suggestions.get(k)), "")
 
     video_path = Path(data.get("video_path", "")).expanduser()
-    yield send(log=f"🚀 Khởi tạo tiến trình xử lý: {video_path.name}...", level="info")
+    yield send(log=f"Khởi tạo tiến trình xử lý: {video_path.name}...", level="info")
     
     if not video_path.exists():
         yield send(log=f"File not found: {video_path}", level="error", failed=True, overall=0, overall_lbl="Không tìm thấy video")
@@ -220,7 +220,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     final_output_path = None
     pipeline_failed = ""
 
-    def _write_edit_only_ass(out_path: Path) -> Path:
+    def _write_edit_only_ass(out_path: Path, target_segs=None) -> Path:
         """Create an ASS file for visual edits without subtitle dialogue."""
         alignment = 8 if str(data.get("subtitle_position", "bottom")).lower() == "top" else 2
         _orig_font_size = _as_int(data.get("font_size", 32), 32)
@@ -241,7 +241,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             )
             _logo_path = str(data.get("frame_logo_path") or "").strip()
             return write_ass_with_frame(
-                segments=[],
+                segments=target_segs or [],
                 out_path=out_path,
                 video_duration=_duration,
                 play_res_x=_vw,
@@ -283,7 +283,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             )
 
         return write_ass(
-            [],
+            target_segs or [],
             out_path,
             font_size=_scaled_font_size,
             font_color=data.get("font_color", "white"),
@@ -300,11 +300,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     print("=== [DEBUG] process_video_full: reaching step 1 yield ===", file=sys.stderr, flush=True)
     _vid_size_mb = video_path.stat().st_size / 1024 / 1024
 
-    yield send(log=f"[Bước 1/5] 📥 Video đã sẵn sàng: {video_path.name} ({_vid_size_mb:.1f} MB)", level="success")
-    yield send(log=f"[Bước 1/5] 📂 Thư mục output: {out_dir}", level="info")
-    yield send(log=f"[Bước 1/5] ⚙️ Cấu hình: burn={do_burn}, voice={do_voice}, translate={do_translate}, frame={_as_bool(data.get('frame_enabled', False), False)} (embedded in ASS)", level="info")
+    yield send(log=f"[Bước 1/5] Video đã sẵn sàng: {video_path.name} ({_vid_size_mb:.1f} MB)", level="success")
+    yield send(log=f"[Bước 1/5] Thư mục output: {out_dir}", level="info")
+    yield send(log=f"[Bước 1/5] Cấu hình: burn={do_burn}, voice={do_voice}, translate={do_translate}, frame={_as_bool(data.get('frame_enabled', False), False)} (embedded in ASS)", level="info")
     yield send(overall=5, overall_lbl="Video sẵn sàng")
-    yield send(log=f"[Bước 1/5] ✓ Chuẩn bị video hoàn tất trong {_pytime.time() - _t_step1_start:.2f}s", level="info")
+    yield send(log=f"[Bước 1/5] Chuẩn bị video hoàn tất trong {_pytime.time() - _t_step1_start:.2f}s", level="info")
 
     _multi_speaker = _as_bool(data.get("multi_speaker", False), False)
     _voice_male = str(data.get("tts_voice_male") or "").strip()
@@ -338,13 +338,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     skip_trans = not do_burn and not do_voice
 
     if skip_trans:
-        yield send(log=f"[Bước 2/5] ⏭ Bỏ qua bước phiên âm ({_pytime.time() - _t_step2_start:.2f}s, không bật Ghi phụ đề & Giọng đọc)", level="info")
+        yield send(log=f"[Bước 2/5] Bỏ qua bước phiên âm ({_pytime.time() - _t_step2_start:.2f}s, không bật Ghi phụ đề & Giọng đọc)", level="info")
         yield send(overall=35, overall_lbl="Bỏ qua phiên âm")
     else:
         # Check video audio first
         has_audio = has_audio_track(video_path, ffmpeg)
         if not has_audio:
-            yield send(log=f"[Bước 2/5] ⚠ Video không có audio track", level="warning")
+            yield send(log=f"[Bước 2/5] Video không có audio track", level="warning")
         
         selected_stt_model = str(data.get("transcribe_model") or model_name or "").strip()
         display_model = selected_stt_model if selected_stt_model and selected_stt_model not in ["tiny", "base", "small", "medium", "large", "auto", "model"] else "Tự động theo Provider"
@@ -425,27 +425,27 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             segments = item[1]
             if not segments:
                 transcribe_failed = True
-                yield send(log="[Bước 2/5] ⚠ Không phát hiện giọng nói trong video", level="warning")
+                yield send(log="[Bước 2/5] Không phát hiện giọng nói trong video", level="warning")
                 if not (do_voice or do_burn):
-                    yield send(log="[Bước 2/5] ✗ Không có giọng nói và TTS/burn phụ đề cũng bị tắt", level="error", failed=True, overall=0, overall_lbl="Không có nội dung để xử lý")
+                    yield send(log="[Bước 2/5] Không có giọng nói và TTS/burn phụ đề cũng bị tắt", level="error", failed=True, overall=0, overall_lbl="Không có nội dung để xử lý")
                     return
                 if do_burn and not do_voice:
-                    yield send(log="[Bước 2/5] ℹ Sẽ chỉ burn phụ đề, bỏ qua phiên âm", level="info")
+                    yield send(log="[Bước 2/5] Sẽ chỉ burn phụ đề, bỏ qua phiên âm", level="info")
                     segments = []
                 else:
                     video_duration = get_media_duration_seconds(ffmpeg, video_path)
                     if video_duration > 0:
                         segments = [{"start": 0.0, "end": video_duration, "text": "[Giọng nói tự động]"}]
-                        yield send(log=f"[Bước 2/5] ℹ Tạo 1 segment tự động (0s → {video_duration:.1f}s)", level="info")
+                        yield send(log=f"[Bước 2/5] Tạo 1 segment tự động (0s → {video_duration:.1f}s)", level="info")
                     else:
-                        yield send(log="[Bước 2/5] ✗ Không thể tính được thời lượng video", level="error", failed=True, overall=0, overall_lbl="Không đọc được video")
+                        yield send(log="[Bước 2/5] Không thể tính được thời lượng video", level="error", failed=True, overall=0, overall_lbl="Không đọc được video")
                         return
             else:
                 process_speaker_tags_in_segments(segments)
                 if _multi_speaker and segments:
                     has_spk = sum(1 for s in segments if s.get("speaker"))
                     if has_spk < len(segments) * 0.5:
-                        yield send(log="[Bước 2/5] 🎭 Đang nhận diện và phân vai nhân vật (Nam/Nữ) qua kịch bản hội thoại...", level="info")
+                        yield send(log="[Bước 2/5] Đang nhận diện và phân vai nhân vật (Nam/Nữ) qua kịch bản hội thoại...", level="info")
                         try:
                             segments = classify_dialogue_speakers(
                                 segments,
@@ -454,19 +454,19 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                 target_lang=language,
                             )
                         except Exception as _ce:
-                            yield send(log=f"[Bước 2/5] ⚠ Lỗi phân vai AI: {_ce}", level="warning")
+                            yield send(log=f"[Bước 2/5] Lỗi phân vai AI: {_ce}", level="warning")
                     m_cnt = sum(1 for s in segments if s.get("speaker") == "male")
                     f_cnt = sum(1 for s in segments if s.get("speaker") == "female")
-                    yield send(log=f"[Bước 2/5] 🎭 Phân vai hoàn tất: {m_cnt} câu giọng Nam, {f_cnt} câu giọng Nữ", level="info")
+                    yield send(log=f"[Bước 2/5] Phân vai hoàn tất: {m_cnt} câu giọng Nam, {f_cnt} câu giọng Nữ", level="info")
 
                 write_ass(segments, ass_path, play_res_x=_vw, play_res_y=_vh)
-                yield send(log=f"[Bước 2/5] ✓ Phiên âm {len(segments)} đoạn trong {_pytime.time() - _t_step2_start:.1f}s → {ass_path.name}", level="success", subtitle_path=str(ass_path.resolve()))
+                yield send(log=f"[Bước 2/5] Phiên âm {len(segments)} đoạn trong {_pytime.time() - _t_step2_start:.1f}s → {ass_path.name}", level="success", subtitle_path=str(ass_path.resolve()))
             yield send(overall=35, overall_lbl=f"Phiên âm xong: {len(segments)} đoạn")
         except (RuntimeError, Exception) as e:
             transcribe_failed = True
             err_msg = str(e)
-            yield send(log=f"[Bước 2/5] ✗ Phiên âm thất bại: {err_msg}", level="error", failed=True, overall=0, overall_lbl="Phiên âm thất bại")
-            yield send(log="[Bước 2/5] 💡 Vui lòng mở Nhà cung cấp để kiểm tra/cập nhật API Key hoặc chọn Engine phiên âm khác.", level="error")
+            yield send(log=f"[Bước 2/5] Phiên âm thất bại: {err_msg}", level="error", failed=True, overall=0, overall_lbl="Phiên âm thất bại")
+            yield send(log="[Bước 2/5] Vui lòng mở Nhà cung cấp để kiểm tra/cập nhật API Key hoặc chọn Engine phiên âm khác.", level="error")
             return
 
 
@@ -489,11 +489,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     # ── Bước 3/5: Dịch ZH → VI ─────────────────────────────────────────────────
     _t_step3_start = _pytime.time()
     translated_texts = []
+    _write_current_ass = lambda rows, target_path: _write_edit_only_ass(target_path, rows)
     if skip_trans:
-        yield send(log=f"[Bước 3/5] ⏭ Bỏ qua bước dịch và tạo giọng đọc ({_pytime.time() - _t_step3_start:.2f}s, không bật Ghi phụ đề & Giọng đọc)", level="info")
+        yield send(log=f"[Bước 3/5] Bỏ qua bước dịch và tạo giọng đọc ({_pytime.time() - _t_step3_start:.2f}s, không bật Ghi phụ đề & Giọng đọc)", level="info")
         yield send(overall=70, overall_lbl="Bỏ qua dịch")
     elif not do_translate:
-        yield send(log=f"[Bước 3/5] ℹ Bỏ qua dịch phụ đề ({_pytime.time() - _t_step3_start:.2f}s, translate_subs=off)", level="info")
+        if do_voice and segments:
+            translated_texts = [seg.get("text", "") for seg in segments]
+        yield send(log=f"[Bước 3/5] Bỏ qua dịch phụ đề ({_pytime.time() - _t_step3_start:.2f}s, translate_subs=off)", level="info")
     else:
         # Resume: nếu vi.ass đã có → load lại segments và translated_texts từ đó
         # BUT: if frame is enabled, skip resume because ASS needs to be regenerated with new frame settings
@@ -510,7 +513,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     segments = tts_vi_segs
                     vi_ass_path = vi_ass_path_cached
                     srt_path = vi_ass_path
-                    yield send(log=f"[Bước 3/5] ♻ Dùng lại bản dịch cũ ({len(cached_vi_segs)} dòng, gộp {len(translated_texts)} đoạn TTS, {_pytime.time() - _t_step3_start:.2f}s): {vi_ass_path_cached.name}", level="info", subtitle_path=str(vi_ass_path_cached.resolve()))
+                    yield send(log=f"[Bước 3/5] Dùng lại bản dịch cũ ({len(cached_vi_segs)} dòng, gộp {len(translated_texts)} đoạn TTS, {_pytime.time() - _t_step3_start:.2f}s): {vi_ass_path_cached.name}", level="info", subtitle_path=str(vi_ass_path_cached.resolve()))
                     yield send(overall=55, overall_lbl="Dùng lại bản dịch cũ")
             except Exception:
                 translated_texts = []
@@ -519,7 +522,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             n_segs = len(segments)
             batch_sz = 30
             n_batches = (n_segs + batch_sz - 1) // batch_sz
-            yield send(log=f"[Bước 3/5] 🌐 Dịch {n_segs} đoạn sang {target_lang_name} ({n_batches} batch)...", level="info")
+            yield send(log=f"[Bước 3/5] Dịch {n_segs} đoạn sang {target_lang_name} ({n_batches} batch)...", level="info")
             yield send(overall=45, overall_lbl=f"Đang dịch {n_segs} đoạn...")
             try:
                 from utils.translation import BatchTranslator
@@ -553,10 +556,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         provider = f"{provider}/{req_model}"
 
                 texts = [seg.get("text", "").strip() for seg in segments]
-                yield send(log=f"[Bước 3/5] 🤖 Đang dịch bằng {provider}...", level="info")
+                yield send(log=f"[Bước 3/5] Đang dịch bằng {provider}...", level="info")
                 translator = BatchTranslator(trans_cfg)
                 translated_texts, used = translator.translate(texts, provider, context=stem_source, target_lang=target_language)
-                yield send(log=f"[Bước 3/5] ✓ Dịch xong {len(translated_texts)} đoạn trong {_pytime.time() - _t_step3_start:.1f}s (provider: {used})", level="success")
+                yield send(log=f"[Bước 3/5] Dịch xong {len(translated_texts)} đoạn trong {_pytime.time() - _t_step3_start:.1f}s (provider: {used})", level="success")
                 yield send(overall=55, overall_lbl="Dịch xong")
 
                 if translated_texts:
@@ -566,6 +569,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     vi_segs = [{"start": s["start"], "end": s["end"], "text": t, "speaker": s.get("speaker")}
                                for s, t in zip(segments, translated_texts) if t]
                     vi_segs = _merge_segments_for_tts(vi_segs)
+                    segments = vi_segs
+                    translated_texts = [s["text"] for s in vi_segs]
 
                     # Scale font_size, margin_v, and outline_width dynamically based on actual video height vs 720
                     _orig_font_size = _as_int(data.get("font_size", 32), 32)
@@ -588,7 +593,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         # Generate a contextual title only when the title toggle is on.
                         _frame_title = str(data.get("frame_title") or "").strip()
                         if _as_bool(data.get("frame_title_enabled", True), True) and not _frame_title:
-                            yield send(log=f"[Bước 3/5] 🤖 AI đang tạo tiêu đề khung...", level="info")
+                            yield send(log=f"[Bước 3/5] AI đang tạo tiêu đề khung...", level="info")
                             try:
                                 _frame_title = generate_frame_title(
                                     translated_texts=translated_texts,
@@ -600,9 +605,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                 )
                                 data["frame_title"] = _frame_title
                                 yield send(frame_title=_frame_title)
-                                yield send(log=f"[Bước 3/5] ✓ Tiêu đề AI: \"{_frame_title}\"", level="success")
+                                yield send(log=f"[Bước 3/5] Tiêu đề AI: \"{_frame_title}\"", level="success")
                             except Exception as _e:
-                                yield send(log=f"[Bước 3/5] ⚠ Không tạo được tiêu đề: {_e}", level="warning")
+                                yield send(log=f"[Bước 3/5] Không tạo được tiêu đề: {_e}", level="warning")
                                 _frame_title = ""
                         _frame_title_visible = (
                             _as_bool(data.get("frame_title_enabled", True), True)
@@ -673,17 +678,17 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
                     _write_current_ass(vi_segs)
                     if frame_enabled:
-                        yield send(log=f"[Bước 3/5] ✓ ASS (có khung) {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
-                        yield send(log=f"[Bước 3/5] 🎞 Khung: title=\"{_frame_title[:25]}\", blur={_as_float(data.get('frame_blur_w_pct'), 0.0)}%, logo={'✓' if _logo_path else '✗'}", level="info")
+                        yield send(log=f"[Bước 3/5] ASS (có khung) {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
+                        yield send(log=f"[Bước 3/5] Khung: title=\"{_frame_title[:25]}\", blur={_as_float(data.get('frame_blur_w_pct'), 0.0)}%, logo={'' if _logo_path else ''}", level="info")
                     else:
-                        yield send(log=f"[Bước 3/5] ✓ ASS {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
+                        yield send(log=f"[Bước 3/5] ASS {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                     # Signal frontend to review the ASS file before continuing
                     _skip_ass_review = _as_bool(data.get("skip_ass_review", False), False) or _as_bool(data.get("skip_ass", False), False)
                     if not _skip_ass_review:
                         yield send(
                             review_ass=True,
                             ass_path=str(vi_ass_path.resolve()),
-                            log=f"[Bước 3/5] ⏸ Chờ kiểm tra nội dung dịch: {vi_ass_path.name}",
+                            log=f"[Bước 3/5] Chờ kiểm tra nội dung dịch: {vi_ass_path.name}",
                             level="info",
                         )
                         # Wait for frontend to confirm (or auto-continue if skip_review)
@@ -702,7 +707,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                 _t.sleep(0.5)
                         _proc_review_event.set()
                     else:
-                        yield send(log=f"[Bước 3/5] ⏭ Bỏ qua kiểm tra ASS (tự động tiếp tục)", level="info")
+                        yield send(log=f"[Bước 3/5] Bỏ qua kiểm tra ASS (tự động tiếp tục)", level="info")
                     # Re-read vi_ass_path in case user edited it
                     yield send(log=f"[Bước 3/5] ▶ Tiếp tục xử lý...", level="info")
 
@@ -713,13 +718,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             segments = tts_vi_segs
                             translated_texts = [s.get("text", "") for s in tts_vi_segs]
                             yield send(
-                                log=f"[Bước 3/5] ✓ Đã nạp ASS mới nhất sau chỉnh sửa ({len(refreshed_vi_segs)} dòng, gộp {len(translated_texts)} đoạn TTS)",
+                                log=f"[Bước 3/5] Đã nạp ASS mới nhất sau chỉnh sửa ({len(refreshed_vi_segs)} dòng, gộp {len(translated_texts)} đoạn TTS)",
                                 level="success",
                                 subtitle_path=str(vi_ass_path.resolve()),
                             )
                         else:
                             yield send(
-                                log=f"[Bước 3/5] ⚠ Không đọc được dialogue từ ASS đã chỉnh sửa: {vi_ass_path.name}",
+                                log=f"[Bước 3/5] Không đọc được dialogue từ ASS đã chỉnh sửa: {vi_ass_path.name}",
                                 level="warning",
                             )
 
@@ -727,7 +732,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         srt_path = vi_ass_path
                         yield send(log=f"[Bước 3/5] Sẽ burn: {srt_path.name}", level="info")
             except Exception as e:
-                yield send(log=f"[Bước 3/5] ✗ Dịch thất bại: {e}", level="error", failed=True, overall=0, overall_lbl="Dịch thất bại")
+                yield send(log=f"[Bước 3/5] Dịch thất bại: {e}", level="error", failed=True, overall=0, overall_lbl="Dịch thất bại")
                 return
 
     # ── Parallel thumbnail generation (chạy song song với burn) ─────────
@@ -808,9 +813,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 return None
 
             _thumb_future = _thumb_executor.submit(_gen_thumb_task)
-            yield send(log=f"[Bước 4/5] 🖼 Đang tạo thumbnail ({_thumb_mode}) song song với burn...", level="info")
+            yield send(log=f"[Bước 4/5] Đang tạo thumbnail ({_thumb_mode}) song song với burn...", level="info")
         except Exception as e:
-            yield send(log=f"[Bước 4/5] ⚠ Không khởi tạo được thumbnail task: {e}", level="warning")
+            yield send(log=f"[Bước 4/5] Không khởi tạo được thumbnail task: {e}", level="warning")
 
     # ── Bước 4/5: Burn phụ đề ────────────────────────────────────────────────
     _t_step4_start = _pytime.time()
@@ -829,7 +834,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         _srt_is_translated = (srt_path != source_srt_path)
         do_burn_effective = bool(do_burn_vi and _srt_is_translated)
         if not do_burn_effective:
-            yield send(log="[Bước 4/5] ℹ Tắt ghi phụ đề: không in phụ đề gốc; nếu có chỉnh sửa video vẫn render", level="info")
+            yield send(log="[Bước 4/5] Tắt ghi phụ đề: không in phụ đề gốc; nếu có chỉnh sửa video vẫn render", level="info")
     do_burn = do_burn_effective
 
     # ── Tham số che (blur) vùng phụ đề gốc ───────────────────────────────────
@@ -932,7 +937,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             _edit_note = ", ".join(_edit_reasons) or "chỉnh sửa video"
             yield send(log=f"[Bước 4/5] ▣ Không ghi phụ đề nhưng vẫn encode để {_edit_note}", level="info")
         except Exception as _e_ass:
-            yield send(log=f"[Bước 4/5] ⚠ Không tạo được ASS che: {_e_ass}", level="warning")
+            yield send(log=f"[Bước 4/5] Không tạo được ASS che: {_e_ass}", level="warning")
 
     # Resume cache chỉ áp dụng cho chế độ có phụ đề ("sub")
     _burn_cache_valid = False
@@ -1027,11 +1032,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 _eng_sel, _voice_sel, _ev_changed, _ev_note = _req_engine, _req_voice, False, ""
             if _ev_changed:
                 if "alias" in _ev_note:
-                    _msg = f"[TTS] 🔄 Cập nhật tên giọng: {_req_voice or '∅'} → {_voice_sel} (phiên bản mới)"
+                    _msg = f"[TTS] Cập nhật tên giọng: {_req_voice or '∅'} → {_voice_sel} (phiên bản mới)"
                 elif _req_engine != _eng_sel:
-                    _msg = f"[TTS] 🌐 Chọn engine TTS: {_req_engine}/{_req_voice or '∅'} → {_eng_sel}/{_voice_sel or '∅'} ({_ev_note})"
+                    _msg = f"[TTS] Chọn engine TTS: {_req_engine}/{_req_voice or '∅'} → {_eng_sel}/{_voice_sel or '∅'} ({_ev_note})"
                 else:
-                    _msg = f"[TTS] 🔄 Giọng '{_req_voice or '∅'}' không có trong danh mục, tự chọn: '{_voice_sel}'"
+                    _msg = f"[TTS] Giọng '{_req_voice or '∅'}' không có trong danh mục, tự chọn: '{_voice_sel}'"
                 yield send(
                     log=_msg,
                     level="info",
@@ -1128,10 +1133,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 _tts_tmp_ctx = tempfile.TemporaryDirectory(prefix="tts_parallel_")
                 _tts_tmp_path = Path(_tts_tmp_ctx.name)
 
-                _sync_sub_to_voice = _as_bool(
-                    data.get("sync_sub_to_voice", _vp_cfg.get("sync_sub_to_voice", True)),
-                    True,
-                )
+                # Voice and displayed text share one measured timeline.
+                _sync_sub_to_voice = True
 
                 _tts_voice_map = None
                 if _multi_speaker:
@@ -1167,7 +1170,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 if _sync_sub_to_voice:
                     yield send(
                         log=(
-                            f"[Lồng tiếng đồng bộ] 🗣 Đang tạo giọng đọc tự nhiên cho {len(translated_texts)} đoạn thoại..."
+                            f"[Lồng tiếng đồng bộ] Đang tạo giọng đọc tự nhiên cho {len(translated_texts)} đoạn thoại..."
                         ),
                         level="info",
                         overall=62,
@@ -1186,41 +1189,32 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     _tts_clips = _tts_future.result()
 
 
-                    # Căn mốc phụ đề khớp chuẩn 100% theo độ dài thực tế của giọng đọc
+                    expected = {i for i, text in enumerate(translated_texts) if text.strip()}
+                    if {int(c["index"]) for c in _tts_clips} != expected:
+                        raise ValueError("Tạo giọng chưa đủ các câu. Chạy lại để thử lại trước khi ghi phụ đề.")
                     _vid_dur = get_media_duration_seconds(ffmpeg, video_path)
                     _tts_clips, aligned_segs = align_subtitles_to_voice(
-                        segments=segments,
-                        tts_clips=_tts_clips,
-                        ffmpeg=ffmpeg,
-                        video_duration=_vid_dur,
-                        min_gap=0.08,
+                        segments=segments, tts_clips=_tts_clips, ffmpeg=ffmpeg,
+                        video_duration=_vid_dur, min_gap=0.02,
                     )
+                    if aligned_segs:
+                        synced_ass = out_dir / f"{stem}_{target_language}_voice_sync.ass"
+                        _write_current_ass(aligned_segs, synced_ass)
+                        vi_ass_path = synced_ass
+                        if do_burn and do_burn_vi:
+                            _encode_srt = synced_ass
+                            _burn_cache_valid = False
+                            _burn_cache_stale_reason = "phụ đề theo thời lượng giọng đọc"
+                        yield send(log=f"Đã đồng bộ {len(aligned_segs)} câu theo mốc video", level="success",
+                                   subtitle_path=str(synced_ass.resolve()))
 
-                    # Ghi đè file ASS với timeline đã đồng bộ hoàn hảo
-                    if callable(_write_current_ass) and aligned_segs:
-                        try:
-                            _write_current_ass(aligned_segs)
-                            if vi_ass_path and vi_ass_path.exists():
-                                _encode_srt = vi_ass_path
-                                _burn_cache_valid = False
-                                _burn_cache_stale_reason = "căn mốc phụ đề khớp chuẩn theo giọng đọc"
-                                yield send(
-                                    log=f"[Lồng tiếng đồng bộ] 🎯 Đã căn mốc phụ đề khớp chuẩn 100% theo giọng đọc ({len(aligned_segs)} câu)",
-                                    level="success",
-                                    subtitle_path=str(vi_ass_path.resolve()),
-                                )
-                        except Exception as align_err:
-                            yield send(
-                                log=f"[Lồng tiếng đồng bộ] ⚠ Lỗi ghi ASS đồng bộ: {align_err}",
-                                level="warning"
-                            )
                 else:
                     import concurrent.futures as _cf
                     _tts_executor = _cf.ThreadPoolExecutor(max_workers=1)
                     _tts_future = _tts_executor.submit(_run_tts_indices, list(range(len(translated_texts))))
                     yield send(
                         log=(
-                            f"[TTS song song] 🗣 Bắt đầu {len(translated_texts)} đoạn, "
+                            f"[TTS song song] Bắt đầu {len(translated_texts)} đoạn, "
                             f"VieNeu tạo lần lượt từng đoạn; burn chạy cùng lúc"
                         ),
                         level="info",
@@ -1236,35 +1230,36 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     _tts_tmp_ctx = None
                 _run_tts_indices = None
                 yield send(
-                    log=f"[TTS song song] ⚠ Không thể khởi tạo luồng TTS: {tts_start_err}",
-                    level="warning",
+                    log=f"[TTS song song] Không thể khởi tạo luồng TTS: {tts_start_err}",
+                    level="error", failed=True,
                 )
+                return
 
     if _encode_mode == "sub" and not _frame_enabled_for_burn and _burn_cache_valid:
         burned_path = burned_path_cached
         final_output_path = burned_path
         _aspect_combined = _aspect_should_convert
-        yield send(log=f"[Bước 4/5] ♻ Dùng lại video phụ đề cũ ({_pytime.time() - _t_step4_start:.2f}s): {burned_path.name}", level="info")
+        yield send(log=f"[Bước 4/5] Dùng lại video phụ đề cũ ({_pytime.time() - _t_step4_start:.2f}s): {burned_path.name}", level="info")
         yield send(overall=80, overall_lbl="Dùng lại video phụ đề cũ")
     elif _encode_mode != "skip" and _encode_srt and _encode_srt.exists():
         if _burn_cache_stale_reason:
-            yield send(log=f"[Bước 4/5] ♻ Bỏ cache video phụ đề cũ ({_burn_cache_stale_reason}), encode lại từ ASS hiện tại", level="info")
+            yield send(log=f"[Bước 4/5] Bỏ cache video phụ đề cũ ({_burn_cache_stale_reason}), encode lại từ ASS hiện tại", level="info")
         if _encode_mode == "edit":
             yield send(log=f"[Bước 4/5] ▣ Đang áp dụng chỉnh sửa video...", level="info")
         elif _encode_mode == "blur":
-            yield send(log=f"[Bước 4/5] 🌫 Đang che phụ đề gốc (không ghi phụ đề)...", level="info")
+            yield send(log=f"[Bước 4/5] Đang che phụ đề gốc (không ghi phụ đề)...", level="info")
         else:
-            yield send(log=f"[Bước 4/5] 🔥 Đang burn phụ đề ASS vào video...", level="info")
+            yield send(log=f"[Bước 4/5] Đang burn phụ đề ASS vào video...", level="info")
         yield send(overall=65, overall_lbl="Đang xử lý video...")
         burned_path = burned_path_cached
 
         # Log details before starting (so user sees progress immediately)
         _vid_size = video_path.stat().st_size / 1024 / 1024
-        yield send(log=f"[Bước 4/5] 📂 Video: {video_path.name} ({_vid_size:.1f} MB)", level="info")
-        yield send(log=f"[Bước 4/5] 📄 ASS: {_encode_srt.name}", level="info")
+        yield send(log=f"[Bước 4/5] Video: {video_path.name} ({_vid_size:.1f} MB)", level="info")
+        yield send(log=f"[Bước 4/5] ASS: {_encode_srt.name}", level="info")
         _hw_preset = _get_encoding_args(ffmpeg)
         _hw_desc = " ".join(_hw_preset[:6])
-        yield send(log=f"[Bước 4/5] 🎬 Đang encode ({_hw_desc})...", level="info")
+        yield send(log=f"[Bước 4/5] Đang encode ({_hw_desc})...", level="info")
 
         # Collect logs from burn process
         _burn_logs = []
@@ -1311,21 +1306,21 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 pass  # A missing cache marker forces a safe re-render next time.
             _s4_dur = _pytime.time() - _t_step4_start
             if _encode_mode == "edit":
-                yield send(log=f"[Bước 4/5] ✓ Video đã áp dụng chỉnh sửa trong {_s4_dur:.1f}s: {burned_path.name}", level="success")
+                yield send(log=f"[Bước 4/5] Video đã áp dụng chỉnh sửa trong {_s4_dur:.1f}s: {burned_path.name}", level="success")
             elif _encode_mode == "blur":
-                yield send(log=f"[Bước 4/5] ✓ Video đã che phụ đề gốc trong {_s4_dur:.1f}s: {burned_path.name}", level="success")
+                yield send(log=f"[Bước 4/5] Video đã che phụ đề gốc trong {_s4_dur:.1f}s: {burned_path.name}", level="success")
             else:
-                yield send(log=f"[Bước 4/5] ✓ Video có phụ đề trong {_s4_dur:.1f}s: {burned_path.name}", level="success")
+                yield send(log=f"[Bước 4/5] Video có phụ đề trong {_s4_dur:.1f}s: {burned_path.name}", level="success")
             yield send(overall=80, overall_lbl="Xử lý video xong")
             final_output_path = burned_path
         else:
-            yield send(log=f"[Bước 4/5] ✗ Xử lý thất bại: {err}", level="error")
+            yield send(log=f"[Bước 4/5] Xử lý thất bại: {err}", level="error")
             pipeline_failed = f"Không thể tạo video đã chỉnh sửa: {err}"
             burned_path = None
     elif do_burn and not srt_path.exists() and not _visual_edit_enabled:
-        yield send(log="[Bước 4/5] ⚠ Không có file phụ đề để burn", level="warning")
+        yield send(log="[Bước 4/5] Không có file phụ đề để burn", level="warning")
     else:
-        yield send(log="[Bước 4/5] ℹ Bỏ qua burn phụ đề / che", level="info")
+        yield send(log="[Bước 4/5] Bỏ qua burn phụ đề / che", level="info")
 
     # ── Fallback aspect conversion (normally folded into the burn encode) ─────
     # Nếu user chọn 9x16/16x9 mà video burned không đúng aspect đó → convert.
@@ -1333,7 +1328,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     # thumbnail để aspect của final khớp với thumbnail.
     if _aspect_combined and burned_path and burned_path.exists():
         yield send(
-            log=f"[Aspect] ✓ Đã gộp chuyển khung {_target_aspect} vào bước burn/che",
+            log=f"[Aspect] Đã gộp chuyển khung {_target_aspect} vào bước burn/che",
             level="success",
         )
     if (
@@ -1411,11 +1406,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     str(aspect_video), "-y", "-loglevel", "error",
                 ], timeout=600)
             if ok_a and aspect_video.exists():
-                yield send(log=f"[Aspect] ✓ Khung hình đã chuyển: {aspect_video.name}", level="success")
+                yield send(log=f"[Aspect] Khung hình đã chuyển: {aspect_video.name}", level="success")
                 burned_path = aspect_video
                 final_output_path = aspect_video
             else:
-                yield send(log=f"[Aspect] ⚠ Convert khung hình thất bại: {err_a}", level="warning")
+                yield send(log=f"[Aspect] Convert khung hình thất bại: {err_a}", level="warning")
 
     # ── Concat thumbnail vào đầu video (sau khi burn + convert aspect xong) ───
     def _emit_thumb_image(thumb_path: Path):
@@ -1430,12 +1425,12 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
     if _thumb_future and burned_path and burned_path.exists():
         try:
-            yield send(log="[Bước 4/5] ⏳ Đợi thumbnail hoàn tất để chèn vào đầu video...", level="info")
+            yield send(log="[Bước 4/5] Đợi thumbnail hoàn tất để chèn vào đầu video...", level="info")
             try:
                 thumb_result = _thumb_future.result(timeout=120)
             except Exception as _ex:
                 thumb_result = None
-                yield send(log=f"[Bước 4/5] ⚠ Lỗi tạo thumbnail: {_ex}", level="warning")
+                yield send(log=f"[Bước 4/5] Lỗi tạo thumbnail: {_ex}", level="warning")
 
             # ── Retry loop khi AI thumbnail fail (chỉ áp dụng cho mode='ai') ──
             if (not thumb_result or not Path(thumb_result).exists()) and _thumb_mode == "ai":
@@ -1445,13 +1440,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     yield send(
                         thumb_failed=True,
                         thumb_mode=_thumb_mode,
-                        log=f"[Bước 4/5] ⚠ Thumbnail AI thất bại — chờ user xử lý (lần {_attempt}/{_max_retries})",
+                        log=f"[Bước 4/5] Thumbnail AI thất bại — chờ user xử lý (lần {_attempt}/{_max_retries})",
                         level="warning",
                     )
                     action_data = wait_thumb_retry_action(timeout=600)
                     action = action_data.get("action") or "skip"
                     if action == "retry":
-                        yield send(log="[Bước 4/5] 🔄 Thử tạo lại thumbnail AI...", level="info")
+                        yield send(log="[Bước 4/5] Thử tạo lại thumbnail AI...", level="info")
                         try:
                             thumb_result = _gen_ai_thumbnail_for_pipeline(
                                 video_path=video_path,
@@ -1463,9 +1458,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             )
                         except Exception as _re:
                             thumb_result = None
-                            yield send(log=f"[Bước 4/5] ⚠ Retry lỗi: {_re}", level="warning")
+                            yield send(log=f"[Bước 4/5] Retry lỗi: {_re}", level="warning")
                         if thumb_result and Path(thumb_result).exists():
-                            yield send(log="[Bước 4/5] ✓ Thumbnail AI tạo lại thành công", level="success")
+                            yield send(log="[Bước 4/5] Thumbnail AI tạo lại thành công", level="success")
                             break
                     elif action == "upload":
                         user_path = action_data.get("path") or ""
@@ -1475,15 +1470,15 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             if src.exists():
                                 _shutil.copy2(str(src), str(_thumb_target_path))
                                 thumb_result = _thumb_target_path
-                                yield send(log=f"[Bước 4/5] ✓ Đã dùng ảnh user upload: {src.name}", level="success")
+                                yield send(log=f"[Bước 4/5] Đã dùng ảnh user upload: {src.name}", level="success")
                                 break
                             else:
-                                yield send(log=f"[Bước 4/5] ⚠ File upload không tồn tại: {user_path}", level="warning")
+                                yield send(log=f"[Bước 4/5] File upload không tồn tại: {user_path}", level="warning")
                         except Exception as _ue:
-                            yield send(log=f"[Bước 4/5] ⚠ Lỗi copy ảnh upload: {_ue}", level="warning")
+                            yield send(log=f"[Bước 4/5] Lỗi copy ảnh upload: {_ue}", level="warning")
                     else:
                         # skip
-                        yield send(log="[Bước 4/5] ℹ User chọn bỏ qua thumbnail", level="info")
+                        yield send(log="[Bước 4/5] User chọn bỏ qua thumbnail", level="info")
                         thumb_result = None
                         break
 
@@ -1491,14 +1486,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 # Emit ảnh thumbnail (base64) để frontend hiển thị real-time
                 _img_data = _emit_thumb_image(Path(thumb_result))
                 yield send(
-                    log=f"[Bước 4/5] 🖼 Thumbnail đã sẵn sàng: {Path(thumb_result).name}",
+                    log=f"[Bước 4/5] Thumbnail đã sẵn sàng: {Path(thumb_result).name}",
                     level="info",
                     thumbnail_path=str(Path(thumb_result).resolve()),
                     thumbnail_image=_img_data,
                 )
 
                 concat_out = out_dir / f"{stem}_subbed_with_thumb.mp4"
-                yield send(log=f"[Bước 4/5] 🎬 Đang chèn thumbnail ({_thumb_duration}s) vào đầu video...", level="info")
+                yield send(log=f"[Bước 4/5] Đang chèn thumbnail ({_thumb_duration}s) vào đầu video...", level="info")
                 ok_c, err_c = concat_thumbnail_with_video(
                     video_path=burned_path,
                     thumbnail_path=Path(thumb_result),
@@ -1507,15 +1502,15 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     duration=_thumb_duration,
                 )
                 if ok_c and concat_out.exists():
-                    yield send(log=f"[Bước 4/5] ✓ Đã chèn thumbnail: {concat_out.name}", level="success")
+                    yield send(log=f"[Bước 4/5] Đã chèn thumbnail: {concat_out.name}", level="success")
                     burned_path = concat_out
                     final_output_path = concat_out
                 else:
-                    yield send(log=f"[Bước 4/5] ⚠ Chèn thumbnail thất bại: {err_c}", level="warning")
+                    yield send(log=f"[Bước 4/5] Chèn thumbnail thất bại: {err_c}", level="warning")
             else:
-                yield send(log="[Bước 4/5] ⚠ Không có thumbnail — bỏ qua chèn vào video", level="warning")
+                yield send(log="[Bước 4/5] Không có thumbnail — bỏ qua chèn vào video", level="warning")
         except Exception as e:
-            yield send(log=f"[Bước 4/5] ⚠ Lỗi xử lý thumbnail: {e}", level="warning")
+            yield send(log=f"[Bước 4/5] Lỗi xử lý thumbnail: {e}", level="warning")
         finally:
             try:
                 if _thumb_executor:
@@ -1527,19 +1522,23 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _t_step5_start = _pytime.time()
     try:
         if do_voice and _voice_cache_valid:
+            synced_ass = out_dir / f"{stem}_{target_language}_voice_sync.ass"
+            if synced_ass.is_file():
+                vi_ass_path = synced_ass
+                yield send(subtitle_path=str(synced_ass.resolve()))
             final_output_path = voice_path_cached
-            yield send(log=f"[Bước 5/5] ♻ Dùng lại giọng {target_lang_name} cũ ({_pytime.time() - _t_step5_start:.2f}s): {voice_path_cached.name}", level="info")
+            yield send(log=f"[Bước 5/5] Dùng lại giọng {target_lang_name} cũ ({_pytime.time() - _t_step5_start:.2f}s): {voice_path_cached.name}", level="info")
             yield send(overall=92, overall_lbl="Dùng lại giọng cũ")
         elif do_voice and translated_texts:
             if _voice_cache_stale_reason:
-                yield send(log=f"[Bước 5/5] ♻ Bỏ cache giọng cũ ({_voice_cache_stale_reason})", level="info")
+                yield send(log=f"[Bước 5/5] Bỏ cache giọng cũ ({_voice_cache_stale_reason})", level="info")
             if _tts_future:
-                yield send(log="[Bước 5/5] ⏳ Burn đã xong, kiểm tra kết quả TTS song song...", level="info")
+                yield send(log="[Bước 5/5] Burn đã xong, kiểm tra kết quả TTS song song...", level="info")
                 try:
                     _tts_clips = _tts_future.result()
                 except Exception as _tts_err:
                     _tts_clips = []
-                    yield send(log=f"[Bước 5/5] ⚠ Luồng TTS gặp lỗi: {_tts_err}", level="warning")
+                    yield send(log=f"[Bước 5/5] Luồng TTS gặp lỗi: {_tts_err}", level="warning")
 
             clip_by_index = {
                 int(clip.get("index")): clip
@@ -1569,7 +1568,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     total_count=len(translated_texts),
                     missing_segments=missing_details,
                     log=(
-                        f"[Bước 5/5] ⚠ TTS thiếu {len(missing_indices)} đoạn "
+                        f"[Bước 5/5] TTS thiếu {len(missing_indices)} đoạn "
                         f"({len(clip_by_index)}/{len(translated_texts)}) — đang chờ xử lý"
                     ),
                     level="warning",
@@ -1581,13 +1580,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
                 if action == "retry":
                     yield send(
-                        log=f"[Bước 5/5] 🔄 Thử lại riêng {len(missing_indices)} đoạn TTS bị thiếu...",
+                        log=f"[Bước 5/5] Thử lại riêng {len(missing_indices)} đoạn TTS bị thiếu...",
                         level="info",
                     )
                     if not callable(_run_tts_indices):
                         retry_clips = []
                         yield send(
-                            log="[Bước 5/5] ⚠ Tác vụ TTS chưa được khởi tạo; không thể thử lại",
+                            log="[Bước 5/5] Tác vụ TTS chưa được khởi tạo; không thể thử lại",
                             level="warning",
                         )
                     else:
@@ -1595,7 +1594,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             retry_clips = _run_tts_indices(missing_indices)
                         except Exception as retry_err:
                             retry_clips = []
-                            yield send(log=f"[Bước 5/5] ⚠ Retry TTS lỗi: {retry_err}", level="warning")
+                            yield send(log=f"[Bước 5/5] Retry TTS lỗi: {retry_err}", level="warning")
                     for clip in retry_clips:
                         if clip.get("index") is not None:
                             clip_by_index[int(clip["index"])] = clip
@@ -1604,18 +1603,18 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         if i not in clip_by_index
                     ]
                     if not missing_indices:
-                        yield send(log="[Bước 5/5] ✓ Đã tạo đủ toàn bộ đoạn TTS", level="success")
+                        yield send(log="[Bước 5/5] Đã tạo đủ toàn bộ đoạn TTS", level="success")
                     continue
 
                 if action == "continue":
                     yield send(
-                        log=f"[Bước 5/5] ⚠ Tiếp tục với {len(missing_indices)} đoạn TTS bị thiếu theo xác nhận của người dùng",
+                        log=f"[Bước 5/5] Tiếp tục với {len(missing_indices)} đoạn TTS bị thiếu theo xác nhận của người dùng",
                         level="warning",
                     )
                     break
 
                 yield send(
-                    log="[Bước 5/5] ℹ Đã bỏ lồng tiếng; giữ kết quả burn/che video",
+                    log="[Bước 5/5] Đã bỏ lồng tiếng; giữ kết quả burn/che video",
                     level="warning",
                 )
                 clip_by_index.clear()
@@ -1631,7 +1630,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             if _tts_clips and not pipeline_failed:
                 source_for_voice = burned_path if burned_path else video_path
                 yield send(
-                    log="[Bước 5/5] 🎚 Đang ghép giọng vào video (copy luồng hình, chỉ encode audio)...",
+                    log="[Bước 5/5] Đang ghép giọng vào video (copy luồng hình, chỉ encode audio)...",
                     level="info",
                     overall=92,
                     overall_lbl="Đang ghép giọng cuối...",
@@ -1667,14 +1666,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         )
                     except Exception:
                         pass
-                    yield send(log=f"[Bước 5/5] ✓ Giọng {target_lang_name} hoàn tất trong {_pytime.time() - _t_step5_start:.1f}s: {voice_path.name}", level="success")
+                    yield send(log=f"[Bước 5/5] Giọng {target_lang_name} hoàn tất trong {_pytime.time() - _t_step5_start:.1f}s: {voice_path.name}", level="success")
                     yield send(overall=96, overall_lbl="Ghép giọng xong")
                     final_output_path = voice_path
                 else:
-                    yield send(log=f"[Bước 5/5] ✗ Ghép giọng thất bại: {err}", level="error")
+                    yield send(log=f"[Bước 5/5] Ghép giọng thất bại: {err}", level="error")
                     pipeline_failed = f"Không thể ghép giọng vào video: {err}"
     except Exception as e:
-        yield send(log=f"[Bước 5/5] ✗ Lỗi xử lý giọng: {e}", level="error")
+        yield send(log=f"[Bước 5/5] Lỗi xử lý giọng: {e}", level="error")
         if do_voice:
             pipeline_failed = f"Lỗi xử lý giọng: {e}"
     finally:
@@ -1694,7 +1693,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if pipeline_failed:
         _pipeline_dur = _pytime.time() - _t_pipeline_start
         yield send(
-            log=f"⛔ Quy trình dừng sau {_pipeline_dur:.1f}s: {pipeline_failed}",
+            log=f"Quy trình dừng sau {_pipeline_dur:.1f}s: {pipeline_failed}",
             level="error",
             failed=True,
             overall=0,
@@ -1751,7 +1750,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         
         if valid_ext_audios:
             yield send(
-                log=f"[Âm thanh] 🎚 Đang ghép {len(valid_ext_audios)} tệp âm thanh ngoài vào video...",
+                log=f"[Âm thanh] Đang ghép {len(valid_ext_audios)} tệp âm thanh ngoài vào video...",
                 level="info",
                 overall=97,
                 overall_lbl="Đang ghép âm thanh ngoài...",
@@ -1769,20 +1768,20 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 ffmpeg=ffmpeg
             )
             if ok_mix and mixed_path.exists():
-                yield send(log=f"[Âm thanh] ✓ Đã ghép {len(valid_ext_audios)} âm thanh ngoài vào video", level="success")
+                yield send(log=f"[Âm thanh] Đã ghép {len(valid_ext_audios)} âm thanh ngoài vào video", level="success")
                 final_output_path = mixed_path
                 was_original = False
             else:
-                yield send(log=f"[Âm thanh] ✗ Ghép âm thanh ngoài thất bại: {err_mix}", level="error")
+                yield send(log=f"[Âm thanh] Ghép âm thanh ngoài thất bại: {err_mix}", level="error")
                 pipeline_failed = f"Không thể ghép âm thanh ngoài: {err_mix}"
         else:
-            yield send(log="[Âm thanh] ⚠ Không tìm thấy tệp âm thanh ngoài hợp lệ nào để ghép", level="warning")
+            yield send(log="[Âm thanh] Không tìm thấy tệp âm thanh ngoài hợp lệ nào để ghép", level="warning")
 
 
     if pipeline_failed:
         _pipeline_dur = _pytime.time() - _t_pipeline_start
         yield send(
-            log=f"⛔ Quy trình dừng sau {_pipeline_dur:.1f}s: {pipeline_failed}",
+            log=f"Quy trình dừng sau {_pipeline_dur:.1f}s: {pipeline_failed}",
             level="error",
             failed=True,
             overall=0,
@@ -1819,20 +1818,20 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             except Exception:
                 pass
             yield send(
-                log=f"[Thumbnail] ✓ Tạo thumbnail: {thumb_path.name}",
+                log=f"[Thumbnail] Tạo thumbnail: {thumb_path.name}",
                 level="success",
                 thumbnail_path=str(thumb_path.resolve()),
                 thumbnail_image=thumb_b64,
             )
         elif thumb_result != "thumbnail disabled":
-            yield send(log=f"[Thumbnail] ⚠ Không tạo được thumbnail: {thumb_result}", level="warning")
+            yield send(log=f"[Thumbnail] Không tạo được thumbnail: {thumb_result}", level="warning")
     except Exception as _thumb_err:
-        yield send(log=f"[Thumbnail] ⚠ Lỗi tạo thumbnail: {_thumb_err}", level="warning")
+        yield send(log=f"[Thumbnail] Lỗi tạo thumbnail: {_thumb_err}", level="warning")
 
     # ── Cleanup file trung gian ───────────────────────────────────────────────
     if final_output_path and final_output_path.exists():
         from core.processor.completed_outputs import register_output
-        register_output(final_output_path)
+        register_output(final_output_path, vi_ass_path or srt_path)
 
     if cleanup_outputs and final_output_path and final_output_path.exists():
         # Giữ lại SRT/ASS để resume lần sau, chỉ xóa file trung gian không cần thiết
@@ -1863,7 +1862,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         yield send(log=f"[Hoàn tất] File cuối cùng: {final_output_path.name}", level="success", file_path=str(final_output_path.resolve()))
 
     _pipeline_dur = _pytime.time() - _t_pipeline_start
-    yield send(log=f"🎉 Toàn bộ quy trình hoàn tất trong {_pipeline_dur:.1f}s!", level="success")
+    yield send(log=f"Toàn bộ quy trình hoàn tất trong {_pipeline_dur:.1f}s!", level="success")
     yield send(overall=100, overall_lbl="Hoàn tất")
 
     # ── Backend auto-upload after processing ─────────────────────────────────
@@ -1890,9 +1889,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     privacy = privacy_map.get(privacy.lower(), privacy)
                     result = uploader.upload_video(str(final_output_path), title=title, privacy_level=privacy)
                     if result:
-                        yield send(log=f"[Auto-upload] ✓ TikTok: {result.get('publish_id')}", level="success")
+                        yield send(log=f"[Auto-upload] TikTok: {result.get('publish_id')}", level="success")
                     else:
-                        yield send(log=f"[Auto-upload] ✗ TikTok: {uploader.last_error}", level="error")
+                        yield send(log=f"[Auto-upload] TikTok: {uploader.last_error}", level="error")
                 else:
                     yield send(log="[Auto-upload] TikTok chưa đăng nhập, bỏ qua", level="warning")
             except Exception as e:
@@ -1923,9 +1922,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         tags=all_tags,
                         is_short=bool(yt_cfg.get("short", False)))
                     if result:
-                        yield send(log=f"[Auto-upload] ✓ YouTube: {result.get('url')}", level="success")
+                        yield send(log=f"[Auto-upload] YouTube: {result.get('url')}", level="success")
                     else:
-                        yield send(log="[Auto-upload] ✗ YouTube upload thất bại", level="error")
+                        yield send(log="[Auto-upload] YouTube upload thất bại", level="error")
                 else:
                     yield send(log="[Auto-upload] YouTube chưa đăng nhập, bỏ qua", level="warning")
             except Exception as e:

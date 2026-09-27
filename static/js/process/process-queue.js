@@ -213,12 +213,12 @@ window._batchQueue = window._batchQueue || [];
     if (dlArea) dlArea.style.display = 'block';
 
     const statusLabel = {
-      pending:     '⏳ Chờ',
-      downloading: '📥 Đang tải...',
-      ready:       '✅ Sẵn sàng',
-      processing:  '⚙ Đang xử lý...',
-      done:        '✔ Hoàn tất',
-      error:       '❌ Lỗi',
+      pending:     ' Chờ',
+      downloading: ' Đang tải...',
+      ready:       ' Sẵn sàng',
+      processing:  ' Đang xử lý...',
+      done:        ' Hoàn tất',
+      error:       ' Lỗi',
     };
     list.innerHTML = window._batchQueue.map((t,i) => {
       let badgeClass = 'badge-gray';
@@ -226,7 +226,7 @@ window._batchQueue = window._batchQueue || [];
       else if (t.status === 'error') badgeClass = 'badge-red';
       else if (t.status === 'processing' || t.status === 'downloading') badgeClass = 'badge-yellow';
       else if (t.status === 'ready') badgeClass = 'badge-accent';
-      
+
       const disableDel = (t.status === 'processing' || t.status === 'downloading') ? 'disabled' : '';
       const label = statusLabel[t.status] || t.status;
 
@@ -236,7 +236,7 @@ window._batchQueue = window._batchQueue || [];
       const cfgBtnHtml = isReadyOrPending ? `
         <div style="position:relative;display:inline-block">
           <button data-cfg-btn class="btn btn-outline btn-xs" onclick="window._toggleItemCfgDropdown('${t.id}', event)" style="font-size:10px;padding:2px 6px;height:24px;line-height:20px;border-color:var(--border);border-radius:4px;display:flex;align-items:center;gap:3px;white-space:nowrap">
-            ⚙️ ${labelCfg}
+             ${labelCfg}
           </button>
           <div id="cfg-drop-${t.id}" class="cfg-dropdown-panel" style="display:none;position:fixed;z-index:99999;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);width:200px;text-align:left">
             <div style="font-weight:600;font-size:10px;margin-bottom:6px;color:var(--text-muted)">Cấu hình video này:</div>
@@ -258,11 +258,11 @@ window._batchQueue = window._batchQueue || [];
 
       return `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
-        <span style="color:var(--text-muted)">${t.type==='url'?'🔗':'📄'}</span>
+        <span style="color:var(--text-muted)">${t.type==='url'?'':''}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
         <span class="badge ${badgeClass}">${label}</span>
         ${cfgBtnHtml}
-        <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px" ${disableDel}>✕</button>
+        <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px" ${disableDel}>×</button>
       </div>`;
     }).join('');
 
@@ -282,11 +282,11 @@ window._batchQueue = window._batchQueue || [];
     if (dlBtn) {
       const isDownloading = window._step1Downloading;
       dlBtn.disabled = isDownloading;
-      dlBtn.textContent = isDownloading ? '⏳ Đang tải...' : '📥 Tải hàng chờ';
+      dlBtn.textContent = isDownloading ? ' Đang tải...' : ' Tải hàng chờ';
     }
     if (dlStatus) {
       if (hasReady && !hasPending) {
-        dlStatus.textContent = '✅ Tất cả video đã sẵn sàng.';
+        dlStatus.textContent = ' Tất cả video đã sẵn sàng.';
       } else if (hasPending) {
         dlStatus.textContent = 'Nhấn để bắt đầu tải video gốc từ URL.';
       }
@@ -356,7 +356,7 @@ window._batchQueue = window._batchQueue || [];
       window._procRunning = false;
       window._step3Started = false;
       _renderBatchQueue();
-      if (typeof toast === 'function') toast('✅ Đã đặt lại trạng thái sẵn sàng', 'success');
+      if (typeof toast === 'function') toast(' Đã đặt lại trạng thái sẵn sàng', 'success');
     }
   };
 
@@ -365,7 +365,7 @@ window._batchQueue = window._batchQueue || [];
     if (idx !== -1) {
       window._batchQueue.splice(idx, 1);
       _renderBatchQueue();
-      if (typeof toast === 'function') toast('🗑 Đã xóa video khỏi hàng chờ', 'info');
+      if (typeof toast === 'function') toast(' Đã xóa video khỏi hàng chờ', 'info');
     }
   };
 
@@ -389,7 +389,7 @@ window._batchQueue = window._batchQueue || [];
     // Apply skip flags from checkboxes before starting
     window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
     window._procSkipThumbSession  = false;
-    
+
     // Check if there are tasks in the queue waiting or ready
     const hasQueueTasks = (window._batchQueue || []).some(t => t.status !== 'done' && t.status !== 'error');
     if (hasQueueTasks) {
@@ -424,10 +424,10 @@ window._batchQueue = window._batchQueue || [];
     // Mark as started and running
     window._step3Started = true;
     window._procRunning = true;
-    
+
     // Refresh card UI (do not hide options card!)
     _step3RefreshStartCard();
-    
+
     // Start backend process!
     startProcessVideo();
   };
@@ -536,7 +536,7 @@ window._batchQueue = window._batchQueue || [];
     const status = document.getElementById('batch-drain-status');
     if (status) {
       status.textContent = on
-        ? '🔁 Đang bật — sẽ tự động xử lý video mới thêm vào.'
+        ? ' Đang bật — sẽ tự động xử lý video mới thêm vào.'
         : '';
     }
     if (on && !window._procRunning) {
@@ -641,7 +641,7 @@ window._batchQueue = window._batchQueue || [];
       if (t) {
         t.status = ok ? 'done' : 'error';
         if (!ok) {
-          _appendProcLog?.(`⚠ Task "${t.desc || t.val}" thất bại — chuyển sang task tiếp theo`, 'warning');
+          _appendProcLog?.(` Task "${t.desc || t.val}" thất bại — chuyển sang task tiếp theo`, 'warning');
         }
       }
     }
@@ -671,7 +671,7 @@ window._batchQueue = window._batchQueue || [];
         setTimeout(() => _runBatchQueueFlow(), 800);
       } else {
         const status = document.getElementById('batch-drain-status');
-        if (status) status.textContent = '🔁 Đang chờ video mới...';
+        if (status) status.textContent = ' Đang chờ video mới...';
       }
     } else {
       // Reset session-only skip flag when a manual batch ends
@@ -778,7 +778,7 @@ window._batchQueue = window._batchQueue || [];
       logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
     };
 
-    _appendProcLog('🎞 Đang tạo khung video...', 'info');
+    _appendProcLog(' Đang tạo khung video...', 'info');
     try {
       const res  = await fetch('/api/make_vertical_video', {
         method: 'POST',
@@ -787,13 +787,13 @@ window._batchQueue = window._batchQueue || [];
       });
       const data = await res.json();
       if (data.ok) {
-        _appendProcLog('✅ Khung video: ' + data.output_path, 'success');
+        _appendProcLog(' Khung video: ' + data.output_path, 'success');
         window._publishLastOutputPath = data.output_path;
       } else {
-        _appendProcLog('❌ Tạo khung thất bại: ' + (data.error || ''), 'error');
+        _appendProcLog(' Tạo khung thất bại: ' + (data.error || ''), 'error');
       }
     } catch (e) {
-      _appendProcLog('❌ Lỗi tạo khung: ' + e.message, 'error');
+      _appendProcLog(' Lỗi tạo khung: ' + e.message, 'error');
     }
   }
 
@@ -802,7 +802,7 @@ window._batchQueue = window._batchQueue || [];
     const card = document.getElementById('proc-ass-review-card');
     const pathEl = document.getElementById('proc-ass-review-path');
     const ta = document.getElementById('proc-ass-review-content');
-    if (pathEl) pathEl.textContent = '📄 ' + assPath;
+    if (pathEl) pathEl.textContent = ' ' + assPath;
     if (ta) ta.value = content || '';
     if (card) {
       card.style.display = 'block';
@@ -822,7 +822,7 @@ window._batchQueue = window._batchQueue || [];
   function _procShowPauseBtn(show) {
     const btn = document.getElementById('btn-proc-pause');
     if (btn) btn.style.display = show ? 'inline-flex' : 'none';
-    if (!show) { window._procPaused = false; if (btn) { btn.textContent = '⏸ Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; } }
+    if (!show) { window._procPaused = false; if (btn) { btn.textContent = ' Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; } }
   }
 
   // A reload interrupts the response stream. Restore the task as ready so the
@@ -831,7 +831,7 @@ window._batchQueue = window._batchQueue || [];
     setTimeout(() => {
       if (typeof procWizGo === 'function') procWizGo(3);
       _step3RenderQueue();
-      _appendProcLog?.('⚠ Trang đã được tải lại khi đang xử lý. Tác vụ đã chuyển về Sẵn sàng; bấm Tiếp tục xử lý hàng chờ để chạy tiếp từ dữ liệu đã lưu.', 'warning');
+      _appendProcLog?.(' Trang đã được tải lại khi đang xử lý. Tác vụ đã chuyển về Sẵn sàng; bấm Tiếp tục xử lý hàng chờ để chạy tiếp từ dữ liệu đã lưu.', 'warning');
       const startText = document.querySelector('[onclick="_step3StartProc()"] span:last-child');
       if (startText) startText.textContent = 'Tiếp tục xử lý hàng chờ';
     }, 500);
@@ -848,14 +848,14 @@ window._batchQueue = window._batchQueue || [];
   function _uploadFileWithProgress(file, type, onProgress, onLoad, onError) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload_anti_fp_image', true);
-    
+
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable) {
         const pct = Math.round((e.loaded / e.total) * 100);
         if (typeof onProgress === 'function') onProgress(pct);
       }
     };
-    
+
     xhr.onload = function() {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
@@ -868,11 +868,11 @@ window._batchQueue = window._batchQueue || [];
         if (typeof onError === 'function') onError(new Error('Upload failed with status ' + xhr.status));
       }
     };
-    
+
     xhr.onerror = function(err) {
       if (typeof onError === 'function') onError(err);
     };
-    
+
     const form = new FormData();
     form.append('file', file);
     form.append('type', type);
@@ -959,7 +959,7 @@ window._batchQueue = window._batchQueue || [];
     window._step3Started = false;
     window._step3Confirmed = false;
     const step = targetStep || 2;
-    _step1Log(`✅ Đã tải hết hàng chờ. Chuyển sang Bước ${step}.`, 'success');
+    _step1Log(` Đã tải hết hàng chờ. Chuyển sang Bước ${step}.`, 'success');
     setTimeout(() => procWizGo(step), 250);
     return true;
   }
@@ -982,7 +982,7 @@ window._batchQueue = window._batchQueue || [];
         toast('Tất cả video trong hàng chờ đã xử lý xong!', 'info');
         return;
       }
-      
+
       // Check if there are pending items that need downloading
       const hasPending = (window._batchQueue || []).some(t => t.status === 'pending');
       if (hasPending) {
@@ -994,7 +994,7 @@ window._batchQueue = window._batchQueue || [];
         }
         return;
       }
-      
+
       toast('Vui lòng thêm video và đợi tải video gốc hoàn tất ở Bước 1!', 'warning');
       return;
     }
@@ -1025,7 +1025,7 @@ window._batchQueue = window._batchQueue || [];
     if (typeof procSaveStep === 'function') procSaveStep(2, true);
     // Settings are ready; continue to the confirmation/start step.
     procWizGo(targetStep || 3);
-    
+
     // DO NOT auto-start processing — user must navigate to step 3 and click "Bắt đầu xử lý"
 
   };
@@ -1245,7 +1245,7 @@ window._batchQueue = window._batchQueue || [];
     const ph  = document.getElementById('thumb-placeholder');
     const info = document.getElementById('thumb-output-info');
     if (img) { img.src = ''; img.style.display = 'none'; }
-    if (ph) { ph.style.display = 'block'; ph.textContent = '📁 Import / 🎨 Tạo / 🤖 AI'; }
+    if (ph) { ph.style.display = 'block'; ph.textContent = ' Import /  Tạo /  AI'; }
     if (info) info.style.display = 'none';
     window._thumbState = { mode: 'none', path: '', b64: '' };
     toast('Đã xóa thumbnail', 'info');

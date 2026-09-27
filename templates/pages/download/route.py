@@ -19,17 +19,23 @@ bp = Blueprint("download", __name__)
 
 @bp.route('/api/files/completed', methods=['GET'])
 def completed_files():
-    from core.processor.completed_outputs import list_outputs
+    from core.processor.completed_outputs import list_outputs, subtitles_for_output
     base = Path(load_cfg().get('path') or './Downloaded').expanduser().resolve()
     items = []
     for path, completed in list_outputs():
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        subtitles, subtitle_path = subtitles_for_output(path)
         try:
             relative = str(path.relative_to(base)).replace('\\', '/')
         except ValueError:
             relative = str(path)
         items.append(dict(name=path.name, path=relative, abs_path=str(path),
                           file_type='video', is_dir=False, ext=path.suffix.lower(),
-                          size_str=_fmt_size(path.stat().st_size), completed=completed))
+                          size_str=_fmt_size(size), completed=completed,
+                          subtitles=subtitles, subtitle_path=subtitle_path))
     return jsonify(items=items)
 
 

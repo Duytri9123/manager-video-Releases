@@ -244,7 +244,7 @@ function procAiOwnsBlur() {
     const info = document.getElementById('thumb-output-info');
     const btn = document.querySelector('[onclick="generateThumbnailPreview()"]');
 
-    if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Đang tải...'; }
     if (ph) { ph.style.display = 'block'; ph.textContent = 'Đang lấy preview...'; }
     if (img) img.style.display = 'none';
     if (info) info.style.display = 'none';
@@ -278,7 +278,7 @@ function procAiOwnsBlur() {
         if (ph) ph.style.display = 'none';
         // Save state — frame mode means: server will extract frame at runtime, no path needed
         window._thumbState = { mode: 'frame', path: '', b64: data.image };
-        toast('✓ Preview thumbnail', 'success');
+        toast('Đã lấy preview thumbnail', 'success');
       } else {
         if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'Không lấy được frame'; }
         toast('Lỗi: ' + (data.error || ''), 'error');
@@ -287,7 +287,7 @@ function procAiOwnsBlur() {
       if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
       toast('Lỗi: ' + e.message, 'error');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🎨'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Xem trước'; }
     }
   }
   window._procExtraBlurZones = [];
@@ -330,7 +330,7 @@ function procAiOwnsBlur() {
     container.innerHTML = window._procExtraBlurZones.map((z, idx) => {
       var st = (z.start === '' || z.start == null) ? '' : z.start;
       var en = (z.end === '' || z.end == null) ? '' : z.end;
-      var rangeTxt = '⏱ Burn ' + (st !== '' ? ('từ ' + st + 's') : 'từ đầu') + ' ' + (en !== '' ? ('đến ' + en + 's') : 'đến cuối');
+      var rangeTxt = 'Burn ' + (st !== '' ? ('từ ' + st + 's') : 'từ đầu') + ' ' + (en !== '' ? ('đến ' + en + 's') : 'đến cuối');
       var xVal = z.x ?? 50;
       var wVal = z.width ?? 80;
       var openAttr = openIds.has(z.id) ? ' open' : '';
@@ -343,10 +343,13 @@ function procAiOwnsBlur() {
             <span class="pe2-extra-zone-meta">Cao ${z.height}% · Y ${z.position}% · X ${xVal}% · Rộng ${wVal}%</span>
             <span class="pe2-extra-zone-meta">${rangeTxt}</span>
           </span>
-          <button type="button" style="border:none;background:transparent;padding:4px 6px;cursor:pointer;font-size:15px;color:#ef4444;line-height:1;vertical-align:middle;flex:0 0 auto" 
+          <button type="button" style="border:none;background:transparent;padding:4px 6px;cursor:pointer;color:#ef4444;line-height:1;vertical-align:middle;flex:0 0 auto;display:inline-flex;align-items:center"
             onclick="event.preventDefault();event.stopPropagation();procRemoveBlurZone(${z.id})" 
             title="Xóa vùng che">
-            🗑️
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
           </button>
         </summary>
         <div class="pe2-extra-zone-body">
@@ -402,10 +405,10 @@ function procAiOwnsBlur() {
             const info = document.getElementById('thumb-output-info');
             if (img) { img.src = e.target.result; img.style.display = 'block'; }
             if (ph) ph.style.display = 'none';
-            if (info) { info.style.display = 'block'; info.textContent = '📁 ' + data.path; }
+            if (info) { info.style.display = 'block'; info.textContent = data.path; }
           };
           reader.readAsDataURL(file);
-          toast('✓ Đã import thumbnail', 'success');
+          toast('Đã import thumbnail', 'success');
         } else {
           toast('Lỗi upload: ' + (data.error || ''), 'error');
         }
@@ -426,7 +429,7 @@ function procAiOwnsBlur() {
     // Ưu tiên 1: Lấy ảnh đang có sẵn ở Thumbnail để chỉnh sửa / vẽ tiếp lên chính nó
     const existingThumbImg = document.getElementById('thumb-preview-img');
     const previewImg = document.getElementById('sub-preview-img');
-    
+
     let frameB64 = null;
     let isEditingExistingThumb = false;
 
@@ -452,7 +455,7 @@ function procAiOwnsBlur() {
 
     // Bắt buộc phải có ảnh tham chiếu khi bấm tạo bằng nút AI ở Thumbnail
     if (!frameB64) {
-      toast('⚠️ Vui lòng lấy frame Preview hoặc import/tạo sẵn 1 thumbnail trước để AI có ảnh làm dữ liệu tham chiếu!', 'warning');
+      toast('Vui lòng lấy frame Preview hoặc import/tạo sẵn 1 thumbnail trước để AI có ảnh làm dữ liệu tham chiếu!', 'warning');
       return;
     }
 
@@ -462,9 +465,9 @@ function procAiOwnsBlur() {
     const btn = document.querySelector('[onclick="generateThumbnailAI()"]');
 
     const loadingMsg = isEditingExistingThumb
-      ? '✏️ AI đang chỉnh sửa thumbnail hiện tại...'
-      : '🤖 AI đang phân tích video và tạo thumbnail...';
-    const btnLabel  = isEditingExistingThumb ? '⏳ AI đang sửa...' : '⏳ AI đang tạo...';
+      ? 'AI đang chỉnh sửa thumbnail hiện tại...'
+      : 'AI đang phân tích video và tạo thumbnail...';
+    const btnLabel  = isEditingExistingThumb ? 'AI đang sửa...' : 'AI đang tạo...';
 
     if (btn) { btn.disabled = true; btn.textContent = btnLabel; }
     if (ph) { ph.style.display = 'block'; ph.textContent = loadingMsg; }
@@ -503,8 +506,8 @@ function procAiOwnsBlur() {
         if (info) {
           info.style.display = 'block';
           let infoText = '';
-          if (data.output_path) infoText += '📁 ' + data.output_path;
-          if (data.prompt_used) infoText += '\n💡 Prompt: ' + data.prompt_used;
+          if (data.output_path) infoText += data.output_path;
+          if (data.prompt_used) infoText += '\nPrompt: ' + data.prompt_used;
           info.textContent = infoText;
         }
         // Save state for batch processing
@@ -514,8 +517,8 @@ function procAiOwnsBlur() {
           b64: data.image || ''
         };
         const successMsg = isEditingExistingThumb
-          ? '✓ AI đã chỉnh sửa thumbnail thành công!'
-          : '✓ AI đã tạo thumbnail mới!';
+          ? 'AI đã chỉnh sửa thumbnail thành công!'
+          : 'AI đã tạo thumbnail mới!';
         toast(successMsg, 'success');
       } else {
         if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'AI thumbnail thất bại'; }
@@ -525,7 +528,7 @@ function procAiOwnsBlur() {
       if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
       toast('Lỗi: ' + e.message, 'error');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🤖'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'AI Tạo'; }
     }
   }
   window.generateThumbnailPreview = async function() {};

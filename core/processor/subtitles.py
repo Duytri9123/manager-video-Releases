@@ -34,11 +34,11 @@ def _fmt_srt_time(seconds: float) -> str:
 
 def _fmt_ass_time(seconds: float) -> str:
     """Format seconds → ASS timestamp h:mm:ss.cs"""
-    h, r = divmod(seconds, 3600)
-    m, r = divmod(r, 60)
-    s = int(r)
-    cs = int((r - s) * 100)
-    return f"{int(h)}:{int(m):02d}:{s:02d}.{cs:02d}"
+    total = max(0, round(seconds * 100))
+    h, remainder = divmod(total, 360000)
+    m, remainder = divmod(remainder, 6000)
+    s, cs = divmod(remainder, 100)
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
 def _sentence_parts(text: str) -> list[str]:
@@ -298,7 +298,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = ' '.join(text.split())
         if not text:
             continue
-        split_lines = _smart_split_display_lines(text, max_words=max_words_per_line)
+        split_lines = ([text] if seg.get("voice_aligned") else
+                       _smart_split_display_lines(text, max_words=max_words_per_line))
         total_len = sum(len(c) for c in split_lines) or 1
         seg_start = float(seg["start"])
         seg_end = float(seg["end"])
@@ -611,104 +612,55 @@ def align_subtitles_to_voice(
     min_gap: float = 0.08,
     max_speed_factor: float = 1.25,
 ) -> tuple[list[dict], list[dict]]:
-    """
-    Căn mốc thời gian phụ đề khớp chuẩn 100% theo thời lượng thực tế của giọng đọc (TTS).
-    
-    Phương án A:
-    1. Đo thời lượng thực tế (duration) của từng file âm thanh TTS vừa tạo.
-    2. Nếu tổng thời gian đọc của toàn bộ video vượt quá thời lượng video,
-       tự động điều chỉnh time-stretch nhẹ (tối đa max_speed_factor, mặc định 1.25x) bằng ffmpeg atempo.
-    3. Sắp xếp timeline liên tục (ripple alignment):
-       - Mỗi câu thoại bắt đầu đúng khi giọng đọc phát ra, kết thúc khi giọng đọc dứt.
-       - Tự động dịch chuyển các câu kế tiếp để không bao giờ bị đè âm thanh (giữ khoảng nghỉ min_gap).
-       - Khắc phục triệt để hiện tượng đọc quá nhanh (không còn auto-speed 2x-3x) và hiện tượng ngắt quãng.
-    
-    Returns:
-        (aligned_clips, aligned_segments)
+    """Anchor every utterance to the video; never ripple later speech forward.
+
+    A modest tempo correction fits long speech into its own window. If that
+    cannot fit naturally, fail explicitly instead of overlapping or truncating.
     """
     if not tts_clips or not segments:
         return tts_clips, segments
-
+    import math
     from core.processor.ffmpeg_base import _get_audio_duration
     from core.processor.tts import _apply_atempo
 
-    # Sắp xếp clips theo index
-    sorted_clips = sorted(
-        [c for c in tts_clips if c.get("index") is not None],
-        key=lambda c: int(c["index"])
-    )
-    if not sorted_clips:
-        sorted_clips = list(tts_clips)
+    ordered = sorted(enumerate(segments), key=lambda pair: float(pair[1]["start"]))
+    windows = {}
+    for position, (idx, seg) in enumerate(ordered):
+        start = max(0.0, float(seg["start"]))
+        end = float(seg["end"])
+        if position + 1 < len(ordered):
+            end = min(end, float(ordered[position + 1][1]["start"]) - min_gap)
+        if video_duration and video_duration > 0:
+            end = min(end, video_duration)
+        windows[idx] = (start, end)
 
-    # 1. Đo độ dài thực tế của từng clip
-    prepared_clips = []
-    for c in sorted_clips:
-        clip_copy = dict(c)
-        dur = float(clip_copy.get("duration") or 0.0)
-        path = Path(clip_copy.get("path") or "")
-        if dur <= 0 and path.exists():
-            dur = _get_audio_duration(ffmpeg, path)
-        idx = int(clip_copy.get("index", 0))
-        seg = segments[idx] if idx < len(segments) else {}
-        if dur <= 0:
-            dur = max(0.5, float(seg.get("end", 0.0)) - float(seg.get("start", 0.0)))
-        clip_copy["duration"] = dur
-        clip_copy["text"] = str(seg.get("text") or clip_copy.get("text") or "").strip()
-        prepared_clips.append(clip_copy)
-
-    # 2. Kiểm tra nếu tổng thời gian nói vượt quá thời lượng video
-    first_orig_start = max(0.0, float(segments[0].get("start", 0.0))) if segments else 0.0
-    total_raw_speech = sum(c["duration"] for c in prepared_clips) + max(0, len(prepared_clips) - 1) * min_gap
-    if video_duration and video_duration > 0:
-        avail_time = max(1.0, video_duration - first_orig_start - 0.2)
-        if total_raw_speech > avail_time and avail_time > 3.0:
-            needed_speed = total_raw_speech / avail_time
-            speed_factor = min(max_speed_factor, max(1.0, needed_speed))
-            if speed_factor > 1.05:
-                for c in prepared_clips:
-                    src_p = Path(c["path"])
-                    sped_p = src_p.parent / f"{src_p.stem}_sync.mp3"
-                    if _apply_atempo(ffmpeg, src_p, sped_p, speed_factor) and sped_p.exists() and sped_p.stat().st_size > 0:
-                        c["path"] = sped_p
-                        c["duration"] = _get_audio_duration(ffmpeg, sped_p)
-
-    # 3. Tính toán mốc thời gian start & end mới (Ripple alignment)
-    current_cursor = 0.0
-    aligned_clips: list[dict] = []
-    aligned_segments: list[dict] = []
-
-    for i, c in enumerate(prepared_clips):
-        idx = int(c.get("index", i))
-        seg = segments[idx] if idx < len(segments) else {}
-        orig_start = float(seg.get("start", 0.0))
-        dur = float(c["duration"])
-
-        if i == 0:
-            start_t = max(0.0, orig_start)
-        else:
-            if orig_start >= current_cursor + min_gap:
-                start_t = orig_start
-            else:
-                start_t = current_cursor + min_gap
-
-        end_t = start_t + dur
-        current_cursor = end_t
-
-        c_res = dict(c)
-        c_res["start"] = round(start_t, 3)
-        c_res["end"] = round(end_t, 3)
-        aligned_clips.append(c_res)
-
-        seg_res = {
-            "start": round(start_t, 3),
-            "end": round(end_t, 3),
-            "text": c["text"],
-        }
-        spk = seg.get("speaker") or c.get("speaker")
-        if spk:
-            seg_res["speaker"] = spk
-        aligned_segments.append(seg_res)
-
+    aligned_clips, aligned_segments = [], []
+    for original in sorted(tts_clips, key=lambda c: windows[int(c["index"])][0]):
+        clip = dict(original)
+        idx = int(clip["index"])
+        seg = segments[idx]
+        start, limit = windows[idx]
+        available = limit - start
+        duration = float(clip.get("duration") or _get_audio_duration(ffmpeg, Path(clip["path"])))
+        if not math.isfinite(duration) or duration <= 0 or available <= 0:
+            raise ValueError(f"Câu {idx + 1}: thời lượng âm thanh hoặc mốc phụ đề không hợp lệ")
+        if duration > available:
+            # Leave a small encoding margin and measure the resulting file again.
+            speed = duration / max(0.001, available - 0.02)
+            if speed > max_speed_factor:
+                raise ValueError(f"Câu {idx + 1} cần {duration:.2f}s nhưng chỉ có {available:.2f}s. "
+                                 "Hãy rút gọn câu hoặc chỉnh mốc ASS để giữ giọng tự nhiên.")
+            src = Path(clip["path"])
+            dst = src.with_name(src.stem + "_sync.wav")
+            if not _apply_atempo(ffmpeg, src, dst, speed):
+                raise ValueError(f"Không điều chỉnh được thời lượng câu {idx + 1}")
+            duration = _get_audio_duration(ffmpeg, dst)
+            if not math.isfinite(duration) or duration <= 0 or duration > available:
+                raise ValueError(f"Câu {idx + 1} vẫn vượt khoảng thời gian video sau khi căn giọng")
+            clip["path"] = dst
+        clip.update(start=start, end=start + duration, duration=duration)
+        aligned_clips.append(clip)
+        aligned_segments.append(dict(seg, start=start, end=start + duration, voice_aligned=True))
     return aligned_clips, aligned_segments
 
 
@@ -2203,7 +2155,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = ' '.join(text.split())
         if not text:
             continue
-        split_lines = _smart_split_display_lines(text, max_words=max_words_per_line)
+        split_lines = ([text] if seg.get("voice_aligned") else
+                       _smart_split_display_lines(text, max_words=max_words_per_line))
         total_len = sum(len(c) for c in split_lines) or 1
         seg_start = float(seg["start"])
         seg_end = float(seg["end"])

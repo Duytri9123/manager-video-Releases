@@ -126,7 +126,7 @@ function _ovClamp(v, min, max) {
       return (ov.text || 'Text').slice(0, 32);
     }
     if (ov.type === 'image') {
-      return '🖼️ ' + (ov.name || 'Ảnh');
+      return ' ' + (ov.name || 'Ảnh');
     }
     return 'Khối ' + _ovRoundPct(ov.width_pct) + '% × ' + _ovRoundPct(ov.height_pct) + '%';
   }
@@ -187,7 +187,7 @@ function _ovClamp(v, min, max) {
           <label style="font-size:11px;color:var(--text-muted,#8a8a93);margin-bottom:4px;display:block">Tệp hình ảnh</label>
           <div style="display:flex;gap:4px;height:38px">
             <input type="text" value="${_ovEsc(filename)}" readonly style="flex:1;font-size:11px;height:38px;box-sizing:border-box;padding:0 10px;border:1px solid var(--border,#dcdce2);border-radius:4px;background:var(--bg3,#f3f4f6)">
-            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 10px;height:38px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:4px" onclick="document.getElementById('ov-change-image-file').dataset.ovId = '${id}'; document.getElementById('ov-change-image-file').click()">📂 Đổi</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:0 10px;height:38px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:4px" onclick="document.getElementById('ov-change-image-file').dataset.ovId = '${id}'; document.getElementById('ov-change-image-file').click()"> Đổi</button>
           </div>
         </div>
         ${common}
@@ -254,9 +254,7 @@ function _ovClamp(v, min, max) {
               </label>
               <button type="button" style="border:none;background:transparent;padding:4px 6px;cursor:pointer;font-size:16px;color:#ef4444;line-height:1;vertical-align:middle;display:inline-flex;align-items:center" 
                 onclick="ovRemoveLayer('${_ovEsc(ov.id)}')" 
-                title="Xóa">
-                🗑️
-              </button>
+                title="Xóa">Xóa</button>
             </span>
           </div>
           <div class="ov-layer-body" onclick="if(!event.target.closest('input,select,textarea,button,label')) ovSelectLayer('${_ovEsc(ov.id)}', false, true)">
@@ -320,33 +318,33 @@ function _ovClamp(v, min, max) {
     if (!file) return;
     input.value = '';
 
-    if (typeof toast === 'function') toast('⏳ Đang tải hình ảnh lên...', 'info');
-    
+    if (typeof toast === 'function') toast(' Đang tải hình ảnh lên...', 'info');
+
     _uploadFileWithProgress(file, 'logo',
       function(pct) {
         if (typeof toast === 'function') {
-          toast('⏳ Đang tải hình ảnh: ' + pct + '%', 'info', { id: 'ov-add-img-upload', duration: 1500 });
+          toast(' Đang tải hình ảnh: ' + pct + '%', 'info', { id: 'ov-add-img-upload', duration: 1500 });
         }
       },
       function(d) {
         if (d.ok && d.path) {
           if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
           window._videoOverlays.forEach(x => { x.open = false; });
-          
+
           const ov = _ovDefault('image');
           ov.path = d.path;
           ov.name = file.name;
-          
+
           window._videoOverlays.push(ov);
           ovSelectLayer(ov.id, true);
-          
-          if (typeof toast === 'function') toast('✓ Đã tải lên hình ảnh: ' + file.name, 'success');
+
+          if (typeof toast === 'function') toast('+ Đã tải lên hình ảnh: ' + file.name, 'success');
         } else {
-          if (typeof toast === 'function') toast('✗ Tải lên hình ảnh thất bại: ' + (d.error || ''), 'error');
+          if (typeof toast === 'function') toast(' Tải lên hình ảnh thất bại: ' + (d.error || ''), 'error');
         }
       },
       function(err) {
-        if (typeof toast === 'function') toast('✗ Lỗi kết nối khi tải hình ảnh', 'error');
+        if (typeof toast === 'function') toast(' Lỗi kết nối khi tải hình ảnh', 'error');
       }
     );
   }
@@ -360,30 +358,30 @@ function _ovClamp(v, min, max) {
     const ov = _ovFind(id);
     if (!ov) return;
 
-    if (typeof toast === 'function') toast('⏳ Đang tải hình ảnh mới...', 'info');
+    if (typeof toast === 'function') toast(' Đang tải hình ảnh mới...', 'info');
 
     _uploadFileWithProgress(file, 'logo',
       function(pct) {
         if (typeof toast === 'function') {
-          toast('⏳ Đang tải hình ảnh: ' + pct + '%', 'info', { id: 'ov-change-img-upload', duration: 1500 });
+          toast(' Đang tải hình ảnh: ' + pct + '%', 'info', { id: 'ov-change-img-upload', duration: 1500 });
         }
       },
       function(d) {
         if (d.ok && d.path) {
           if (!window._pe2Restoring && window.pe2PushUndo) window.pe2PushUndo();
-          
+
           ov.path = d.path;
           ov.name = file.name;
-          
+
           ovRenderLayerList();
           if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
-          if (typeof toast === 'function') toast('✓ Đã đổi hình ảnh: ' + file.name, 'success');
+          if (typeof toast === 'function') toast('+ Đã đổi hình ảnh: ' + file.name, 'success');
         } else {
-          if (typeof toast === 'function') toast('✗ Tải lên hình ảnh thất bại: ' + (d.error || ''), 'error');
+          if (typeof toast === 'function') toast(' Tải lên hình ảnh thất bại: ' + (d.error || ''), 'error');
         }
       },
       function(err) {
-        if (typeof toast === 'function') toast('✗ Lỗi kết nối khi đổi hình ảnh', 'error');
+        if (typeof toast === 'function') toast(' Lỗi kết nối khi đổi hình ảnh', 'error');
       }
     );
   }
@@ -478,9 +476,21 @@ function _ovClamp(v, min, max) {
     return { x: cx - boxW / 2, y: cy - boxH / 2, w: boxW, h: boxH };
   }
   function _drawVideoOverlaysOnCanvas(ctx, vidX, vidY, vidW, vidH) {
-    window._lastCanvasOverlayBoxes = window._lastCanvasOverlayBoxes || {};
+    window._lastCanvasOverlayBoxes = {};
     (window._videoOverlays || []).filter(ov => ov.enabled !== false && _ovVisibleAtPreviewTime(ov)).forEach(ov => {
-      if (ov.type === 'rect') {
+      if (ov.type === 'text') {
+        const box = _drawOverlayText(ctx, ov, vidX, vidY, vidW, vidH);
+        if (!box) return;
+        window._lastCanvasOverlayBoxes[ov.id] = {
+          left: (box.x - vidX) / vidW, right: (box.x + box.w - vidX) / vidW,
+          top: (box.y - vidY) / vidH, bottom: (box.y + box.h - vidY) / vidH,
+          x: (box.x + box.w / 2 - vidX) / vidW, y: (box.y + box.h / 2 - vidY) / vidH,
+          w: box.w / vidW, h: box.h / vidH
+        };
+        if (window._pe2Sel?.type === 'overlay' && String(window._pe2Sel.id) === String(ov.id)) {
+          _drawCanvasSelection(ctx, box.x, box.y, box.w, box.h, true, false);
+        }
+      } else if (ov.type === 'rect') {
         const rw = vidW * Math.max(0.01, Math.min(1, ov.width_pct || 0.8));
         const rh = vidH * Math.max(0.01, Math.min(1, ov.height_pct || 0.12));
         const rx = vidX + vidW * Math.max(0, Math.min(1, ov.x_pct ?? 0.5)) - rw / 2;
@@ -553,7 +563,7 @@ function _ovClamp(v, min, max) {
     wrap.querySelectorAll('.video-overlay-el').forEach(el => el.remove());
     (window._videoOverlays || []).filter(ov => ov.enabled !== false && _ovVisibleAtPreviewTime(ov)).forEach(ov => {
       if (ov.type === 'text' && !String(ov.text || '').trim()) return;
-      
+
       const el = document.createElement('div');
       el.className = 'video-overlay-el type-' + ov.type;
       el.dataset.ovId = ov.id;
@@ -571,7 +581,7 @@ function _ovClamp(v, min, max) {
         el.style.width = w + 'px';
         el.style.height = h + 'px';
         el.style.opacity = ov.opacity ?? 1.0;
-        
+
         el.style.backgroundImage = `url("${_ovResolveUrl(ov.path)}")`;
         el.style.backgroundSize = 'contain';
         el.style.backgroundPosition = 'center';
@@ -684,7 +694,7 @@ function _ovClamp(v, min, max) {
       _savePresetsMap(map);
       // Keep legacy v1 in sync with the most recently saved preset for backward compat
       try { localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data)); } catch (_) {}
-      toast(`✅ Đã lưu cài đặt mặc định cho ${aspect.replace('x', ':')}`, 'success');
+      toast(` Đã lưu cài đặt mặc định cho ${aspect.replace('x', ':')}`, 'success');
       _updateAspectBadge();
     } catch (e) {
       toast('Lỗi lưu: ' + e.message, 'error');
@@ -727,7 +737,7 @@ function _ovClamp(v, min, max) {
       if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
       // Sync time input display after restore
       if (typeof window.pe2SyncPlayhead === 'function') window.pe2SyncPlayhead();
-      toast(`✅ Đã khôi phục cài đặt cho tỉ lệ ${aspect.replace('x', ':')}`, 'success');
+      toast(` Đã khôi phục cài đặt cho tỉ lệ ${aspect.replace('x', ':')}`, 'success');
     } catch (e) {
       toast('Lỗi khôi phục: ' + e.message, 'error');
     }

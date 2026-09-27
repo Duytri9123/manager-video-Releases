@@ -36,8 +36,8 @@
     if (!badge) return;
     const a = window._procActiveAspect;
     const override = _getAspectOverride();
-    const label = a === '9x16' ? '📱 9:16 (dọc)' : '🖥 16:9 (ngang)';
-    badge.textContent = override === 'auto' ? `📐 ${label} • tự nhận diện` : `📐 ${label} • thủ công`;
+    const label = a === '9x16' ? ' 9:16 (dọc)' : ' 16:9 (ngang)';
+    badge.textContent = override === 'auto' ? ` ${label} • tự nhận diện` : ` ${label} • thủ công`;
     badge.style.display = 'inline-block';
   }
 
@@ -194,7 +194,7 @@
       try { localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data)); } catch (_) {}
       if (!silent) {
         const stepNames = { 1: 'Bước 1 (Nguồn & Dịch)', 2: 'Bước 2 (Khung hình & Sub)', 3: 'Bước 3 (AI & Lồng tiếng)' };
-        const msg = `✅ Đã lưu ${stepNames[stepNum] || 'cài đặt'} vào cấu hình mặc định ${aspect.replace('x', ':')} trong trình duyệt.`;
+        const msg = ` Đã lưu ${stepNames[stepNum] || 'cài đặt'} vào cấu hình mặc định ${aspect.replace('x', ':')} trong trình duyệt.`;
         if (typeof toast === 'function') toast(msg, 'success');
       }
       _updateAspectBadge();
@@ -223,7 +223,7 @@
       _savePresetsMap(map);
       try { localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data)); } catch (_) {}
       if (!silent && typeof toast === 'function') {
-        toast(`✅ Đã lưu cài đặt mặc định cho ${aspect.replace('x', ':')}`, 'success');
+        toast(` Đã lưu cài đặt mặc định cho ${aspect.replace('x', ':')}`, 'success');
       }
       _updateAspectBadge();
     } catch (e) {
@@ -587,7 +587,7 @@
     if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
 
     if (typeof toast === 'function') {
-      toast(`✅ Đã áp dụng cấu hình: ${profileName}`, 'success');
+      toast(` Đã áp dụng cấu hình: ${profileName}`, 'success');
     }
   }
   window.pe2ApplyNamedProfile = pe2ApplyNamedProfile;
@@ -654,7 +654,7 @@
       _pe2ServerProfiles[name] = custom[name];
       savedToServer = true;
     } catch (error) {
-      if (typeof toast === 'function') toast(`⚠ Cấu hình “${name}” (${type}, ${aspect.replace('x', ':')}) chỉ được lưu trong trình duyệt; chưa lưu vào hệ thống: ${error.message}`, 'warning');
+      if (typeof toast === 'function') toast(` Cấu hình “${name}” (${type}, ${aspect.replace('x', ':')}) chỉ được lưu trong trình duyệt; chưa lưu vào hệ thống: ${error.message}`, 'warning');
     }
 
     pe2PopulateProfileSelects(name);
@@ -663,7 +663,7 @@
     if (drawer) drawer.style.display = 'none';
 
     if (savedToServer && typeof toast === 'function') {
-      toast(`✅ Đã lưu cấu hình “${name}” (${type}, ${aspect.replace('x', ':')}) vào hệ thống và trình duyệt.`, 'success');
+      toast(` Đã lưu cấu hình “${name}” (${type}, ${aspect.replace('x', ':')}) vào hệ thống và trình duyệt.`, 'success');
     }
   }
   window.pe2SaveNamedProfile = pe2SaveNamedProfile;
@@ -697,7 +697,7 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       delete _pe2ServerProfiles[profileName];
     } catch (error) {
-      if (typeof toast === 'function') toast(`⚠ Đã xóa trong trình duyệt nhưng chưa xóa được dữ liệu hệ thống: ${error.message}`, 'warning');
+      if (typeof toast === 'function') toast(` Đã xóa trong trình duyệt nhưng chưa xóa được dữ liệu hệ thống: ${error.message}`, 'warning');
     }
 
     delete custom[profileName];
@@ -710,7 +710,7 @@
 
     pe2PopulateProfileSelects('');
     if (typeof toast === 'function') {
-      toast(`🗑 Đã xóa cấu hình: ${profileName}`, 'info');
+      toast(` Đã xóa cấu hình: ${profileName}`, 'info');
     }
   }
   window.pe2DeleteNamedProfile = pe2DeleteNamedProfile;

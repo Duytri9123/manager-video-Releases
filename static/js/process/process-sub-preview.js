@@ -76,7 +76,7 @@ async function onTranscribeProviderChanged(restoreValue) {
 
   const optLoading = document.createElement('option');
   optLoading.value = '';
-  optLoading.textContent = `⏳ Đang tải mô hình từ ${provider}...`;
+  optLoading.textContent = `Đang tải mô hình từ ${provider}...`;
   modelSel.appendChild(optLoading);
 
   try {
@@ -134,7 +134,7 @@ async function onTranslationProviderChanged(restoreValue) {
 
   // If select is empty or has only 1 placeholder option, show loading state
   if (modelSel.options.length <= 1) {
-    modelSel.innerHTML = '<option value="">⏳ Đang tải mô hình...</option>';
+    modelSel.innerHTML = '<option value="">Đang tải mô hình...</option>';
   }
 
   try {
@@ -537,7 +537,7 @@ if (document.readyState === 'loading') {
       player.style.display = 'none';
     }
 
-    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
     if (ph)  ph.textContent = 'Đang tải frame...';
 
     try {
@@ -609,7 +609,7 @@ if (document.readyState === 'loading') {
         }
         if (ph) ph.style.display = 'none';
         if (data.source === 'thumbnail') {
-          toast('📷 Đã lấy thumbnail từ URL', 'success');
+          toast('Đã lấy thumbnail từ URL', 'success');
         }
       } else {
         if (ph) { ph.style.display = 'block'; ph.textContent = data.error || 'Không lấy được frame'; }
@@ -619,7 +619,7 @@ if (document.readyState === 'loading') {
       if (ph) { ph.style.display = 'block'; ph.textContent = 'Lỗi: ' + e.message; }
       toast('Lỗi: ' + e.message, 'error');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '📷 Lấy frame'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Lấy frame'; }
     }
   }
 
