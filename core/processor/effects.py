@@ -284,6 +284,7 @@ def _normalize_video_overlays(raw) -> list[dict]:
                 "color": _normalize_hex_rgb(item.get("color"), "#FFFFFF"),
                 "box_color": _normalize_hex_rgb(item.get("box_color"), "#000000"),
                 "box_opacity": pct("box_opacity", 0.5),
+                "text_opacity": pct("text_opacity", 1.0),
                 "start_sec": start_sec,
                 "end_sec": end_sec,
             })
@@ -372,7 +373,7 @@ def _append_video_overlay_filters(
             y_pct = _clamp_float(ov.get("y_pct", 0.18), 0.0, 1.0)
             x_expr = f"{bx:.3f}+{bw:.3f}*{x_pct:.6f}-text_w/2"
             y_expr = f"{by:.3f}+{bh:.3f}*{y_pct:.6f}-text_h/2"
-            font_color = _ffmpeg_color(ov.get("color", "#FFFFFF"), 1.0)
+            font_color = _ffmpeg_color(ov.get("color", "#FFFFFF"), _clamp_float(ov.get("text_opacity", 1.0), 0.0, 1.0))
             box_opacity = _clamp_float(ov.get("box_opacity", 0.5), 0.0, 1.0)
             if box_opacity > 0.001:
                 box_color = _ffmpeg_color(ov.get("box_color", "#000000"), box_opacity)
@@ -1499,3 +1500,14 @@ def generate_thumbnail(
     if output_path.exists() and output_path.stat().st_size > 0:
         return True, str(output_path)
     return False, "Không tạo được thumbnail"
+
+def _parse_content_aspect(value):
+    """Accept custom positive W:H ratios and legacy WxH saved profiles."""
+    match = re.fullmatch(r"\s*(\d+(?:[.,]\d+)?)\s*[:xX/×]\s*(\d+(?:[.,]\d+)?)\s*", str(value or ""))
+    if not match:
+        return None
+    width, height = (float(part.replace(",", ".")) for part in match.groups())
+    if not (0 < width < float("inf") and 0 < height < float("inf")):
+        return None
+    ratio = width / height
+    return ratio if 0 < ratio < float("inf") else None

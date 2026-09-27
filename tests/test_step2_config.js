@@ -46,3 +46,27 @@ const cloned = sandbox.window.collectProfileProcessConfig({processing:snapshot})
 cloned.vol_orig = 1;
 assert.equal(snapshot.vol_orig, 0);
 console.log('Step 2 config regressions passed');
+elements['frame-title'] = {value: '', dataset: {aiTitle: 'Tiêu đề video trước'}};
+sandbox.window._procUseAiAnalysis = true;
+sandbox.window._procVideoAiAnalysis = {video_path:'old.mp4', result:{title_suggestions:{short:'Tiêu đề cũ'}}};
+config = sandbox.collectProcessConfig('new.mp4');
+assert.equal(config.frame_title, '');
+assert.equal(config.frame_title_auto, true);
+assert.equal(config.ai_video_analysis, null);
+elements['frame-title'].value = 'Tiêu đề video trước';
+assert.equal(sandbox.collectProcessConfig('new.mp4').frame_title, '');
+elements['frame-title'].value = 'Tiêu đề nhập tay';
+assert.equal(sandbox.collectProcessConfig('new.mp4').frame_title, 'Tiêu đề nhập tay');
+assert.equal(sandbox.collectProcessConfig('new.mp4').frame_title_auto, false);
+console.log('Per-video automatic titles do not leak to the next video');
+
+elements['proc-content-aspect'] = {value:'3x4'};
+elements['proc-mask-mode'] = {value:'patch'};
+elements['proc-mask-source-x'] = {value:'0'};
+elements['proc-mask-source-y'] = {value:'75'};
+config = sandbox.collectProcessConfig();
+assert.equal(config.content_aspect, '3x4');
+assert.equal(config.mask_config.mode, 'patch');
+assert.equal(config.mask_config.source_x, 0);
+assert.equal(config.mask_config.source_y, .75);
+console.log('Inner aspect and sample region config passed');

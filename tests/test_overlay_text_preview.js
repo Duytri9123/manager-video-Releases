@@ -22,3 +22,12 @@ sandbox._drawVideoOverlaysOnCanvas(ctx, 0, 0, 500, 800);
 assert.equal(Object.keys(sandbox.window._lastCanvasOverlayBoxes).length, 0);
 assert.equal(rendered.length, 1);
 console.log('Text canvas rendering and timed hitboxes passed');
+
+const editor = fs.readFileSync('static/js/process/process-frame-editor.js','utf8');
+vm.runInContext(editor.slice(editor.indexOf('function ovUpdateLayer('), editor.indexOf("  window.addEventListener('resize'")), sandbox);
+sandbox.ovUpdateLayer('text','text_opacity',.25,true);
+assert.equal(sandbox.window._videoOverlays[0].text_opacity,.25);
+time=2;
+sandbox._drawVideoOverlaysOnCanvas(ctx,0,0,500,800);
+assert.equal(ctx.globalAlpha,.25);
+console.log('Text opacity editing and canvas alpha passed');

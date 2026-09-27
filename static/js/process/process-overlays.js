@@ -38,7 +38,7 @@ function _ovClamp(v, min, max) {
         id: _ovNewId(), type: 'text', enabled: true, open: true,
         text: 'Text mới', x_pct: 0.50, y_pct: 0.18, size_pct: 0.05,
         weight: 700, padding_pct: 0.55,
-        color: '#ffffff', box_color: '#000000', box_opacity: 0.50,
+        color: '#ffffff', box_color: '#000000', box_opacity: 0.50, text_opacity: 1,
         start_sec: '', end_sec: ''
       };
     }
@@ -75,6 +75,7 @@ function _ovClamp(v, min, max) {
       base.padding_pct = _ovClamp(raw.padding_pct ?? base.padding_pct, 0, 1.5);
       base.color = _ovHexValue(raw.color, base.color);
       base.box_color = _ovHexValue(raw.box_color, base.box_color);
+      base.text_opacity = _ovClamp(raw.text_opacity ?? 1, 0, 1);
       base.box_opacity = _ovClamp(raw.box_opacity ?? base.box_opacity, 0, 1);
     } else if (type === 'image') {
       base.path = String(raw.path ?? base.path);
@@ -161,7 +162,7 @@ function _ovClamp(v, min, max) {
           <div class="field"><label>Cỡ %</label><input type="number" value="${_ovRoundPct(ov.size_pct)}" min="1" max="30" step="0.5" oninput="ovUpdateLayer('${id}','size_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
           <div class="field"><label>Độ đậm</label><select style="height:38px" oninput="ovUpdateLayer('${id}','weight',parseInt(this.value,10),true)" onchange="ovRenderLayerList()">${_ovWeightOptions(ov.weight)}</select></div>
           <div class="field"><label>Lề text %</label><input type="number" value="${Math.round((ov.padding_pct ?? 0.55) * 100)}" min="0" max="150" step="5" oninput="ovUpdateLayer('${id}','padding_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+          <div style="display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
             <div class="field">
               <label>Màu chữ</label>
               <div style="display:flex;gap:4px;align-items:center">
@@ -178,6 +179,7 @@ function _ovClamp(v, min, max) {
             </div>
           </div>
         </div>
+        <div class="field"><label>Độ mờ chữ ${Math.round((1-(ov.text_opacity ?? 1))*100)}%</label><input aria-label="Độ mờ chữ" type="range" min="0" max="100" value="${Math.round((1-(ov.text_opacity ?? 1))*100)}" oninput="ovUpdateLayer('${id}','text_opacity',1-this.value/100,true)" onchange="ovRenderLayerList()"></div>
         <div class="field"><label>Nền text ${Math.round((ov.box_opacity || 0) * 100)}%</label><input type="range" min="0" max="100" step="5" value="${Math.round((ov.box_opacity || 0) * 100)}" style="width:100%" oninput="ovUpdateLayer('${id}','box_opacity',this.value/100,true)" onchange="ovRenderLayerList()"></div>`;
     }
     if (ov.type === 'image') {
@@ -240,12 +242,12 @@ function _ovClamp(v, min, max) {
             <span class="ov-layer-actions" onclick="event.stopPropagation()">
               <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 5px;height:24px;line-height:1;border-radius:4px" 
                 onclick="ovMoveLayerUp('${_ovEsc(ov.id)}')" 
-                title="Đưa lên trên (ưu tiên hiển thị)" ${idx === 0 ? 'disabled style="opacity:0.3;padding:2px 5px;height:24px"' : ''}>
+                title="Đưa lên trên (ưu tiên hiển thị)" ${idx === 0 ? 'disabled' : ''}>
                 ▲
               </button>
               <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 5px;height:24px;line-height:1;border-radius:4px" 
                 onclick="ovMoveLayerDown('${_ovEsc(ov.id)}')" 
-                title="Đưa xuống dưới" ${idx === totalLayers - 1 ? 'disabled style="opacity:0.3;padding:2px 5px;height:24px"' : ''}>
+                title="Đưa xuống dưới" ${idx === totalLayers - 1 ? 'disabled' : ''}>
                 ▼
               </button>
               <label class="pe2-switch" title="${ov.enabled ? 'Ẩn' : 'Hiện'}" onclick="event.stopPropagation();">
@@ -254,7 +256,7 @@ function _ovClamp(v, min, max) {
               </label>
               <button type="button" style="border:none;background:transparent;padding:4px 6px;cursor:pointer;font-size:16px;color:#ef4444;line-height:1;vertical-align:middle;display:inline-flex;align-items:center" 
                 onclick="ovRemoveLayer('${_ovEsc(ov.id)}')" 
-                title="Xóa">Xóa</button>
+                title="Xóa" aria-label="Xóa lớp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
             </span>
           </div>
           <div class="ov-layer-body" onclick="if(!event.target.closest('input,select,textarea,button,label')) ovSelectLayer('${_ovEsc(ov.id)}', false, true)">
@@ -411,6 +413,7 @@ function _ovClamp(v, min, max) {
         out.color = ov.color;
         out.box_color = ov.box_color;
         out.box_opacity = ov.box_opacity;
+        out.text_opacity = ov.text_opacity;
       } else if (ov.type === 'image') {
         out.path = ov.path;
         out.name = ov.name;
@@ -466,6 +469,7 @@ function _ovClamp(v, min, max) {
       ctx.fill();
     }
     ctx.fillStyle = ov.color || '#ffffff';
+    ctx.globalAlpha = ov.text_opacity ?? 1;
     ctx.shadowColor = 'rgba(0,0,0,0.85)';
     ctx.shadowBlur = 4;
     lines.forEach((l, i) => {
@@ -611,8 +615,8 @@ function _ovClamp(v, min, max) {
         el.style.wordBreak = 'break-word';
         el.style.font = `${weight} ${Math.max(8, Math.round(dispH * (ov.size_pct || 0.05)))}px Arial, sans-serif`;
         el.style.lineHeight = '1.25';
-        el.style.color = ov.color || '#ffffff';
-        el.style.textShadow = '0 2px 6px rgba(0,0,0,.85)';
+        el.style.color = _ovRgba(ov.color || '#ffffff', ov.text_opacity ?? 1);
+        el.style.textShadow = `0 2px 6px rgba(0,0,0,${.85 * (ov.text_opacity ?? 1)})`;
         el.style.padding = (padMul * 0.65) + 'em ' + padMul + 'em';
         el.style.borderRadius = '0.35em';
         el.style.background = _ovRgba(ov.box_color || '#000000', ov.box_opacity || 0);

@@ -68,6 +68,16 @@
   #page-process #step3-start-card, #page-process #step3-config-card { height:auto;flex-shrink:0; }
   #page-process .step1-grid-layout > :first-child > .card { flex-shrink:0; }
   #page-process #step3-log { overflow-y:auto;overflow-wrap:anywhere;min-height:0; }
+  #page-process #proc-ass-review-card { flex:0 0 auto;min-height:0; }
+  #page-process #proc-ass-review-card .card-header { flex-wrap:wrap;gap:8px; }
+  #page-process #proc-ass-review-card .card-body { display:flex;flex-direction:column;min-height:0; }
+  #page-process #proc-ass-review-path { white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  #page-process #proc-ass-review-content {
+    height:clamp(100px,25dvh,220px);min-height:0;max-height:220px;
+    flex:0 0 auto;overflow-y:auto;resize:none !important;
+  }
+  #page-process #proc-ass-review-actions { flex:0 0 auto;flex-wrap:wrap;padding-top:8px; }
+  #page-process #proc-ass-review-actions .btn { min-height:36px;height:auto !important;white-space:normal; }
   #page-process .proc-reuse-card input, #page-process .proc-reuse-card select { width:100%;min-width:0; }
   @media (min-width:1024px) {
     #page-process .step1-grid-layout,

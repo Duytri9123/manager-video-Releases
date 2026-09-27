@@ -802,8 +802,12 @@ window._batchQueue = window._batchQueue || [];
     const card = document.getElementById('proc-ass-review-card');
     const pathEl = document.getElementById('proc-ass-review-path');
     const ta = document.getElementById('proc-ass-review-content');
-    if (pathEl) pathEl.textContent = ' ' + assPath;
-    if (ta) ta.value = content || '';
+    if (pathEl) { pathEl.textContent = assPath; pathEl.title = assPath; }
+    if (ta) {
+      ta.value = content || '';
+      ta.style.removeProperty('height');
+      ta.scrollTop = 0;
+    }
     if (card) {
       card.style.display = 'block';
       // Auto-navigate to step 3 so user sees the review panel

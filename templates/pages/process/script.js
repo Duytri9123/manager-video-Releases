@@ -1735,7 +1735,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     skip_ass_review:  (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
     skip_ass:         (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
     burn_subs:        (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn')?.checked ?? true),
-    blur_original:    (window._procUseAiAnalysis && window._procVideoAiAnalysis?.result) ? false : (document.getElementById('proc-blur-original')?.checked ?? true),
+    blur_original:    (window._procUseAiAnalysis && window._procVideoAiAnalysis?.video_path === videoPath && window._procVideoAiAnalysis?.result) ? false : (document.getElementById('proc-blur-original')?.checked ?? true),
     blur_by_subtitles: document.getElementById('proc-blur-by-subtitles')?.checked ?? false,
     blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
     blur_width_pct:   parseFloat(document.getElementById('proc-blur-width')?.value || '80') / 100,
@@ -1748,7 +1748,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
       return (v !== '' && v !== undefined) ? parseFloat(v) / 100 : null;  // null = 50%
     })(),
     blur_zone:        'bottom',  // legacy compat
-    blur_extra_zones: (window._procExtraBlurZones || []).filter(z => !(window._procUseAiAnalysis && window._procVideoAiAnalysis?.result) || z.source === 'ai' || z.zone === 'ai').map(z => ({
+    blur_extra_zones: (window._procExtraBlurZones || []).filter(z => !(window._procUseAiAnalysis && window._procVideoAiAnalysis?.video_path === videoPath && window._procVideoAiAnalysis?.result) || z.source === 'ai' || z.zone === 'ai').map(z => ({
       height_pct: (z.height || 12) / 100,
       position_pct: (z.position || 50) / 100,
       width_pct: (z.width || 80) / 100,
@@ -1821,6 +1821,8 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     capcut_enabled:   document.getElementById('proc-capcut-enabled')?.checked ?? false,
     capcut_auto_open: document.getElementById('proc-capcut-auto-open')?.checked ?? false,
     // Video mode: only convert when the source orientation differs from the selected mode.
+    content_aspect: document.getElementById('proc-content-aspect')?.value || 'auto',
+    mask_config: {mode: document.getElementById('proc-mask-mode')?.value || 'blur', source_x: Number(document.getElementById('proc-mask-source-x')?.value ?? 50)/100, source_y: Number(document.getElementById('proc-mask-source-y')?.value ?? 75)/100},
     target_aspect: document.getElementById('proc-preview-aspect')?.value || 'auto',
     output_fps: Number(document.getElementById('proc-output-fps')?.value || 0),
     encode_device: document.getElementById('proc-encode-device')?.value || 'auto',
@@ -1828,7 +1830,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     aspect_pad_blur: document.getElementById('proc-aspect-blur-bg')?.checked ?? false,
     // Frame video (step 6)
     frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
-    frame_title:          document.getElementById('frame-title')?.value || '',
+    frame_title:          document.getElementById('frame-title')?.value === document.getElementById('frame-title')?.dataset?.aiTitle ? '' : (document.getElementById('frame-title')?.value || ''),
     frame_title_auto:     !document.getElementById('frame-title')?.value?.trim() || document.getElementById('frame-title')?.value === document.getElementById('frame-title')?.dataset?.aiTitle,
     frame_title_enabled:  document.getElementById('frame-title-enabled')?.checked ?? true,
     frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
@@ -1858,8 +1860,8 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
     video_overlays:       (typeof window._collectVideoOverlays === 'function') ? window._collectVideoOverlays() : [],
-    ai_video_analysis:    (window._procUseAiAnalysis && window._procVideoAiAnalysis?.result) ? window._procVideoAiAnalysis.result : null,
-    ai_video_analysis_text: (window._procUseAiAnalysis && window._procVideoAiAnalysis?.analysis_text) ? window._procVideoAiAnalysis.analysis_text : '',
+    ai_video_analysis:    (window._procUseAiAnalysis && window._procVideoAiAnalysis?.video_path === videoPath && window._procVideoAiAnalysis?.result) ? window._procVideoAiAnalysis.result : null,
+    ai_video_analysis_text: (window._procUseAiAnalysis && window._procVideoAiAnalysis?.video_path === videoPath && window._procVideoAiAnalysis?.analysis_text) ? window._procVideoAiAnalysis.analysis_text : '',
     // Thumbnail flow disabled by request.
     thumb_enabled:        false,
     thumb_mode:           'none',
@@ -2012,8 +2014,9 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
             if (d.frame_title && document.getElementById('frame-title-enabled')?.checked) {
               const input = document.getElementById('frame-title');
               if (input && (!input.value.trim() || input.value === input.dataset.aiTitle)) {
-                input.value = d.frame_title;
+                if (input.value === input.dataset.aiTitle) input.value = "";
                 input.dataset.aiTitle = d.frame_title;
+                input.dataset.aiVideoPath = videoPath;
                 if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
               }
             }

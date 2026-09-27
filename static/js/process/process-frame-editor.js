@@ -1,3 +1,17 @@
+function procParseContentAspect(value) {
+  const m = String(value || '').match(/^\s*(\d+(?:[.,]\d+)?)\s*[:xX/×]\s*(\d+(?:[.,]\d+)?)\s*$/);
+  if (!m) return null;
+  const w = Number(m[1].replace(',', '.')), h = Number(m[2].replace(',', '.'));
+  const ratio = w / h;
+  return w > 0 && h > 0 && Number.isFinite(w) && Number.isFinite(h) && Number.isFinite(ratio) && ratio > 0 ? ratio : null;
+}
+function procContentAspectInput(input) {
+  const valid = !input.value.trim() || input.value.trim() === 'auto' || procParseContentAspect(input.value) !== null;
+  input.setCustomValidity(valid ? '' : 'Nhập tỉ lệ hợp lệ, ví dụ 3:4 hoặc 4:5.');
+  input.setAttribute('aria-invalid', String(!valid));
+  document.getElementById('proc-content-aspect-error').hidden = valid;
+  framePreviewUpdate();
+}
 function subPreviewUpdate() {
   const fsInput = document.getElementById('proc-font-size');
   const fsSlider = document.getElementById('proc-font-size-slider');
@@ -72,7 +86,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     else if (key === 'size_pct') ov.size_pct = _ovClamp(value, 0.01, 0.30);
     else if (key === 'weight') ov.weight = Math.max(300, Math.min(900, parseInt(value, 10) || 700));
     else if (key === 'padding_pct') ov.padding_pct = _ovClamp(value, 0, 1.5);
-    else if (key === 'box_opacity' || key === 'opacity') ov[key] = _ovClamp(value, 0, 1);
+    else if (key === 'box_opacity' || key === 'opacity' || key === 'text_opacity') ov[key] = _ovClamp(value, 0, 1);
     else if (key === 'radius_pct') ov.radius_pct = _ovClamp(value, 0, 0.5);
     else if (key === 'width_pct' || key === 'height_pct') ov[key] = _ovClamp(value, 0.01, 1);
     else if (key === 'x_pct' || key === 'y_pct') ov[key] = _ovClamp(value, 0, 1);
@@ -150,7 +164,10 @@ function ovSelectLayer(id, open, skipSubUpdate) {
 
     const frameEnabled = document.getElementById('frame-enabled')?.checked ?? false;
     const titleEnabled = frameEnabled && (document.getElementById('frame-title-enabled')?.checked ?? true);
-    const title       = titleEnabled ? (document.getElementById('frame-title')?.value || '') : '';
+    const titleInput = document.getElementById('frame-title');
+    const previewPath = typeof _procAiVideoPath === 'function' ? _procAiVideoPath() : '';
+    const autoTitle = previewPath && titleInput?.dataset.aiVideoPath === previewPath ? titleInput.dataset.aiTitle : '';
+    const title = titleEnabled ? (titleInput?.value || autoTitle || '') : '';
     const hasTitle    = titleEnabled && title.trim();
     const titleSizePct= parseFloat(document.getElementById('frame-title-size')?.value || 5);
     const titleWeight = Math.max(300, Math.min(900, parseInt(document.getElementById('frame-title-weight')?.value || 400, 10) || 400));
@@ -452,7 +469,8 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     const sourceIsVertical = srcNH > srcNW;
     const isForced = (aspectValue === '16x9' || aspectValue === '9x16');
     const targetAspect = isForced ? aspectValue : (sourceIsVertical ? '9x16' : '16x9');
-    const shouldConvert = isForced && (
+    const contentRatio = procParseContentAspect(document.getElementById('proc-content-aspect')?.value);
+    const shouldConvert = !!contentRatio || isForced && (
       (aspectValue === '9x16' && !sourceIsVertical) ||
       (aspectValue === '16x9' && sourceIsVertical)
     );
@@ -474,8 +492,8 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       composed.height = cH;
       composed.getContext('2d').drawImage(canvas, 0, 0);
 
-      finalCW = targetAspect === '9x16' ? 1080 : 1920;
-      finalCH = targetAspect === '9x16' ? 1920 : 1080;
+      finalCW = !isForced && contentRatio ? cW : (targetAspect === '9x16' ? 1080 : 1920);
+      finalCH = !isForced && contentRatio ? cH : (targetAspect === '9x16' ? 1920 : 1080);
       canvas.width = finalCW;
       canvas.height = finalCH;
       const outCtx = canvas.getContext('2d');
@@ -492,12 +510,15 @@ function ovSelectLayer(id, open, skipSubUpdate) {
         outCtx.restore();
       }
 
-      fgScale = Math.min(finalCW / cW, finalCH / cH);
+      const innerW = contentRatio ? Math.max(2,Math.floor(Math.min(finalCW, finalCH*contentRatio)/2)*2) : finalCW;
+      const innerH = contentRatio ? Math.max(2,Math.floor(Math.min(finalCH, finalCW/contentRatio)/2)*2) : finalCH;
+      fgScale = contentRatio ? Math.max(innerW/cW,innerH/cH) : Math.min(finalCW / cW, finalCH / cH);
       const fgW = cW * fgScale;
       const fgH = cH * fgScale;
       fgX = (finalCW - fgW) / 2;
       fgY = (finalCH - fgH) / 2;
-      outCtx.drawImage(composed, fgX, fgY, fgW, fgH);
+      outCtx.save(); outCtx.beginPath(); outCtx.rect((finalCW-innerW)/2,(finalCH-innerH)/2,innerW,innerH); outCtx.clip();
+      outCtx.drawImage(composed, fgX, fgY, fgW, fgH); outCtx.restore();
 
       finalVidX = fgX + vidX * fgScale;
       finalVidY = fgY + vidY * fgScale;

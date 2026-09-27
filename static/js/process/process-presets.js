@@ -92,6 +92,10 @@
     { id:'proc-blur-original',  type:'checkbox' },
     { id:'proc-blur-by-subtitles', type:'checkbox' },
     { id:'proc-blur-height',    type:'value' },
+    { id:'proc-mask-mode', type:'value' },
+    { id:'proc-mask-source-x', type:'value' },
+    { id:'proc-mask-source-y', type:'value' },
+    { id:'proc-content-aspect', type:'value' },
     { id:'proc-blur-width',     type:'value' },
     { id:'proc-blur-zone',      type:'value' },
     { id:'proc-blur-x',         type:'value' },
@@ -163,7 +167,7 @@
 
   const _STEP_FIELD_IDS = {
     1: ['proc-lang', 'proc-target-lang', 'proc-trans-provider-model', 'proc-ai-video-auto', 'proc-ai-video-samples', 'proc-ai-video-nine-model', 'proc-auto-flow', 'step3-skip-ass', 'proc-skip-transcription', 'batch-auto-drain', 'proc-batch-resolution', 'proc-batch-cookie'],
-    2: ['proc-aspect-blur-bg', 'proc-burn', 'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-blur-height', 'proc-blur-width', 'proc-blur-zone', 'proc-blur-x', 'proc-blur-y', 'proc-font-size', 'proc-font-color', 'proc-font-color-picker', 'proc-font-color-hex', 'proc-margin-v', 'proc-outline-width', 'proc-font-bold', 'proc-font-weight', 'proc-sub-pos', 'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y', 'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex', 'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'ov-layers-json', 'sub-preview-sample', 'sub-preview-ts', 'proc-capcut-enabled', 'proc-capcut-auto-open', 'proc-vol-orig', 'proc-ext-audio-enabled', 'proc-ext-audios-json', 'proc-out'],
+    2: ['proc-mask-mode','proc-mask-source-x','proc-mask-source-y','proc-content-aspect', 'proc-aspect-blur-bg', 'proc-burn', 'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-blur-height', 'proc-blur-width', 'proc-blur-zone', 'proc-blur-x', 'proc-blur-y', 'proc-font-size', 'proc-font-color', 'proc-font-color-picker', 'proc-font-color-hex', 'proc-margin-v', 'proc-outline-width', 'proc-font-bold', 'proc-font-weight', 'proc-sub-pos', 'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y', 'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex', 'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'ov-layers-json', 'sub-preview-sample', 'sub-preview-ts', 'proc-capcut-enabled', 'proc-capcut-auto-open', 'proc-vol-orig', 'proc-ext-audio-enabled', 'proc-ext-audios-json', 'proc-out'],
     3: ['proc-model', 'proc-transcribe-provider-model', 'proc-ai-video-samples', 'proc-voice', 'proc-tts-engine', 'proc-tts-voice', 'proc-tts-pitch', 'proc-tts-rate', 'proc-tts-emotion', 'proc-tts-speed', 'proc-auto-speed', 'proc-keep-bg', 'proc-bg-vol', 'proc-fx-enabled', 'proc-fx-pitch', 'proc-fx-speed', 'proc-fx-bass', 'proc-fx-mid', 'proc-fx-treble', 'proc-fx-comp', 'proc-fx-reverb']
   };
 
@@ -180,7 +184,7 @@
       if (targetIds.length && !targetIds.includes(f.id)) return;
       const el = document.getElementById(f.id);
       if (!el) return;
-      data[f.id] = f.type === 'checkbox' ? el.checked : el.value;
+      data[f.id] = f.type === 'checkbox' ? el.checked : (f.id === 'frame-title' && el.value === el.dataset.aiTitle ? '' : el.value);
     });
 
     if (stepNum === 2 || !stepNum) {
@@ -211,7 +215,7 @@
     _PROC_FIELDS.forEach(f => {
       const el = document.getElementById(f.id);
       if (!el) return;
-      data[f.id] = f.type === 'checkbox' ? el.checked : el.value;
+      data[f.id] = f.type === 'checkbox' ? el.checked : (f.id === 'frame-title' && el.value === el.dataset.aiTitle ? '' : el.value);
     });
     const blurMode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value;
     if (blurMode) data['frame-blur-mode'] = blurMode;
@@ -610,7 +614,7 @@
       _PROC_FIELDS.forEach(f => {
         const el = document.getElementById(f.id);
         if (!el) return;
-        settings[f.id] = f.type === 'checkbox' ? el.checked : el.value;
+        settings[f.id] = f.type === 'checkbox' ? el.checked : (f.id === 'frame-title' && el.value === el.dataset.aiTitle ? '' : el.value);
       });
     }
     const blurMode = document.querySelector('input[name="frame-blur-mode"]:checked')?.value;

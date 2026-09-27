@@ -28,7 +28,7 @@ FPT_TTS_ENDPOINT = "https://api.fpt.ai/hmi/tts/v5"
 # FPT key must come from env (FPT_TTS_API_KEY) or config (video_process.fpt_api_key).
 # Hard-coded keys removed for security.
 FPT_TTS_DEFAULT_KEY = ""
-TTS_CACHE_VERSION = "tts-video-anchored-v4"
+TTS_CACHE_VERSION = "tts-video-anchored-v5"
 
 # ElevenLabs TTS endpoint
 ELEVENLABS_TTS_ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"

@@ -7,6 +7,8 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
+from utils.browser_download import hidden_download_browser, has_browser_verification, BrowserVerificationRequired
+
 import aiohttp
 from auth import MsTokenManager
 from utils.cookie_utils import sanitize_cookies
@@ -512,6 +514,7 @@ class DouyinAPIClient:
 
     get_aweme_detail = get_video_detail
 
+    @hidden_download_browser
     async def fetch_single_video_via_browser(
         self,
         aweme_id: str,
@@ -586,13 +589,18 @@ class DouyinAPIClient:
                     await page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
                 except Exception as exc:
                     logger.warning("Browser goto error (continuing): %s", exc)
-                try:
-                    await asyncio.wait_for(detail_event.wait(), timeout=wait_timeout_seconds)
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        "Browser fallback timeout waiting for aweme/detail: aweme_id=%s",
-                        aweme_id,
-                    )
+                deadline = asyncio.get_running_loop().time() + wait_timeout_seconds
+                while not detail_event.is_set() and asyncio.get_running_loop().time() < deadline:
+                    if await has_browser_verification(page):
+                        if headless:
+                            raise BrowserVerificationRequired()
+                        await self._wait_for_manual_verification(page, wait_timeout_seconds=wait_timeout_seconds)
+                        deadline = asyncio.get_running_loop().time() + 30
+                    try:
+                        await asyncio.wait_for(detail_event.wait(), timeout=1)
+                    except asyncio.TimeoutError:
+                        pass
+
             finally:
                 try:
                     browser_cookies = await context.cookies(self.BASE_URL)
@@ -750,6 +758,7 @@ class DouyinAPIClient:
             logger.error("Failed to resolve short URL: %s, error: %s", short_url, e)
             return None
 
+    @hidden_download_browser
     async def collect_user_post_ids_via_browser(
         self,
         sec_uid: str,
@@ -900,13 +909,9 @@ class DouyinAPIClient:
                     title = await page.title()
                 except Exception:
                     pass
-                if "验证码" in title:
+                if await has_browser_verification(page):
                     if headless:
-                        logger.warning(
-                            "检测到验证码页面且当前为 headless 模式，无法人工验证。"
-                            "请将 browser_fallback.headless 设为 false。"
-                        )
-                        return []
+                        raise BrowserVerificationRequired()
                     logger.warning(
                         "检测到验证码页面，请在浏览器中完成验证，程序会自动继续采集。"
                     )
@@ -931,6 +936,10 @@ class DouyinAPIClient:
                         if page.is_closed():
                             logger.warning("Browser page closed during warmup")
                             break
+                        if await has_browser_verification(page):
+                            if headless:
+                                raise BrowserVerificationRequired()
+                            await self._wait_for_manual_verification(page, wait_timeout_seconds=wait_timeout_seconds)
                         cards = await self._extract_aweme_cards_from_page(page)
                         for c in cards:
                             cid = str(c.get("aweme_id") or "")
@@ -957,6 +966,10 @@ class DouyinAPIClient:
                         await page.wait_for_timeout(1200)
 
                         before = len(ids)
+                        if await has_browser_verification(page):
+                            if headless:
+                                raise BrowserVerificationRequired()
+                            await self._wait_for_manual_verification(page, wait_timeout_seconds=wait_timeout_seconds)
                         cards = await self._extract_aweme_cards_from_page(page)
                         for c in cards:
                             cid = str(c.get("aweme_id") or "")
@@ -976,6 +989,8 @@ class DouyinAPIClient:
                             break
                         if expected_count <= 0 and stable_rounds >= idle_stop_rounds:
                             break
+                except BrowserVerificationRequired:
+                    raise
                 except Exception as exc:
                     logger.warning(
                         "Browser collection interrupted, use collected ids so far: %s",
@@ -1170,14 +1185,12 @@ class DouyinAPIClient:
                 title = await page.title()
             except Exception:
                 pass
-            if "验证码" not in title:
+            if not await has_browser_verification(page):
                 logger.warning("验证码页面已退出，继续采集。")
                 return
             await page.wait_for_timeout(1000)
 
-        logger.warning(
-            "等待手动验证超时（%ss），继续按当前页面状态采集。", wait_timeout_seconds
-        )
+        raise TimeoutError("Hết thời gian chờ xác minh CAPTCHA; vui lòng tải lại sau khi xác minh.")
 
     def _sync_browser_cookies(self, browser_cookies: List[Dict[str, Any]]) -> None:
         merged: Dict[str, str] = {}

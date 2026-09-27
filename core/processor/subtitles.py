@@ -20,6 +20,7 @@ from core.processor.ffmpeg_base import (
     _escape_drawtext_text, _fmt_hms, has_audio_track
 )
 from core.processor.effects import (
+    _parse_content_aspect,
     _normalize_video_overlays, _append_video_overlay_filters
 )
 
@@ -610,7 +611,7 @@ def align_subtitles_to_voice(
     ffmpeg: str = "ffmpeg",
     video_duration: float | None = None,
     min_gap: float = 0.08,
-    max_speed_factor: float = 1.25,
+    max_speed_factor: float = 1.5,
 ) -> tuple[list[dict], list[dict]]:
     """Anchor every utterance to the video; never ripple later speech forward.
 
@@ -628,10 +629,18 @@ def align_subtitles_to_voice(
     for position, (idx, seg) in enumerate(ordered):
         start = max(0.0, float(seg["start"]))
         end = float(seg["end"])
-        if position + 1 < len(ordered):
-            end = min(end, float(ordered[position + 1][1]["start"]) - min_gap)
-        if video_duration and video_duration > 0:
-            end = min(end, video_duration)
+        # Borrow only the immediately following silence (at most 0.5s).
+        # Distinct voices may overlap only when the source dialogue overlaps.
+        boundary = video_duration if video_duration and video_duration > 0 else end
+        for _, following in ordered[position + 1:]:
+            other_start = float(following["start"])
+            distinct = (seg.get("speaker") and following.get("speaker")
+                        and seg["speaker"] != following["speaker"])
+            if distinct and other_start < float(seg["end"]):
+                continue
+            boundary = min(boundary, other_start - min_gap)
+            break
+        end = min(end + 0.5, boundary)
         windows[idx] = (start, end)
 
     aligned_clips, aligned_segments = [], []
@@ -642,6 +651,7 @@ def align_subtitles_to_voice(
         start, limit = windows[idx]
         available = limit - start
         duration = float(clip.get("duration") or _get_audio_duration(ffmpeg, Path(clip["path"])))
+        speed = 1.0
         if not math.isfinite(duration) or duration <= 0 or available <= 0:
             raise ValueError(f"Câu {idx + 1}: thời lượng âm thanh hoặc mốc phụ đề không hợp lệ")
         if duration > available:
@@ -658,7 +668,10 @@ def align_subtitles_to_voice(
             if not math.isfinite(duration) or duration <= 0 or duration > available:
                 raise ValueError(f"Câu {idx + 1} vẫn vượt khoảng thời gian video sau khi căn giọng")
             clip["path"] = dst
-        clip.update(start=start, end=start + duration, duration=duration)
+        clip.update(start=start, end=start + duration, duration=duration,
+                    tempo_factor=speed,
+                    speaker=seg.get("speaker"), source_start=float(seg["start"]),
+                    source_end=float(seg["end"]))
         aligned_clips.append(clip)
         aligned_segments.append(dict(seg, start=start, end=start + duration, voice_aligned=True))
     return aligned_clips, aligned_segments
@@ -830,6 +843,8 @@ def burn_subtitles(
     video_overlays: Optional[list] = None,
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
+    content_aspect: str = "auto",
+    mask_config: dict | None = None,
     output_fps: int = 0,
     encode_device: str = "auto",
     blur_subtitle_segments: Optional[list] = None,
@@ -841,6 +856,24 @@ def burn_subtitles(
     If frame_enabled=True: also creates 9:16 frame in same encode pass (ASS mode only).
     Aspect conversion is folded into the ASS encode when requested.
     """
+    # Use the same compositor for imported SRT files when new visual options are active.
+    if str(subtitle_format).lower() != "ass" and (
+        _parse_content_aspect(content_aspect) is not None
+        or (isinstance(mask_config, dict) and mask_config.get("mode") == "patch")
+    ):
+        options = locals().copy()
+        with tempfile.TemporaryDirectory(prefix="compose_srt_") as directory:
+            converted = Path(directory) / "subtitles.ass"
+            result = subprocess.run(
+                [str(ffmpeg), "-y", "-v", "error", "-i", str(srt_path), str(converted)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+            if result.returncode:
+                return False, result.stderr
+            options.update(srt_path=converted, subtitle_format="ass")
+            return burn_subtitles(**options)
+
     # Tự động căn giữa vùng che blur với phụ đề (chỉ khi không có blur_y_pct)
     blur_lift_pct_adj = blur_lift_pct
     if blur_y_pct is None and blur_original and blur_zone != "none":
@@ -881,6 +914,7 @@ def burn_subtitles(
                          video_overlays=video_overlays,
                          target_aspect=target_aspect,
                          aspect_pad_blur=aspect_pad_blur,
+                         content_aspect=content_aspect, mask_config=mask_config,
                          output_fps=output_fps, encode_device=encode_device)
 
     # SRT path (original logic — no frame support)
@@ -927,6 +961,8 @@ def _burn_ass(
     video_overlays: Optional[list] = None,
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
+    content_aspect: str = "auto",
+    mask_config: dict | None = None,
     output_fps: int = 0,
     encode_device: str = "auto",
     blur_subtitle_segments: Optional[list] = None,
@@ -1003,7 +1039,10 @@ def _burn_ass(
             (1080, 1920) if _target_aspect == "9x16" else (1920, 1080)
         )
         _src_is_vertical = _src_h > _src_w
-        _aspect_convert = _target_aspect in ("9x16", "16x9") and (
+        _content_ratio = _parse_content_aspect(content_aspect)
+        if _content_ratio and _target_aspect == "auto":
+            _target_w, _target_h = int(_src_w), int(_src_h)
+        _aspect_convert = bool(_content_ratio) or _target_aspect in ("9x16", "16x9") and (
             (_target_aspect == "9x16" and not _src_is_vertical)
             or (_target_aspect == "16x9" and _src_is_vertical)
         )
@@ -1182,10 +1221,16 @@ def _burn_ass(
                 _e0 = float(_en) if _en is not None else 1e9
                 _en_expr = f":enable='between(t,{_s0:.3f},{_e0:.3f})'"
             filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
-            filter_complex_parts.append(
-                f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_left:.4f}:ih*{y:.4f},"
-                f"boxblur=luma_radius='min(20,min(w,h)/2)':luma_power=3:chroma_radius='min(15,min(cw,ch)/2)':chroma_power=2[blurred_{idx}]"
-            )
+            _patch = idx == 0 and blur_original and blur_zone != "none" and isinstance(mask_config, dict) and mask_config.get("mode") == "patch"
+            if _patch:
+                _sx = max(0.0, min(1.0-w, _clamp_float(mask_config.get("source_x", .5), 0, 1)-w/2))
+                _sy = max(0.0, min(1.0-h, _clamp_float(mask_config.get("source_y", .75), 0, 1)-h/2))
+                filter_complex_parts.append(f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_sx:.4f}:ih*{_sy:.4f}[blurred_{idx}]")
+            else:
+                filter_complex_parts.append(
+                    f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_left:.4f}:ih*{y:.4f},"
+                    f"boxblur=luma_radius='min(20,min(w,h)/2)':luma_power=3:chroma_radius='min(15,min(cw,ch)/2)':chroma_power=2[blurred_{idx}]"
+                )
             filter_complex_parts.append(
                 f"[orig_{idx}][blurred_{idx}]overlay=W*{_left:.4f}:H*{y:.4f}{_en_expr}[{next_label}]"
             )
@@ -1396,6 +1441,11 @@ def _burn_ass(
             filter_complex += f";[{curr_label}]null[composited]"
 
         if _aspect_convert:
+            _inner_w, _inner_h = _target_w, _target_h
+            if _content_ratio:
+                _inner_w = max(2, int(min(_target_w, _target_h * _content_ratio) // 2 * 2))
+                _inner_h = max(2, int(min(_target_h, _target_w / _content_ratio) // 2 * 2))
+            _fg_filter = (f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=increase,crop={_inner_w}:{_inner_h}" if _content_ratio else f"scale={_target_w}:{_target_h}:force_original_aspect_ratio=decrease")
             if aspect_pad_blur:
                 # Blur at preview resolution, then upscale. The background is
                 # already intentionally soft, so processing it at full 1080p
@@ -1412,15 +1462,13 @@ def _burn_ass(
                     f"crop={blur_w}:{blur_h},gblur=sigma=23,"
                     f"colorchannelmixer=rr=0.7:gg=0.7:bb=0.7,"
                     f"scale={_target_w}:{_target_h}:flags=bicubic[aspect_bg]"
-                    f";[composited]scale={_target_w}:{_target_h}:"
-                    f"force_original_aspect_ratio=decrease[aspect_fg]"
+                    f";[composited]{_fg_filter}[aspect_fg]"
                     f";[aspect_bg][aspect_fg]overlay=(W-w)/2:(H-h)/2,setsar=1[vout]"
                 )
                 _log("Aspect: nen mo preview 112%, sigma=23, brightness=70%")
             else:
                 filter_complex += (
-                    f";[composited]scale={_target_w}:{_target_h}:"
-                    f"force_original_aspect_ratio=decrease,"
+                    f";[composited]{_fg_filter},"
                     f"pad={_target_w}:{_target_h}:(ow-iw)/2:(oh-ih)/2:black,"
                     f"setsar=1[vout]"
                 )

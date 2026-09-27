@@ -29,6 +29,26 @@
     #pe2-panel .pe2-pane .field select {min-width:0;max-width:100%;box-sizing:border-box;}
     #pe2-panel .pe2-pane .field select {font-size:12px;}
     #pe2-panel .pe2-pane .field label {font-size:11px;line-height:1.4;}
+  #pe2-panel .ov-layer-body .field {display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:5px!important;min-width:0;}
+#pe2-panel .ov-layer-body .field input,#pe2-panel .ov-layer-body .field select {max-width:100%;min-width:0;box-sizing:border-box;flex:none!important;}
+#pe2-panel .ov-layer-body .field > div input[type=text] {width:0!important;flex:1 1 0%!important;}
+#pe2-panel .ov-layer-body input[type=range] {width:100%;margin:0;box-sizing:border-box;}
+#pe2-panel .ov-layer-head {flex-wrap:wrap;gap:8px;box-sizing:border-box;}
+#pe2-panel .ov-layer-actions {margin-left:0;flex:0 0 100%;justify-content:flex-end;}
+
+    #pe2-panel .pe2-setting-field {display:flex;flex-direction:column;gap:7px;min-width:0;margin:12px 0;}
+    #pe2-panel .pe2-setting-field label {font-size:11px;font-weight:600;}
+    #pe2-panel .pe2-setting-field input,#pe2-panel .pe2-setting-field select {width:100%;min-width:0;height:36px;box-sizing:border-box;border:1px solid var(--border,#dce4f0);border-radius:8px;padding:0 10px;background:var(--bg3,#f3f6fa);color:inherit;font-size:12px;}
+    #pe2-panel .pe2-setting-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+    #pe2-panel .pe2-setting-grid .pe2-setting-field {margin:4px 0 0;}
+    #pe2-panel .pe2-sample-card {padding:12px;border:1px solid var(--border,#dce4f0);border-radius:10px;background:var(--bg2,#f8fafc);margin:12px 0;}
+    #pe2-panel .pe2-sample-card strong,#pe2-panel .pe2-setting-row strong {font-size:12px;font-weight:600;}
+    #pe2-panel .pe2-pane[data-pe2pane="overlay"]:not(:has(#proc-mask-mode option[value="patch"]:checked)) #proc-mask-source {display:none;}
+    #pe2-panel .pe2-setting-note {font-size:11px;line-height:1.6;color:var(--text-muted,#708099);margin:7px 0 10px;}
+    #pe2-panel .pe2-setting-row {display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border,#dce4f0);border-radius:10px;padding:12px;margin:16px 0 10px;}
+    #pe2-panel .pe2-setting-row small {display:block;font-size:11px;line-height:1.5;color:var(--text-muted,#708099);margin-top:4px;}
+    #pe2-panel .pe2-setting-row .pe2-switch {flex-shrink:0;}
+    #pe2-panel [data-pe2pane="ratio"] .pe2-aspect-grid {margin-bottom:18px;}
   </style>
 
 
@@ -149,30 +169,6 @@
             <!-- ══ PANE: Phụ đề & Dịch ══ -->
             <div class="pe2-pane active" data-pe2pane="subs">
 
-              <!-- Chế độ video: lưới tỉ lệ -->
-              <div class="pe2-grp">Tỷ lệ khung hình</div>
-              <select id="proc-preview-aspect"
-                onchange="_onPreviewAspectChange();if(window._syncAspectBtns)_syncAspectBtns()" style="display:none">
-                <option value="auto" selected>Tự nhận diện</option>
-                <option value="16x9">16:9 (ngang)</option>
-                <option value="9x16">9:16 (dọc)</option>
-              </select>
-              <div class="pe2-aspect-grid">
-                <button type="button" class="pe2-aspect-btn active" data-pe2aspect="auto"
-                  onclick="pe2SetAspect('auto')">
-                  <span class="box" style="width:22px;height:16px"></span>
-                  <span>Tự động</span>
-                </button>
-                <button type="button" class="pe2-aspect-btn" data-pe2aspect="16x9" onclick="pe2SetAspect('16x9')">
-                  <span class="box" style="width:26px;height:15px"></span>
-                  <span>16:9</span>
-                </button>
-                <button type="button" class="pe2-aspect-btn" data-pe2aspect="9x16" onclick="pe2SetAspect('9x16')">
-                  <span class="box" style="width:13px;height:22px"></span>
-                  <span>9:16</span>
-                </button>
-              </div>
-
               <div class="pe2-export-row">
               <div>
               <div class="pe2-grp"><label for="proc-encode-device">Bộ mã hóa</label></div>
@@ -237,20 +233,7 @@
                   <span class="pe2-optcard-lbl">Che gốc</span>
                   <span class="pe2-optcard-badge">+</span>
                 </label>
-                <label class="pe2-optcard" title="Lấp viền bằng nền mờ khi đổi tỉ lệ ngang và dọc">
-                  <input type="checkbox" id="proc-aspect-blur-bg"
-                    onchange="if(window._onPreviewAspectChange)_onPreviewAspectChange();subPreviewUpdate()">
-                  <span class="pe2-optcard-ic">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <line x1="3" y1="9" x2="21" y2="9" />
-                      <line x1="3" y1="15" x2="21" y2="15" />
-                    </svg>
-                  </span>
-                  <span class="pe2-optcard-lbl">Nền mờ</span>
-                  <span class="pe2-optcard-badge">+</span>
-                </label>
+
                 <label class="pe2-optcard" title="Chỉ che vùng phụ đề gốc trong các khoảng thời gian có nội dung ASS/SRT; không dùng OCR">
                   <input type="checkbox" id="proc-blur-by-subtitles" onchange="subPreviewUpdate()">
                   <span class="pe2-optcard-ic">
@@ -261,6 +244,12 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Che theo sub</span>
+                  <span class="pe2-optcard-badge">+</span>
+                </label>
+                <label class="pe2-optcard" title="Lấp vùng ngoài video bằng nền mờ; tắt để dùng nền đen">
+                  <input type="checkbox" id="proc-aspect-blur-bg"
+                    onchange="if(window._onPreviewAspectChange)_onPreviewAspectChange();subPreviewUpdate()">
+                  <span class="pe2-optcard-lbl">Nền mờ</span>
                   <span class="pe2-optcard-badge">+</span>
                 </label>
               </div>
@@ -500,8 +489,59 @@
             </div>
 
             <!-- ══ PANE: Chữ / Khối ══ -->
-            <div class="pe2-pane" data-pe2pane="overlay">
+            <div class="pe2-pane" data-pe2pane="ratio">
+              <!-- Chế độ video: lưới tỉ lệ -->
+              <div class="pe2-grp">Tỷ lệ khung hình</div>
+              <select id="proc-preview-aspect"
+                onchange="_onPreviewAspectChange();if(window._syncAspectBtns)_syncAspectBtns()" style="display:none">
+                <option value="auto" selected>Tự nhận diện</option>
+                <option value="16x9">16:9 (ngang)</option>
+                <option value="9x16">9:16 (dọc)</option>
+              </select>
+              <div class="pe2-aspect-grid">
+                <button type="button" class="pe2-aspect-btn active" data-pe2aspect="auto"
+                  onclick="pe2SetAspect('auto')">
+                  <span class="box" style="width:22px;height:16px"></span>
+                  <span>Tự động</span>
+                </button>
+                <button type="button" class="pe2-aspect-btn" data-pe2aspect="16x9" onclick="pe2SetAspect('16x9')">
+                  <span class="box" style="width:26px;height:15px"></span>
+                  <span>16:9</span>
+                </button>
+                <button type="button" class="pe2-aspect-btn" data-pe2aspect="9x16" onclick="pe2SetAspect('9x16')">
+                  <span class="box" style="width:13px;height:22px"></span>
+                  <span>9:16</span>
+                </button>
+              </div>
+
+              <div class="pe2-setting-field">
+                <label for="proc-content-aspect">Tỉ lệ video bên trong</label>
+                <input id="proc-content-aspect" type="text" value="" placeholder="Ví dụ: 3:4, 4:5, 2.35:1"
+                  aria-describedby="proc-content-aspect-help proc-content-aspect-error" oninput="procContentAspectInput(this)">
+                <small id="proc-content-aspect-help" class="pe2-setting-note">Nhập rộng:cao. Để trống để giữ tỉ lệ gốc.</small>
+                <small id="proc-content-aspect-error" hidden style="color:#dc2626">Nhập hai số lớn hơn 0, ví dụ 3:4.</small>
+              </div>
+              <p class="pe2-setting-note">Video được cắt giữa để vừa tỉ lệ đã chọn, không kéo méo hình.</p>
+            </div>
+<div class="pe2-pane" data-pe2pane="overlay">
               <div class="pe2-grp" style="margin-top:0">Che phụ đề gốc</div>
+              <div class="pe2-setting-field">
+                <label for="proc-mask-mode">Kiểu che</label>
+                <select id="proc-mask-mode" onchange="framePreviewUpdate()">
+                  <option value="blur">Làm mờ</option><option value="patch">Che bằng vùng chọn</option>
+                </select>
+              </div>
+              <div id="proc-mask-source" class="pe2-sample-card">
+                <strong>Vùng lấy mẫu</strong>
+                <p class="pe2-setting-note">Chọn tâm vùng ảnh dùng để che. Kích thước bằng vùng che bên dưới.</p>
+                <div class="pe2-setting-grid">
+                  <div class="pe2-setting-field"><label for="proc-mask-source-x">Tâm X (%)</label>
+                    <input id="proc-mask-source-x" type="number" min="0" max="100" step="0.1" value="50" oninput="framePreviewUpdate()"></div>
+                  <div class="pe2-setting-field"><label for="proc-mask-source-y">Tâm Y (%)</label>
+                    <input id="proc-mask-source-y" type="number" min="0" max="100" step="0.1" value="75" oninput="framePreviewUpdate()"></div>
+                </div>
+              </div>
+              <div class="pe2-grp">Vị trí &amp; kích thước vùng che</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
                 <div class="field"><label>Che rộng (%)</label><input type="number" id="proc-blur-width" min="10"
                     max="100" step="1" value="80" oninput="subPreviewUpdate()"></div>
@@ -656,7 +696,7 @@
               <line x1="16" y1="16" x2="16" y2="16" />
             </svg>
           </button>
-          <button type="button" class="pe2-vtab" data-pe2tab="frame" onclick="pe2Tool('frame')"
+          <button type="button" class="pe2-vtab" data-pe2tab="ratio" onclick="pe2Tool('ratio')" title="Tỉ lệ video"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="2" width="18" height="20" rx="2"/><rect x="6" y="6" width="12" height="12"/></svg></button><button type="button" class="pe2-vtab" data-pe2tab="frame" onclick="pe2Tool('frame')"
             title="Khung hình & Tỉ lệ">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
@@ -850,6 +890,7 @@
         var root = document.querySelector('[data-proc-step="2"] .pe2-editor');
         if (!root) return;
         var titles = {
+          ratio: 'Tỉ lệ video',
           subs: 'Phụ đề & Dịch',
           ai: 'Phân tích AI',
           frame: 'Khung video',
@@ -858,6 +899,7 @@
           tracks: 'Quản lý Lớp & Track'
         };
         var icons = {
+          ratio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="2" width="18" height="20" rx="2"/><rect x="6" y="6" width="12" height="12"/></svg>',
           subs: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>',
           ai: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>',
           frame: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>',
@@ -885,7 +927,7 @@
       // Restore the inspector tool the user was editing last time.
       try {
         var savedTool = localStorage.getItem('pe2_active_tool');
-        if (savedTool && ['subs', 'ai', 'frame', 'overlay', 'audio', 'tracks'].indexOf(savedTool) >= 0) {
+        if (savedTool && ['subs', 'ai', 'frame', 'overlay', 'audio', 'tracks', 'ratio'].indexOf(savedTool) >= 0) {
           setTimeout(function () { window.pe2Tool(savedTool); }, 0);
         }
       } catch (_) { }
@@ -1105,7 +1147,7 @@
         var drag = null;
         var clamp = function (v, min, max) { return Math.max(min, Math.min(max, v)); };
         var undoFields = [
-          'proc-font-size', 'proc-margin-v', 'proc-sub-pos', 'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y',
+          'proc-font-size', 'proc-margin-v', 'proc-sub-pos', 'proc-mask-mode', 'proc-mask-source-x', 'proc-mask-source-y', 'proc-content-aspect', 'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y',
           'proc-burn', 'proc-burn-vi', 'proc-blur-original', 'proc-preview-aspect', 'proc-aspect-blur-bg',
           'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y',
           'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex',
@@ -3252,7 +3294,7 @@
           'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-aspect-blur-bg',
           'sub-preview-sample', 'proc-font-size', 'proc-sub-pos', 'proc-font-color-picker',
           'proc-font-color-hex', 'proc-font-weight', 'proc-margin-v', 'proc-outline-width',
-          'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y', 'proc-blur-zone',
+          'proc-mask-mode', 'proc-mask-source-x', 'proc-mask-source-y', 'proc-content-aspect', 'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y', 'proc-blur-zone',
           'proc-blur-by-subtitles',
           'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight',
           'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y',

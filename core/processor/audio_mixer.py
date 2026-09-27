@@ -44,14 +44,22 @@ class AudioMixer:
             return False, "No TTS clips"
 
         previous_end = 0.0
+        active = []
         for clip in sorted(tts_clips, key=lambda c: float(c['start'])):
             start = float(clip['start'])
             duration = float(clip.get('duration') or _get_audio_duration(self.ffmpeg, Path(clip['path'])))
             if duration <= 0:
                 return False, "Không đo được thời lượng giọng đọc"
-            if start < previous_end - 0.001:
-                return False, "Các câu giọng đọc bị chồng thời gian; cần căn lại trước khi ghép"
-            previous_end = start + duration
+            active = [(end, other) for end, other in active if end > start + 0.001]
+            for _, other in active:
+                distinct = (clip.get('speaker') and other.get('speaker')
+                            and clip['speaker'] != other['speaker'])
+                source_overlap = (max(float(clip.get('source_start', start)), float(other.get('source_start', other['start'])))
+                                  < min(float(clip.get('source_end', start)), float(other.get('source_end', other['start']))))
+                if not (distinct and source_overlap):
+                    return False, "Các câu giọng đọc bị chồng thời gian; cần căn lại trước khi ghép"
+            active.append((start + duration, clip))
+            previous_end = max(previous_end, start + duration)
 
         video_path = Path(video_path)
         output_path = Path(output_path)

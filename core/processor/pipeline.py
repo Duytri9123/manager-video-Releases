@@ -28,6 +28,7 @@ from core.processor.ffmpeg_base import (
     _resolve_image_path, _SUPPORTED_IMAGE_EXTS, _LOGO_POSITION_MAP
 )
 from core.processor.effects import (
+    _parse_content_aspect,
     _overlay_enable_expr, _append_video_overlay_filters, _normalize_video_overlays,
     apply_audio_effects, _build_color_grade_filter, _build_anti_fingerprint_filter,
     apply_anti_fingerprint, make_vertical_video, preview_subtitles_in_video,
@@ -87,6 +88,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _t_pipeline_start = _pytime.time()
 
     data = dict(data)
+    if _as_bool(data.get("frame_title_auto", False), False):
+        data["frame_title"] = ""
     if _as_bool(data.get("frame_title_enabled", True), True) and not str(data.get("frame_title") or "").strip():
         analysis = data.get("ai_video_analysis") or {}
         suggestions = analysis.get("title_suggestions") or {} if isinstance(analysis, dict) else {}
@@ -119,7 +122,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _target_aspect = str(data.get("target_aspect") or "auto").lower()
     _pad_blur = _as_bool(data.get("aspect_pad_blur", False), False)
     _source_is_vertical = _vh > _vw
-    _aspect_should_convert = _target_aspect in ("9x16", "16x9") and (
+    _aspect_should_convert = _parse_content_aspect(data.get("content_aspect")) is not None or _target_aspect in ("9x16", "16x9") and (
         (_target_aspect == "9x16" and not _source_is_vertical)
         or (_target_aspect == "16x9" and _source_is_vertical)
     )
@@ -863,7 +866,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if _encode_device not in ("auto", "cpu", "nvidia"):
         _encode_device = "auto"
     _blur_timing_signature = {"enabled": _blur_by_subtitles, "segments": _blur_subtitle_segments,
-                              "output_fps": _output_fps, "encode_device": _encode_device}
+                              "output_fps": _output_fps, "encode_device": _encode_device,
+                              "visual_config": {key: data.get(key) for key in (
+                                  "content_aspect", "target_aspect", "aspect_pad_blur", "mask_config",
+                                  "blur_original", "blur_zone", "blur_height_pct", "blur_width_pct",
+                                  "blur_x_pct", "blur_y_pct", "blur_extra_zones", "video_overlays")}}
     _blur_zone_val = str(data.get("blur_zone", "bottom"))
 
     _blur_y_raw = data.get("blur_y_pct")
@@ -1197,6 +1204,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         segments=segments, tts_clips=_tts_clips, ffmpeg=ffmpeg,
                         video_duration=_vid_dur, min_gap=0.02,
                     )
+                    for clip in _tts_clips:
+                        if clip.get("tempo_factor", 1.0) > 1.01:
+                            yield send(log=f"[Đồng bộ giọng đọc] Câu {clip['index'] + 1}: tốc độ {clip['tempo_factor']:.2f}x", level="info")
                     if aligned_segs:
                         synced_ass = out_dir / f"{stem}_{target_language}_voice_sync.ass"
                         _write_current_ass(aligned_segs, synced_ass)
@@ -1230,7 +1240,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     _tts_tmp_ctx = None
                 _run_tts_indices = None
                 yield send(
-                    log=f"[TTS song song] Không thể khởi tạo luồng TTS: {tts_start_err}",
+                    log=f"[Đồng bộ giọng đọc] Không thể hoàn tất: {tts_start_err}",
                     level="error", failed=True,
                 )
                 return
@@ -1292,6 +1302,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             video_overlays=_video_overlays,
             target_aspect=_target_aspect,
             aspect_pad_blur=_pad_blur,
+            content_aspect=data.get("content_aspect", "auto"),
+            mask_config=data.get("mask_config"),
             output_fps=_output_fps,
             encode_device=_encode_device,
         )

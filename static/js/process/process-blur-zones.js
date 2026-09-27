@@ -78,13 +78,17 @@ function procAiOwnsBlur() {
         const bY = vidY + Math.round(vidH * topPct);
         const bH = Math.round(vidH * Math.max(0.01, bottomPct - topPct));
 
-        // Draw blurred region (simulate with semi-transparent dark overlay)
-        ctx.save();
-        ctx.filter = 'blur(8px)';
-        ctx.drawImage(ctx.canvas, bX, bY, bW, bH, bX - 4, bY - 4, bW + 8, bH + 8);
-        ctx.restore();
-        ctx.fillStyle = 'rgba(0,0,0,0.35)';
-        ctx.fillRect(bX, bY, bW, bH);
+        if (document.getElementById('proc-mask-mode')?.value === 'patch') {
+          const sx = vidX + Math.max(0, Math.min(vidW-bW, vidW*Number(document.getElementById('proc-mask-source-x')?.value ?? 50)/100-bW/2));
+          const sy = vidY + Math.max(0, Math.min(vidH-bH, vidH*Number(document.getElementById('proc-mask-source-y')?.value ?? 75)/100-bH/2));
+          ctx.drawImage(ctx.canvas, sx, sy, bW, bH, bX, bY, bW, bH);
+          if (window._pe2Sel?.type === 'blur') {
+            ctx.save(); ctx.strokeStyle='#22c55e'; ctx.setLineDash([6,4]); ctx.strokeRect(sx,sy,bW,bH); ctx.restore();
+          }
+        } else {
+          ctx.save(); ctx.filter = 'blur(8px)';
+          ctx.drawImage(ctx.canvas, bX,bY,bW,bH,bX-4,bY-4,bW+8,bH+8); ctx.restore();
+        }
 
         // Draw selection outline if main blur zone is selected
         if (window._pe2Sel && window._pe2Sel.type === 'blur') {

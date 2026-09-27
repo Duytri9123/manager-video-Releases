@@ -220,8 +220,9 @@
     if (document.getElementById('frame-title-enabled')?.checked && titleInput) {
       const suggestion = titles.short || titles.tiktok || titles.youtube || titles.facebook;
       if (suggestion && (!titleInput.value.trim() || titleInput.value === titleInput.dataset.aiTitle)) {
-        titleInput.value = suggestion;
+        if (titleInput.value === titleInput.dataset.aiTitle) titleInput.value = "";
         titleInput.dataset.aiTitle = suggestion;
+        titleInput.dataset.aiVideoPath = window._procVideoAiAnalysis?.video_path || "";
         if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
       }
     }

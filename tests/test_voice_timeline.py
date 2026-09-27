@@ -7,6 +7,28 @@ from core.processor.subtitles import align_subtitles_to_voice, write_ass, write_
 
 
 class VoiceTimelineTests(unittest.TestCase):
+    def test_reported_544_seconds_fits_410_seconds_at_moderate_speed(self):
+        with patch('core.processor.tts._apply_atempo', return_value=True) as tempo, \
+             patch('core.processor.ffmpeg_base._get_audio_duration', return_value=4.08):
+            clips, subs = align_subtitles_to_voice([dict(start=0, end=4.10, text='Một câu')],
+                [dict(index=0, path='test.wav', duration=5.44)], video_duration=4.10)
+        self.assertAlmostEqual(tempo.call_args.args[3], 1.3333, places=3)
+        self.assertEqual(clips[0]['end'], subs[0]['end'])
+
+    def test_borrows_short_silence_without_moving_next_start(self):
+        clips, _ = align_subtitles_to_voice(
+            [dict(start=0, end=2, text='Một'), dict(start=3, end=4, text='Hai')],
+            [dict(index=0, path='a.wav', duration=2.4), dict(index=1, path='b.wav', duration=1)], video_duration=4)
+        self.assertEqual(clips[0]['end'], 2.4)
+        self.assertEqual(clips[1]['start'], 3)
+
+    def test_distinct_speakers_preserve_source_overlap(self):
+        clips, subs = align_subtitles_to_voice(
+            [dict(start=0, end=2, text='Một', speaker='male'), dict(start=1, end=3, text='Hai', speaker='female')],
+            [dict(index=0, path='a.wav', duration=2), dict(index=1, path='b.wav', duration=2)], video_duration=3)
+        self.assertEqual([c['start'] for c in clips], [0, 1])
+        self.assertEqual([s['end'] for s in subs], [2, 3])
+
     def test_mixer_rejects_overlapping_clips_before_encoding(self):
         from core.processor.audio_mixer import AudioMixer
         ok, error = AudioMixer('unused').mix(Path('unused.mp4'),
