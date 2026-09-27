@@ -227,21 +227,28 @@ class AntigravityTranscriber:
             prompt = (
                 f"Hãy nghe âm thanh và phiên âm toàn bộ lời nói sang {target_lang}.\n"
                 + diarization_guide +
-                "QUY TẮC MỐC THỜI GIAN SRT:\n"
+                "QUY TẮC NGẮT CÂU VÀ DẤU CÂU:\n"
+                "- BẮT BUỘC thêm dấu câu đúng ngữ pháp: dấu phẩy (,) dấu chấm (.) dấu chấm hỏi (?) dấu chấm than (!) vào đúng vị trí.\n"
+                "- Mỗi block SRT phải là MỘT câu hoặc MỘT mệnh đề hoàn chỉnh về ngữ nghĩa (6-12 từ là lý tưởng).\n"
+                "- TUYỆT ĐỐI KHÔNG cắt câu giữa chừng rồi để phần còn lại sang block tiếp theo.\n"
+                "- TUYỆT ĐỐI KHÔNG gộp nhiều câu dài vào 1 block (mỗi block tối đa 12-15 từ).\n"
+                "- Ví dụ SAI: block 1 = 'Khi số lượng muỗi đạt đến một' block 2 = 'mức độ nhất định chúng có thể' (cắt giữa câu, không có dấu câu).\n"
+                "- Ví dụ ĐÚNG: block 1 = 'Khi số lượng muỗi đạt đến một mức độ nhất định,' block 2 = 'chúng có thể hút cạn máu một con sói con đến chết.' (ngắt tại ranh giới mệnh đề, có dấu câu).\n"
+                "\nQUY TẮC MỐC THỜI GIAN SRT:\n"
                 "- BẮT BUỘC định dạng SRT chuẩn: HH:MM:SS,mmm --> HH:MM:SS,mmm (Giờ:Phút:Giây,Miligiây).\n"
                 "- TUYỆT ĐỐI KHÔNG dùng dấu ngoặc vuông [] quanh mốc thời gian.\n"
-                "- TUYỆT ĐỐI KHÔNG gộp nhiều câu hoặc nhiều mốc thời gian vào cùng 1 dòng text.\n"
                 "- Bắt buộc mỗi câu là 1 block SRT riêng biệt có số thứ tự tăng dần, cách nhau 1 dòng trống:\n"
                 "1\n"
                 "00:00:01,000 --> 00:00:04,000\n"
-                "Nội dung câu 1\n\n"
+                "Khi số lượng muỗi đạt đến một mức độ nhất định,\n\n"
                 "2\n"
                 "00:00:04,500 --> 00:00:07,000\n"
-                "Nội dung câu 2\n\n"
+                "chúng có thể hút cạn máu một con sói con đến chết.\n\n"
                 "- Thời gian bắt đầu luôn nhỏ hơn thời gian kết thúc, khớp chính xác với âm thanh phát ra trong video.\n"
                 "- TUYỆT ĐỐI KHÔNG SUY NGHĨ (no thinking, no reasoning), không thêm suy nghĩ hay giải thích.\n"
                 "- Chỉ xuất trực tiếp duy nhất khối nội dung SRT hoàn chỉnh."
             )
+
 
             # Chọn model chính: ưu tiên model người dùng chọn, nếu không lấy model đầu tiên được bật trong cấu hình
             chosen_model = ""

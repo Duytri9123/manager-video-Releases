@@ -43,17 +43,120 @@ def _fmt_ass_time(seconds: float) -> str:
 
 def _sentence_parts(text: str) -> list[str]:
     # Keep punctuation/closing quotes with the sentence they finish.
-    return [p.strip() for p in re.split(r'''(?<=[.!?…。！？])\s+|(?<=[.!?…。！？][”»"’'])\s+''', text) if p.strip()]
+    return [p.strip() for p in re.split(r"""(?<=[.!?…。！？])\s+|(?<=[.!?…。！？]["»\"''])\s+""", text) if p.strip()]
+
+
+# ── Từ nối / chuyển tiếp tiếng Việt thường đứng đầu mệnh đề mới ──────────
+_VN_BOUNDARY_WORDS = {
+    # Liên từ đối lập
+    'Nhưng', 'Tuy', 'Dù', 'Mặc', 'Song', 'Thế',
+    # Liên từ nguyên nhân / kết quả
+    'Vì', 'Bởi', 'Nên', 'Do',
+    # Liên từ bổ sung / tiếp nối
+    'Và', 'Còn', 'Cũng', 'Rồi', 'Lại', 'Thêm',
+    # Từ chỉ thời gian / điều kiện
+    'Khi', 'Lúc', 'Nếu', 'Sau', 'Trước',
+    # Từ chỉ mục đích
+    'Để', 'Nhằm',
+    # Đại từ / chủ ngữ mới (thường bắt đầu mệnh đề)
+    'Nó', 'Chúng', 'Họ', 'Mỗi', 'Những', 'Các',
+    'Loài', 'Đàn', 'Đây', 'Sự', 'Bầy',
+    # Trạng từ đầu câu
+    'Chẳng', 'Không', 'Khiến',
+}
+
+
+def _has_punctuation(text: str) -> bool:
+    """Kiểm tra text có chứa dấu câu phổ biến không."""
+    return bool(re.search(r'[,;:.!?…。，；：！？—]', text))
+
+
+def _add_punctuation_heuristic(text: str) -> str:
+    """
+    Chèn dấu phẩy trước các từ nối / chuyển tiếp tiếng Việt viết hoa
+    khi text hoàn toàn không có dấu câu (phổ biến với output Whisper).
+
+    Ví dụ:
+      "hút cạn máu con sói con đến chết Dù sói con có vùng vẫy"
+      → "hút cạn máu con sói con đến chết, Dù sói con có vùng vẫy"
+    """
+    if _has_punctuation(text):
+        return text
+
+    words = text.split()
+    if len(words) <= 4:
+        return text
+
+    result = [words[0]]
+    last_comma_at = -10  # vị trí cuối cùng đã chèn dấu phẩy
+    for i in range(1, len(words)):
+        w = words[i]
+        # Chèn dấu phẩy nếu:
+        # 1. Từ viết hoa + nằm trong boundary words
+        # 2. Ít nhất 3 từ kể từ đầu hoặc dấu phẩy trước
+        # 3. Phải còn ít nhất 3 từ phía sau (tránh chunk mồ côi)
+        if (w and w[0].isupper()
+                and w in _VN_BOUNDARY_WORDS
+                and i >= 3
+                and (i - last_comma_at) >= 3
+                and (len(words) - i) >= 3):
+            result[-1] = result[-1] + ','
+            last_comma_at = i
+        result.append(w)
+    return ' '.join(result)
+
+
+def _find_best_split_point(words: list, start: int, default_take: int,
+                           total: int, max_words: int) -> int:
+    """
+    Tìm vị trí ngắt tốt nhất gần default_take.
+    Ưu tiên: ngắt TRƯỚC từ nối / chuyển tiếp viết hoa (ranh giới mệnh đề).
+    """
+    min_take = max(2, default_take - 2)
+    max_take = min(max_words, default_take + 2, total - start)
+
+    best = default_take
+    best_score = -1
+
+    for t in range(min_take, max_take + 1):
+        pos = start + t
+        if pos >= total:
+            if total - start - t == 0:
+                return t
+            continue
+
+        next_word = words[pos]
+        score = 0
+        # Ưu tiên cao: từ tiếp theo là boundary word viết hoa
+        if next_word in _VN_BOUNDARY_WORDS:
+            score = 10
+        # Ưu tiên trung bình: từ tiếp theo bắt đầu bằng chữ hoa
+        elif next_word and next_word[0].isupper():
+            score = 5
+
+        if score > best_score:
+            best_score = score
+            best = t
+
+    return best
 
 
 def _smart_split_display_lines(text: str, max_words: int = 7) -> list[str]:
     """
     Tách câu thành các cụm phụ đề ngắn tối đa max_words từ (mặc định 7 từ),
     cắt theo ngữ nghĩa tự nhiên, cân bằng độ dài, không để lại từ mồ côi (1 từ).
+
+    Khi text không có dấu câu (phổ biến với Whisper/AI):
+    - Tự động chèn dấu phẩy trước từ nối tiếng Việt viết hoa
+    - Ưu tiên ngắt tại ranh giới mệnh đề tự nhiên
     """
     clean_text = re.sub(r"\s+", " ", str(text or "")).strip()
     if not clean_text:
         return []
+
+    # Bước 0: Thêm dấu câu heuristic nếu text không có dấu câu
+    clean_text = _add_punctuation_heuristic(clean_text)
+
     sentences = _sentence_parts(clean_text)
     if len(sentences) > 1:
         return [line for sentence in sentences
@@ -80,6 +183,20 @@ def _smart_split_display_lines(text: str, max_words: int = 7) -> list[str]:
     if current_clause.strip():
         chunks.append(current_clause.strip())
 
+    # Gộp chunks quá ngắn (≤3 từ) vào chunk liền kề để tránh dòng phụ đề quá ngắn
+    merged_chunks: list[str] = []
+    for c in chunks:
+        c_core = re.sub(r'[,;:!?…—]+$', '', c).strip()
+        c_word_count = len(c_core.split())
+        if merged_chunks and c_word_count <= 3:
+            # Gộp vào chunk trước nếu tổng không quá max_words
+            prev_words = len(merged_chunks[-1].split())
+            if prev_words + c_word_count <= max_words:
+                merged_chunks[-1] = merged_chunks[-1] + ' ' + c
+                continue
+        merged_chunks.append(c)
+    chunks = merged_chunks
+
     final_lines: list[str] = []
     for c in chunks:
         c_words = c.split()
@@ -95,13 +212,45 @@ def _smart_split_display_lines(text: str, max_words: int = 7) -> list[str]:
                 parts_needed = max(1, (rem + max_words - 1) // max_words)
                 take = (rem + parts_needed - 1) // parts_needed
                 take = min(max_words, max(1, take))
-                # Tránh để rơi 1 từ lẻ ở cuối (ví dụ còn 8 từ thì chia 4 + 4, không chia 7 + 1)
-                if rem - take == 1 and take > 2:
-                    take -= 1
+                # Tránh để rơi 1-2 từ lẻ ở cuối
+                if rem - take <= 2 and take > 3:
+                    take = (rem + 1) // 2  # chia đều
+                # Tìm điểm ngắt tốt hơn dựa trên ngữ nghĩa (từ nối viết hoa)
+                take = _find_best_split_point(c_words, idx, take, n, max_words)
+                # Kiểm tra lại: không để 1-2 từ lẻ cuối
+                if n - (idx + take) <= 2 and n - (idx + take) > 0 and take > 3:
+                    take = (rem + 1) // 2
                 chunk_str = " ".join(c_words[idx : idx + take])
                 if chunk_str:
                     final_lines.append(chunk_str)
                 idx += take
+
+    # Bước cuối: gộp các dòng quá ngắn (≤3 từ) vào dòng trước hoặc sau
+    if len(final_lines) > 1:
+        merged_final: list[str] = []
+        i = 0
+        while i < len(final_lines):
+            line = final_lines[i]
+            line_wc = len(line.split())
+            if line_wc <= 3:
+                # Thử gộp vào dòng trước
+                if merged_final:
+                    prev_wc = len(merged_final[-1].split())
+                    if prev_wc + line_wc <= max_words:
+                        merged_final[-1] = merged_final[-1] + ' ' + line
+                        i += 1
+                        continue
+                # Thử gộp vào dòng sau
+                if i + 1 < len(final_lines):
+                    next_line = final_lines[i + 1]
+                    next_wc = len(next_line.split())
+                    if line_wc + next_wc <= max_words:
+                        merged_final.append(line + ' ' + next_line)
+                        i += 2
+                        continue
+            merged_final.append(line)
+            i += 1
+        final_lines = merged_final
 
     return final_lines if final_lines else [clean_text]
 
