@@ -521,7 +521,14 @@
                 <small id="proc-content-aspect-help" class="pe2-setting-note">Nhập rộng:cao. Để trống để giữ tỉ lệ gốc.</small>
                 <small id="proc-content-aspect-error" hidden style="color:#dc2626">Nhập hai số lớn hơn 0, ví dụ 3:4.</small>
               </div>
-              <p class="pe2-setting-note">Video được cắt giữa để vừa tỉ lệ đã chọn, không kéo méo hình.</p>
+              <div class="pe2-setting-field" style="margin-top:8px">
+                <label for="proc-content-aspect-mode">Chế độ khớp tỉ lệ</label>
+                <select id="proc-content-aspect-mode" onchange="framePreviewUpdate()">
+                  <option value="crop">Cắt giữa (Fill & Crop)</option>
+                  <option value="pad">Giữ toàn bộ (Fit & Pad)</option>
+                </select>
+              </div>
+              <p class="pe2-setting-note">"Cắt giữa" kéo giãn hình ảnh lấp đầy rồi cắt phần thừa. "Giữ toàn bộ" sẽ tạo viền hoặc nền mờ ở chỗ bị thiếu, giữ nguyên chiều rộng/cao nguyên bản.</p>
             </div>
 <div class="pe2-pane" data-pe2pane="overlay">
               <div class="pe2-grp" style="margin-top:0">Che phụ đề gốc</div>

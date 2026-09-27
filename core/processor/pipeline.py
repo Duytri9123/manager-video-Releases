@@ -868,7 +868,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _blur_timing_signature = {"enabled": _blur_by_subtitles, "segments": _blur_subtitle_segments,
                               "output_fps": _output_fps, "encode_device": _encode_device,
                               "visual_config": {key: data.get(key) for key in (
-                                  "content_aspect", "target_aspect", "aspect_pad_blur", "mask_config",
+                                  "content_aspect", "content_aspect_mode", "target_aspect", "aspect_pad_blur", "mask_config",
                                   "blur_original", "blur_zone", "blur_height_pct", "blur_width_pct",
                                   "blur_x_pct", "blur_y_pct", "blur_extra_zones", "video_overlays")}}
     _blur_zone_val = str(data.get("blur_zone", "bottom"))
@@ -1303,6 +1303,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             target_aspect=_target_aspect,
             aspect_pad_blur=_pad_blur,
             content_aspect=data.get("content_aspect", "auto"),
+            content_aspect_mode=data.get("content_aspect_mode", "crop"),
             mask_config=data.get("mask_config"),
             output_fps=_output_fps,
             encode_device=_encode_device,

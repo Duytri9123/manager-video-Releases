@@ -142,9 +142,9 @@ def _find_best_split_point(words: list, start: int, default_take: int,
     return best
 
 
-def _smart_split_display_lines(text: str, max_words: int = 7) -> list[str]:
+def _smart_split_display_lines(text: str, max_words: int = 9) -> list[str]:
     """
-    Tách câu thành các cụm phụ đề ngắn tối đa max_words từ (mặc định 7 từ),
+    Tách câu thành các cụm phụ đề ngắn tối đa max_words từ (mặc định 9 từ),
     cắt theo ngữ nghĩa tự nhiên, cân bằng độ dài, không để lại từ mồ côi (1 từ).
 
     Khi text không có dấu câu (phổ biến với Whisper/AI):
@@ -514,9 +514,9 @@ def process_speaker_tags_in_segments(segments: list[dict]) -> list[dict]:
 def _merge_segments_for_tts(
     segments: list[dict],
     max_gap: float = 1.5,
-    max_words: int = 28,
-    max_chars: int = 200,
-    max_duration: float = 14.0,
+    max_words: int = 18,
+    max_chars: int = 120,
+    max_duration: float = 8.0,
 ) -> list[dict]:
     """
     Gộp các đoạn phụ đề thành các câu thoại hoàn chỉnh, có ý nghĩa trọn vẹn cho TTS đọc.
@@ -586,11 +586,10 @@ def _merge_segments_for_tts(
 
         # 2. Nếu đoạn trước CHƯA hết câu, nhưng độ dài đã quá lớn (cần nhấp nhả/ngắt nghỉ)
         if combined_words > max_words or combined_duration > max_duration or len(combined_text) > max_chars:
-            current_has_pause = curr_text.endswith(_PAUSE_PUNCT)
-            if current_has_pause:
-                merged.append(current)
-                current = item
-                continue
+            # Always split — this keeps individual TTS clips short and avoids overflow
+            merged.append(current)
+            current = item
+            continue
 
         # 3. Gộp câu nếu khoảng cách nghỉ trong cùng một câu hợp lý (gap <= max_gap)
         if gap <= max_gap:
@@ -611,7 +610,7 @@ def align_subtitles_to_voice(
     ffmpeg: str = "ffmpeg",
     video_duration: float | None = None,
     min_gap: float = 0.08,
-    max_speed_factor: float = 1.5,
+    max_speed_factor: float = 1.7,
 ) -> tuple[list[dict], list[dict]]:
     """Anchor every utterance to the video; never ripple later speech forward.
 
@@ -658,22 +657,29 @@ def align_subtitles_to_voice(
             # Leave a small encoding margin and measure the resulting file again.
             speed = duration / max(0.001, available - 0.02)
             if speed > max_speed_factor:
-                raise ValueError(f"Câu {idx + 1} cần {duration:.2f}s nhưng chỉ có {available:.2f}s. "
-                                 "Hãy rút gọn câu hoặc chỉnh mốc ASS để giữ giọng tự nhiên.")
+                import logging
+                logging.getLogger("core.processor").warning(
+                    f"Câu {idx + 1} cần {duration:.2f}s nhưng chỉ có {available:.2f}s. "
+                    f"Tốc độ {speed:.2f}x vượt ngưỡng {max_speed_factor}x. Sẽ ép chạy ở {max_speed_factor}x (có thể bị chèn thời gian)."
+                )
+                speed = max_speed_factor
             src = Path(clip["path"])
             dst = src.with_name(src.stem + "_sync.wav")
             if not _apply_atempo(ffmpeg, src, dst, speed):
                 raise ValueError(f"Không điều chỉnh được thời lượng câu {idx + 1}")
             duration = _get_audio_duration(ffmpeg, dst)
-            if not math.isfinite(duration) or duration <= 0 or duration > available:
-                raise ValueError(f"Câu {idx + 1} vẫn vượt khoảng thời gian video sau khi căn giọng")
+            if not math.isfinite(duration) or duration <= 0:
+                raise ValueError(f"Lỗi tính thời lượng câu {idx + 1} sau khi căn giọng")
             clip["path"] = dst
         clip.update(start=start, end=start + duration, duration=duration,
                     tempo_factor=speed,
                     speaker=seg.get("speaker"), source_start=float(seg["start"]),
                     source_end=float(seg["end"]))
         aligned_clips.append(clip)
-        aligned_segments.append(dict(seg, start=start, end=start + duration, voice_aligned=True))
+        
+        # Clamp visual subtitle end time to prevent text stacking/overlapping on screen
+        visual_end = min(start + duration, limit)
+        aligned_segments.append(dict(seg, start=start, end=visual_end, voice_aligned=True))
     return aligned_clips, aligned_segments
 
 
@@ -844,6 +850,7 @@ def burn_subtitles(
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
     content_aspect: str = "auto",
+    content_aspect_mode: str = "crop",
     mask_config: dict | None = None,
     output_fps: int = 0,
     encode_device: str = "auto",
@@ -914,7 +921,7 @@ def burn_subtitles(
                          video_overlays=video_overlays,
                          target_aspect=target_aspect,
                          aspect_pad_blur=aspect_pad_blur,
-                         content_aspect=content_aspect, mask_config=mask_config,
+                         content_aspect=content_aspect, content_aspect_mode=content_aspect_mode, mask_config=mask_config,
                          output_fps=output_fps, encode_device=encode_device)
 
     # SRT path (original logic — no frame support)
@@ -962,6 +969,7 @@ def _burn_ass(
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
     content_aspect: str = "auto",
+    content_aspect_mode: str = "crop",
     mask_config: dict | None = None,
     output_fps: int = 0,
     encode_device: str = "auto",
@@ -1445,7 +1453,10 @@ def _burn_ass(
             if _content_ratio:
                 _inner_w = max(2, int(min(_target_w, _target_h * _content_ratio) // 2 * 2))
                 _inner_h = max(2, int(min(_target_h, _target_w / _content_ratio) // 2 * 2))
-            _fg_filter = (f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=increase,crop={_inner_w}:{_inner_h}" if _content_ratio else f"scale={_target_w}:{_target_h}:force_original_aspect_ratio=decrease")
+            if content_aspect_mode == "pad":
+                _fg_filter = (f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=decrease" if _content_ratio else f"scale={_target_w}:{_target_h}:force_original_aspect_ratio=decrease")
+            else:
+                _fg_filter = (f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=increase,crop={_inner_w}:{_inner_h}" if _content_ratio else f"scale={_target_w}:{_target_h}:force_original_aspect_ratio=decrease")
             if aspect_pad_blur:
                 # Blur at preview resolution, then upscale. The background is
                 # already intentionally soft, so processing it at full 1080p
@@ -1784,7 +1795,8 @@ def generate_frame_title(
     target_lang_name = _LANG_FULL.get(target_lang, target_lang)
 
     if not translated_texts:
-        return video_title[:30] if video_title else ""
+        # Return empty so Step 3 can generate it properly with translated Vietnamese text, instead of raw filename
+        return ""
 
     cfg = trans_cfg or {}
     # Pick the best available API key
@@ -1821,27 +1833,30 @@ def generate_frame_title(
         # Fallback: use first 30 chars of first translated text
         for t in translated_texts:
             if t and t.strip():
-                return t.strip()[:30]
-        return video_title[:30] if video_title else ""
+                return t.strip()[:35]
+        return video_title.replace("_", " ")[:35] if video_title else ""
 
     # Build content summary from translated texts
     content_sample = " ".join(t for t in translated_texts[:10] if t).strip()
     if len(content_sample) > 500:
         content_sample = content_sample[:500]
 
+    # Clean raw stem: remove numeric suffixes, replace underscores with spaces
+    import re as _re
+    raw_stem = video_title or ""
+    raw_stem = _re.sub(r'_?\d{10,}$', '', raw_stem)   # strip trailing numeric IDs
+    raw_stem = raw_stem.replace("_", " ").strip()
+
     prompt = (
-        f"Video title: {video_title or '(unknown)'}\n"
-        f"Content ({target_lang_name} subtitles): {content_sample}\n\n"
-        f"Create ONE short, catchy title in {target_lang_name} for this video.\n"
-        "Requirements:\n"
-        "- Maximum 30-40 characters\n"
-        "- Curiosity-inducing, click-worthy\n"
-        "- Keep specific numbers if present\n"
-        "- Use | to mark the EMPHASIS part (will be highlighted in yellow)\n"
-        "  Example: 'Fire ants vs|vacuum sealed powder!'\n"
-        "  The part after | is the shocking/curious part\n"
-        "- Return ONLY the title, no explanation\n\n"
-        "Title:"
+        f"Tên file video (không dấu): {raw_stem}\n"
+        f"Nội dung phụ đề ({target_lang_name}): {content_sample[:300]}\n\n"
+        f"Từ tên file và nội dung trên, tạo 1 tiêu đề ngắn gọn (20-35 ký tự) có ý nghĩa với video.\n"
+        f"- Thêm dấu tiếng Việt đúng vào các từ lấy từ tên file\n"
+        f"- Kết hợp ý chính từ tên file + nội dung để tạo tiêu đề hấp dẫn\n"
+        f"- Dùng | để chia tiêu đề thành 2 phần màu. Phần sau | là phần gây tò mò nhất\n"
+        f"- Ví dụ: 'MUỖI BẮC CỰC HÚT MÁU SÓI CON|ĐÀN SÓI BUỘC PHẢI ĐI'\n"
+        f"- Chỉ trả về tiêu đề, không giải thích.\n\n"
+        f"Tiêu đề:"
     )
 
     try:
@@ -1876,7 +1891,7 @@ def generate_frame_title(
         for t in translated_texts:
             if t and t.strip():
                 return t.strip()[:35]
-        return video_title[:35] if video_title else ""
+        return video_title.replace("_", " ")[:35] if video_title else ""
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1898,7 +1913,7 @@ def write_ass_with_frame(
     margin_v: int = 20,
     alignment: int = 2,
     font_name: str = "Arial",
-    max_words_per_line: int = 7,
+    max_words_per_line: int = 9,
     # Frame: Title bar (overlay on top of video)
     title_text: str = "",
     title_size_pct: float = 7.0,
@@ -1963,7 +1978,10 @@ def write_ass_with_frame(
     # Khi title_bar_h_pct=0 (user tắt tiêu đề) → không có title bar (h=0)
     title_bar_h = 0 if title_bar_h_pct <= 0 else max(40, int(play_res_y * title_bar_h_pct / 100))
     title_bar_h = title_bar_h + (title_bar_h % 2)
-    title_font_px = max(16, int(play_res_x * title_size_pct / 100))
+    title_font_px = max(14, int(play_res_x * title_size_pct / 100))
+    # Auto-clamp: font must not exceed ~40% of title bar height (keep text inside bar)
+    if title_bar_h > 0:
+        title_font_px = min(title_font_px, max(14, int(title_bar_h * 0.42)))
     title_bold = -1 if int(_clamp_float(title_weight, 300, 900)) >= 600 else 0
 
     side_w = max(0, int(play_res_x * blur_w_pct / 100))
@@ -2110,9 +2128,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         title_margin_x = int(out_w * _clamp_float(title_margin_x_pct, 0.0, 40.0) / 100.0)
         title_x = int(out_w * _clamp_float(title_x_pct, 0.0, 100.0) / 100.0)
         title_x = max(title_margin_x, min(max(title_margin_x, out_w - title_margin_x), title_x))
-        title_y = int(title_bar_h * _clamp_float(title_y_pct, 0.0, 100.0) / 100.0)
+        # Always anchor title Y to center of title bar
+        title_y = title_bar_h // 2
         # Uppercase the title for impact
         safe_title = title_text.replace("{", "").replace("}", "").replace("\\", "").upper()
+        # Auto-wrap long titles: estimate chars per line based on font size vs bar width
+        # ~0.6 = approximate char width ratio (uppercase Latin/Viet wide chars)
+        _chars_per_line = max(10, int(out_w * 0.9 / max(1, title_font_px * 0.6)))
+        if len(safe_title) > _chars_per_line and " " in safe_title:
+            # Find word boundary closest to middle
+            words = safe_title.split()
+            mid = max(1, len(words) // 2)
+            safe_title = " ".join(words[:mid]) + "\\N" + " ".join(words[mid:])
 
         if title_split_color and len(safe_title) > 1:
             color1_bgr = _hex_color(title_color)

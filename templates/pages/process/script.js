@@ -1822,6 +1822,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     capcut_auto_open: document.getElementById('proc-capcut-auto-open')?.checked ?? false,
     // Video mode: only convert when the source orientation differs from the selected mode.
     content_aspect: document.getElementById('proc-content-aspect')?.value || 'auto',
+    content_aspect_mode: document.getElementById('proc-content-aspect-mode')?.value || 'crop',
     mask_config: {mode: document.getElementById('proc-mask-mode')?.value || 'blur', source_x: Number(document.getElementById('proc-mask-source-x')?.value ?? 50)/100, source_y: Number(document.getElementById('proc-mask-source-y')?.value ?? 75)/100},
     target_aspect: document.getElementById('proc-preview-aspect')?.value || 'auto',
     output_fps: Number(document.getElementById('proc-output-fps')?.value || 0),

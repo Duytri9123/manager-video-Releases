@@ -238,7 +238,7 @@ def _llm_translate(
         parts.append(
             "\nRULES:\n"
             f"1. Each line must be a complete, natural {target_lang_name} sentence.\n"
-            "2. Keep translations concise and natural.\n"
+            "2. [VERY IMPORTANT] Keep translations EXTREMELY CONCISE and SHORT so that the generated TTS audio fits within the short video timing window. Summarize if necessary.\n"
             "3. OUTPUT: Return ONLY numbered lines (1. ..., 2. ...). No explanations, no extra text."
         )
         prompt = "\n".join(parts)
@@ -530,6 +530,7 @@ def _translate_with_antigravity(
             "QUY TẮC BẮT BUỘC:\n"
             f"1. Xuất ĐÚNG số lượng dòng tương ứng, giữ nguyên định dạng số thứ tự (1. ..., 2. ...).\n"
             "2. Tuyệt đối không giải thích, không thêm suy nghĩ (no thinking/reasoning), chỉ xuất các dòng phụ đề đã dịch.\n"
+            "3. [RẤT QUAN TRỌNG] Phải dịch CỰC KỲ NGẮN GỌN VÀ XÚC TÍCH để khớp với thời lượng giọng nói nhanh của video gốc. Nếu câu gốc dài, hãy tóm tắt ý chính.\n"
         )
 
         req_body = {

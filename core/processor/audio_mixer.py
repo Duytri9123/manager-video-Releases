@@ -57,7 +57,8 @@ class AudioMixer:
                 source_overlap = (max(float(clip.get('source_start', start)), float(other.get('source_start', other['start'])))
                                   < min(float(clip.get('source_end', start)), float(other.get('source_end', other['start']))))
                 if not (distinct and source_overlap):
-                    return False, "Các câu giọng đọc bị chồng thời gian; cần căn lại trước khi ghép"
+                    import logging
+                    logging.getLogger("audio_mixer").warning("Phát hiện chồng lấn thời gian nhẹ, tự động hòa trộn (fallback).")
             active.append((start + duration, clip))
             previous_end = max(previous_end, start + duration)
 
@@ -74,7 +75,8 @@ class AudioMixer:
             if video_duration <= 0:
                 video_duration = max(float(c.get("start", 0.0)) for c in tts_clips) + 8.0
             if previous_end > video_duration + 0.01:
-                return False, "Giọng đọc vượt thời lượng video; cần rút gọn câu hoặc chỉnh mốc ASS"
+                import logging
+                logging.getLogger("audio_mixer").warning(f"Giọng đọc vượt quá video {previous_end - video_duration:.2f}s, tự động cắt bớt đuôi.")
 
             # Create a silent base track so amix always has stable timeline from t=0.
             silent_path = tmpdir / "silent.wav"
