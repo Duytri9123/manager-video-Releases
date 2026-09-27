@@ -1109,7 +1109,8 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
 
   let startResp;
   try {
-    const payload = { video_path: videoPath, caption: fullCaption };
+    const accountId = document.getElementById('p-tt-account-select')?.value || document.getElementById('tt-account-select')?.value || '';
+    const payload = { video_path: videoPath, caption: fullCaption, account_id: accountId };
     if (scheduledTime) payload.scheduled_time = scheduledTime;
     const r = await fetch('/api/tiktok/prepare_upload', {
       method: 'POST',
@@ -1185,6 +1186,7 @@ function _pSyncAccountSelectors() {
   };
   mirror('yt-account-select', 'p-yt-account-select');
   mirror('fb-account-select', 'p-fb-account-select');
+  mirror('tt-account-select', 'p-tt-account-select');
 
   const srcPage = document.getElementById('pub-fb-page-select');
   const dstPage = document.getElementById('p-fb-page-select');

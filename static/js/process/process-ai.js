@@ -216,6 +216,16 @@
     const cover = Array.isArray(result.needs_cover) ? result.needs_cover : [];
     const zones = Array.isArray(result.suggested_blur_zones) ? result.suggested_blur_zones : [];
     const titles = result.title_suggestions || {};
+    const titleInput = document.getElementById('frame-title');
+    if (document.getElementById('frame-title-enabled')?.checked && titleInput) {
+      const suggestion = titles.short || titles.tiktok || titles.youtube || titles.facebook;
+      if (suggestion && (!titleInput.value.trim() || titleInput.value === titleInput.dataset.aiTitle)) {
+        titleInput.value = suggestion;
+        titleInput.dataset.aiTitle = suggestion;
+        if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+      }
+    }
+
     const coverHtml = cover.length
       ? `<ul>${cover.map(item => `<li><b>${_procAiEsc(item.label || item.type || 'Thành phần')}</b>: ${_procAiEsc(item.reason || '')} <span class="pe2-ai-pill">${Math.round((item.confidence || 0) * 100)}%</span></li>`).join('')}</ul>`
       : '<div class="text-xs text-muted">AI chưa thấy chữ/logo cần che rõ ràng.</div>';
@@ -225,7 +235,7 @@
     const titleBits = [titles.short, titles.youtube, titles.tiktok, titles.facebook].filter(Boolean);
     box.innerHTML = `
       <div class="pe2-ai-box">
-        <h4>Tổng quan</h4>
+        <h4>Cốt truyện và diễn biến</h4>
         <div>${_procAiEsc(result.summary || 'Chưa có tóm tắt.')}</div>
         ${result.visual_style ? `<div class="mt-4 text-xs text-muted">${_procAiEsc(result.visual_style)}</div>` : ''}
         ${result.source_language ? `<div class="mt-4"><span class="pe2-ai-pill">Ngôn ngữ: ${_procAiEsc(result.source_language)}</span></div>` : ''}
@@ -254,6 +264,7 @@
       }
     } else {
       procRemoveAiZones();
+      if (window.subPreviewUpdate) window.subPreviewUpdate();
       _procAiSetStatus('Đã tắt sử dụng phân tích AI. Nội dung phân tích vẫn được giữ để tham khảo.', 'info');
     }
   }
@@ -270,7 +281,7 @@
       _procAiSetStatus('Không đọc được video: video chưa tải xong hoặc chưa có file local.', 'error');
       return null;
     }
-    if (!opts.force && window._procVideoAiCache[path]) {
+    if (opts.useCache && !opts.force && window._procVideoAiCache[path]) {
       window._procVideoAiAnalysis = window._procVideoAiCache[path];
       if (useToggle) { useToggle.checked = !!window._procUseAiAnalysis; }
       procRenderAiAnalysis();
@@ -279,6 +290,8 @@
     }
     if (window._procAiAnalyzing) return null;
     window._procAiAnalyzing = true;
+    if (window.subPreviewUpdate) window.subPreviewUpdate();
+    if (window.framePreviewUpdate) window.framePreviewUpdate();
     if (btn) { btn.disabled = true; btn.textContent = '⏳ AI đang đọc...'; }
     _procAiSetStatus('AI đang đọc video và kiểm tra chữ/logo cần che...', 'info');
     try {
@@ -327,6 +340,8 @@
       return null;
     } finally {
       window._procAiAnalyzing = false;
+      if (window.subPreviewUpdate) window.subPreviewUpdate();
+      if (window.framePreviewUpdate) window.framePreviewUpdate();
       if (btn) { btn.disabled = false; btn.textContent = '🤖 Phân tích video'; }
     }
   }

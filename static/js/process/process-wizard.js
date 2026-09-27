@@ -1,4 +1,10 @@
 (function(){
+    window.procToggleMobilePanel = function (button) {
+      const editor = button.closest('.pe2-editor');
+      const open = editor.classList.toggle('pe2-mobile-panel-open');
+      button.setAttribute('aria-expanded', String(open));
+      button.querySelector('span').textContent = open ? 'Đóng bảng chỉnh sửa' : 'Mở bảng chỉnh sửa';
+    };
     window._procWizStep = window._procWizStep || 1;
     window._step3Started = false;
     window._step3Confirmed = false;
@@ -214,10 +220,19 @@
           elVoice.classList.remove('text-slate-800', 'dark:text-slate-200');
         } else {
           const engine = _getSelectText(document.getElementById('proc-tts-engine'), 'VieNeu');
-          const voice = _getSelectText(document.getElementById('proc-tts-voice'), 'Mặc định');
-          const txt = `${engine} · ${voice}`;
-          elVoice.textContent = txt;
-          elVoice.title = txt;
+          const isMulti = document.getElementById('proc-multi-speaker')?.checked;
+          if (isMulti) {
+            const vMale = _getSelectText(document.getElementById('proc-tts-voice-male'), 'Nam');
+            const vFem = _getSelectText(document.getElementById('proc-tts-voice-female'), 'Nữ');
+            const txt = `${engine} · Đa vai (Nam & Nữ)`;
+            elVoice.textContent = txt;
+            elVoice.title = `${engine} | Nam: ${vMale} | Nữ: ${vFem}`;
+          } else {
+            const voice = _getSelectText(document.getElementById('proc-tts-voice'), 'Mặc định');
+            const txt = `${engine} · ${voice}`;
+            elVoice.textContent = txt;
+            elVoice.title = txt;
+          }
           elVoice.classList.remove('text-slate-400');
           elVoice.classList.add('text-slate-800', 'dark:text-slate-200');
         }

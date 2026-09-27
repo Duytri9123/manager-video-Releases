@@ -14,7 +14,7 @@ from typing import Optional, List, Tuple, Dict, Any
 
 from core.processor.ffmpeg_base import (
     find_ffmpeg, run_ffmpeg, _run_ffmpeg, get_media_duration_seconds,
-    _get_audio_duration, _winlong, _safe_stem
+    _get_audio_duration, _winlong, _safe_stem, has_audio_track
 )
 
 class AudioMixer:

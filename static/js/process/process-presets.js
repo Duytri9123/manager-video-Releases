@@ -24,6 +24,14 @@
   }
 
   function _updateAspectBadge() {
+    const saveButton = document.getElementById('pe2-save-defaults');
+    const aspectLabel = (window._procActiveAspect || '16x9').replace('x', ':');
+    if (saveButton) {
+      saveButton.title = `Lưu cài đặt Bước 2 vào mặc định ${aspectLabel} trong trình duyệt`;
+      saveButton.setAttribute('aria-label', saveButton.title);
+      const label = document.getElementById('pe2-save-defaults-label');
+      if (label) label.textContent = `Lưu mặc định ${aspectLabel}`;
+    }
     const badge = document.getElementById('proc-active-aspect-badge');
     if (!badge) return;
     const a = window._procActiveAspect;
@@ -63,6 +71,7 @@
     { id:'proc-lang',           type:'value' },
     { id:'proc-target-lang',    type:'value' },
     { id:'proc-trans-provider-model', type:'value' },
+    { id:'proc-translation-provider', type:'value' },
     { id:'proc-ai-video-auto',  type:'checkbox' },
     { id:'proc-ai-video-samples', type:'value' },
     { id:'proc-ai-video-nine-model', type:'value' },
@@ -185,7 +194,7 @@
       try { localStorage.setItem(_PROC_DEFAULTS_KEY, JSON.stringify(data)); } catch (_) {}
       if (!silent) {
         const stepNames = { 1: 'Bước 1 (Nguồn & Dịch)', 2: 'Bước 2 (Khung hình & Sub)', 3: 'Bước 3 (AI & Lồng tiếng)' };
-        const msg = stepNames[stepNum] ? `✅ Đã lưu cấu hình ${stepNames[stepNum]} (${aspect.replace('x', ':')})` : `✅ Đã lưu cấu hình (${aspect.replace('x', ':')})`;
+        const msg = `✅ Đã lưu ${stepNames[stepNum] || 'cài đặt'} vào cấu hình mặc định ${aspect.replace('x', ':')} trong trình duyệt.`;
         if (typeof toast === 'function') toast(msg, 'success');
       }
       _updateAspectBadge();
@@ -238,6 +247,7 @@
         if (targetIds && !targetIds.includes(f.id)) return;
         const el = document.getElementById(f.id);
         if (!el || !(f.id in data)) return;
+
         if (f.type === 'checkbox') el.checked = data[f.id];
         else el.value = data[f.id];
         el.dispatchEvent(new Event('change'));
@@ -298,6 +308,7 @@
         _PROC_FIELDS.forEach(f => {
           const el = document.getElementById(f.id);
           if (!el || !(f.id in data)) return;
+
           if (f.type === 'checkbox') el.checked = data[f.id];
           else el.value = data[f.id];
         });
@@ -544,6 +555,29 @@
       });
     }
 
+    const profileConfig = p.processing || {};
+    if (profileConfig.blur_extra_zones) {
+      window._procExtraBlurZones = profileConfig.blur_extra_zones.map(z => ({
+        height: z.height_pct * 100, width: z.width_pct * 100,
+        position: z.position_pct * 100, x: z.x_pct * 100,
+        start: z.start_sec ?? '', end: z.end_sec ?? ''
+      }));
+    }
+    if (typeof _ovLoadFromHidden === 'function') _ovLoadFromHidden();
+    if (typeof ovRenderLayerList === 'function') ovRenderLayerList();
+    try { window._procExtAudios = JSON.parse(p.settings?.['proc-ext-audios-json'] || '[]'); } catch (_) { window._procExtAudios = []; }
+    if (typeof procRenderExtAudios === 'function') procRenderExtAudios();
+    const blurMode = p.settings?.['frame-blur-mode'];
+    if (blurMode) document.querySelectorAll('input[name="frame-blur-mode"]').forEach(el => { el.checked = el.value === blurMode; });
+    // A hidden video layer must never cover the frame/blur/logo above it.
+    window._pe2LayerOrder = ['video', 'frame', 'blur', 'logo', 'overlays', 'subs'];
+    window._pe2TrackVisibility = {video:true, frame:true, blur:true, logo:true, overlays:true, subs:true};
+    if (Object.prototype.hasOwnProperty.call(profileConfig, 'frame_logo_path')) {
+      const logoPath = profileConfig.frame_logo_path || '';
+      localStorage.setItem('proc_frame_logo_path', logoPath);
+      localStorage.setItem('proc_frame_logo_url', logoPath ? '/temp_uploads/' + encodeURIComponent(logoPath.split(/[\\/]/).pop()) : '');
+      if (typeof _loadFrameLogoDefault === 'function') _loadFrameLogoDefault();
+    }
     try { localStorage.setItem(_PE2_ACTIVE_PROFILE_KEY, profileName); } catch (_) {}
     pe2PopulateProfileSelects(profileName);
 
@@ -596,7 +630,8 @@
       type,
       aspect,
       padMode,
-      settings
+      settings,
+      processing: collectProcessConfig()
     };
 
     try {
@@ -607,6 +642,7 @@
       return;
     }
 
+    let savedToServer = false;
     try {
       const response = await fetch('/api/process_profiles', {
         method: 'POST',
@@ -616,8 +652,9 @@
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result.ok === false) throw new Error(result.error || `HTTP ${response.status}`);
       _pe2ServerProfiles[name] = custom[name];
+      savedToServer = true;
     } catch (error) {
-      if (typeof toast === 'function') toast(`⚠ Đã lưu trong trình duyệt nhưng chưa lưu được vào hệ thống: ${error.message}`, 'warning');
+      if (typeof toast === 'function') toast(`⚠ Cấu hình “${name}” (${type}, ${aspect.replace('x', ':')}) chỉ được lưu trong trình duyệt; chưa lưu vào hệ thống: ${error.message}`, 'warning');
     }
 
     pe2PopulateProfileSelects(name);
@@ -625,8 +662,8 @@
     const drawer = document.getElementById('pe2-profile-save-drawer');
     if (drawer) drawer.style.display = 'none';
 
-    if (typeof toast === 'function') {
-      toast(`✅ Đã lưu cấu hình: ${name}`, 'success');
+    if (savedToServer && typeof toast === 'function') {
+      toast(`✅ Đã lưu cấu hình “${name}” (${type}, ${aspect.replace('x', ':')}) vào hệ thống và trình duyệt.`, 'success');
     }
   }
   window.pe2SaveNamedProfile = pe2SaveNamedProfile;
@@ -699,3 +736,28 @@
   });
 
 
+
+// Serialize a saved Step 2 profile using the same collector as manual processing.
+window.collectProfileProcessConfig = function(profile) {
+  if (!profile) return collectProcessConfig();
+  if (profile.processing) return JSON.parse(JSON.stringify(profile.processing));
+  const saved = [];
+  const ext = window._procExtAudios, overlays = window._videoOverlays;
+  try {
+    const values = {...(profile.settings || {}), 'proc-preview-aspect': profile.aspect || 'auto'};
+    Object.entries(values).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      saved.push([el, el.value, el.checked]);
+      if (typeof value === 'boolean') el.checked = value; else el.value = value;
+    });
+    if (values['proc-ext-audios-json']) window._procExtAudios = JSON.parse(values['proc-ext-audios-json']);
+    if (values['ov-layers-json']) window._videoOverlays = JSON.parse(values['ov-layers-json']);
+    const result = collectProcessConfig();
+    if (values['frame-blur-mode']) result.frame_blur_mode = values['frame-blur-mode'];
+    return result;
+  } finally {
+    saved.forEach(([el, value, checked]) => { el.value = value; el.checked = checked; });
+    window._procExtAudios = ext; window._videoOverlays = overlays;
+  }
+};

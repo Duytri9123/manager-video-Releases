@@ -177,7 +177,8 @@ def get_cookies_with_fallback():
     user must configure their own cookies via the UI / `.cookies.json`."""
     try:
         cfg = load_cfg()
-        ck = cfg.get("cookies") or {}
+        from auth.account_manager import get_douyin_account_manager
+        ck = get_douyin_account_manager().get_cookies() or cfg.get("cookies") or {}
         # Also support cookies in a separate .cookies.json file (gitignored)
         cookies_file = ROOT / ".cookies.json"
         if (not ck) and cookies_file.exists():

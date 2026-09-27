@@ -492,7 +492,7 @@
       btn.innerHTML = '<span class="w-3.5 h-3.5 border-2 border-slate-600 border-t-transparent rounded-full animate-spin inline-block mr-1"></span> Đang thử giọng...';
     }
     
-    let engine = 'vieneu';
+    let engine = document.getElementById('tr-tts-engine')?.value || 'vieneu';
     let voice = voiceSel?.value || '';
     
     trAppendLog(`⏳ Đang tạo giọng nói thử nghiệm (${engine} / ${voice}). Lần đầu sau khi mở app có thể cần chờ model khởi động...`, 'info');
@@ -570,7 +570,7 @@
     trClearLogs();
     trAppendLog('Bắt đầu lồng tiếng từ file phụ đề .ass...', 'info');
     
-    let engine = 'vieneu';
+    let engine = document.getElementById('tr-tts-engine')?.value || 'vieneu';
     let voice = document.getElementById('tr-tts-voice')?.value || '';
     
     const payload = {
@@ -886,7 +886,7 @@
   async function trSaveTtsSettings() {
     if (!enginesCatalog) return;
     
-    let engine = document.getElementById('tr-tts-engine')?.value || 'edge-tts';
+    let engine = document.getElementById('tr-tts-engine')?.value || 'vieneu';
     let voice = document.getElementById('tr-tts-voice')?.value || '';
     const lang = document.getElementById('tr-tts-lang')?.value || 'vi';
     const rate = document.getElementById('tr-tts-rate')?.value || '+0%';

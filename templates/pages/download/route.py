@@ -580,50 +580,139 @@ def register_socketio_handlers():
                                         prog.fail_url(dl_res.get("error") or "download failed")
                                     continue
 
-                                async with DouyinAPIClient(cm.get_cookies(), proxy=_resolve_proxy(config)) as api:
-                                    prog.advance_step("解析链接", "")
-                                    if url.startswith("https://v.douyin.com"):
-                                        r = await api.resolve_short_url(url)
-                                        if r:
-                                            url = r
-                                    parsed = URLParser.parse(url)
-                                    if not parsed:
-                                        prog.fail_url("URL parse failed")
-                                        continue
-                                    prog.advance_step("创建下载器", parsed["type"])
-                                    dl = DownloaderFactory.create(
-                                        parsed["type"], config, api, fm, cm, db, rl, rh, qm,
-                                        progress_reporter=prog
-                                    )
-                                    if not dl:
-                                        prog.fail_url("No downloader")
-                                        continue
-                                    prog.advance_step("执行下载", "")
-                                    result = await dl.download(parsed)
-                                    prog.advance_step("记录历史", "")
-                                    if result and db:
-                                        safe = {k: v for k, v in config.config.items()
-                                                if k not in ("cookies", "cookie", "transcript")}
-                                        await db.add_history({
-                                            "url": orig, "url_type": parsed["type"],
-                                            "total_count": result.total, "success_count": result.success,
-                                            "config": _j.dumps(safe, ensure_ascii=False),
-                                        })
-                                    prog.advance_step("收尾", "")
-                                    if result:
-                                        results.append(result)
-                                        prog.complete_url(result)
-                                        socketio.emit("queue_item_state", {"url": orig, "state": "success"}, to=sid)
-                                        if use_queue:
-                                            with _queue_lock:
-                                                for idx2, qi in enumerate(_dl_queue):
-                                                    if qi["url"] == orig:
-                                                        del _dl_queue[idx2]
-                                                        break
-                                            socketio.emit("queue_update", list(_dl_queue), to=sid)
-                                    else:
+                                # ── DTK config ──────────────────────────────────────────────────
+                                _dtk_cfg = config.get("dtk") or {}
+                                _dtk_enabled = bool(_dtk_cfg.get("enabled"))
+                                _use_dtk_primary = _dtk_enabled and bool(_dtk_cfg.get("use_as_primary"))
+                                _use_dtk_fallback = _dtk_enabled and bool(_dtk_cfg.get("use_as_fallback", True))
+                                _native_success = False
+
+                                # ── Bước 1: Douyin gốc (bỏ qua nếu DTK primary) ─────────────
+                                if not _use_dtk_primary:
+                                    try:
+                                        async with DouyinAPIClient(cm.get_cookies(), proxy=_resolve_proxy(config)) as api:
+                                            prog.advance_step("解析链接", "")
+                                            if url.startswith("https://v.douyin.com"):
+                                                r = await api.resolve_short_url(url)
+                                                if r:
+                                                    url = r
+                                            parsed = URLParser.parse(url)
+                                            if not parsed:
+                                                prog.print_warning("Douyin native: URL parse failed" + (", trying DTK..." if _use_dtk_fallback else ""))
+                                            else:
+                                                prog.advance_step("创建下载器", parsed["type"])
+                                                dl = DownloaderFactory.create(
+                                                    parsed["type"], config, api, fm, cm, db, rl, rh, qm,
+                                                    progress_reporter=prog
+                                                )
+                                                if not dl:
+                                                    prog.print_warning("Douyin native: no downloader" + (", trying DTK..." if _use_dtk_fallback else ""))
+                                                else:
+                                                    prog.advance_step("执行下载", "")
+                                                    result = await dl.download(parsed)
+                                                    if result and result.success > 0:
+                                                        _native_success = True
+                                                        prog.advance_step("记录历史", "")
+                                                        if db:
+                                                            safe = {k: v for k, v in config.config.items()
+                                                                    if k not in ("cookies", "cookie", "transcript")}
+                                                            await db.add_history({
+                                                                "url": orig, "url_type": parsed["type"],
+                                                                "total_count": result.total, "success_count": result.success,
+                                                                "config": _j.dumps(safe, ensure_ascii=False),
+                                                            })
+                                                        prog.advance_step("收尾", "")
+                                                        results.append(result)
+                                                        prog.complete_url(result)
+                                                        socketio.emit("queue_item_state", {"url": orig, "state": "success"}, to=sid)
+                                                        if use_queue:
+                                                            with _queue_lock:
+                                                                for idx2, qi in enumerate(_dl_queue):
+                                                                    if qi["url"] == orig:
+                                                                        del _dl_queue[idx2]
+                                                                        break
+                                                            socketio.emit("queue_update", list(_dl_queue), to=sid)
+                                                    else:
+                                                        prog.print_warning("Douyin native: 0 files downloaded" + (", trying DTK fallback..." if _use_dtk_fallback else ""))
+                                    except Exception as _native_exc:
+                                        msg = str(_native_exc)
+                                        prog.print_warning(f"Douyin native error: {msg[:120]}" + (", trying DTK fallback..." if _use_dtk_fallback else ""))
+                                        logger.warning("Douyin native failed for %s: %s", orig[:80], msg)
+
+                                # ── Bước 2: DTK fallback / primary ──────────────────────────────
+                                if not _native_success and (_use_dtk_primary or _use_dtk_fallback):
+                                    try:
+                                        from core.dtk_client import try_parse_via_dtk
+                                        prog.advance_step("DTK解析", "Douyin_TikTok_Download_API")
+                                        prog.print_info("🔄 DTK API: đang parse URL...")
+                                        aweme_data = await try_parse_via_dtk(orig, config)
+                                        if aweme_data:
+                                            play_addr = (aweme_data.get("video") or {}).get("play_addr") or {}
+                                            video_urls = play_addr.get("url_list") or []
+                                            if not video_urls:
+                                                prog.fail_url("DTK: không tìm được video URL")
+                                                socketio.emit("queue_item_state", {"url": orig, "state": "failed"}, to=sid)
+                                            else:
+                                                prog.advance_step("DTK下载", "downloading via CDN")
+                                                import aiohttp as _ah
+                                                author_name = (aweme_data.get("author") or {}).get("nickname") or "dtk"
+                                                aweme_id_val = aweme_data.get("aweme_id") or "0"
+                                                out_dir = Path(config.get("path") or "./Downloaded")
+                                                out_dir.mkdir(parents=True, exist_ok=True)
+                                                out_path = out_dir / f"{author_name}_{aweme_id_val}.mp4"
+                                                _dtk_headers = {
+                                                    "Referer": "https://www.douyin.com/",
+                                                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+                                                }
+                                                _dtk_ok = False
+                                                for _vurl in video_urls:
+                                                    try:
+                                                        async with _ah.ClientSession() as _ds:
+                                                            async with _ds.get(_vurl, headers=_dtk_headers, timeout=_ah.ClientTimeout(total=300)) as _dr:
+                                                                if _dr.status == 200:
+                                                                    with open(out_path, "wb") as _df:
+                                                                        async for _chunk in _dr.content.iter_chunked(65536):
+                                                                            _df.write(_chunk)
+                                                                    _dtk_ok = True
+                                                                    break
+                                                    except Exception:
+                                                        continue
+                                                rr = DownloadResult()
+                                                rr.total = 1
+                                                if _dtk_ok:
+                                                    rr.success = 1
+                                                    prog.print_success(f"✅ DTK: đã lưu → {out_path.name}")
+                                                    if db:
+                                                        await db.add_history({
+                                                            "url": orig, "url_type": "dtk_video",
+                                                            "total_count": 1, "success_count": 1,
+                                                            "config": "{}",
+                                                        })
+                                                    results.append(rr)
+                                                    prog.complete_url(rr)
+                                                    socketio.emit("queue_item_state", {"url": orig, "state": "success"}, to=sid)
+                                                    if use_queue:
+                                                        with _queue_lock:
+                                                            for idx2, qi in enumerate(_dl_queue):
+                                                                if qi["url"] == orig:
+                                                                    del _dl_queue[idx2]
+                                                                    break
+                                                        socketio.emit("queue_update", list(_dl_queue), to=sid)
+                                                else:
+                                                    rr.failed = 1
+                                                    results.append(rr)
+                                                    socketio.emit("queue_item_state", {"url": orig, "state": "failed"}, to=sid)
+                                                    prog.fail_url("DTK: CDN URL không tải được")
+                                        else:
+                                            prog.fail_url("DTK parse: không có dữ liệu trả về")
+                                            socketio.emit("queue_item_state", {"url": orig, "state": "failed"}, to=sid)
+                                    except Exception as _dtk_exc:
+                                        logger.error("DTK fallback error: %s", _dtk_exc, exc_info=True)
+                                        prog.fail_url(f"DTK error: {_dtk_exc}")
                                         socketio.emit("queue_item_state", {"url": orig, "state": "failed"}, to=sid)
-                                        prog.fail_url("No result")
+                                elif not _native_success:
+                                    socketio.emit("queue_item_state", {"url": orig, "state": "failed"}, to=sid)
+                                    prog.fail_url("No result")
                             except Exception as e:
                                 socketio.emit("queue_item_state", {"url": orig, "state": "failed"}, to=sid)
                                 prog.fail_url(str(e))

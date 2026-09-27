@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional, List, Tuple, Dict, Any
 
@@ -112,12 +113,12 @@ def _max_tts_chars_for_engine(engine: str) -> int:
 # MultiProviderTTS
 # ══════════════════════════════════════════════════════════════════════════════
 class MultiProviderTTS:
-    """Multi-provider TTS: FPT AI, OpenAI, Edge-TTS, gTTS, ElevenLabs."""
+    """VieNeu-only adapter; accepts legacy constructor arguments for saved jobs."""
 
     def __init__(
         self,
-        voice: str = "banmai",
-        engine: str = "fpt-ai",
+        voice: str = "Minh Quân Pro",
+        engine: str = "vieneu",
         fpt_api_key: str = "",
         fpt_speed: int = 0,
         openai_api_key: str = "",
@@ -137,8 +138,8 @@ class MultiProviderTTS:
         vieneu_ref_audio: str = "",
     ):
         from config.config_loader import get_provider_api_key
-        self.voice = voice
-        self.engine = engine
+        from core.tts_catalog import resolve_engine_voice
+        self.engine, self.voice, _, _ = resolve_engine_voice(engine, voice, tts_lang)
         self.fpt_api_key = (fpt_api_key or "").strip() or get_provider_api_key("fptai")
         self.fpt_speed = fpt_speed
         self.openai_api_key = (openai_api_key or "").strip() or get_provider_api_key("openai")
@@ -163,156 +164,21 @@ class MultiProviderTTS:
         # Tự động fallback FPT → ElevenLabs khi FPT hết token/quota
         self.fpt_fallback_elevenlabs = fpt_fallback_elevenlabs and bool(self.elevenlabs_api_key)
 
-    async def _generate_single(self, text: str, out_path: Path, engine: str) -> bool:
+    async def _generate_single(
+        self, text: str, out_path: Path, engine: str, voice: str | None = None
+    ) -> bool:
         """Generate TTS for a single text chunk (no splitting). Internal use only."""
-        if engine == "fpt-ai":
-            try:
-                ok = await _tts_fpt_ai(text, self.voice, out_path, self.fpt_api_key, self.fpt_speed)
-                if ok:
-                    return True
-            except Exception as fpt_err:
-                # FPT hết token hoặc lỗi → fallback sang ElevenLabs nếu có key
-                if self.fpt_fallback_elevenlabs:
-                    import logging as _log
-                    _log.getLogger(__name__).warning(
-                        "FPT TTS thất bại (%s), chuyển sang ElevenLabs voice_id=%s",
-                        fpt_err, self.elevenlabs_voice_id,
-                    )
-                    try:
-                        ok = await _tts_elevenlabs(
-                            text, self.elevenlabs_voice_id, out_path,
-                            api_key=self.elevenlabs_api_key,
-                            model_id=self.elevenlabs_model,
-                        )
-                        if ok:
-                            return True
-                    except Exception:
-                        pass
+        from core.tts_catalog import resolve_engine_voice
+        _, selected_voice, _, _ = resolve_engine_voice(self.engine, voice or self.voice, self.tts_lang)
+        return await asyncio.to_thread(
+            _tts_vieneu, text, selected_voice, out_path,
+            style=self.tts_emotion, ref_audio=self.vieneu_ref_audio, engine=self.engine,
+        )
 
-        elif engine == "elevenlabs":
-            try:
-                selected_voice = (self.voice or "").strip()
-                voice_id = selected_voice if selected_voice and selected_voice not in {
-                    "banmai", "thuminh", "myan", "leminh", "linhsan", "giahuy", "lannhi"
-                } else self.elevenlabs_voice_id
-                ok = await _tts_elevenlabs(
-                    text, voice_id, out_path,
-                    api_key=self.elevenlabs_api_key,
-                    model_id=self.elevenlabs_model,
-                )
-                if ok:
-                    return True
-            except Exception:
-                pass
-
-        elif engine == "fish-audio":
-            try:
-                ref_id = (self.voice or "").strip() or self.fish_reference_id
-                ok = await _tts_fish(
-                    text, ref_id, out_path,
-                    api_key=self.fish_api_key,
-                    model=self.fish_model,
-                )
-                if ok:
-                    return True
-            except Exception:
-                pass
-
-        elif engine == "vieneu":
-            try:
-                ok = _tts_vieneu(
-                    text,
-                    self.voice,
-                    out_path,
-                    style=self.tts_emotion,
-                    ref_audio=self.vieneu_ref_audio,
-                )
-                if ok:
-                    return True
-            except Exception:
-                pass
-
-        elif engine == "openai-tts":
-            try:
-                ok = await _tts_openai(text, self.voice, out_path, self.openai_api_key, self.openai_model)
-                if ok:
-                    return True
-            except Exception:
-                pass
-
-        elif engine == "edge-tts":
-            try:
-                ok = await _tts_edge(
-                    text,
-                    self.voice,
-                    out_path,
-                    rate=self.tts_rate,
-                    pitch=self.tts_pitch,
-                    style=self.tts_emotion,
-                )
-                if ok:
-                    return True
-            except Exception:
-                pass
-
-        elif engine == "gtts":
-            try:
-                ok = _tts_gtts(text, self.tts_lang, out_path, self.voice)
-                if ok:
-                    return True
-            except Exception:
-                pass
-
-        return False
-
-    async def generate(self, text: str, out_path: Path) -> bool:
-        """Generate TTS audio. Splits long text into sentence-boundary chunks,
-        generates each chunk separately, then concatenates with ffmpeg.
-        Returns False if all providers fail."""
+    async def generate(self, text: str, out_path: Path, voice: str | None = None) -> bool:
+        """Generate with VieNeu; its SDK handles sentence splitting internally."""
         out_path = Path(out_path)
-        engine = self.engine.strip().lower()
-
-        # Tách text thành các đoạn nhỏ theo dấu câu (language-aware)
-        max_chars = _max_tts_chars_for_engine(engine)
-        chunks = _split_text_for_tts(text, max_chars=max_chars)
-        if not chunks:
-            return False
-
-        # Nếu chỉ 1 chunk, không cần concat
-        if len(chunks) == 1:
-            return await self._generate_single(chunks[0], out_path, engine)
-
-        # Nhiều chunk → tạo từng file tạm, concat lại bằng ffmpeg
-        import tempfile as _tmp
-        with _tmp.TemporaryDirectory(prefix="tts_chunks_") as _td:
-            chunk_paths: list[Path] = []
-            tmp_dir = Path(_td)
-            for idx, chunk in enumerate(chunks):
-                chunk_path = tmp_dir / f"chunk_{idx:04d}.mp3"
-                ok = await self._generate_single(chunk, chunk_path, engine)
-                if not ok or not chunk_path.exists() or chunk_path.stat().st_size == 0:
-                    return False  # fail fast — partial audio would desync
-                chunk_paths.append(chunk_path)
-
-            if len(chunk_paths) == 1:
-                import shutil as _sh
-                _sh.copy2(str(chunk_paths[0]), str(out_path))
-                return out_path.exists() and out_path.stat().st_size > 0
-
-            # Dùng ffmpeg concat demuxer để nối các chunk lại
-            list_file = tmp_dir / "concat.txt"
-            list_file.write_text(
-                "\n".join(f"file '{p}'" for p in chunk_paths),
-                encoding="utf-8",
-            )
-            ffmpeg_bin = find_ffmpeg()
-            ok, _ = run_ffmpeg([
-                ffmpeg_bin, "-f", "concat", "-safe", "0",
-                "-i", str(list_file),
-                "-c", "copy",
-                str(out_path), "-y", "-loglevel", "error",
-            ], "concat_tts_chunks")
-            return ok and out_path.exists() and out_path.stat().st_size > 0
+        return await self._generate_single(text, out_path, "vieneu", voice=voice)
 
     async def generate_all(
         self,
@@ -326,22 +192,39 @@ class MultiProviderTTS:
         ffmpeg: str = "ffmpeg",
         pitch_semitones: float = 0.0,
         indices: list[int] | None = None,
+        voice_map: dict | None = None,
+        progress_callback=None,
     ) -> list[dict]:
         """
-        Generate TTS for all segments with bounded concurrency.
-        Returns list of {"path": Path, "start": float, "end": float}
+        Generate TTS for all segments with bounded concurrency and optional multi-speaker voice_map.
+        Returns list of {"path": Path, "start": float, "end": float, "speaker": str}
         only for successfully generated segments.
         """
         tmpdir = Path(tmpdir)
-        sem = asyncio.Semaphore(max(1, max_concurrency))
+        sem = asyncio.Semaphore(1)  # One local model, no competing CPU inference.
+        completed = 0
+        total = sum(bool(t and t.strip()) for t in translations)
 
         async def _gen_one(i: int, seg: dict, text: str):
             if not text or not text.strip():
                 return None
-            out_path = tmpdir / f"tts_{i:04d}.mp3"
+            out_path = tmpdir / f"tts_{i:04d}.wav"
+
+            seg_voice = None
+            if voice_map:
+                spk = str(seg.get("speaker") or "").lower().strip()
+                if spk in voice_map and voice_map[spk]:
+                    seg_voice = voice_map[spk]
+                elif ("female" not in spk and ("male" in spk or "nam" in spk)) and voice_map.get("male"):
+                    seg_voice = voice_map["male"]
+                elif ("female" in spk or "nữ" in spk or "nu" in spk) and voice_map.get("female"):
+                    seg_voice = voice_map["female"]
+                elif "default" in voice_map and voice_map["default"]:
+                    seg_voice = voice_map["default"]
+
             async with sem:
                 for _attempt in range(max(1, retries + 1)):
-                    ok = await self.generate(text.strip(), out_path)
+                    ok = await self.generate(text.strip(), out_path, voice=seg_voice)
                     if ok:
                         # Auto-speed: fit TTS duration to segment duration
                         speed = float(tts_speed) if tts_speed else 1.0
@@ -390,11 +273,16 @@ class MultiProviderTTS:
                                         str(pitched_path), "-y", "-loglevel", "error"], capture_output=True)
                                     if pitched_path.exists() and pitched_path.stat().st_size > 0:
                                         out_path = pitched_path
+                        nonlocal completed
+                        completed += 1
+                        if progress_callback:
+                            progress_callback(completed, total)
                         return {
                             "index": i,
                             "path": out_path,
                             "start": seg["start"],
                             "end": seg["end"],
+                            "speaker": seg.get("speaker"),
                         }
                     await asyncio.sleep(0.25 * (_attempt + 1))
             return None
@@ -430,6 +318,12 @@ class MultiProviderTTS:
 # ══════════════════════════════════════════════════════════════════════════════
 def _get_audio_duration(ffmpeg: str, path: Path) -> float:
     """Return duration of an audio file in seconds."""
+    if Path(path).suffix.lower() == ".wav":
+        try:
+            import soundfile as sf
+            return float(sf.info(str(path)).duration)
+        except Exception:
+            pass
     try:
         r = subprocess.run(
             [ffmpeg, "-i", str(path), "-f", "null", "-"],
@@ -761,6 +655,7 @@ _GEMINI_TTS_STYLE_PREFIX = {
 
 
 _VIENEU_TTS_INSTANCE = None
+_VIENEU_LOCK = threading.RLock()
 
 
 def _vieneu_emotion_from_style(style: str) -> str:
@@ -800,29 +695,53 @@ def _vieneu_text_with_cue(text: str, style: str) -> str:
     return clean if not cue or clean.startswith("[") else cue + clean
 
 
-def _get_vieneu_tts():
+def _get_vieneu_tts(engine="vieneu"):
+    with _VIENEU_LOCK:
+        return _load_vieneu_tts(engine)
+
+
+_VIENEU_ENGINE = None
+
+
+def _load_vieneu_tts(engine="vieneu"):
     """Load VieNeu v3 Turbo once per process."""
-    global _VIENEU_TTS_INSTANCE
-    if _VIENEU_TTS_INSTANCE is not None:
+    global _VIENEU_TTS_INSTANCE, _VIENEU_ENGINE
+    if _VIENEU_TTS_INSTANCE is not None and _VIENEU_ENGINE == engine:
         return _VIENEU_TTS_INSTANCE
     try:
         from vieneu import Vieneu
     except Exception as exc:
         raise RuntimeError("VieNeu chưa được cài. Chạy: pip install vieneu") from exc
     try:
-        _VIENEU_TTS_INSTANCE = Vieneu(mode="v3turbo", backend="onnx")
+        if engine == "vieneu-nano":
+            instance = Vieneu(mode="v3nano")
+        else:
+            backend = {"vieneu-cpu": "onnx", "vieneu-gpu": "pytorch"}.get(engine, os.getenv("VIENEU_BACKEND", "auto"))
+            if engine == "vieneu-gpu":
+                import torch
+                if not torch.cuda.is_available():
+                    raise RuntimeError("GPU CUDA chưa khả dụng. Cần GPU NVIDIA và PyTorch CUDA; hãy chọn CPU hoặc Tự động.")
+            instance = Vieneu(mode="v3turbo", backend=backend, max_batch_size=2)
+        _VIENEU_TTS_INSTANCE = instance
+        _VIENEU_ENGINE = engine
     except Exception as exc:
         raise RuntimeError(f"Không load được VieNeu TTS: {exc}") from exc
     return _VIENEU_TTS_INSTANCE
 
 
-def _tts_vieneu(
+def _tts_vieneu(*args, **kwargs):
+    with _VIENEU_LOCK:
+        return _tts_vieneu_locked(*args, **kwargs)
+
+
+def _tts_vieneu_locked(
     text: str,
     voice: str,
     out_path: Path,
     style: str = "default",
     ref_audio: str = "",
     apply_watermark: bool = False,
+    engine: str = "vieneu",
 ) -> bool:
     """Generate Vietnamese TTS with local VieNeu and write MP3/WAV."""
     payload_text = (text or "").strip()
@@ -830,13 +749,15 @@ def _tts_vieneu(
         return False
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    tts = _get_vieneu_tts()
+    tts = _get_vieneu_tts(engine)
     emotion = _vieneu_emotion_from_style(style)
+    from core.tts_catalog import resolve_engine_voice
+    _, resolved_voice, _, _ = resolve_engine_voice(engine, voice, "vi")
     infer_kwargs = {
-        "voice": (voice or "Minh Quân Pro").strip() or "Minh Quân Pro",
+        "voice": resolved_voice,
         "emotion": emotion,
         "apply_watermark": apply_watermark,
-        "max_chars": 240,
+        "max_chars": 140 if engine == "vieneu-nano" else 240,
     }
     if ref_audio:
         infer_kwargs.pop("voice", None)
@@ -1253,9 +1174,9 @@ async def convert_voice(
                     if auto_speed and tts_dur > 0 and seg_dur > 0:
                         auto = tts_dur / seg_dur  # how much faster needed
                         # clamp between 0.5x and 3.0x
-                        auto = max(0.5, min(3.0, auto))
+                        auto = max(0.85, min(1.25, auto))
                         speed = auto * tts_speed
-                        speed = max(0.5, min(3.0, speed))
+                        speed = max(0.85, min(1.25, speed))
                     # Apply speed with atempo if needed
                     if abs(speed - 1.0) > 0.05:
                         sped_path = tmpdir / f"tts_{i:04d}_fast.mp3"

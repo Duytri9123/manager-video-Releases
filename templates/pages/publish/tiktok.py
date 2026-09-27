@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import re
 import time
 import uuid
 from pathlib import Path
@@ -540,8 +541,8 @@ def _cleanup_session_profile(session_dir: Path):
 def _has_login_cookies(profile_dir: Path) -> bool:
     """Check if master profile has a saved TikTok login state.
     
-    Primary source of truth: our JSON state file (from storage_state).
-    Fallback: Chromium's native Cookies file size.
+    Require an unexpired authentication cookie from storage_state.
+    Guest cookies and a populated Chromium database do not prove login.
     """
     try:
         # Primary: check our JSON state file with actual cookie count
@@ -551,13 +552,8 @@ def _has_login_cookies(profile_dir: Path) -> bool:
             with open(state_file, encoding="utf-8") as f:
                 data = json.load(f)
             cookies = data.get("cookies", [])
-            tt_cookies = [c for c in cookies if "tiktok" in (c.get("domain") or "").lower()]
-            if tt_cookies:
-                return True
-        # Fallback: check Chromium's native Cookies DB size
-        cookies_file = profile_dir / "Default" / "Cookies"
-        if cookies_file.exists() and cookies_file.stat().st_size > 16384:
-            return True
+            from auth.session_validation import has_authenticated_session
+            return has_authenticated_session(cookies, "tiktok.com")
         return False
     except Exception:
         return False
@@ -608,10 +604,13 @@ async def _load_tiktok_state(context, profile_dir: Path, sid: str = None):
         return 0
 
 
-async def _run_upload_flow(sid: str, video_path: Path, caption: str):
+async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir: Optional[Path] = None):
     """Open TikTok Studio, attach the file, fill caption, then wait for the user
     to press Post manually. This coroutine lives in its own thread/loop."""
     import shutil
+
+    if not profile_dir:
+        profile_dir = _TT_PROFILE_DIR
 
     try:
         from playwright.async_api import async_playwright
@@ -619,11 +618,11 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
         _set_status(sid, "error", error=f"Playwright không khả dụng: {exc}", done=True)
         return
 
-    _TT_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    profile_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Login gate: if master profile has no cookies, acquire the gate so
     # only this session runs until login completes. Other sessions will wait.
-    login_needed = not _has_login_cookies(_TT_PROFILE_DIR)
+    login_needed = not _has_login_cookies(profile_dir)
     gate_held = False
     if login_needed:
         _log(sid, "🔒 Chưa có phiên đăng nhập TikTok — các session khác sẽ chờ login xong.", "info")
@@ -635,7 +634,7 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
                 gate_held = True
                 break
             # If another session finished login in the meantime, we can skip the gate.
-            if _has_login_cookies(_TT_PROFILE_DIR):
+            if _has_login_cookies(profile_dir):
                 _log(sid, "✅ Session khác đã đăng nhập xong — tiếp tục.", "info")
                 break
             await asyncio.sleep(2)
@@ -649,7 +648,7 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
 
     # Copy essential files from master profile (cookies, local storage, etc.)
     # but skip heavy cache dirs to keep it fast.
-    _copy_profile_essentials(_TT_PROFILE_DIR, session_profile)
+    _copy_profile_essentials(profile_dir, session_profile)
 
     _set_status(sid, "launching")
     _log(sid, f"🚀 Mở trình duyệt (session profile: {sid}) ...")
@@ -738,7 +737,7 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
 
         # Inject saved cookies from master state (extra safety net beyond
         # the file-level profile copy, which can miss data if SQLite was locked).
-        await _load_tiktok_state(context, _TT_PROFILE_DIR, sid)
+        await _load_tiktok_state(context, profile_dir, sid)
 
         try:
             page = context.pages[0] if context.pages else await context.new_page()
@@ -752,7 +751,7 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
             # If redirected to login but we have saved cookies, reload once to
             # let TikTok pick them up (the initial goto raced the cookie inject).
             if ("login" in (page.url or "") or "verify" in (page.url or "")) and \
-               (_TT_PROFILE_DIR / ".tiktok_state.json").exists():
+               (profile_dir / ".tiktok_state.json").exists():
                 _log(sid, "🔄 Thử reload để TikTok nhận diện phiên đã lưu...", "info")
                 try:
                     await page.goto(TIKTOK_UPLOAD_URL, wait_until="domcontentloaded", timeout=30_000)
@@ -780,7 +779,7 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
                 _log(sid, "✅ Đã đăng nhập. Đồng bộ cookies về master profile...")
                 # Use Playwright's storage_state API — works reliably while
                 # browser is open, unlike file copy which can hit SQLite locks.
-                await _save_tiktok_state(context, _TT_PROFILE_DIR, sid)
+                await _save_tiktok_state(context, profile_dir, sid)
                 _log(sid, "✅ Cookies đã được lưu. Session khác có thể chạy song song.", "success")
 
             # Release the login gate now — master profile has valid cookies.
@@ -896,6 +895,19 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
             # ── Copyright Check: Tự động kích hoạt & kiểm tra bản quyền âm thanh ──
             await _check_tiktok_copyright(page, sid)
 
+            if _sessions[sid].get("auto_publish"):
+                post = page.get_by_role("button", name=re.compile(r"^(Post|Publish|Đăng)$", re.I)).first
+                await post.wait_for(state="visible", timeout=120000)
+                await post.click(timeout=120000)
+                # A click alone is not proof of publication. Wait for Studio's confirmation.
+                success = page.get_by_text(re.compile(r"(Your video has been uploaded|Video uploaded|Video published|Đã đăng video)", re.I)).first
+                await success.wait_for(state="visible", timeout=120000)
+                with _sessions_lock:
+                    _sessions[sid]["published"] = True
+                    _sessions[sid]["published_url"] = page.url
+                _set_status(sid, "published", done=True)
+                return
+
             _set_status(sid, "ready")
             _log(sid, "✅ Sẵn sàng. Kiểm tra lại rồi nhấn Post trong cửa sổ TikTok.", "success")
 
@@ -920,7 +932,7 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
             # Save state BEFORE closing the browser (storage_state needs an
             # open context; file-level sync can miss writes from open SQLite).
             try:
-                await _save_tiktok_state(context, _TT_PROFILE_DIR, sid)
+                await _save_tiktok_state(context, profile_dir, sid)
             except Exception:
                 pass
             try:
@@ -940,10 +952,10 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str):
     _set_status(sid, "closed", done=True)
 
 
-def _launch_session_thread(sid: str, video_path: Path, caption: str):
+def _launch_session_thread(sid: str, video_path: Path, caption: str, profile_dir: Optional[Path] = None):
     def _runner():
         try:
-            asyncio.run(_run_upload_flow(sid, video_path, caption))
+            asyncio.run(_run_upload_flow(sid, video_path, caption, profile_dir=profile_dir))
         except Exception as exc:  # noqa: BLE001
             _set_status(sid, "error", error=str(exc), done=True)
             _log(sid, f"❌ Lỗi: {exc}", "error")
@@ -961,8 +973,19 @@ def tt_prepare_upload():
     caption = str(data.get("caption") or "").strip()
     scheduled_time = str(data.get("scheduled_time") or "").strip()
     privacy = str(data.get("privacy") or "").strip().upper()
+    account_id = str(data.get("account_id") or "").strip()
     if not video_path_str:
         return jsonify({"ok": False, "error": "Thiếu video_path"}), 400
+
+    profile_dir = None
+    try:
+        from auth.account_manager import get_tiktok_account_manager
+        mgr = get_tiktok_account_manager()
+        profile_dir = mgr.get_profile_dir(account_id or None)
+    except Exception:
+        pass
+    if not profile_dir:
+        profile_dir = _TT_PROFILE_DIR
 
     # Resolve relative paths to workspace ROOT
     vp = Path(video_path_str)
@@ -1003,7 +1026,7 @@ def tt_prepare_upload():
         _log(sid, f"📅 Sẽ đặt lịch: {scheduled_time}")
     if privacy:
         _log(sid, f"🔒 Privacy: {privacy}")
-    _launch_session_thread(sid, vp, caption)
+    _launch_session_thread(sid, vp, caption, profile_dir=profile_dir)
     return jsonify({"ok": True, "session_id": sid})
 
 

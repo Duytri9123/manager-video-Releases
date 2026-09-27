@@ -3,6 +3,9 @@
 
   <!-- ── Scoped styles cho editor (light theme, theo biến của app) ──────── -->
   <style>
+    @media (max-width: 767px) {
+      #pe2-strip-btn, #pe2-queue-select { display: none !important; }
+    }
     #pe2-panel .pe2-pane .pe2-grp {
       text-transform:none;letter-spacing:0;font-size:12px;font-weight:600;
       margin-top:18px;margin-bottom:8px;
@@ -15,6 +18,11 @@
     #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard-lbl {font-size:11px;line-height:1.35;}
     #pe2-panel .pe2-optcard:focus-within {outline:2px solid var(--accent);outline-offset:2px;}
     #pe2-panel .pe2-pane .pe2-grp:first-child {margin-top:0;}
+    #pe2-tl-track {height:220px;}
+    #pe2-tl-strip {height:66px;bottom:auto;}
+    #pe2-tl-empty {height:66px;bottom:auto;}
+    #pe2-tl-ranges {top:84px;bottom:0;overflow-y:auto;overflow-x:hidden;pointer-events:auto;border-top:1px solid var(--border);background:var(--bg3,#f3f4f6);}
+    #pe2-tl-ranges .pe2-tl-range {box-sizing:border-box;overflow:hidden;}
     #pe2-panel .pe2-frame-grid {gap:12px;}
     #pe2-panel .pe2-pane .field {min-width:0;}
     #pe2-panel .pe2-pane .field input:not([type="checkbox"]):not([type="radio"]),
@@ -25,6 +33,7 @@
 
 
   <div class="pe2-editor">
+
 
     <!-- ── Editor body: inspector | preview ── -->
     <div class="pe2-body">
@@ -52,8 +61,8 @@
                   <path d="M3 3v5h5" />
                 </svg>
               </button>
-              <button type="button" class="btn btn-primary btn-sm" onclick="procSaveStep(2)"
-                title="Lưu cấu hình Bước 2 (Khung hình, Subtitle, Overlays...)"
+              <button type="button" id="pe2-save-defaults" class="btn btn-primary btn-sm" onclick="procSaveStep(2)"
+                title="Lưu cài đặt Bước 2 vào cấu hình mặc định theo tỷ lệ trong trình duyệt"
                 style="display:inline-flex;align-items:center;gap:4px">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                   stroke-linecap="round" stroke-linejoin="round">
@@ -61,6 +70,7 @@
                   <polyline points="17 21 17 13 7 13 7 21" />
                   <polyline points="7 3 7 8 15 8" />
                 </svg>
+                <span id="pe2-save-defaults-label">Lưu mặc định</span>
               </button>
 
             </div>
@@ -318,7 +328,7 @@
                   <div class="field">
                     <label>Số khung hình</label>
                     <select id="proc-ai-video-samples">
-                      <option value="full" selected>Tự động (5–8)</option>
+                      <option value="full" selected>Toàn video (1 ảnh/giây)</option>
                       <option value="3">3 frame</option>
                       <option value="5">5 frame</option>
                       <option value="8">8 frame</option>
@@ -362,13 +372,13 @@
                   <span>Tiêu đề</span>
                   <label class="toggle-wrap" style="margin:0;cursor:pointer" title="Bật/tắt hiển thị tiêu đề">
                     <input type="checkbox" class="toggle-input" id="frame-title-enabled" checked
-                      onchange="framePreviewUpdate()">
+                      onchange="if (typeof procRenderAiAnalysis === 'function') procRenderAiAnalysis(); framePreviewUpdate()">
                     <div class="toggle"></div>
                     <span class="toggle-label text-xs font-semibold">Hiện</span>
                   </label>
                 </div>
                 <div class="field wide" style="margin-bottom:12px">
-                  <input type="text" id="frame-title" placeholder="Nhập tiêu đề video..."
+                  <input type="text" id="frame-title" placeholder="Để trống để AI tạo tiêu đề khi phân tích video"
                     style="height:38px;width:100%;font-weight:600;border-radius:8px" oninput="framePreviewUpdate()">
                 </div>
 
@@ -728,7 +738,13 @@
 
         <!-- Timeline (filmstrip + ruler + playhead) — đặt phía dưới video -->
         <div class="pe2-timeline" id="pe2-timeline">
+          <div id="pe2-timeline-resize" role="separator" tabindex="0" aria-label="Điều chỉnh chiều cao timeline" aria-orientation="horizontal" title="Kéo lên để mở rộng timeline; dùng phím mũi tên lên hoặc xuống" style="height:12px;cursor:ns-resize;touch-action:none;display:flex;align-items:center;justify-content:center"><span style="width:48px;height:4px;border-radius:4px;background:var(--accent,#6366f1)"></span></div>
           <div class="pe2-tl-controls">
+    <button type="button" class="btn btn-secondary pe2-mobile-panel-toggle"
+      aria-controls="pe2-panel" aria-expanded="false" onclick="procToggleMobilePanel(this)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18M6 8h6M6 12h6M6 16h6"/></svg>
+      <span>Mở bảng chỉnh sửa</span>
+    </button>
             <button type="button" class="btn btn-primary btn-sm" id="pe2-play-btn" onclick="pe2TogglePlayback()"
               title="Phát hoặc tạm dừng video (phím Space)" style="display:inline-flex;align-items:center;gap:4px">
               <span>▶</span><span>Phát video</span>
@@ -816,6 +832,7 @@
       const quickLabel = document.getElementById('proc-vol-orig-quick-val');
       if (main && main !== source) main.value = value;
       if (quick && quick !== source) quick.value = value;
+      if (window.pe2SyncPreviewVolume) window.pe2SyncPreviewVolume();
       if (mainLabel) mainLabel.textContent = value + '%';
       if (quickLabel) quickLabel.textContent = value + '%';
       if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
@@ -860,6 +877,9 @@
         if (icEl && icons[name]) icEl.innerHTML = icons[name];
         if (name === 'tracks' && window.pe2RenderTracksUI) window.pe2RenderTracksUI();
         try { localStorage.setItem('pe2_active_tool', name); } catch (_) { }
+        if (typeof window.framePreviewUpdate === 'function') {
+          setTimeout(function () { window.framePreviewUpdate(); }, 20);
+        }
       };
 
       // Restore the inspector tool the user was editing last time.
@@ -1265,6 +1285,7 @@
           wrap.querySelectorAll('.pe2-selected').forEach(function (el) { el.classList.remove('pe2-selected'); });
           document.querySelectorAll('.ov-layer-card.pe2-selected').forEach(function (el) { el.classList.remove('pe2-selected'); });
           var s = window._pe2Sel;
+          if (window.pe2SyncTrackSelection) window.pe2SyncTrackSelection();
           if (!s) return;
           var el = null;
           if (s.type === 'sub') {
@@ -1427,7 +1448,7 @@
           return { left: left, top: top, right: left + w, bottom: top + h, x: left + w / 2, y: top + h / 2, w: w, h: h };
         }
         function _mainBlurBoundsFrac() {
-          if (!document.getElementById('proc-blur-original')?.checked) return null;
+          if (window._procAiAnalyzing || procAiOwnsBlur() || !document.getElementById('proc-blur-original')?.checked) return null;
           var h = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
           var yVal = document.getElementById('proc-blur-y')?.value?.trim();
           var yc = (yVal !== '' && yVal !== undefined)
@@ -1597,7 +1618,7 @@
               }
             }
             // Test main blur zone (che phụ đề gốc)
-            if (!hit && document.getElementById('proc-blur-original')?.checked) {
+            if (!hit && !window._procAiAnalyzing && !procAiOwnsBlur() && document.getElementById('proc-blur-original')?.checked) {
               var mbw = parseFloat(document.getElementById('proc-blur-width')?.value || 80) / 100;
               var mbh = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
               var byOv = document.getElementById('proc-blur-y')?.value?.trim();
@@ -2317,7 +2338,7 @@
           var point = mediaPoint(e);
           var canvasBlurEdge = '';
           if (e.target.id === 'frame-preview-canvas' && document.getElementById('frame-enabled')?.checked
-            && document.getElementById('proc-blur-original')?.checked) {
+            && !window._procAiAnalyzing && !procAiOwnsBlur() && document.getElementById('proc-blur-original')?.checked) {
             var cbw = parseFloat(document.getElementById('proc-blur-width')?.value || 80) / 100;
             var cbh = parseFloat(document.getElementById('proc-blur-height')?.value || 15) / 100;
             var cbx = parseFloat(document.getElementById('proc-blur-x')?.value || 50) / 100;
@@ -2448,6 +2469,16 @@
       }
       // Expose để scripts.html có thể gọi khi duration cập nhật
       window._pe2RenderRuler = _renderRuler;
+      window.pe2SyncTrackSelection = function () {
+        var selection = window._pe2Sel;
+        document.querySelectorAll('#pe2-tl-ranges .pe2-tl-range').forEach(function (row) {
+          var selected = !!selection && row.dataset.selectionType === selection.type
+            && row.dataset.selectionId === String(selection.id ?? '');
+          row.setAttribute('aria-pressed', String(selected));
+          row.style.outline = selected ? '2px solid var(--accent,#6366f1)' : '';
+          row.style.outlineOffset = '-2px';
+        });
+      };
       // Vẽ các đoạn "burn từ → đến" của các lớp lên timeline đa track
       window.pe2RenderRanges = function () {
         var box = document.getElementById('pe2-tl-ranges');
@@ -2455,6 +2486,41 @@
         box.innerHTML = '';
         var dur = _dur();
         if (!dur) return;   // Duration chưa biết → không vẽ range
+        function bindTrack(row, selection, start, end) {
+          row.style.pointerEvents = 'auto';
+          row.style.cursor = 'pointer';
+          row.tabIndex = 0;
+          row.setAttribute('role', 'button');
+          row.dataset.selectionType = selection.type;
+          row.dataset.selectionId = String(selection.id ?? '');
+          row.addEventListener('pointerdown', function(e) { e.stopPropagation(); });
+          row.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+          function select(e) {
+            e.stopPropagation();
+            window._pe2Sel = selection;
+            if (selection.type === 'audio') {
+              if (window.pe2Tool) window.pe2Tool('audio');
+            } else {
+              var ts = Number(document.getElementById('sub-preview-ts')?.value || 0);
+              if (ts < start || ts >= end) pe2SetTimeFromInput(String(start));
+              if (selection.type === 'overlay' && window.ovSelectLayer) window.ovSelectLayer(selection.id, true);
+              if (window.subPreviewUpdate) window.subPreviewUpdate();
+              if (window.framePreviewUpdate) window.framePreviewUpdate();
+              if (window.pe2ApplySelection) window.pe2ApplySelection();
+            }
+            window.pe2SyncTrackSelection();
+            if (e.type === 'keydown') {
+              Array.from(box.children).find(function(child) {
+                return child.dataset.selectionType === selection.type
+                  && child.dataset.selectionId === String(selection.id ?? '');
+              })?.focus({preventScroll:true});
+            }
+          }
+          row.addEventListener('click', select);
+          row.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(e); }
+          });
+        }
 
         // 1. Track Logo (nếu có chọn logo)
         var logoPath = document.getElementById('frame-logo-path')?.value;
@@ -2475,11 +2541,12 @@
           logoSeg.style.color = '#93c5fd';
           logoSeg.style.pointerEvents = 'none';
           logoSeg.textContent = '🖼 Logo: ' + (logoPath.split(/[\\/]/).pop() || logoPath);
+          bindTrack(logoSeg, {type:'frame-logo'}, 0, dur);
           box.appendChild(logoSeg);
         }
 
         // 2. Track Vùng che bổ sung (Blur Zones)
-        (window._procExtraBlurZones || []).forEach(function (z) {
+        procActiveBlurZones().forEach(function (z) {
           var hasS = !(z.start === '' || z.start === null || z.start === undefined);
           var hasE = !(z.end === '' || z.end === null || z.end === undefined);
           var s = hasS ? Number(z.start) : 0;
@@ -2503,6 +2570,7 @@
           seg.style.color = '#fdba74';
           var lab = document.createElement('span');
           lab.textContent = '🌫 ' + _fmt(s) + '→' + _fmt(e);
+          bindTrack(seg, {type:'extra', id:z.id}, s, e);
           seg.appendChild(lab);
           box.appendChild(seg);
         });
@@ -2538,6 +2606,7 @@
           var name = ov.type === 'text' ? (ov.text || 'Text') : (ov.type === 'image' ? (ov.name || 'Ảnh') : 'Khối');
           var lab = document.createElement('span');
           lab.textContent = icon + (name.length > 15 ? name.slice(0, 15) + '…' : name) + ' (' + _fmt(s) + '→' + _fmt(e) + ')';
+          bindTrack(seg, {type:'overlay', id:ov.id}, s, e);
           seg.appendChild(lab);
           box.appendChild(seg);
         });
@@ -2558,11 +2627,12 @@
         vidAudioLine.style.paddingLeft = '4px';
 
         var vidAudioIcon = document.createElement('span');
-        vidAudioIcon.textContent = '🔊';
+        vidAudioIcon.textContent = '🔊 Âm thanh video gốc';
         vidAudioIcon.style.fontSize = '9px';
         vidAudioIcon.style.color = 'rgb(34,197,94)';
         vidAudioIcon.style.lineHeight = '12px';
         vidAudioLine.appendChild(vidAudioIcon);
+        bindTrack(vidAudioLine, {type:'audio'}, 0, dur);
         box.appendChild(vidAudioLine);
 
         // 5. Track Âm thanh ngoài (External audio)
@@ -2609,12 +2679,23 @@
               segIcon.style.display = 'inline-flex';
               segIcon.style.alignItems = 'center';
               segIcon.style.color = '#ffffff';
+              segIcon.textContent = '♫ ' + (track.path.split(/[\\/]/).pop() || 'Âm thanh ngoài');
               seg.appendChild(segIcon);
+              bindTrack(seg, {type:'audio', id:tIdx}, s, e);
 
               box.appendChild(seg);
             }
           });
         }
+        // One lane per component, below the fixed-height thumbnail strip.
+        Array.from(box.children).forEach(function(row, index) {
+          row.style.top = (8 + index * 30) + 'px';
+          row.style.bottom = 'auto';
+          row.style.height = '24px';
+          row.style.fontSize = '11px';
+          row.title = row.textContent;
+        });
+        window.pe2SyncTrackSelection();
       };
 
       // Parse "m:ss" hoặc số giây → số giây
@@ -2693,25 +2774,37 @@
       });
 
       // ── Build filmstrip ──
-      window.pe2BuildFilmstrip = async function () {
+      var _stripCache = new Map(), _stripPending = new Set();
+      window.pe2BuildFilmstrip = async function (automatic) {
         if (typeof _getPreviewVideoPath !== 'function') return;
         var source = _getPreviewVideoPath();
         if (!source) { if (window.toast) toast('Chưa có video — hãy chọn file hoặc nhập URL', 'warning'); return; }
         if (source.type !== 'file') {
+          if (automatic) return;
           if (window.toast) toast('Dải thời gian chỉ hỗ trợ video từ file (URL chỉ có ảnh bìa)', 'warning');
           return;
         }
         var btn = document.getElementById('pe2-strip-btn');
         var strip = document.getElementById('pe2-tl-strip');
         var empty = document.getElementById('pe2-tl-empty');
+        if (_stripPending.has(source.val)) return;
+        _stripPending.add(source.val);
         if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tạo...'; }
         try {
+          var data = automatic && _stripCache.get(source.val);
+          if (!data) {
           var res = await fetch('/api/video_filmstrip', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ video_path: source.val, count: 14 })
           });
-          var data = await res.json();
+          data = await res.json();
+          if (data.ok) {
+            _stripCache.set(source.val, data);
+            if (_stripCache.size > 6) _stripCache.delete(_stripCache.keys().next().value);
+          }
+          }
+          if (_getPreviewVideoPath()?.val !== source.val) return;
           if (data.ok && data.frames && data.frames.length) {
             window._pe2Duration = data.duration || 0;
             if (strip) {
@@ -2737,16 +2830,45 @@
             }
             pe2SyncPlayhead();
             if (window.pe2RenderRanges) pe2RenderRanges();
-            if (window.toast) toast('✓ Đã tạo dải thời gian', 'success');
+            if (!automatic && window.toast) toast('✓ Đã tạo dải thời gian', 'success');
           } else {
             if (window.toast) toast('Không tạo được dải: ' + (data.error || ''), 'error');
           }
         } catch (err) {
           if (window.toast) toast('Lỗi: ' + err.message, 'error');
         } finally {
+          _stripPending.delete(source.val);
           if (btn) { btn.disabled = false; btn.textContent = '🎞 Tạo dải thời gian'; }
         }
       };
+
+      (function () {
+        var handle = document.getElementById('pe2-timeline-resize');
+        var track = document.getElementById('pe2-tl-track');
+        if (!handle || !track) return;
+        function resize(height) {
+          var limit = Math.max(160, Math.min(500, window.innerHeight * 0.6));
+          var value = Math.round(Math.max(160, Math.min(limit, height)));
+          track.style.height = value + 'px';
+          handle.setAttribute('aria-valuenow', value);
+          try { localStorage.setItem('pe2-timeline-height', value); } catch (_) {}
+        }
+        try { resize(Number(localStorage.getItem('pe2-timeline-height')) || 220); } catch (_) {}
+        var origin = null;
+        handle.addEventListener('pointerdown', function(e) {
+          origin = {y:e.clientY, height:track.offsetHeight};
+          handle.setPointerCapture(e.pointerId); e.preventDefault();
+        });
+        handle.addEventListener('pointermove', function(e) {
+          if (origin) resize(origin.height + origin.y - e.clientY);
+        });
+        handle.addEventListener('lostpointercapture', function() { origin = null; });
+        handle.addEventListener('keydown', function(e) {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            resize(track.offsetHeight + (e.key === 'ArrowUp' ? 20 : -20)); e.preventDefault();
+          }
+        });
+      })();
 
       // Init ruler + playhead + aspect buttons khi DOM sẵn sàng
       function _init() { _renderRuler(); pe2SyncPlayhead(); _syncAspectBtns(); pe2ApplyZoom(); if (window.pe2RenderRanges) pe2RenderRanges(); }
@@ -2758,6 +2880,27 @@
     (function () {
       var player = document.getElementById('pe2-video-player');
       if (!player) return;
+
+      let audioContext, gainNode;
+      window.pe2SyncPreviewVolume = function() {
+        const volume = Math.max(0, Math.min(2, Number(document.getElementById('proc-vol-orig')?.value ?? 100) / 100));
+        player.muted = volume === 0;
+        if (gainNode) { player.volume = 1; gainNode.gain.value = volume; }
+        else player.volume = Math.min(1, volume);
+      };
+      player.addEventListener('play', function() {
+        if (!audioContext) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) {
+            audioContext = new AudioCtx();
+            gainNode = audioContext.createGain();
+            audioContext.createMediaElementSource(player).connect(gainNode);
+            gainNode.connect(audioContext.destination);
+          }
+        }
+        if (audioContext) audioContext.resume().catch(() => {});
+        window.pe2SyncPreviewVolume();
+      });
 
       function _getVideoSrc() {
         if (typeof _getPreviewVideoPath !== 'function') return null;
@@ -2787,7 +2930,7 @@
       var _playAnimId = null;
       function _playbackTick() {
         if (!player.paused && !player.ended && player.style.display !== 'none') {
-          if (document.getElementById('frame-enabled')?.checked && typeof window.framePreviewUpdate === 'function') {
+          if (typeof window.framePreviewUpdate === 'function') {
             window.framePreviewUpdate();
           } else if (typeof window._renderSubOverlay === 'function') {
             window._renderSubOverlay();
@@ -2807,10 +2950,11 @@
         }
         var canvas = document.getElementById('frame-preview-canvas');
         if (canvas) {
-          var frameOn = !!document.getElementById('frame-enabled')?.checked;
-          canvas.style.display = frameOn ? 'block' : 'none';
-          canvas.style.zIndex = frameOn ? '4' : '2';
-          canvas.style.pointerEvents = frameOn ? 'auto' : 'none';
+          var frameChk = document.getElementById('frame-enabled');
+          // Keep the configured frame toggle.
+          canvas.style.display = 'block';
+          canvas.style.zIndex = '4';
+          canvas.style.pointerEvents = 'auto';
         }
         var ph = document.getElementById('sub-preview-placeholder');
         if (ph) ph.style.display = 'none';
@@ -2830,6 +2974,10 @@
         player.style.zIndex = '3';
         player.style.pointerEvents = document.getElementById('frame-enabled')?.checked ? 'none' : (autoPlay ? 'auto' : 'none');
         _hideStaticPreviews();
+
+        if (typeof window.framePreviewUpdate === 'function') {
+          window.framePreviewUpdate();
+        }
 
         if (autoPlay) {
           player.play().catch(function (e) { console.warn('Autoplay failed:', e); });
@@ -2890,7 +3038,7 @@
         var tsInput = document.getElementById('sub-preview-ts');
         if (tsInput) tsInput.value = Math.round(player.currentTime * 10) / 10;
         if (typeof window.pe2SyncPlayhead === 'function') window.pe2SyncPlayhead();
-        if (document.getElementById('frame-enabled')?.checked && typeof window.framePreviewUpdate === 'function') window.framePreviewUpdate();
+        if (typeof window.framePreviewUpdate === 'function') window.framePreviewUpdate();
         else if (typeof window.subPreviewUpdate === 'function') window.subPreviewUpdate();
         else if (typeof window._renderSubOverlay === 'function') window._renderSubOverlay();
       });
@@ -2901,12 +3049,27 @@
         player.style.pointerEvents = 'none';
       });
 
+      player.addEventListener('seeked', function () {
+        if (typeof window.framePreviewUpdate === 'function') window.framePreviewUpdate();
+        else if (typeof window.subPreviewUpdate === 'function') window.subPreviewUpdate();
+      });
+
+      player.addEventListener('loadeddata', function () {
+        if (typeof window.framePreviewUpdate === 'function') window.framePreviewUpdate();
+        else if (typeof window.subPreviewUpdate === 'function') window.subPreviewUpdate();
+      });
+
+      player.addEventListener('canplay', function () {
+        if (typeof window.framePreviewUpdate === 'function') window.framePreviewUpdate();
+      });
+
       player.addEventListener('timeupdate', function () {
         var ts = player.currentTime;
         var tsInput = document.getElementById('sub-preview-ts');
         if (tsInput) tsInput.value = Math.round(ts * 10) / 10;
         if (typeof window.pe2SyncPlayhead === 'function') window.pe2SyncPlayhead();
-        if (typeof window._renderSubOverlay === 'function') window._renderSubOverlay();
+        if (player.paused && typeof window.framePreviewUpdate === 'function') window.framePreviewUpdate();
+        else if (typeof window._renderSubOverlay === 'function') window._renderSubOverlay();
       });
 
       player.addEventListener('loadedmetadata', function () {
@@ -2917,7 +3080,8 @@
           if (typeof window.pe2RenderRanges === 'function') window.pe2RenderRanges();
         }
         if (typeof window._onPreviewAspectChange === 'function') window._onPreviewAspectChange();
-        if (typeof window._renderSubOverlay === 'function') window._renderSubOverlay();
+        if (typeof window.framePreviewUpdate === 'function') window.framePreviewUpdate();
+        else if (typeof window._renderSubOverlay === 'function') window._renderSubOverlay();
       });
 
       player.addEventListener('click', function (e) {
@@ -3088,13 +3252,23 @@
           'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-aspect-blur-bg',
           'sub-preview-sample', 'proc-font-size', 'proc-sub-pos', 'proc-font-color-picker',
           'proc-font-color-hex', 'proc-font-weight', 'proc-margin-v', 'proc-outline-width',
-          'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y', 'proc-blur-zone'
+          'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y', 'proc-blur-zone',
+          'proc-blur-by-subtitles',
+          'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight',
+          'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y',
+          'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex',
+          'frame-title-split-color', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-w',
+          'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius'
         ];
         sidebarInputs.forEach(function(id) {
           var el = document.getElementById(id);
           if (!el) return;
-          el.addEventListener('input', function() { if (typeof subPreviewUpdate === 'function') subPreviewUpdate(); });
-          el.addEventListener('change', function() { if (typeof subPreviewUpdate === 'function') subPreviewUpdate(); });
+          var doUpdate = function() {
+            if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
+            else if (typeof subPreviewUpdate === 'function') subPreviewUpdate();
+          };
+          el.addEventListener('input', doUpdate);
+          el.addEventListener('change', doUpdate);
         });
       })();
     });

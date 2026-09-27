@@ -265,7 +265,7 @@
           // We need to serve it as /temp_uploads/anti-fp-logo-xxx.png
           const pathParts = d.path.split(/[\\/]/);  // Handle both / and \
           const filename = pathParts[pathParts.length - 1];
-          const url = '/temp_uploads/' + filename;
+          const url = d.url || '/temp_uploads/' + encodeURIComponent(filename);
           
           // Save to localStorage for persistence
           try {
@@ -292,6 +292,7 @@
           img.onload = () => {
             _setFrameLogo(img, (file.type === 'image/gif') || _isGifSrc(file.name) || _isGifSrc(url));
           };
+          img.onerror = () => { _setFrameLogo(null, false); toast('Không đọc được ảnh logo. Vui lòng chọn lại tệp ảnh hợp lệ.', 'error'); };
           img.src = url + '?t=' + Date.now();  // Add timestamp to bypass cache
         } else {
           document.getElementById('frame-logo-path').value = '';

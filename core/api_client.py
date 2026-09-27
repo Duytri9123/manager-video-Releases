@@ -505,7 +505,7 @@ class DouyinAPIClient:
             return await self.fetch_single_video_via_browser(
                 aweme_id,
                 headless=bool(browser_fallback.get("headless", False)),
-                wait_timeout_seconds=int(browser_fallback.get("wait_timeout_seconds", 30)),
+                wait_timeout_seconds=int(browser_fallback.get("wait_timeout_seconds", 600)),
             )
 
         return None
@@ -542,43 +542,19 @@ class DouyinAPIClient:
         )
 
         async with async_playwright() as playwright:
-            if not headless:
-                import sys, threading, subprocess
-                if sys.platform == "win32":
-                    def _minimize():
-                        try:
-                            subprocess.run(
-                                ["powershell", "-Command",
-                                 "Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;"
-                                 "public class W{[DllImport(\"user32.dll\")]"
-                                 "public static extern bool ShowWindow(IntPtr h,int n);}';"
-                                 "Start-Sleep -Milliseconds 600;"
-                                 "Get-Process chrome,msedge,brave -ErrorAction SilentlyContinue"
-                                 "| Where-Object {$_.MainWindowHandle -ne 0}"
-                                 "| Sort-Object StartTime -Descending | Select-Object -First 3"
-                                 "| ForEach-Object { [W]::ShowWindow($_.MainWindowHandle, 6) }"
-                                 ],
-                                capture_output=True, timeout=4
-                            )
-                        except Exception:
-                            pass
-                    threading.Thread(target=_minimize, daemon=True).start()
-
-            browser = await playwright.chromium.launch(
+            from pathlib import Path
+            from utils.helpers import launch_playwright_browser_async
+            from auth.account_manager import get_douyin_account_manager
+            context = await launch_playwright_browser_async(
+                playwright.chromium,
+                is_persistent=True,
+                user_data_dir=str(get_douyin_account_manager().get_profile_dir()),
                 headless=headless,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-dev-shm-usage",
-                    "--no-sandbox",
-                ],
-            )
-            context = await browser.new_context(
-                user_agent=self.headers.get("User-Agent", ""),
                 locale="zh-CN",
                 viewport={"width": 1600, "height": 900},
             )
             cookies = self._browser_cookie_payload()
-            if cookies:
+            if cookies and not await context.cookies("https://www.douyin.com"):
                 await context.add_cookies(cookies)
 
             page = await context.new_page()
@@ -595,7 +571,7 @@ class DouyinAPIClient:
                 if not isinstance(data, dict):
                     return
                 detail = data.get("aweme_detail")
-                if isinstance(detail, dict) and detail.get("aweme_id"):
+                if isinstance(detail, dict) and str(detail.get("aweme_id")) == str(aweme_id):
                     result = detail
                     logger.info(
                         "Browser fallback intercepted aweme/detail: aweme_id=%s",
@@ -624,7 +600,6 @@ class DouyinAPIClient:
                 except Exception as exc:
                     logger.debug("Sync browser cookies skipped: %s", exc)
                 await context.close()
-                await browser.close()
 
         if result:
             logger.warning(
@@ -820,37 +795,10 @@ class DouyinAPIClient:
         async with async_playwright() as playwright:
             from pathlib import Path
             from utils.helpers import launch_playwright_browser_async
-            douyin_profile_dir = Path(".douyin_profile").resolve()
+            from auth.account_manager import get_douyin_account_manager
+            douyin_profile_dir = get_douyin_account_manager().get_profile_dir()
             douyin_profile_dir.mkdir(parents=True, exist_ok=True)
             browser = None
-
-            # Minimize the browser window immediately after launch on Windows
-            # so it runs in the background without occupying the screen.
-            def _minimize_browser_window():
-                import sys
-                if sys.platform != "win32":
-                    return
-                try:
-                    import subprocess
-                    subprocess.run(
-                        ["powershell", "-Command",
-                         "Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;"
-                         "public class W{[DllImport(\"user32.dll\")]"
-                         "public static extern bool ShowWindow(IntPtr h,int n);}';"
-                         "Start-Sleep -Milliseconds 600;"
-                         "Get-Process chrome,msedge,brave -ErrorAction SilentlyContinue"
-                         "| Where-Object {$_.MainWindowHandle -ne 0}"
-                         "| Sort-Object StartTime -Descending | Select-Object -First 3"
-                         "| ForEach-Object { [W]::ShowWindow($_.MainWindowHandle, 6) }"
-                         ],
-                        capture_output=True, timeout=4
-                    )
-                except Exception:
-                    pass
-
-            if not headless:
-                import threading
-                threading.Thread(target=_minimize_browser_window, daemon=True).start()
 
             try:
                 context = await launch_playwright_browser_async(
@@ -867,6 +815,8 @@ class DouyinAPIClient:
                     ],
                 )
             except Exception as _p_err:
+                if get_douyin_account_manager().get_active_account():
+                    raise RuntimeError("Không mở được hồ sơ Douyin đang chọn. Nếu cửa sổ đăng nhập còn mở, hãy đóng cửa sổ đó rồi tải lại.") from _p_err
                 logger.debug("Persistent browser launch fallback to standard: %s", _p_err)
                 browser = await launch_playwright_browser_async(
                     playwright.chromium,

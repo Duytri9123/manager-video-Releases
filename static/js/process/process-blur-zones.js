@@ -1,4 +1,10 @@
-function procRemoveAiZones() {
+function procAiOwnsBlur() {
+    return !!(window._procUseAiAnalysis && window._procVideoAiAnalysis?.result);
+  }
+  function procActiveBlurZones() {
+    return (window._procExtraBlurZones || []).filter(z => !procAiOwnsBlur() || z.source === 'ai' || z.zone === 'ai');
+  }
+  function procRemoveAiZones() {
     const before = (window._procExtraBlurZones || []).length;
     window._procExtraBlurZones = (window._procExtraBlurZones || []).filter(z => z.zone !== 'ai' && z.source !== 'ai');
     if ((window._procExtraBlurZones || []).length !== before) {
@@ -15,9 +21,9 @@ function procRemoveAiZones() {
       _blurZoneCounter++;
       window._procExtraBlurZones.push({
         id: _blurZoneCounter,
-        height: Math.max(3, Math.min(45, parseFloat(z.height_pct ?? 12) || 12)),
+        height: Math.max(0.1, Math.min(100, parseFloat(z.height_pct ?? 12) || 12)),
         position: Math.max(0, Math.min(100, parseFloat(z.position_pct ?? 50) || 50)),
-        width: Math.max(20, Math.min(100, parseFloat(z.width_pct ?? 85) || 85)),
+        width: Math.max(0.1, Math.min(100, parseFloat(z.width_pct ?? 85) || 85)),
         x: Math.max(0, Math.min(100, parseFloat(z.x_pct ?? 50) || 50)),
         start: (z.start_sec === null || z.start_sec === undefined) ? '' : z.start_sec,
         end: (z.end_sec === null || z.end_sec === undefined) ? '' : z.end_sec,
@@ -33,7 +39,7 @@ function procRemoveAiZones() {
     if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
   }
   function _drawBlurZonesOnCanvas(ctx, vidX, vidY, vidW, vidH) {
-    const blurOn = document.getElementById('proc-blur-original')?.checked || false;
+    const blurOn = !window._procAiAnalyzing && !procAiOwnsBlur() && (document.getElementById('proc-blur-original')?.checked || false);
 
     // ── Draw blur zone (che phụ đề gốc) ──
     if (blurOn) {
@@ -97,12 +103,12 @@ function procRemoveAiZones() {
         }
       } catch (_) {}
 
-      window._procExtraBlurZones.forEach(zone => {
+      procActiveBlurZones().forEach(zone => {
         const sel = window._pe2Sel;
         const isSelected = sel && sel.type === 'extra' && String(sel.id) === String(zone.id);
 
         // Timecode check: hide if outside [start, end] unless currently selected for editing
-        if (!isSelected) {
+        if (!isSelected || zone.source === 'ai' || zone.zone === 'ai') {
           if (zone.start !== '' && zone.start !== null && zone.start !== undefined && !isNaN(parseFloat(zone.start))) {
             if (curTs < parseFloat(zone.start)) return;
           }

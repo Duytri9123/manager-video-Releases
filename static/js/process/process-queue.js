@@ -370,6 +370,21 @@ window._batchQueue = window._batchQueue || [];
   };
 
   /** Called when user clicks "Bắt đầu xử lý" in step 3 */
+  window.procStartQueueFromStep1 = function() {
+    if (window._procRunning || window._step1Downloading ||
+        (window._batchQueue || []).some(t => t.status === 'processing' || t.status === 'downloading')) {
+      toast('Hàng chờ đang tải hoặc xử lý video, vui lòng đợi hoàn tất.', 'info');
+      return;
+    }
+    if (!(window._batchQueue || []).some(t => t.status === 'pending' || t.status === 'ready')) {
+      toast('Vui lòng thêm video vào hàng chờ để xử lý.', 'warning');
+      return;
+    }
+    if (typeof procSaveStep === 'function') procSaveStep(2, true);
+    procWizGo(3);
+    window._step3StartProc();
+  };
+
   window._step3StartProc = function() {
     // Apply skip flags from checkboxes before starting
     window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;

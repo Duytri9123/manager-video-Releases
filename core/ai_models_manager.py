@@ -485,9 +485,12 @@ def get_default_model(available_models: Optional[List[Dict[str, Any]]] = None) -
     """Determine the optimal default model from available active models."""
     models = available_models if available_models is not None else get_available_models("llm")
     if not models:
-        return "gemini-3.7-flash"
+        return "gemini-3.8-flash-high"
     
-    # Priority: gemini-3.7-flash -> gemini-3.6-flash -> first available
+    # Priority: gemini-3.8-flash-high -> gemini-3.7-flash -> first available
+    for it in models:
+        if "gemini-3.8-flash" in it["id"].lower():
+            return it["id"]
     for it in models:
         if "gemini-3.7-flash" in it["id"].lower():
             return it["id"]

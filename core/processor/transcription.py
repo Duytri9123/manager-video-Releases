@@ -113,7 +113,7 @@ class GroqWhisperTranscriber:
 class AntigravityTranscriber:
     """Speech-to-text via Antigravity provider connection with multi-key and model fallbacks."""
 
-    def __init__(self, language: str = "zh", api_key: str = "", model_name: str = ""):
+    def __init__(self, language: str = "zh", api_key: str = "", model_name: str = "", multi_speaker: bool = False):
         self.language = language
         self.api_key = (api_key or "").strip()
         m = (model_name or "").strip()
@@ -122,6 +122,7 @@ class AntigravityTranscriber:
         if "/" in m:
             m = m.split("/")[-1]
         self.model_name = m
+        self.multi_speaker = bool(multi_speaker)
 
     def transcribe(self, video_path: Path, ffmpeg: str, out_srt: Path):
         import subprocess, base64, urllib.request, urllib.error, json, tempfile, re
@@ -208,8 +209,24 @@ class AntigravityTranscriber:
             lang_names = {"zh": "Tiếng Trung", "en": "Tiếng Anh", "vi": "Tiếng Việt", "ja": "Tiếng Nhật", "ko": "Tiếng Hàn", "th": "Tiếng Thái"}
             target_lang = lang_names.get(self.language, self.language)
 
+            diarization_guide = ""
+            if self.multi_speaker:
+                diarization_guide = (
+                    "ĐẶC BIỆT - NHẬN DIỆN VÀ PHÂN VAI GIỌNG NÓI (SPEAKER DIARIZATION):\n"
+                    "- Hãy nghe âm thanh thực tế và phân tích cao độ, âm sắc của từng người nói.\n"
+                    "- Đầu mỗi câu, BẮT BUỘC ghi rõ nhãn nhân vật: [Nam] nếu là giọng nam/đàn ông, hoặc [Nữ] nếu là giọng nữ/phụ nữ.\n"
+                    "- Ví dụ:\n"
+                    "1\n"
+                    "00:00:01,000 --> 00:00:03,500\n"
+                    "[Nam]: Xin chào mọi người!\n\n"
+                    "2\n"
+                    "00:00:04,000 --> 00:00:06,000\n"
+                    "[Nữ]: Cho em đi với nhé anh!\n\n"
+                )
+
             prompt = (
                 f"Hãy nghe âm thanh và phiên âm toàn bộ lời nói sang {target_lang}.\n"
+                + diarization_guide +
                 "QUY TẮC MỐC THỜI GIAN SRT:\n"
                 "- BẮT BUỘC định dạng SRT chuẩn: HH:MM:SS,mmm --> HH:MM:SS,mmm (Giờ:Phút:Giây,Miligiây).\n"
                 "- TUYỆT ĐỐI KHÔNG dùng dấu ngoặc vuông [] quanh mốc thời gian.\n"
@@ -237,22 +254,31 @@ class AntigravityTranscriber:
                 try:
                     from core.ai_models_manager import get_available_models
                     avail = get_available_models(category="llm", active_only=True)
-                    for dm in avail:
-                        if dm.get("owned_by") in ("antigravity", "gemini") and dm.get("id"):
-                            mid = str(dm["id"])
-                            mid_lower = mid.lower()
-                            if not any(bad in mid_lower for bad in ["thinking", "claude", "gpt-oss", "image"]):
-                                chosen_model = mid
+                    # Ưu tiên gemini-3.8-flash-high trước để không bị timeout/fallback
+                    for target_m in ["gemini-3.8-flash-high", "gemini-3.8-flash"]:
+                        for dm in avail:
+                            if dm.get("id") == target_m:
+                                chosen_model = target_m
                                 break
+                        if chosen_model:
+                            break
+                    if not chosen_model:
+                        for dm in avail:
+                            if dm.get("owned_by") in ("antigravity", "gemini") and dm.get("id"):
+                                mid = str(dm["id"])
+                                mid_lower = mid.lower()
+                                if not any(bad in mid_lower for bad in ["thinking", "claude", "gpt-oss", "image"]):
+                                    chosen_model = mid
+                                    break
                 except Exception:
                     pass
 
             if not chosen_model:
-                chosen_model = "gemini-3.7-flash"
+                chosen_model = "gemini-3.8-flash-high"
 
             # Chỉ thử 1 model (cùng lắm 1 fallback nếu 404 Model Not Found), KHÔNG lặp qua toàn bộ model khi lỗi tài khoản
             models_to_try = [chosen_model]
-            if chosen_model not in ("gemini-3.8-flash-high", "gemini-3.8-flash"):
+            if chosen_model != "gemini-3.8-flash-high":
                 models_to_try.append("gemini-3.8-flash-high")
 
             srt_text = ""
@@ -291,7 +317,7 @@ class AntigravityTranscriber:
                                     ]
                                 }],
                                 "generationConfig": {
-                                    "thinkingConfig": {"thinkingBudget": 0}
+                                    "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False}
                                 }
                             }
                             resp_data, updates = antigravity_generate_content(c_obj, model, req_body, timeout=60)
@@ -316,7 +342,7 @@ class AntigravityTranscriber:
                                     ]
                                 }],
                                 "generationConfig": {
-                                    "thinkingConfig": {"thinkingBudget": 0}
+                                    "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False}
                                 }
                             }).encode("utf-8")
                             req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
@@ -369,11 +395,14 @@ class AntigravityTranscriber:
             if srt_text:
                 segs = _parse_srt_text_to_segments(srt_text, video_dur=video_dur)
                 if segs:
+                    from core.processor.subtitles import process_speaker_tags_in_segments
+                    process_speaker_tags_in_segments(segs)
                     srt_blocks = []
                     for i, s in enumerate(segs, 1):
                         start_str = _fmt_srt_time(s["start"])
                         end_str = _fmt_srt_time(s["end"])
-                        srt_blocks.append(f"{i}\n{start_str} --> {end_str}\n{s['text']}\n")
+                        spk_lbl = f"[{'Nam' if s.get('speaker') == 'male' else 'Nữ'}] " if s.get("speaker") else ""
+                        srt_blocks.append(f"{i}\n{start_str} --> {end_str}\n{spk_lbl}{s['text']}\n")
                     with open(_winlong(out_srt), "w", encoding="utf-8") as _f:
                         _f.write("\n".join(srt_blocks))
                 yield ("result", segs)
@@ -516,3 +545,137 @@ def transcribe_to_srt(
 # ══════════════════════════════════════════════════════════════════════════════
 # FRAME VIDEO: Convert to 9:16 with title bar, side blur, logo
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+def classify_dialogue_speakers(
+    segments: list[dict],
+    trans_cfg: dict | None = None,
+    preferred_provider: str = "antigravity",
+    target_lang: str = "vi",
+) -> list[dict]:
+    """
+    Phân vai nhân vật Nam (male) / Nữ (female) cho các đoạn hội thoại bằng AI.
+    Dùng khi transcriber (như Whisper) không trích xuất sẵn nhãn người nói.
+    """
+    if not segments:
+        return segments
+
+    # Nếu trên 50% câu đã có speaker thì không cần classify lại
+    tagged_count = sum(1 for s in segments if s.get("speaker"))
+    if tagged_count >= len(segments) * 0.5:
+        return segments
+
+    import json, urllib.request
+    from core.processor.subtitles import extract_speaker_from_text
+
+    # Thử bóc tách từ text trước (phòng trường hợp text còn chứa [Nam], [Nữ],...)
+    for s in segments:
+        clean_text, spk = extract_speaker_from_text(s.get("text", ""))
+        s["text"] = clean_text
+        if spk and not s.get("speaker"):
+            s["speaker"] = spk
+
+    tagged_count = sum(1 for s in segments if s.get("speaker"))
+    if tagged_count >= len(segments) * 0.5:
+        return segments
+
+    lines_to_classify = []
+    for idx, s in enumerate(segments):
+        t = str(s.get("text") or "").strip()
+        lines_to_classify.append(f"{idx}: {t}")
+
+    prompt_content = (
+        "Bạn là đạo diễn lồng tiếng chuyên nghiệp. Hãy đọc các câu thoại sau và phân loại người nói:\n"
+        "- 'male' nếu là giọng nam (đàn ông, con trai, chú, anh, người kể chuyện nam)\n"
+        "- 'female' nếu là giọng nữ (phụ nữ, con gái, chị, cô, em gái)\n"
+        "Căn cứ vào đại từ nhân xưng (anh/em, chú/cháu, vợ/chồng, tôi, cậu/tớ), ngữ cảnh hội thoại.\n"
+        "Nếu là độc thoại không rõ giới tính, mặc định chọn 'male'.\n"
+        "BẮT BUỘC chỉ trả về 1 JSON duy nhất dạng: {\"0\": \"male\", \"1\": \"female\", ...} không có chữ nào khác.\n\n"
+        "Danh sách câu:\n"
+        + "\n".join(lines_to_classify[:120])
+    )
+
+    # 1. Thử gọi Antigravity / Gemini
+    classified_map = {}
+    try:
+        from core.ai_models_manager import get_active_provider_connections
+        conns = get_active_provider_connections("antigravity") or get_active_provider_connections("gemini")
+        if conns:
+            conn = conns[0]
+            api_key = (conn.get("api_key") or conn.get("access_token") or "").strip()
+            base_url = (conn.get("base_url") or "").strip().rstrip("/")
+            if not base_url:
+                base_url = "https://generativelanguage.googleapis.com"
+            model = "gemini-3.7-flash"
+            url = f"{base_url}/v1beta/models/{model}:generateContent?key={api_key}"
+            req_data = {
+                "contents": [{"parts": [{"text": prompt_content}]}],
+                "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1024,
+                                     "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False}}
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(req_data).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                res_json = json.loads(resp.read().decode("utf-8"))
+                ans_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                ans_text = re.sub(r"^```[a-zA-Z]*\n?", "", ans_text.strip())
+                ans_text = re.sub(r"```$", "", ans_text.strip())
+                classified_map = json.loads(ans_text)
+    except Exception:
+        pass
+
+    # 2. Thử gọi OpenAI / DeepSeek / Groq nếu chưa có kết quả
+    if not classified_map and trans_cfg:
+        try:
+            api_key = trans_cfg.get("deepseek_key") or trans_cfg.get("groq_key") or trans_cfg.get("openai_key")
+            api_url = "https://api.deepseek.com/v1/chat/completions" if trans_cfg.get("deepseek_key") else (
+                "https://api.groq.com/openai/v1/chat/completions" if trans_cfg.get("groq_key") else "https://api.openai.com/v1/chat/completions"
+            )
+            model = "deepseek-chat" if trans_cfg.get("deepseek_key") else (
+                trans_cfg.get("groq_model", "llama-3.1-8b-instant") if trans_cfg.get("groq_key") else "gpt-4o-mini"
+            )
+            if api_key:
+                req_data = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt_content}],
+                    "temperature": 0.1,
+                }
+                req = urllib.request.Request(
+                    api_url,
+                    data=json.dumps(req_data).encode("utf-8"),
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=12) as resp:
+                    res_json = json.loads(resp.read().decode("utf-8"))
+                    ans_text = res_json["choices"][0]["message"]["content"]
+                    ans_text = re.sub(r"^```[a-zA-Z]*\n?", "", ans_text.strip())
+                    ans_text = re.sub(r"```$", "", ans_text.strip())
+                    classified_map = json.loads(ans_text)
+        except Exception:
+            pass
+
+    # 3. Gán kết quả vào segments
+    for idx, s in enumerate(segments):
+        if s.get("speaker"):
+            continue
+        role = str(classified_map.get(str(idx)) or classified_map.get(idx) or "").lower().strip()
+        if "female" in role or "nữ" in role:
+            s["speaker"] = "female"
+        elif "male" in role or "nam" in role:
+            s["speaker"] = "male"
+        else:
+            # Fallback phân tích ngữ nghĩa nhẹ
+            txt = str(s.get("text") or "").lower()
+            if any(w in txt for w in ["em ơi", "cô ơi", "chị ơi", "bà ơi", "vợ ơi"]):
+                s["speaker"] = "male"
+            elif any(w in txt for w in ["anh ơi", "chú ơi", "bác ơi", "chồng ơi"]):
+                s["speaker"] = "female"
+            else:
+                s["speaker"] = "male"
+
+    return segments

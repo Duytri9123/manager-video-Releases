@@ -36,6 +36,10 @@ async function loadCookieFields() {
   set('ck-fb-file', cookieFiles.facebook || '');
   set('ck-fb-content', cookieContents.facebook || '');
   set('ck-fb-profile', cfg?.facebook_profile || '.facebook_profile');
+
+  if (typeof loadAccounts === 'function') {
+    loadAccounts();
+  }
 }
 
 function switchCookieTab(platform) {
@@ -124,7 +128,19 @@ async function saveCookies() {
     if (el) data[f] = el.value.trim();
   });
   await API.post('/api/cookies', data);
-  toast(t('toast_cookies_saved'), 'success');
+  if (window._activeAccounts?.douyin) {
+    try {
+      const activeAcc = (window._accounts?.douyin || []).find(a => a.id === window._activeAccounts.douyin);
+      const accName = activeAcc ? activeAcc.name : 'Douyin Mặc Định';
+      await fetch('/api/accounts/douyin/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_id: window._activeAccounts.douyin, name: accName, cookies: data })
+      });
+      if (typeof loadAccounts === 'function') loadAccounts();
+    } catch (_) {}
+  }
+  toast(t('toast_cookies_saved') || 'Đã lưu Cookie Douyin thành công!', 'success');
 }
 
 async function validateCookie() {
@@ -152,39 +168,69 @@ async function parseCookie() {
   });
 }
 
+let douyinCaptureTimer;
 async function autoFetch() {
   try {
-    const res = await API.post('/api/auto_fetch_cookie', {});
-    if (res?.ok) {
-      toast('Đã mở Douyin. Hãy đăng nhập/xác minh rồi đóng cửa sổ để lưu cookie mới.', 'info');
-    } else {
-      toast('Không thể mở Douyin: ' + (res?.error || 'Không rõ lỗi'), 'error');
+    const data = await (await fetch('/api/auto_fetch_cookie', {method: 'POST'})).json();
+    if (!data.ok) throw new Error(data.error || 'Không mở được trình duyệt');
+    let button = document.getElementById('douyin-finish-login');
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'douyin-finish-login';
+      button.className = 'btn btn-primary btn-sm';
+      button.textContent = 'Đã đăng nhập / xác minh xong — Lưu cookie';
+      button.type = 'button';
+      document.querySelector('[onclick="autoFetch()"]')?.after(button);
     }
-  } catch (e) {
-    toast('Không thể mở Douyin: ' + e.message, 'error');
-  }
+    button.disabled = false;
+    button.onclick = async () => {
+      try {
+        const result = await (await fetch('/api/auto_fetch_cookie/finish', {method: 'POST'})).json();
+        if (!result.ok) throw new Error(result.error);
+        button.disabled = true;
+      } catch (e) { toast(e.message, 'error'); }
+    };
+    toast('Đăng nhập và giải CAPTCHA trong trình duyệt. Giữ cửa sổ mở, quay lại bấm Lưu cookie. Thời gian chờ: 10 phút.', 'info');
+    clearInterval(douyinCaptureTimer);
+    douyinCaptureTimer = setInterval(async () => {
+      try {
+        const status = await (await fetch('/api/auto_fetch_cookie/status')).json();
+        if (status.state === 'waiting') return;
+        clearInterval(douyinCaptureTimer);
+        button.remove();
+        toast(status.state === 'saved' ? 'Đã lưu cookie. Có thể tìm và tải video Douyin.' : (status.error || 'Phiên đăng nhập đã kết thúc.'), status.state === 'saved' ? 'success' : 'error');
+        if (status.state === 'saved') {
+          if (typeof loadCookieFields === 'function') await loadCookieFields();
+          if (typeof loadCookieMode === 'function') await loadCookieMode();
+        }
+      } catch (e) {
+        clearInterval(douyinCaptureTimer);
+        toast('Không đọc được trạng thái đăng nhập: ' + e.message, 'error');
+      }
+    }, 2000);
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 async function openYoutubeLoginCookie(btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '⏳ Đang chờ đóng trình duyệt...';
-  
+  btn.textContent = 'Đang chờ đóng trình duyệt...';
+
   try {
-    toast('🌐 Trình duyệt đang mở. Vui lòng đăng nhập YouTube và ĐÓNG trình duyệt khi hoàn tất!', 'info');
+    toast('Trình duyệt đang mở. Vui lòng đăng nhập YouTube và ĐÓNG trình duyệt khi hoàn tất!', 'info');
     const res = await fetch('/api/youtube/login_cookie', { method: 'POST' });
     const data = await res.json();
     if (data.ok) {
-      toast('✅ Đã lấy và lưu Cookie YouTube thành công!', 'success');
+      toast('Đã lấy và lưu Cookie YouTube thành công!', 'success');
       const contentEl = document.getElementById('ck-yt-content');
       if (contentEl) {
         contentEl.value = data.cookie;
       }
     } else {
-      toast('❌ Lỗi lấy cookie: ' + (data.error || 'Vui lòng thử lại'), 'error');
+      toast('Lỗi lấy cookie: ' + (data.error || 'Vui lòng thử lại'), 'error');
     }
   } catch (e) {
-    toast('❌ Lỗi: ' + e.message, 'error');
+    toast('Lỗi: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;

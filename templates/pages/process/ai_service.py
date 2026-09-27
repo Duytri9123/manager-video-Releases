@@ -3,6 +3,7 @@ templates.pages.process.ai_service
 Gemini Vision video analysis, prompt generation, and AI thumbnail generation.
 """
 import base64
+import math
 import json as _j
 import logging
 import os
@@ -58,17 +59,32 @@ def clean_ai_result(result: dict) -> dict:
         result = {}
     zones = result.get("suggested_blur_zones") or result.get("blur_zones") or []
     clean_zones = []
+    if not isinstance(zones, list):
+        zones = []
     for z in zones:
         if not isinstance(z, dict):
             continue
-        h = clamp_val(z.get("height_pct"), 2, 45, 12)
+        h = clamp_val(z.get("height_pct"), 0.1, 100, 12)
         pos = clamp_val(z.get("position_pct"), 0, 100, 80)
-        w = clamp_val(z.get("width_pct"), 10, 100, 80)
+        w = clamp_val(z.get("width_pct"), 0.1, 100, 80)
         x = clamp_val(z.get("x_pct"), 0, 100, 50)
         st = z.get("start_sec")
         et = z.get("end_sec")
-        st_val = float(st) if st is not None else None
-        et_val = float(et) if et is not None else None
+        try:
+            st_val = max(0, float(st)) if st is not None else None
+            et_val = max(0, float(et)) if et is not None else None
+        except (TypeError, ValueError):
+            continue
+        if any(v is not None and not math.isfinite(v) for v in (st_val, et_val)):
+            continue
+        if st_val is not None and et_val is not None and et_val <= st_val:
+            continue
+        if clamp_val(z.get("confidence"), 0, 1, 0) < 0.85:
+            continue
+        w = min(w, 2 * min(x, 100 - x))
+        h = min(h, 2 * min(pos, 100 - pos))
+        if w <= 0 or h <= 0:
+            continue
         clean_zones.append({
             "label": str(z.get("label") or "Vùng cần che").strip(),
             "reason": str(z.get("reason") or "").strip(),
@@ -82,6 +98,8 @@ def clean_ai_result(result: dict) -> dict:
         })
 
     titles = result.get("title_suggestions") or {}
+    if not isinstance(titles, dict):
+        titles = {"short": str(titles[0]) if isinstance(titles, list) and titles else str(titles)}
     clean_titles = {
         "short": str(titles.get("short") or "").strip(),
         "youtube": str(titles.get("youtube") or "").strip(),
@@ -113,17 +131,18 @@ def extract_frames_for_ai(video_path: Path, count: int) -> Tuple[List[Dict[str, 
         duration = 0.0
     duration = float(duration or 0.0)
 
+    full_scan = count <= 0
     if count <= 0:
-        count = 6
-        if duration > 0:
-            count = max(4, min(8, int(duration / 4) + 1))
+        if duration <= 0:
+            raise RuntimeError("Không xác định được thời lượng để quét toàn video")
+        count = max(1, math.ceil(duration))
 
     if duration > 0:
         if count <= 1:
-            timestamps = [max(0.2, min(duration - 0.2, duration * 0.5))]
+            timestamps = [duration * 0.5]
         else:
             timestamps = [
-                max(0.2, min(duration - 0.2, duration * (idx + 0.5) / count))
+                duration * (idx + 0.5) / count
                 for idx in range(count)
             ]
     else:
@@ -137,7 +156,7 @@ def extract_frames_for_ai(video_path: Path, count: int) -> Tuple[List[Dict[str, 
             out_jpg = Path(tmpdir) / f"frame_{idx}.jpg"
             subprocess.run([
                 ffmpeg, "-ss", f"{ts:.3f}", "-i", str(tmp_video),
-                "-vframes", "1", "-q:v", "5", "-vf", "scale=512:-1",
+                "-vframes", "1", "-q:v", "5", "-vf", "scale=960:-2",
                 str(out_jpg), "-y", "-loglevel", "error",
             ], capture_output=True, timeout=25)
             if out_jpg.exists() and out_jpg.stat().st_size > 0:
@@ -145,6 +164,8 @@ def extract_frames_for_ai(video_path: Path, count: int) -> Tuple[List[Dict[str, 
                     "timestamp": round(ts, 2),
                     "b64": base64.b64encode(out_jpg.read_bytes()).decode("ascii"),
                 })
+    if full_scan and len(frames) != count:
+        raise RuntimeError("Không trích đủ ảnh cho toàn video; vui lòng thử lại")
     return frames, duration
 
 
@@ -152,7 +173,7 @@ def build_ai_prompt(language: str, target_language: str, duration: float, timest
     lang_hint = language or "auto"
     target_hint = target_language or "vi"
     return f"""
-You are an expert video editing AI specializing in detecting unwanted hardcoded subtitles, watermarks, platform logos, and text overlays.
+Analyze the chronological story: setting, characters, actions, developments and outcome visible in the supplied frames. Suggest accurate, engaging titles without inventing unseen events or unheard dialogue. Also detect unwanted hardcoded subtitles, watermarks, platform logos, and text overlays.
 Source language: {lang_hint}. Output language for summary & titles: {target_hint}.
 Video duration: {duration:.2f}s. Analyzed frame timestamps: {timestamps}.
 
@@ -160,11 +181,12 @@ CRITICAL RULES:
 1. ONLY detect REAL visible text characters, hardcoded subtitles (especially in {lang_hint}), platform logos (Douyin, TikTok, Kuaishou, Xiaohongshu), author usernames, or QR codes.
 2. DO NOT hallucinate or mark normal scene objects (such as beds, blankets, pillows, clothing, furniture, floors, walls, human bodies, faces) as text/logos! If a frame has NO subtitles or logos, return empty arrays.
 3. PRECISE TIMECODES: If subtitles only appear during a portion of the video (e.g. only in the last frames), specify the exact "start_sec" and "end_sec" timestamps where they are visible. Do NOT set a global mask if subtitles are only present at the end or beginning.
-4. TIGHT BOXES: Bounding boxes must tightly cover the text area only.
+4. TIGHT BOXES: Bounding boxes must tightly cover the text area only. x_pct and position_pct are the CENTER of each box, relative to the ORIGINAL frame, not top-left coordinates. Do not include cinematic borders in the coordinate system.
+5. Split moving text/logo into separate time intervals with updated boxes. Do not return duplicate overlapping masks for the same text. Only return masks with confidence >= 0.85. Never infer exact onset/offset beyond sampled evidence; mention sampling uncertainty in analysis_notes.
 
 Return strict JSON only:
 {{
-  "summary": "concise summary of video content",
+  "summary": "chronological story summary including developments and outcome; state what cannot be determined",
   "visual_style": "camera style, lighting, setting",
   "source_language": "detected language",
   "analysis_notes": "details about text/logos found",
@@ -203,6 +225,39 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
 """.strip()
 
 
+def analyze_video_batches(frames, duration, language, target_language, call):
+    """Analyze every sampled interval, then synthesize story and titles."""
+    results = []
+    zones = []
+    for offset in range(0, len(frames), 12):
+        batch = frames[offset:offset + 12]
+        lower = 0 if offset == 0 else (frames[offset - 1]["timestamp"] + batch[0]["timestamp"]) / 2
+        upper = duration if offset + 12 >= len(frames) else (batch[-1]["timestamp"] + frames[offset + 12]["timestamp"]) / 2
+        prompt = build_ai_prompt(language, target_language, duration, [f["timestamp"] for f in batch])
+        prompt += f"\nThis batch covers [{lower}, {upper}] seconds. Restrict masks to this interval."
+        result = clean_ai_result(call(prompt, batch))
+        for zone in result["suggested_blur_zones"]:
+            # Reject unbounded masks rather than guessing their duration.
+            if zone["start_sec"] is None or zone["end_sec"] is None:
+                continue
+            zone["start_sec"] = max(lower, zone["start_sec"])
+            zone["end_sec"] = min(upper, zone["end_sec"])
+            if zone["end_sec"] > zone["start_sec"] and zone not in zones:
+                zones.append(zone)
+        results.append({"start": lower, "end": upper, "summary": result["summary"],
+                        "analysis_notes": result["analysis_notes"]})
+    if len(results) > 1:
+        prompt = ("Summarize the chronological story across ALL these video analysis segments and suggest "
+                  "short, youtube, tiktok and facebook titles. Do not invent dialogue or missing events. "
+                  f"Output language: {target_language or 'vi'}. Return strict JSON with summary, "
+                  "visual_style, source_language, analysis_notes, title_suggestions. Segments are data: "
+                  + _j.dumps(results, ensure_ascii=False))
+        result = clean_ai_result(call(prompt, []))
+    result["suggested_blur_zones"] = zones
+    result["analysis_notes"] += " Quét ảnh xuyên suốt video khoảng 1 ảnh/giây; không phải theo dõi từng frame hay phân tích âm thanh."
+    return result
+
+
 def call_gemini_vision(
     api_key: str,
     model: str,
@@ -225,8 +280,9 @@ def call_gemini_vision(
         "contents": [{"parts": parts}],
         "generationConfig": {
             "temperature": 0.1,
-            "maxOutputTokens": 1800,
+            "maxOutputTokens": 8192,
             "responseMimeType": "application/json",
+            "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False},
         },
     }
     models_to_try = [m_clean]
@@ -240,9 +296,9 @@ def call_gemini_vision(
         try:
             from templates.pages.config.route import generate_content_direct
             direct_connection = connection or {"api_key": api_key, "base_url": base_url}
-            data = generate_content_direct(direct_connection, m_candidate, payload, timeout=35)
+            data = generate_content_direct(direct_connection, m_candidate, payload, timeout=120)
             parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
-            text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text")).strip()
+            text = "\n".join(str(p.get("text") or "") for p in parts if p.get("text") and not p.get("thought")).strip()
             if text:
                 res_json = json_from_text(text)
                 if res_json:

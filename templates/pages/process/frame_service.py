@@ -109,7 +109,8 @@ def extract_single_frame(video_path_str: str, timestamp: float = 0.0) -> Tuple[b
                     subprocess.run([
                         ffmpeg, "-ss", str(safe_timestamp),
                         "-i", str(tmp_video),
-                        "-vframes", "1",
+                        "-threads", "1",
+                    "-vframes", "1",
                         "-q:v", "2",
                         "-vf", preview_scale,
                         "-strict", "-2",
@@ -171,7 +172,8 @@ def extract_filmstrip(video_path_str: str, count: int = 12) -> Tuple[bool, List[
             tmpdir_p = Path(tmpdir)
             frames = []
 
-            for idx, ts in enumerate(timestamps):
+            def extract_one(item):
+                idx, ts = item
                 out_jpg = tmpdir_p / f"thumb_{idx:03d}.jpg"
                 cmd = [
                     ffmpeg,
@@ -194,10 +196,15 @@ def extract_filmstrip(video_path_str: str, count: int = 12) -> Tuple[bool, List[
                 if out_jpg.exists() and out_jpg.stat().st_size > 0:
                     with open(out_jpg, "rb") as f:
                         b64 = base64.b64encode(f.read()).decode("ascii")
-                    frames.append(f"data:image/jpeg;base64,{b64}")
+                    return f"data:image/jpeg;base64,{b64}"
                 else:
-                    frames.append("")
+                    return ""
 
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                frames = list(pool.map(extract_one, enumerate(timestamps)))
+            if not any(frames):
+                return False, [], duration, "Không trích được khung hình"
             return True, frames, duration, ""
     except subprocess.TimeoutExpired:
         return False, [], duration, "Timeout khi tạo filmstrip (>60s)"

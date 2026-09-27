@@ -536,7 +536,7 @@ def _translate_with_antigravity(
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.2,
-                "thinkingConfig": {"thinkingBudget": 0}
+                "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False}
             }
         }
 

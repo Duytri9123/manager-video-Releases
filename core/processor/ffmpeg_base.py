@@ -72,6 +72,9 @@ def get_burn_encoder(ffmpeg: str, mode: str = "auto"):
         if _test_encoder(ffmpeg, "h264_nvenc"):
             return ffmpeg, ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr",
                             "-cq", "23", "-b:v", "0", "-c:a", "aac", "-b:a", "128k"]
+        if _test_encoder(ffmpeg, "h264_mf"):
+            return ffmpeg, ["-c:v", "h264_mf", "-b:v", "6M", "-pix_fmt", "yuv420p",
+                            "-c:a", "aac", "-b:a", "128k"]
         args = cpu_args
     else:
         args = _get_encoding_args(ffmpeg)
@@ -91,6 +94,10 @@ def get_burn_encoder(ffmpeg: str, mode: str = "auto"):
     except Exception:
         pass
     if mode == "nvidia":
+        from core.hardware_presets import _test_encoder
+        if _test_encoder(ffmpeg, "h264_mf"):
+            return ffmpeg, ["-c:v", "h264_mf", "-b:v", "6M", "-pix_fmt", "yuv420p",
+                            "-c:a", "aac", "-b:a", "128k"]
         raise RuntimeError("GPU NVIDIA không khả dụng với FFmpeg/driver hiện tại. Chọn Tự động hoặc CPU.")
     return ffmpeg, args
 

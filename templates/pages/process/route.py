@@ -315,7 +315,7 @@ def analyze_video_ai():
     full_video = sample_raw in ("0", "full", "all", "video", "entire")
 
     try:
-        sample_count = 3 if full_video else int(sample_raw or 5)
+        sample_count = 0 if full_video else int(sample_raw or 5)
     except Exception:
         sample_count = 5
     if not full_video:
@@ -362,10 +362,16 @@ def analyze_video_ai():
         last_error = None
         for connection in ag_conns:
             try:
-                result = call_gemini_vision(
-                    str(connection.get("api_key") or ""), gemini_model, prompt, frames,
-                    base_url=str(connection.get("base_url") or ""), connection=connection, db_models=ag_models,
-                )
+                def analyze(prompt_text, batch):
+                    return call_gemini_vision(
+                        str(connection.get("api_key") or ""), gemini_model, prompt_text, batch,
+                        base_url=str(connection.get("base_url") or ""), connection=connection, db_models=ag_models,
+                    )
+                if full_video:
+                    from .ai_service import analyze_video_batches
+                    result = analyze_video_batches(frames, duration, language, target_language, analyze)
+                else:
+                    result = analyze(prompt, frames)
                 return jsonify({
                     "ok": True,
                     "provider": "antigravity",
@@ -426,10 +432,11 @@ def upload_anti_fp_image():
     upload_dir = TEMP_UPLOADS_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    save_path = upload_dir / f"anti-fp-{img_type}-{safe_name}"
+    import uuid
+    save_path = upload_dir / f"anti-fp-{uuid.uuid4().hex}-{safe_name}"
     upload_file.save(str(save_path))
 
-    return jsonify({"ok": True, "path": str(save_path)})
+    return jsonify({"ok": True, "path": str(save_path), "url": "/temp_uploads/" + save_path.name})
 
 
 @require_valid_license
@@ -958,6 +965,15 @@ def download_original_video():
     if not video_url:
         return jsonify({"ok": False, "error": "Chưa nhập URL video"}), 400
 
+    try:
+        downloaded_path, downloaded_title = download_original_source(video_url, out_dir)
+        return jsonify({"ok": True, "path": str(downloaded_path), "title": downloaded_title})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+def download_original_source(video_url: str, out_dir: str = ""):
+    """Shared original-video downloader for Step 1 and the publishing queue."""
     from config import ConfigLoader
     from auth import CookieManager
     from core import DouyinAPIClient, URLParser
@@ -1181,20 +1197,7 @@ def download_original_video():
 
             return save_path.resolve(), resolved_title
 
-    try:
-        loop = asyncio.new_event_loop()
-        try:
-            downloaded_path, downloaded_title = loop.run_until_complete(_do_download())
-        finally:
-            loop.close()
-
-        return jsonify({
-            "ok": True,
-            "path": str(downloaded_path),
-            "title": downloaded_title
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    return asyncio.run(_do_download())
 
 
 @require_valid_license

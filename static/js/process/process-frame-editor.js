@@ -5,17 +5,15 @@ function subPreviewUpdate() {
     fsSlider.value = fsInput.value || 4.5;
   }
 
-  const player = document.getElementById('pe2-video-player');
-  const playerVisible = !!(player && player.style.display !== 'none');
-  const frameEnabled = document.getElementById('frame-enabled')?.checked || false;
+  // Đảm bảo frame-enabled luôn bật
+  const frameChk = document.getElementById('frame-enabled');
+  // Respect the saved frame toggle.
 
-  // Khi video player đang hoạt động (đang phát hoặc tạm dừng), luôn cập nhật DOM overlay trên video
-  if (playerVisible) {
-    if (typeof _renderSubOverlay === 'function') _renderSubOverlay();
-  } else if (frameEnabled) {
-    if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
-  } else {
-    if (typeof _renderSubOverlay === 'function') _renderSubOverlay();
+  // Luôn cập nhật preview canvas thống nhất (chứa cả video, khung, logo, vùng mờ và phụ đề)
+  if (typeof framePreviewUpdate === 'function') {
+    framePreviewUpdate();
+  } else if (typeof _renderSubOverlay === 'function') {
+    _renderSubOverlay();
   }
   if (window.pe2RenderRanges) window.pe2RenderRanges();
 }
@@ -126,20 +124,32 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     framePreviewUpdate();
   }
   function framePreviewUpdate() {
-    if (!document.getElementById('frame-enabled')?.checked) return;
+    const frameChk = document.getElementById('frame-enabled');
+    // Respect the saved frame toggle.
+
+    const canvas = document.getElementById('frame-preview-canvas');
+    if (canvas) {
+      canvas.style.display = 'block';
+      canvas.style.zIndex = '4';
+      canvas.style.pointerEvents = 'auto';
+    }
+
     const player = document.getElementById('pe2-video-player');
-    const liveSource = player && player.style.display !== 'none' && player.readyState >= 2
-      && player.videoWidth && player.videoHeight ? player : null;
-    const srcImg = liveSource || document.getElementById('sub-preview-img');
+    const playerReady = !!(player && player.style.display !== 'none' && player.readyState >= 1
+      && player.videoWidth && player.videoHeight);
+    const img = document.getElementById('sub-preview-img');
+    const imgReady = !!(img && img.complete && (img.naturalWidth || 0) > 0);
+    const srcImg = (playerReady && player.readyState >= 2) ? player : (imgReady ? img : (playerReady ? player : null));
     const sourceW = srcImg ? (srcImg.videoWidth || srcImg.naturalWidth || 0) : 0;
-    if (!srcImg || (!liveSource && !srcImg.complete) || !sourceW) return;
+    if (!srcImg || (!playerReady && img && !img.complete) || !sourceW) return;
     _drawFramePreview(srcImg);
   }
   function _drawFramePreview(srcImg) {
     const canvas = document.getElementById('frame-preview-canvas');
     if (!canvas) return;
 
-    const titleEnabled = document.getElementById('frame-title-enabled')?.checked ?? true;
+    const frameEnabled = document.getElementById('frame-enabled')?.checked ?? false;
+    const titleEnabled = frameEnabled && (document.getElementById('frame-title-enabled')?.checked ?? true);
     const title       = titleEnabled ? (document.getElementById('frame-title')?.value || '') : '';
     const hasTitle    = titleEnabled && title.trim();
     const titleSizePct= parseFloat(document.getElementById('frame-title-size')?.value || 5);
@@ -154,11 +164,11 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     const blurWPct    = parseFloat(document.getElementById('frame-blur-w')?.value || 0) / 100;
     const blurOpacity = parseFloat(document.getElementById('frame-blur-opacity')?.value || 60) / 100;
     const logoSizeRaw = parseFloat(document.getElementById('frame-logo-size')?.value);
-    const logoSizePct = (isNaN(logoSizeRaw) || logoSizeRaw <= 0 ? (document.getElementById('frame-logo-path')?.value ? 12 : 0) : logoSizeRaw) / 100;
+    const logoSizePct = (isNaN(logoSizeRaw) ? (document.getElementById('frame-logo-path')?.value ? 12 : 0) : logoSizeRaw) / 100;
     const logoTopPct  = parseFloat(document.getElementById('frame-logo-top')?.value || 3) / 100;
     const logoLeftPct = parseFloat(document.getElementById('frame-logo-left')?.value || 3) / 100;
     const logoRadiusPct = parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50) / 100;
-    const blurMode    = document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay';
+    const blurMode = frameEnabled ? (document.querySelector('input[name="frame-blur-mode"]:checked')?.value || 'overlay') : 'overlay';
     const blurTopPct    = parseFloat(document.getElementById('frame-blur-top')?.value || 0) / 100;
     const blurBottomPct = parseFloat(document.getElementById('frame-blur-bottom')?.value || 0) / 100;
 
@@ -169,7 +179,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     const wrapW = srcImg.videoWidth || srcImg.naturalWidth || wrap?.offsetWidth || 640;
 
     // Title bar chỉ chiếm chỗ khi thật sự có nội dung tiêu đề.
-    const titleFontPx = hasTitle ? Math.max(10, Math.round(wrapW * titleSizePct / 100)) : 0;
+    const titleFontPx = hasTitle ? Math.max(16, Math.floor(wrapW * titleSizePct / 100)) : 0;
     const sourceDisplayH = Math.round(wrapW * srcNH / srcNW);
     const titleBarH = hasTitle
       ? Math.max(40, Math.round(sourceDisplayH * Math.max(3, Math.min(20, titleBarPct)) / 100))
@@ -204,7 +214,22 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     let frameInteractiveSource = {};
 
     function _drawLayerVideo(c) {
-      c.drawImage(srcImg, vidX, vidY, vidW, vidH);
+      let drawn = false;
+      if (srcImg && (srcImg.readyState === undefined || srcImg.readyState >= 2)) {
+        try {
+          c.drawImage(srcImg, vidX, vidY, vidW, vidH);
+          drawn = true;
+        } catch (_) {}
+      }
+      if (!drawn) {
+        const fallbackImg = document.getElementById('sub-preview-img');
+        if (fallbackImg && fallbackImg.complete && fallbackImg.naturalWidth) {
+          try {
+            c.drawImage(fallbackImg, vidX, vidY, vidW, vidH);
+            drawn = true;
+          } catch (_) {}
+        }
+      }
     }
 
     function _drawLayerFrame(c) {
@@ -372,7 +397,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
         const logoNW = window._frameLogoImg.naturalWidth  || window._frameLogoImg.width;
         const logoNH = window._frameLogoImg.naturalHeight || window._frameLogoImg.height;
         const logoAR = logoNW / (logoNH || 1);
-        const lH = Math.max(8, Math.round(vidH * logoSizePct));
+        const lH = Math.max(20, Math.floor(vidH * logoSizePct));
         const lW = Math.round(lH * logoAR);
         const lX = vidX + Math.round(vidW * logoLeftPct);
         const titleOffset = (blurMode === 'overlay' && hasTitle) ? titleBarH : 0;
@@ -392,20 +417,21 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     }
 
     // ── Execute layer drawing in configured order (bottom to top) ──
-    const layerOrder = window._pe2LayerOrder || ['video', 'frame', 'blur', 'logo', 'overlays', 'subs'];
+    // Keep source video below all configured effects, including legacy saved orders.
+    const layerOrder = ['video', ...(window._pe2LayerOrder || ['frame', 'blur', 'logo', 'overlays', 'subs']).filter(id => id !== 'video')];
     const trackVis = window._pe2TrackVisibility || {};
 
     layerOrder.forEach(layerId => {
       if (trackVis[layerId] === false) return;
       if (layerId === 'video') {
         _drawLayerVideo(ctx);
-      } else if (layerId === 'frame') {
+      } else if (layerId === 'frame' && frameEnabled) {
         _drawLayerFrame(ctx);
       } else if (layerId === 'blur') {
         if (typeof _drawBlurZonesOnCanvas === 'function') {
           _drawBlurZonesOnCanvas(ctx, vidX, vidY, vidW, vidH);
         }
-      } else if (layerId === 'logo') {
+      } else if (layerId === 'logo' && frameEnabled) {
         _drawLayerLogo(ctx);
       } else if (layerId === 'overlays') {
         if (typeof _drawVideoOverlaysOnCanvas === 'function') {
@@ -480,6 +506,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       finalTitleBarH = titleBarH * fgScale;
     }
 
+    canvas.style.display = 'block';
     canvas.style.position = 'absolute';
     canvas.style.inset = '0';
     canvas.style.zIndex = '4';
@@ -487,6 +514,17 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.maxWidth = '100%';
+
+    // Hide DOM overlays to avoid duplicate text / blur boxes on screen
+    const domText = document.getElementById('sub-preview-text');
+    if (domText) domText.style.display = 'none';
+    const domBlur = document.getElementById('sub-preview-blur');
+    if (domBlur) domBlur.style.display = 'none';
+    const domBlurCanvas = document.getElementById('sub-preview-blur-canvas');
+    if (domBlurCanvas) domBlurCanvas.style.display = 'none';
+    const domPh = document.getElementById('sub-preview-placeholder');
+    if (domPh) domPh.style.display = 'none';
+
     if (wrap) {
       wrap.style.aspectRatio = finalCW + ' / ' + finalCH;
       wrap.dataset.letterbox = shouldConvert ? '1' : '';
@@ -800,7 +838,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       if (layerId === 'overlays') {
         const count = (window._videoOverlays || []).length;
         extraInfo = `<span class="pe2-track-badge" style="background:rgba(99,102,241,0.12);color:var(--accent,#3b82f6)">${count} phần tử</span>`;
-      } else if (layerId === 'logo') {
+      } else if (layerId === 'logo' && frameEnabled) {
         const hasLogo = !!(document.getElementById('frame-logo-path')?.value);
         extraInfo = hasLogo ? `<span class="pe2-track-badge" style="background:rgba(34,197,94,0.12);color:#22c55e">Đã chọn</span>` : `<span class="pe2-track-badge" style="color:var(--text-muted)">Chưa có</span>`;
       } else if (layerId === 'subs') {

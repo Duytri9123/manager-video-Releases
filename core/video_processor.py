@@ -59,6 +59,9 @@ from core.processor import (
     _hex_to_ass_color_alpha,
     generate_frame_title,
     write_ass_with_frame,
+    align_subtitles_to_voice,
+    extract_speaker_from_text,
+    process_speaker_tags_in_segments,
 
     # Transcription
     _GROQ_MODEL,
@@ -166,6 +169,9 @@ __all__ = [
     "_hex_to_ass_color_alpha",
     "generate_frame_title",
     "write_ass_with_frame",
+    "align_subtitles_to_voice",
+    "extract_speaker_from_text",
+    "process_speaker_tags_in_segments",
     "_GROQ_MODEL",
     "_GROQ_MAX_MB",
     "_whisper_model_cache",

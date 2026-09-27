@@ -24,7 +24,7 @@
         </span>
         <div class="card-actions" onclick="event.stopPropagation()">
           <label class="toggle-wrap">
-            <input type="checkbox" class="toggle-input" id="p-autopub-enabled"
+            <input type="checkbox" class="toggle-input" id="p-autopub-enabled" aria-label="Bật tự động đăng sau khi xử lý"
               onchange="const sourceToggle=document.getElementById('step1-autopub-toggle');if(sourceToggle)sourceToggle.checked=this.checked;try{localStorage.setItem('step1_autopub_enabled',this.checked?'1':'0')}catch(_e){}">
             <div class="toggle"></div>
             <span class="toggle-label text-sm">Bật</span>
@@ -60,7 +60,7 @@
         <!-- Platform tabs -->
         <div class="platform-tabs-header"
           style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:12px; padding-bottom:14px; border-bottom:1px solid var(--border)">
-          <div class="platform-tab active" id="p-tab-yt" onclick="pPubSwitchTab('youtube')">
+          <div class="platform-tab active" id="p-tab-yt" title="YouTube" onclick="pPubSwitchTab('youtube')">
             <span class="yt-color" style="display:inline-flex;align-items:center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path
@@ -71,7 +71,7 @@
             <div class="tab-toggle" id="p-toggle-yt" onclick="event.stopPropagation();pPubTogglePlatform('youtube')">✓
             </div>
           </div>
-          <div class="platform-tab" id="p-tab-tt" onclick="pPubSwitchTab('tiktok')">
+          <div class="platform-tab" id="p-tab-tt" title="TikTok" onclick="pPubSwitchTab('tiktok')">
             <span class="tt-color" style="display:inline-flex;align-items:center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path
@@ -82,7 +82,7 @@
             <div class="tab-toggle" id="p-toggle-tt" onclick="event.stopPropagation();pPubTogglePlatform('tiktok')">✓
             </div>
           </div>
-          <div class="platform-tab" id="p-tab-fb" onclick="pPubSwitchTab('facebook')">
+          <div class="platform-tab" id="p-tab-fb" title="Facebook" onclick="pPubSwitchTab('facebook')">
             <span class="fb-color" style="display:inline-flex;align-items:center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path
@@ -146,6 +146,12 @@
 
         <!-- ── TikTok Panel ── -->
         <div id="p-panel-tiktok" class="platform-panel" style="display:none">
+          <div class="field" style="margin-bottom:8px">
+            <label style="font-size:11px;color:var(--text-muted)">Tài khoản TikTok</label>
+            <select id="p-tt-account-select" class="pub-select-sm" style="width:100%" onchange="onAccountSelectChange('tiktok', this)">
+              <option value="">Chưa có tài khoản</option>
+            </select>
+          </div>
           <div class="field">
             <label>Nội dung</label>
             <textarea id="p-tt-title" rows="3" placeholder="Nhập nội dung video..."></textarea>

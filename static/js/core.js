@@ -320,8 +320,8 @@ const I18N = {
     lbl_vp_title: 'Hậu xử lý video sau khi tải', lbl_enable: 'Bật',
     lbl_voice_convert: 'Đổi giọng tiếng Việt',
     lbl_enable_voice: 'Bật',
-    lbl_voice_note: 'Cần: pip install edge-tts (hoặc gtts).',
-    lbl_vp_note: 'Cần: pip install openai-whisper edge-tts.',
+    lbl_voice_note: 'Cần: pip install vieneu.',
+    lbl_vp_note: 'Cần: pip install openai-whisper vieneu.',
     lbl_loading: 'Đang tải...',
     lbl_deepseek_api_key: 'DeepSeek API Key',
     lbl_openai_api_key: 'OpenAI API Key',
@@ -475,8 +475,8 @@ const I18N = {
     lbl_vp_title: 'Post-download video processing', lbl_enable: 'Enable',
     lbl_voice_convert: 'Convert to Vietnamese voice',
     lbl_enable_voice: 'Enable',
-    lbl_voice_note: 'Requires: pip install edge-tts (or gtts).',
-    lbl_vp_note: 'Requires: pip install openai-whisper edge-tts.',
+    lbl_voice_note: 'Requires: pip install vieneu.',
+    lbl_vp_note: 'Requires: pip install openai-whisper vieneu.',
     lbl_loading: 'Loading...',
     lbl_deepseek_api_key: 'DeepSeek API Key',
     lbl_openai_api_key: 'OpenAI API Key',
@@ -701,18 +701,44 @@ function toggleMobileMenu() {
   const ov = document.createElement('div');
   ov.id = 'mobile-menu-overlay';
   ov.className = 'fixed inset-0 bg-black/40 dark:bg-black/60 z-[300] flex items-start';
-  const pages = [
-    ['user','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>','Tìm video'],
-    ['process','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>','Xử lý'],
-    ['transcribe','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>','Phiên âm'],
-    ['publish','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>','Đăng video'],
-    ['content','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>','Quản lý'],
-    ['config','<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4"/></svg>','Cấu hình']
-  ];
-  ov.innerHTML = `<div class="bg-white dark:bg-slate-800 w-56 h-full p-4 shadow-2xl overflow-y-auto">
-    <div class="font-bold text-[13px] mb-3 pb-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg> Menu</div>
-    ${pages.map(([p,i,l]) => `<div onclick="switchPage('${p}');document.getElementById('mobile-menu-overlay')?.remove()" class="flex items-center gap-2 p-2.5 rounded-lg cursor-pointer text-slate-500 dark:text-slate-400 font-medium mb-0.5 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors text-[12px]">${i} ${l}</div>`).join('')}
-  </div>`;
+  // Share the desktop navigation so mobile always has the same tabs and labels.
+  const navigation = document.querySelector('#sidebar .nav-item')?.parentElement;
+  if (!navigation) return;
+  const panel = document.createElement('div');
+  panel.className = 'bg-white dark:bg-slate-800 w-56 h-full p-4 shadow-2xl overflow-y-auto';
+  const heading = document.createElement('div');
+  heading.className = 'font-bold text-[13px] mb-3 pb-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between';
+  heading.textContent = 'Menu';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = '×';
+  close.setAttribute('aria-label', 'Đóng menu');
+  close.className = 'text-xl p-2';
+  close.addEventListener('click', () => ov.remove());
+  heading.appendChild(close);
+  const menu = navigation.cloneNode(true);
+  menu.querySelectorAll('.nav-item').forEach(item => {
+    item.removeAttribute('onclick');
+    item.setAttribute('role', 'button');
+    item.tabIndex = 0;
+    item.style.minHeight = '44px';
+    const select = () => {
+      switchPage(item.dataset.page);
+      ov.remove();
+    };
+    item.addEventListener('click', select);
+    item.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        select();
+      }
+    });
+  });
+  panel.append(heading, menu);
+  ov.appendChild(panel);
+  ov.addEventListener('keydown', event => {
+    if (event.key === 'Escape') ov.remove();
+  });
   ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   document.body.appendChild(ov);
 }

@@ -4,19 +4,57 @@
   <!-- Cookie tabs switcher -->
   <div class="card mb-4" style="padding:8px">
     <div class="platform-tabs" style="margin:0">
-      <div class="platform-tab active cookie-tab" data-cookie-platform="douyin" onclick="switchCookieTab('douyin')">🎵 Douyin</div>
-      <div class="platform-tab cookie-tab" data-cookie-platform="tiktok" onclick="switchCookieTab('tiktok')">📱 TikTok</div>
-      <div class="platform-tab cookie-tab" data-cookie-platform="youtube" onclick="switchCookieTab('youtube')">📺 YouTube</div>
-      <div class="platform-tab cookie-tab" data-cookie-platform="facebook" onclick="switchCookieTab('facebook')">👥 Facebook</div>
+      <div class="platform-tab active cookie-tab" data-cookie-platform="douyin" onclick="switchCookieTab('douyin')">
+        <svg class="w-3.5 h-3.5 text-rose-500 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        Douyin
+      </div>
+      <div class="platform-tab cookie-tab" data-cookie-platform="tiktok" onclick="switchCookieTab('tiktok')">
+        <svg class="w-3.5 h-3.5 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+        TikTok
+      </div>
+      <div class="platform-tab cookie-tab" data-cookie-platform="youtube" onclick="switchCookieTab('youtube')">
+        <svg class="w-3.5 h-3.5 text-rose-600 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+        YouTube
+      </div>
+      <div class="platform-tab cookie-tab" data-cookie-platform="facebook" onclick="switchCookieTab('facebook')">
+        <svg class="w-3.5 h-3.5 text-blue-600 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        Facebook
+      </div>
     </div>
   </div>
 
   <!-- Douyin Cookie Panel -->
   <div class="cookie-tab-panel" data-cookie-platform="douyin">
+
+    <!-- Douyin Account Profiles Selector Card -->
+    <div class="card mb-4" style="padding:12px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <svg class="w-4 h-4 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <span style="font-size:12px;font-weight:600;color:var(--text)">Hồ sơ Douyin đang chọn:</span>
+          <select id="cookies-dy-account-select" class="pub-select-sm" onchange="onCookiesDouyinAccountChange(this.value)" style="min-width:200px;height:32px;font-size:12px">
+            <option value="">Đang tải danh sách...</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openAddDouyinModal()" style="height:32px;font-size:11px;display:flex;align-items:center;gap:6px">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Thêm tài khoản Douyin mới
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="saveAsNewDouyinAccount()" style="height:32px;font-size:11px;display:flex;align-items:center;gap:6px">
+            Lưu thành hồ sơ mới
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Mode toggle card -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">🍪 Chế độ Cookie Douyin</span>
+        <span class="card-title">
+          <svg class="w-4 h-4 text-rose-500 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          Chế độ Cookie Douyin
+        </span>
         <div class="card-actions">
           <span class="badge badge-accent" id="ck-mode-badge" data-i18n="lbl_cookie_default">Mặc định</span>
         </div>
@@ -39,24 +77,30 @@
     <!-- Parse card -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">📋 Phân tích Cookie</span>
+        <span class="card-title">
+          <svg class="w-4 h-4 text-slate-600 dark:text-slate-400 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Nhập &amp; Phân tích chuỗi Cookie Douyin thô
+        </span>
       </div>
       <div class="field">
-        <label>Dán chuỗi cookie thô vào đây</label>
+        <label>Dán chuỗi cookie thô hoặc JSON vào đây</label>
         <textarea id="ck-raw" rows="3" placeholder="ttwid=xxx; odin_tt=xxx; passport_csrf_token=xxx; ..."></textarea>
       </div>
       <div class="btn-group mt-8">
-        <button class="btn btn-primary btn-sm" onclick="parseCookie()">🔍 Phân tích</button>
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-json-file')?.click()">Import JSON</button>
+        <button class="btn btn-primary btn-sm" onclick="parseCookie()">Phân tích tự động</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ck-json-file')?.click()">Nhập tệp JSON</button>
         <input id="ck-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importCookieJsonFile(this)">
-        <button class="btn btn-secondary btn-sm" onclick="autoFetch()">⚡ Tự động lấy</button>
+        <button class="btn btn-secondary btn-sm" onclick="autoFetch()">Tự động lấy qua trình duyệt</button>
       </div>
     </div>
 
     <!-- Fields card -->
     <div class="card">
       <div class="card-header">
-        <span class="card-title">🔑 Các trường Cookie</span>
+        <span class="card-title">
+          <svg class="w-4 h-4 text-indigo-500 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Các trường tham số Cookie Douyin
+        </span>
         <div class="card-actions">
           <div class="status-bar" id="ck-status">
             <span class="dot dot-gray"></span>
@@ -67,7 +111,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="field">
           <label>ttwid</label>
-          <input type="text" id="cookies-ck-ttwid" placeholder="ttwid value...">
+          <input type="text" id="ck-ttwid" placeholder="ttwid value...">
         </div>
         <div class="field">
           <label>odin_tt</label>
@@ -99,17 +143,40 @@
         </div>
       </div>
       <div class="btn-group mt-12">
-        <button class="btn btn-primary" onclick="saveCookies()">💾 Lưu Cookie Douyin</button>
-        <button class="btn btn-secondary" onclick="validateCookie()">✅ Kiểm tra hợp lệ</button>
+        <button class="btn btn-primary" onclick="saveCookies()">Lưu Cookie Douyin</button>
+        <button class="btn btn-secondary" onclick="validateCookie()">Kiểm tra hợp lệ</button>
       </div>
     </div>
   </div>
 
   <!-- TikTok Cookie Panel -->
   <div class="cookie-tab-panel" data-cookie-platform="tiktok" style="display:none">
+
+    <!-- TikTok Account Profiles Selector Card -->
+    <div class="card mb-4" style="padding:12px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+          <span style="font-size:12px;font-weight:600;color:var(--text)">Hồ sơ TikTok đang chọn:</span>
+          <select id="cookies-tt-account-select" class="pub-select-sm" onchange="onCookiesTikTokAccountChange(this.value)" style="min-width:200px;height:32px;font-size:12px">
+            <option value="">Đang tải danh sách...</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addTikTokAccount()" style="height:32px;font-size:11px;display:flex;align-items:center;gap:6px">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Đăng nhập tài khoản TikTok mới (Trình duyệt)
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="card shadow-xs">
       <div class="card-header">
-        <span class="card-title">📱 Cookie TikTok (yt-dlp)</span>
+        <span class="card-title">
+          <svg class="w-4 h-4 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+          Cookie TikTok (yt-dlp)
+        </span>
       </div>
       
       <div class="alert-info mb-4">
@@ -119,8 +186,9 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Browser Cookie Source -->
         <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-            📡 Đọc trực tiếp từ trình duyệt (Khuyên dùng)
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Đọc trực tiếp từ trình duyệt (Khuyên dùng)
           </h4>
           <div class="field">
             <label>Trình duyệt nguồn (cookies_from_browser)</label>
@@ -138,8 +206,9 @@
 
         <!-- Netscape Cookie File Path -->
         <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-            📄 Đường dẫn File Cookie TikTok (Netscape .txt)
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Đường dẫn File Cookie TikTok (Netscape .txt)
           </h4>
           <div class="field">
             <label>Đường dẫn File Cookie TikTok</label>
@@ -150,8 +219,9 @@
 
       <!-- Paste Raw Cookie Content -->
       <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 mt-4">
-        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-          📋 Dán nội dung Cookie TikTok (Netscape .txt hoặc Header Raw)
+        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Dán nội dung Cookie TikTok (Netscape .txt hoặc Header Raw)
         </h4>
         <div class="field mb-0">
           <label>Nội dung Cookie TikTok</label>
@@ -159,10 +229,10 @@
         </div>
       </div>
 
-      <div class="btn-group mt-12" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-        <button class="btn btn-primary" onclick="savePlatformConfig('tiktok')">💾 Lưu Cookie TikTok</button>
-        <button class="btn btn-secondary" onclick="validateTiktokCookie(this)">✅ Kiểm tra hợp lệ</button>
-        <span id="ck-standalone-tiktok-status" style="font-size: 13px; font-weight: 500;"></span>
+      <div class="btn-group mt-12" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="savePlatformConfig('tiktok')">Lưu Cookie TikTok</button>
+        <button class="btn btn-secondary" onclick="validateTiktokCookie(this)">Kiểm tra hợp lệ</button>
+        <span id="ck-standalone-tiktok-status" style="font-size:13px;font-weight:500"></span>
       </div>
     </div>
   </div>
@@ -171,7 +241,10 @@
   <div class="cookie-tab-panel" data-cookie-platform="youtube" style="display:none">
     <div class="card shadow-xs">
       <div class="card-header">
-        <span class="card-title">📺 Cookie YouTube</span>
+        <span class="card-title">
+          <svg class="w-4 h-4 text-rose-600 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+          Cookie YouTube
+        </span>
       </div>
       
       <div class="alert-info mb-4">
@@ -181,8 +254,9 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Browser Cookie Source -->
         <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-            📡 Đọc trực tiếp từ trình duyệt (Khuyên dùng)
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Đọc trực tiếp từ trình duyệt (Khuyên dùng)
           </h4>
           <div class="field">
             <label>Trình duyệt nguồn (cookies_from_browser)</label>
@@ -197,9 +271,10 @@
               <option value="vivaldi">Vivaldi</option>
             </select>
           </div>
-          <div style="margin-top: 10px;">
-            <button class="btn btn-secondary btn-sm w-full" id="btn-yt-login-cookie" onclick="openYoutubeLoginCookie(this)" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
-              🌐 Mở trình duyệt đăng nhập lấy Cookie
+          <div style="margin-top:10px">
+            <button class="btn btn-secondary btn-sm w-full" id="btn-yt-login-cookie" onclick="openYoutubeLoginCookie(this)" style="display:flex;align-items:center;justify-content:center;gap:6px">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              Mở trình duyệt đăng nhập lấy Cookie
             </button>
           </div>
           <p class="text-xs text-muted mt-2">
@@ -210,15 +285,16 @@
         <!-- Cookie File Path -->
         <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 flex flex-col justify-between">
           <div>
-            <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-              📄 Sử dụng File Cookie (Netscape .txt)
+            <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Sử dụng File Cookie (Netscape .txt)
             </h4>
             <div class="field">
               <label>Đường dẫn File Cookie YouTube</label>
               <input type="text" id="cookies-ck-yt-file" placeholder="VD: C:\cookies\youtube-cookies.txt" class="w-full">
             </div>
             <p class="text-xs text-muted mt-2">
-              Dành cho VPS/Server hoặc khi không chạy trình duyệt ở môi trường local. Bạn có thể xuất file cookie bằng tiện ích mở rộng như <i>Get cookies.txt LOCALLY</i>.
+              Dành cho VPS/Server hoặc khi không chạy trình duyệt ở môi trường local. Bạn có thể xuất file cookie bằng tiện ích mở rộng như Get cookies.txt LOCALLY.
             </p>
           </div>
         </div>
@@ -226,8 +302,9 @@
 
       <!-- Paste Raw Cookie Content -->
       <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 mt-6">
-        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-          📋 Dán nội dung Cookie (Netscape .txt hoặc chuỗi Raw)
+        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Dán nội dung Cookie (Netscape .txt hoặc chuỗi Raw)
         </h4>
         <div class="field mb-0">
           <label>Nội dung Cookie (tự động lưu vào hệ thống)</label>
@@ -239,7 +316,7 @@
       </div>
 
       <div class="btn-group mt-12">
-        <button class="btn btn-primary" onclick="savePlatformConfig('youtube')">💾 Lưu cấu hình YouTube</button>
+        <button class="btn btn-primary" onclick="savePlatformConfig('youtube')">Lưu cấu hình YouTube</button>
       </div>
     </div>
   </div>
@@ -248,7 +325,10 @@
   <div class="cookie-tab-panel" data-cookie-platform="facebook" style="display:none">
     <div class="card shadow-xs">
       <div class="card-header">
-        <span class="card-title">👥 Cookie & Hồ sơ Facebook</span>
+        <span class="card-title">
+          <svg class="w-4 h-4 text-blue-600 inline-block align-middle mr-1.5" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          Cookie &amp; Hồ sơ Facebook
+        </span>
       </div>
       
       <div class="alert-info mb-4">
@@ -258,8 +338,9 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Facebook Profile Folder -->
         <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-            📂 Thư mục hồ sơ trình duyệt (Playwright Profile)
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Thư mục hồ sơ trình duyệt (Playwright Profile)
           </h4>
           <div class="field">
             <label>Đường dẫn thư mục hồ sơ</label>
@@ -272,8 +353,9 @@
 
         <!-- Facebook Cookie File Path -->
         <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5">
-          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-            📄 Đường dẫn File Cookie Facebook (Netscape .txt)
+          <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Đường dẫn File Cookie Facebook (Netscape .txt)
           </h4>
           <div class="field">
             <label>Đường dẫn File Cookie Facebook</label>
@@ -287,8 +369,9 @@
 
       <!-- Paste Raw Cookie Content -->
       <div class="bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 rounded-xl p-5 mt-6">
-        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4">
-          📋 Dán nội dung Cookie Facebook (Netscape .txt hoặc chuỗi Raw)
+        <h4 class="text-[12px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Dán nội dung Cookie Facebook (Netscape .txt hoặc chuỗi Raw)
         </h4>
         <div class="field mb-0">
           <label>Nội dung Cookie Facebook</label>
@@ -300,10 +383,9 @@
       </div>
 
       <div class="btn-group mt-12">
-        <button class="btn btn-primary" onclick="savePlatformConfig('facebook')">💾 Lưu cấu hình Facebook</button>
+        <button class="btn btn-primary" onclick="savePlatformConfig('facebook')">Lưu cấu hình Facebook</button>
       </div>
     </div>
   </div>
 
 </div>
-

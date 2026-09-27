@@ -122,6 +122,28 @@ python run_flask.py
 
 ## Sử dụng
 
+### Đăng nhập Douyin và lưu phiên
+
+Trong trang Cookie hoặc Cấu hình, chọn **Tự động lấy** của Douyin. Đăng nhập
+và giải CAPTCHA trong cửa sổ trình duyệt, giữ cửa sổ đó mở rồi quay lại ứng dụng
+bấm **Đã đăng nhập / xác minh xong — Lưu cookie**. Ứng dụng báo kết quả lưu;
+thời gian chờ tối đa là 10 phút. Không mở đồng thời tác vụ tải Douyin và cửa sổ
+lấy cookie vì chúng dùng chung hồ sơ trình duyệt `.douyin_profile`.
+
+Có thể đăng nhập từ PowerShell (chạy tại thư mục dự án):
+
+```powershell
+# Chỉ sao chép nếu chưa có cấu hình, tránh ghi đè cookie/cài đặt hiện tại.
+if (!(Test-Path config.yml)) { Copy-Item config.example.yml config.yml }
+.\.venv\Scripts\python.exe -m tools.cookie_fetcher --config config.yml
+```
+
+Sau khi đăng nhập/xác minh, nhấn Enter trong PowerShell để lưu. Cookie Douyin
+được cập nhật vào `config.yml` và `.cookies.json`; các cài đặt khác được giữ lại.
+Luồng tải video đơn và bài đăng dùng lại hồ sơ trình duyệt. Khi có CAPTCHA,
+hãy giải trực tiếp trong cửa sổ đang mở. Lưu được cookie không đảm bảo Douyin
+chấp nhận mọi yêu cầu tải; browser fallback vẫn phụ thuộc phản hồi của trang.
+
 ### 1. Tìm người dùng
 
 - Vào tab "Tìm người dùng"

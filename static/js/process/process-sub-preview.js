@@ -289,14 +289,14 @@ if (document.readyState === 'loading') {
 
     // Chế độ khung luôn dùng cùng một canvas, cả trước, trong và sau khi phát.
     // Nhờ vậy hình hiển thị và vùng tương tác không đổi khi chuyển trạng thái.
-    if (document.getElementById('frame-enabled')?.checked) {
+    if (typeof framePreviewUpdate === 'function') {
       if (overlay) overlay.style.display = 'none';
       if (blurEl)  blurEl.style.display  = 'none';
       const blurC = document.getElementById('sub-preview-blur-canvas');
       if (blurC) blurC.style.display = 'none';
-      // Xoá các div vùng che bổ sung của DOM để không bị hiển thị 2 lớp (canvas + DOM)
       wrap.querySelectorAll('.extra-blur-zone').forEach(el => el.remove());
       wrap.querySelectorAll('.video-overlay-el').forEach(el => el.remove());
+      if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
       return;
     }
 
@@ -318,7 +318,7 @@ if (document.readyState === 'loading') {
     const color    = document.getElementById('proc-font-color')?.value || 'white';
     const marginV  = _parseSafeFloat(document.getElementById('proc-margin-v')?.value, 3);
     const pos      = document.getElementById('proc-sub-pos')?.value || 'bottom';
-    const blurOn   = document.getElementById('proc-blur-original')?.checked || false;
+    const blurOn = !window._procAiAnalyzing && !procAiOwnsBlur() && (document.getElementById('proc-blur-original')?.checked || false);
 
     // Tọa độ và kích thước layout chuẩn (CSS pixels, không bị ảnh hưởng bởi zoom)
     const layout = window.pe2GetPreviewMediaLayout();
@@ -484,10 +484,10 @@ if (document.readyState === 'loading') {
         }
       } catch (_) {}
 
-      window._procExtraBlurZones.forEach(zone => {
+      procActiveBlurZones().forEach(zone => {
         const isExtraSelected = window._pe2Sel && window._pe2Sel.type === 'extra' && String(window._pe2Sel.id) === String(zone.id);
 
-        if (!isExtraSelected) {
+        if (!isExtraSelected || zone.source === 'ai' || zone.zone === 'ai') {
           if (zone.start !== '' && zone.start !== null && zone.start !== undefined && !isNaN(parseFloat(zone.start))) {
             if (curTs < parseFloat(zone.start)) return;
           }
@@ -523,6 +523,7 @@ if (document.readyState === 'loading') {
   }
 
   async function subPreviewFetchFrame() {
+    if (window.pe2BuildFilmstrip) window.pe2BuildFilmstrip(true);
     const source = _getPreviewVideoPath();
     if (!source) { toast('Chưa có video trong hàng chờ hoặc chưa chọn file', 'warning'); return; }
 
@@ -576,24 +577,19 @@ if (document.readyState === 'loading') {
               }
             } catch (_) {}
 
-            const frameOn = document.getElementById('frame-enabled')?.checked;
+            const frameChk = document.getElementById('frame-enabled');
+            if (frameChk && !frameChk.checked) frameChk.checked = true;
             const cv = document.getElementById('frame-preview-canvas');
-            if (frameOn) {
-              img.style.display = 'block';
-              img.style.position = 'absolute';
-              img.style.opacity = '0';
-              img.style.pointerEvents = 'none';
-              if (cv) cv.style.display = 'block';
-              if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
-            } else {
-              img.style.display = 'block';
-              img.style.position = '';
-              img.style.opacity = '1';
-              img.style.visibility = 'visible';
-              img.style.pointerEvents = '';
-              if (cv) cv.style.display = 'none';
-              if (typeof _renderSubOverlay === 'function') _renderSubOverlay();
+            if (cv) {
+              cv.style.display = 'block';
+              cv.style.zIndex = '4';
+              cv.style.pointerEvents = 'auto';
             }
+            img.style.display = 'block';
+            img.style.position = 'absolute';
+            img.style.opacity = '0';
+            img.style.pointerEvents = 'none';
+            if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
             if (typeof _onPreviewAspectChange === 'function') _onPreviewAspectChange();
           };
           img.src = data.image;

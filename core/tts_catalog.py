@@ -13,6 +13,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Tuple
+from functools import lru_cache
+
+
+@lru_cache(maxsize=2)
+def _installed_vieneu_catalog(mode="turbo"):
+    try:
+        from importlib import resources
+        return json.loads(resources.files('vieneu').joinpath(f'assets/voices_v3_{mode}.json').read_text(encoding='utf-8'))
+    except Exception:
+        return {}
 
 
 _LANGS = ("vi", "en", "zh", "ja", "ko", "th", "id", "es", "pt", "fr", "de", "ru", "ar", "hi")
@@ -82,13 +92,31 @@ _GOOGLE_CLOUD_SAMPLE_VOICES: Dict[str, List[Tuple[str, str]]] = {
 
 def _vieneu_preset_voices() -> List[Tuple[str, str]]:
     fallback = [
-        ("Minh Quân Pro", "Minh Quân Pro (nam, giọng mặc định)"),
-        ("Trúc Ly", "Trúc Ly (nữ, giọng trẻ trung)"),
-        ("Anh Khôi", "Anh Khôi (nam, kể chuyện)"),
-        ("Mai Anh", "Mai Anh (nữ)"),
-        ("Thái Sơn", "Thái Sơn (nam, giọng chắc khỏe)"),
-        ("Đức Trí", "Đức Trí (nam, giọng rõ ràng)"),
-        ("Xuân Vĩnh", "Xuân Vĩnh (nam, giọng vui tươi)"),
+        ("Minh Quân Pro", "[Tuyển chọn] Minh Quân Pro (Nam · Bắc · Phong cách tự nhiên)"),
+        ("Phạm Tuyên", "Phạm Tuyên (Nam · Bắc · Phong cách tự nhiên)"),
+        ("Mai Anh", "[Tuyển chọn] Mai Anh (Nữ · Bắc · Phong cách tin tức)"),
+        ("Trúc Ly", "[Tuyển chọn] Trúc Ly (Nữ · Bắc · Phong cách tự nhiên)"),
+        ("Thanh Bình", "Thanh Bình (Nam · Bắc · Phong cách kể chuyện)"),
+        ("Thùy Dung", "[Tuyển chọn] Thùy Dung (Nữ · Nam · Phong cách tin tức)"),
+        ("Anh Khôi", "[Tuyển chọn] Anh Khôi (Nam · Bắc · Phong cách kể chuyện)"),
+        ("Thiền Tâm Đức", "[Tuyển chọn] Thiền Tâm Đức (Nam · Bắc · Phong cách kể chuyện)"),
+        ("Ngọc Huyền", "[Tuyển chọn] Ngọc Huyền (Nữ · Bắc · Giọng đọc tự nhiên)"),
+        ("Quang Sơn", "[Tuyển chọn] Quang Sơn (Nam · Trung · Phong cách tự nhiên)"),
+        ("Ngọc Trân", "[Tuyển chọn] Ngọc Trân (Nữ · Trung · Phong cách tự nhiên)"),
+        ("Minh Đức", "Minh Đức (Nam · Bắc · Phong cách tin tức)"),
+        ("Thái Sơn", "Thái Sơn (Nam · Nam · Phong cách kể chuyện)"),
+        ("Xuân Vĩnh", "Xuân Vĩnh (Nam · Bắc · Phong cách tự nhiên)"),
+        ("Ngọc Linh", "Ngọc Linh (Nữ · Bắc · Phong cách kể chuyện)"),
+        ("Đoan Trang", "Đoan Trang (Nữ · Bắc · Phong cách tự nhiên)"),
+        ("Thục Đoan", "Thục Đoan (Nữ · Nam · Phong cách kể chuyện)"),
+        ("Minh Triết", "Minh Triết (Nam · Nam · Phong cách tin tức)"),
+        ("Mỹ Duyên", "Mỹ Duyên (Nữ · Nam · Phong cách đọc truyện)"),
+        ("Quỳnh Anh", "Quỳnh Anh (Nữ · Bắc · Phong cách đọc truyện)"),
+        ("Đức Trí", "Đức Trí (Nam · Nam · Phong cách đọc truyện)"),
+        ("Kim Thanh", "Kim Thanh (Nữ · Nam · Phong cách đọc truyện)"),
+        ("Adam", "Adam (Nam · Nam · Giọng đọc tự nhiên)"),
+        ("Adam bựa", "[Tuyển chọn] Adam bựa (Nam · Bắc · Phong cách tự nhiên)"),
+        ("Mạnh Dũng", "Mạnh Dũng (Nam · Bắc · Phong cách tự nhiên)"),
     ]
     try:
         import json as _json
@@ -96,10 +124,16 @@ def _vieneu_preset_voices() -> List[Tuple[str, str]]:
 
         asset = _resources.files("vieneu").joinpath("assets/voices_v3_turbo.json")
         data = _json.loads(asset.read_text(encoding="utf-8"))
+        presets = data.get("presets") or {}
+        sorted_items = sorted(
+            presets.items(),
+            key=lambda kv: (kv[1].get("featured") is None, kv[1].get("featured") or 0)
+        )
         rows = []
-        for name, info in (data.get("presets") or {}).items():
+        for name, info in sorted_items:
             desc = str(info.get("description") or "").strip()
-            label = f"{name} ({desc})" if desc else name
+            feat = "[Tuyển chọn] " if info.get("featured") is not None else ""
+            label = f"{feat}{name} ({desc})" if desc else f"{feat}{name}"
             rows.append((name, label))
         return rows or fallback
     except Exception:
@@ -353,8 +387,24 @@ def local_tts_engines() -> List[Dict[str, Any]]:
             },
         },
     ]
-    # Tạm khóa TTS web: toàn bộ giao diện và pipeline chỉ được chọn VieNeu local.
-    return [engines[0]]
+    # Use this runtime's names: SDK releases may rename the same voice.
+    engines[0]['default'] = _installed_vieneu_catalog().get('default_voice') or engines[0]['default']
+    voices = engines[0]["voices"]["vi"]
+    if engines[0]["default"] not in {v[0] for v in voices}:
+        engines[0]["default"] = voices[0][0]
+    turbo = engines[0]
+    turbo['label'] = 'VieNeu v3 Turbo — Tự động CPU/GPU (48 kHz)'
+    variants = [turbo]
+    for eid, label in [('vieneu-cpu', 'VieNeu v3 Turbo — CPU (48 kHz)'),
+                       ('vieneu-gpu', 'VieNeu v3 Turbo — GPU CUDA (48 kHz)')]:
+        variants.append(dict(turbo, id=eid, label=label))
+    nano = _installed_vieneu_catalog('nano')
+    presets = nano.get('presets', {})
+    if presets:
+        variants.append(dict(turbo, id='vieneu-nano', label='VieNeu v3 Nano — CPU (preview, 24 kHz)',
+                             default=nano.get('default_voice') or next(iter(presets)),
+                             voices={'vi': [(name, name) for name in presets]}))
+    return variants
 
 
 def _local_engine_by_id(engine_id: str) -> Dict[str, Any] | None:
@@ -373,6 +423,27 @@ def engine_voices_for_lang(engine: Dict[str, Any], lang: str) -> List[Tuple[str,
     return [tuple(v) for v in rows]
 
 
+_VOICE_ALIASES: Dict[str, str] = {
+    "Minh Quân Pro": "Minh Quân Pro",
+    "Minh Quân": "Minh Quân Pro",
+    "Ngọc Lan": "Ngọc Huyền",
+    "Gia Bảo": "Anh Khôi",
+    "Trọng Hữu": "Thiền Tâm Đức",
+    "Bình An": "Thanh Bình",
+    "Tuyen": "Phạm Tuyên",
+    "Tuyên": "Phạm Tuyên",
+    "Binh": "Thanh Bình",
+    "Bình": "Thanh Bình",
+    "Ly": "Trúc Ly",
+    "Ngoc": "Ngọc Linh",
+    "Ngọc": "Ngọc Linh",
+    "Doan": "Thục Đoan",
+    "Đoan": "Thục Đoan",
+    "Vinh": "Xuân Vĩnh",
+    "Vĩnh": "Xuân Vĩnh",
+}
+
+
 def resolve_engine_voice(
     engine_id: str,
     voice_id: str,
@@ -380,17 +451,31 @@ def resolve_engine_voice(
     cfg: Dict[str, Any] | None = None,
 ) -> Tuple[str, str, bool, str]:
     """Normalize every saved selection to local VieNeu and a valid preset."""
-    # Chính sách hiện tại: VieNeu local là engine duy nhất, kể cả cấu hình cũ
-    # còn lưu tên engine web.
     vid = (voice_id or "").strip()
-
-    vieneu = _local_engine_by_id("vieneu")
+    eid = (engine_id or "").strip().lower()
+    if eid not in {"vieneu", "vieneu-cpu", "vieneu-gpu", "vieneu-nano"}:
+        eid = "vieneu"
+    vieneu = _local_engine_by_id(eid)
     rows = engine_voices_for_lang(vieneu, "vi") if vieneu else []
     valid_ids = {row[0] for row in rows}
+
+    # 1. Direct match
     if vid in valid_ids:
-        return "vieneu", vid, (engine_id or "").strip().lower() != "vieneu", "engine→vieneu"
+        return eid, vid, (engine_id or "").strip().lower() != "vieneu", "engine→vieneu"
+
+    # 2. Alias match (e.g. Ngọc Lan -> Ngọc Huyền, Minh Quân -> Minh Quân Pro)
+    installed_aliases = {
+        alias: name
+        for name, info in _installed_vieneu_catalog().get('presets', {}).items()
+        for alias in info.get('aliases', [])
+    }
+    resolved_alias = installed_aliases.get(vid) or _VOICE_ALIASES.get(vid)
+    if resolved_alias and resolved_alias in valid_ids:
+        return eid, resolved_alias, True, f"alias: {vid}→{resolved_alias}"
+
+    # 3. Fallback to default
     default_voice = str((vieneu or {}).get("default") or "Minh Quân Pro")
-    return "vieneu", default_voice, True, f"engine→vieneu, voice→{default_voice}"
+    return eid, default_voice, True, f"voice '{vid}' không tồn tại, tự chọn: {default_voice}"
 
 
 def dtrouter_tts_engines(cfg: Dict[str, Any] | None = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:

@@ -84,6 +84,9 @@ class FFmpegPreset:
             args += ["-preset", self.preset_name, "-crf", str(self.crf)]
         elif self.video_codec == "h264_nvenc":
             args += ["-preset", self.preset_name, "-cq", str(self.crf)]
+        elif self.video_codec == "h264_mf":
+            if not any("-b:v" in str(x) for x in self.extra_video_params):
+                args += ["-b:v", "6M", "-pix_fmt", "yuv420p"]
         elif self.video_codec == "h264_qsv":
             args += ["-preset", self.preset_name, "-global_quality", str(self.crf)]
         elif self.video_codec == "h264_amf":
@@ -653,11 +656,26 @@ def get_optimal_preset(ffmpeg: Optional[str] = None, force_redetect: bool = Fals
     # Validate: test if the chosen codec actually works
     if preset.video_codec != "libx264" and ffmpeg:
         if not _test_encoder(ffmpeg, preset.video_codec):
-            logger.warning(
-                "Encoder %s không hoạt động, fallback về libx264",
-                preset.video_codec
-            )
-            preset = _get_cpu_fallback(hw)
+            if (hw.has_nvidia_gpu or hw.has_intel_qsv or hw.has_amd_amf) and _test_encoder(ffmpeg, "h264_mf"):
+                logger.info(
+                    "Encoder %s cần driver mới hơn, kích hoạt GPU qua Windows MediaFoundation (h264_mf)",
+                    preset.video_codec,
+                )
+                preset = FFmpegPreset(
+                    video_codec="h264_mf",
+                    preset_name="",
+                    crf=23,
+                    extra_video_params=["-b:v", "6M", "-pix_fmt", "yuv420p"],
+                    threads=0,
+                    description="Windows GPU Hardware (h264_mf) — tăng tốc render bằng GPU",
+                    machine_profile="windows_gpu_mf",
+                )
+            else:
+                logger.warning(
+                    "Encoder %s không hoạt động, fallback về libx264",
+                    preset.video_codec
+                )
+                preset = _get_cpu_fallback(hw)
 
     _cached_preset = preset
     logger.info("Selected FFmpeg preset: %s (%s)", preset.machine_profile, preset.description)

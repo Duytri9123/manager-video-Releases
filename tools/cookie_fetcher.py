@@ -71,7 +71,18 @@ async def capture_cookies(args: Any) -> Dict[str, str]:
 
             # Lắng nghe cookie trong tối đa 120 giây hoặc khi đóng tab
             poll_interval = 2.0
-            max_wait = 180.0
+            max_wait = float(getattr(args, "wait_timeout_seconds", 600))
+            finish_event = getattr(args, "finish_event", None)
+            if getattr(args, "interactive", False):
+                import threading
+                finish_event = threading.Event()
+                def wait_for_enter():
+                    try:
+                        input("Đăng nhập/giải CAPTCHA trong trình duyệt, rồi nhấn Enter tại đây để lưu cookie: ")
+                    except EOFError:
+                        return
+                    finish_event.set()
+                threading.Thread(target=wait_for_enter, daemon=True).start()
             elapsed = 0.0
 
             target_domain = "tiktok.com" if is_tiktok else "douyin.com"
@@ -86,7 +97,7 @@ async def capture_cookies(args: Any) -> Dict[str, str]:
                     matched = {}
                     for c in all_ck:
                         c_dom = (c.get("domain") or "").lower()
-                        if target_domain in c_dom:
+                        if c_dom.lstrip(".") == target_domain or c_dom.endswith("." + target_domain):
                             matched[c["name"]] = c["value"]
 
                     # Kiểm tra các trường cookie quan trọng
@@ -109,6 +120,8 @@ async def capture_cookies(args: Any) -> Dict[str, str]:
                 except Exception as exc:
                     logger.debug("Lỗi đọc cookie tạm thời: %s", exc)
 
+                if finish_event is not None and finish_event.is_set():
+                    break
                 await asyncio.sleep(poll_interval)
                 elapsed += poll_interval
 
@@ -117,7 +130,7 @@ async def capture_cookies(args: Any) -> Dict[str, str]:
                 all_ck = await context.cookies()
                 for c in all_ck:
                     c_dom = (c.get("domain") or "").lower()
-                    if target_domain in c_dom:
+                    if c_dom.lstrip(".") == target_domain or c_dom.endswith("." + target_domain):
                         captured_cookies[c["name"]] = c["value"]
             except Exception:
                 pass
@@ -145,7 +158,7 @@ async def capture_cookies(args: Any) -> Dict[str, str]:
                 json.dump(sanitized, f, indent=2, ensure_ascii=False)
             logger.info("Đã lưu cookie vào tệp: %s", output_path)
         except Exception as e:
-            logger.error("Lỗi khi ghi tệp cookie %s: %e", output_path, e)
+            logger.error("Lỗi khi ghi tệp cookie %s: %s", output_path, e)
 
     # Lưu vào .cookies.json trong thư mục gốc nếu là Douyin
     if not is_tiktok:
@@ -164,12 +177,7 @@ async def capture_cookies(args: Any) -> Dict[str, str]:
                 cfg = yaml.safe_load(f) or {}
 
             if not is_tiktok:
-                existing_ck = cfg.get("cookies") or {}
-                if isinstance(existing_ck, dict):
-                    existing_ck.update(sanitized)
-                    cfg["cookies"] = existing_ck
-                else:
-                    cfg["cookies"] = sanitized
+                cfg["cookies"] = sanitized
                 cfg["cookie_mode"] = "custom"
             else:
                 ytdlp_cfg = cfg.get("ytdlp") or {}
@@ -182,13 +190,36 @@ async def capture_cookies(args: Any) -> Dict[str, str]:
             logger.info("Đã cập nhật cookies vào %s thành công!", config_path)
         except Exception as e:
             logger.error("Lỗi cập nhật config.yml: %s", e)
+            raise
 
     # Đồng bộ sang CookieManager
     try:
         from auth import CookieManager
-        cm = CookieManager()
-        cm.set_cookies(sanitized)
+        if not is_tiktok:
+            cm = CookieManager()
+            cm.set_cookies(sanitized)
     except Exception as e:
         logger.debug("Lỗi cập nhật CookieManager: %s", e)
 
     return sanitized
+
+
+def main():
+    import argparse
+    import sys
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    parser = argparse.ArgumentParser(description="Đăng nhập Douyin và lưu cookie")
+    parser.add_argument("--config", default="config.yml")
+    parser.add_argument("--url", default="https://www.douyin.com/")
+    parser.add_argument("--output")
+    parser.add_argument("--wait-timeout-seconds", type=int, default=600)
+    args = parser.parse_args()
+    if not Path(args.config).is_file():
+        parser.error("Chưa có config.yml. Sao chép config.example.yml trước khi đăng nhập.")
+    args.interactive = True
+    return 0 if asyncio.run(capture_cookies(args)) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

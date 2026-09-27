@@ -16,11 +16,12 @@ datas = [
     (str(project_root / "templates"), "templates"),
     (str(project_root / "static"), "static"),
     (str(project_root / "img"), "img"),
-    (str(project_root / "config"), "config"),
-    (str(project_root / "config.yml"), "."),
+    (str(project_root / "config/default_config.py"), "config"),
+    (str(project_root / "config/translation_style.txt"), "config"),
+
     (str(project_root / "config.example.yml"), "."),
     (str(project_root / "client_secrets.example.json"), "."),
-    (str(project_root / "output"), "output"),
+
 ]
 
 binaries = []
@@ -46,7 +47,11 @@ for pyfile in utils_dir.glob("*.py"):
         datas.append((str(pyfile), "utils"))
 
 # Blueprints are imported dynamically in extensions.py.
-hiddenimports += collect_submodules("routes")
+hiddenimports += [".".join(p.relative_to(project_root).with_suffix("").parts) for p in (project_root / "templates/pages").rglob("*.py") if p.name != "__init__.py"]
+hiddenimports += collect_submodules("vieneu")
+hiddenimports += collect_submodules("vieneu_utils")
+datas += collect_data_files("vieneu")
+datas += collect_data_files("vieneu_utils")
 
 python_dll = Path(sys.base_prefix) / f"python{sys.version_info.major}{sys.version_info.minor}.dll"
 if python_dll.exists():
@@ -142,16 +147,12 @@ a = Analysis(
         "numba",
         "pandas",
         "pyarrow",
-        "scipy",
         "sklearn",
         "speechbrain",
         "tensorflow",
         "tensorflow_intel",
-        "torch",
-        "torchaudio",
         "torchtext",
         "torchvision",
-        "transformers",
         "whisper",
         "PySide6.QtQml",
         "PySide6.QtQuick",

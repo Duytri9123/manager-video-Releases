@@ -505,17 +505,52 @@ def set_cookie_mode():
 
 
 # ── /api/auto_fetch_cookie ────────────────────────────────────────────────────
+_cookie_capture_lock = threading.Lock()
+_cookie_capture_finish = threading.Event()
+_cookie_capture_status = {"state": "idle"}
+
+
+@bp.route("/api/auto_fetch_cookie/status", methods=["GET"])
+def cookie_capture_status():
+    with _cookie_capture_lock:
+        return jsonify(dict(_cookie_capture_status))
+
+
+@bp.route("/api/auto_fetch_cookie/finish", methods=["POST"])
+def finish_cookie_capture():
+    with _cookie_capture_lock:
+        if _cookie_capture_status["state"] != "waiting":
+            return jsonify({"ok": False, "error": "Không có phiên đăng nhập đang chờ."}), 409
+        _cookie_capture_finish.set()
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/auto_fetch_cookie", methods=["POST"])
 def auto_fetch_cookie():
+    with _cookie_capture_lock:
+        if _cookie_capture_status["state"] == "waiting":
+            return jsonify({"ok": True, "state": "waiting"})
+        _cookie_capture_finish.clear()
+        _cookie_capture_status.clear()
+        _cookie_capture_status["state"] = "waiting"
     def run():
-        import argparse
-        from tools.cookie_fetcher import capture_cookies
-        args = argparse.Namespace(
-            url="https://www.douyin.com/", browser="chromium",
-            headless=False, output=ROOT / "config" / "cookies.json",
-            config=CONFIG_FILE, include_all=False,
-        )
-        asyncio.run(capture_cookies(args))
+        try:
+            import argparse
+            from tools.cookie_fetcher import capture_cookies
+            args = argparse.Namespace(
+                url="https://www.douyin.com/", browser="chromium",
+                headless=False, output=ROOT / "config" / "cookies.json",
+                config=CONFIG_FILE, include_all=False,
+                finish_event=_cookie_capture_finish, wait_timeout_seconds=600,
+            )
+            cookies = asyncio.run(capture_cookies(args))
+            status = {"state": "saved" if cookies else "error"}
+            if not cookies:
+                status["error"] = "Không lấy được cookie. Hãy mở lại trình duyệt và đăng nhập."
+        except Exception:
+            status = {"state": "error", "error": "Không lưu được cookie. Kiểm tra nhật ký và thử lại."}
+        with _cookie_capture_lock:
+            _cookie_capture_status.update(status)
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"ok": True})
 

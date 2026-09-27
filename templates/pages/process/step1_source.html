@@ -6,6 +6,7 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 16px;
+      align-items: start;
     }
 
     @media (min-width: 1024px) {
@@ -187,6 +188,13 @@
           </div>
 
           <!-- Facebook Account & Page selects -->
+          <div id="step1-tt-pub-row" class="field mb-0">
+            <label class="text-[10px] font-medium">Tài khoản TikTok</label>
+            <select id="step1-tt-account-select" class="w-full text-[10.5px] h-[28px] rounded px-1.5"
+              onchange="_step1SyncAccountToMain('tiktok', this.value)">
+              <option value="">Chọn tài khoản TikTok</option>
+            </select>
+          </div>
           <div id="step1-fb-pub-row" class="grid grid-cols-2 gap-1.5">
             <div class="field mb-0">
               <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Tài khoản Facebook</label>
@@ -355,8 +363,12 @@
 
         <!-- Download area -->
         <div id="step1-download-area"
-          style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          style="display:none;margin-top:auto;padding-top:8px;border-top:1px solid var(--border)">
+          <div class="text-[10px] text-slate-400" id="step1-dl-status" style="margin-bottom:8px">Nhấn để tải video gốc từ URL.</div>
+          <div id="step1-dl-log"
+            style="max-height:120px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:monospace;color:var(--text);display:none;margin-bottom:8px">
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
             <button type="button" class="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1.5 h-[30px]"
               id="btn-step1-download" onclick="window._step1Downloading=false;_runStep1QueueDownload()">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -367,10 +379,11 @@
               </svg>
               <span>Tải hàng chờ</span>
             </button>
-            <span class="text-[10px] text-slate-400" id="step1-dl-status">Nhấn để tải video gốc từ URL.</span>
-          </div>
-          <div id="step1-dl-log"
-            style="max-height:120px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:monospace;color:var(--text);display:none">
+            <button type="button" class="btn btn-primary text-[11px] py-1 px-2.5 flex items-center gap-1.5 h-[30px]"
+              id="btn-step1-process" onclick="procStartQueueFromStep1()"
+              title="Xử lý hàng chờ bằng cấu hình hiện tại ở Bước 2">
+              <span>Xử lý video</span>
+            </button>
           </div>
         </div>
 
@@ -621,8 +634,8 @@
                   onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
                   class="w-full text-[10.5px] h-[28px] rounded px-1.5">
                   <option value="">Tự động theo Provider</option>
-                  <option value="gemini-3.7-flash" selected>Gemini 3.7 Flash</option>
-                  <option value="gemini-3.8-flash-high">Gemini 3.8 Flash (High)</option>
+                  <option value="gemini-3.8-flash-high" selected>Gemini 3.8 Flash (High)</option>
+                  <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
                   <option value="gemini-3.8-flash-medium">Gemini 3.8 Flash (Medium)</option>
                   <option value="gemini-3.8-flash-low">Gemini 3.8 Flash (Low)</option>
                   <option value="gemini-3.6-flash-medium">Gemini 3.6 Flash (Medium)</option>
@@ -761,6 +774,46 @@
                   <option value="vi-VN-Standard-A" selected>Mặc định (Nữ)</option>
                 </select>
               </div>
+              <div class="col-span-2 flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
+                <label for="proc-sync-sub-voice" class="text-[8.5px] text-slate-500 dark:text-slate-400 cursor-pointer flex items-center gap-1" title="Căn thời gian hiện và hết mỗi câu phụ đề theo đoạn giọng đọc được tạo. Nếu câu trước đọc chưa xong, câu sau sẽ lùi lại để tránh chồng tiếng; thời điểm có thể lệch so với lời thoại gốc.">
+                  <span>Căn thời gian phụ đề theo giọng đọc</span>
+                </label>
+                <label class="toggle-wrap m-0 scale-75">
+                  <input type="checkbox" class="toggle-input" id="proc-sync-sub-voice" checked>
+                  <div class="toggle"></div>
+                </label>
+              </div>
+              <div class="col-span-2 flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
+                <label for="proc-multi-speaker" class="text-[8.5px] text-slate-500 dark:text-slate-400 cursor-pointer flex items-center gap-1" title="Tự động nhận diện nhân vật (Nam / Nữ) khi phiên âm để lồng nhiều giọng đọc khác nhau thay vì 1 giọng cho cả video">
+                  <span>Phân vai đa giọng đọc (Nam / Nữ)</span>
+                </label>
+                <label class="toggle-wrap m-0 scale-75">
+                  <input type="checkbox" class="toggle-input" id="proc-multi-speaker" onchange="toggleMultiSpeakerOptions(this.checked);if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()">
+                  <div class="toggle"></div>
+                </label>
+              </div>
+              <div id="cfg-wrap-multi-voice" class="col-span-2 hidden grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <div class="field mb-0">
+                  <label class="text-[8px] font-medium text-blue-500 dark:text-blue-400 mb-0.5 block flex items-center gap-1">
+                    <span>Giọng nhân vật Nam</span>
+                  </label>
+                  <select id="proc-tts-voice-male"
+                    onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                    class="w-full text-[10px] h-[26px] rounded px-1.5 border border-blue-200 dark:border-blue-900 bg-blue-50/20 dark:bg-blue-950/20">
+                    <option value="" selected>Tự động (Nam)</option>
+                  </select>
+                </div>
+                <div class="field mb-0">
+                  <label class="text-[8px] font-medium text-pink-500 dark:text-pink-400 mb-0.5 block flex items-center gap-1">
+                    <span>Giọng nhân vật Nữ</span>
+                  </label>
+                  <select id="proc-tts-voice-female"
+                    onchange="if(typeof refreshSharedConfigSummary==='function')refreshSharedConfigSummary()"
+                    class="w-full text-[10px] h-[26px] rounded px-1.5 border border-pink-200 dark:border-pink-900 bg-pink-50/20 dark:bg-pink-950/20">
+                    <option value="" selected>Tự động (Nữ)</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -883,6 +936,8 @@
       });
       const ytRow = document.getElementById('step1-yt-pub-row');
       if (ytRow) ytRow.style.display = (enabled.youtube !== false) ? 'block' : 'none';
+      const ttRow = document.getElementById('step1-tt-pub-row');
+      if (ttRow) ttRow.style.display = enabled.tiktok !== false ? 'block' : 'none';
       const fbRow = document.getElementById('step1-fb-pub-row');
       if (fbRow) fbRow.style.display = (enabled.facebook !== false) ? 'grid' : 'none';
     }
@@ -894,6 +949,17 @@
         if (main) { main.value = val; main.dispatchEvent(new Event('change')); }
         const top = document.getElementById('yt-account-select');
         if (top) { top.value = val; if (typeof onAccountSelectChange === 'function') onAccountSelectChange('youtube', top); }
+      } else if (platform === 'tiktok') {
+        const main = document.getElementById('p-tt-account-select');
+        const top = document.getElementById('tt-account-select');
+        const source = document.getElementById('step1-tt-account-select');
+        if (main) main.value = val;
+        if (top) top.value = val;
+        if (source && typeof onAccountSelectChange === 'function') onAccountSelectChange('tiktok', source);
+        if (val === '__add__') {
+          if (main) main.value = source?.value || '';
+          if (top) top.value = source?.value || '';
+        }
       } else if (platform === 'facebook') {
         const main = document.getElementById('p-fb-account-select');
         if (main) { main.value = val; main.dispatchEvent(new Event('change')); }
@@ -924,6 +990,10 @@
           else if (src.value) dst.value = src.value;
         }
       };
+      mirror('tt-account-select', 'step1-tt-account-select');
+      const ttSource = document.getElementById('tt-account-select');
+      const ttTarget = document.getElementById('step1-tt-account-select');
+      if (ttSource && ttTarget) ttTarget.value = ttSource.value;
       mirror('p-yt-account-select', 'step1-yt-account-select');
       mirror('yt-account-select', 'step1-yt-account-select');
       mirror('p-fb-account-select', 'step1-fb-account-select');

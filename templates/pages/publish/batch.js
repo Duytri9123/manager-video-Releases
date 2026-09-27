@@ -621,10 +621,11 @@ async function _batchPubUploadTT(videoPath, ttInfo) {
   _batchPubLog(`  [TT] Mở TikTok Studio: "${caption.slice(0, 40)}..."`, 'info');
   let res;
   try {
+    const accountId = document.getElementById('tt-account-select')?.value || document.getElementById('p-tt-account-select')?.value || '';
     res = await fetch('/api/tiktok/prepare_upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video_path: videoPath, caption: caption.trim() }),
+      body: JSON.stringify({ video_path: videoPath, caption: caption.trim(), account_id: accountId }),
     });
   } catch (e) {
     return { ok: false, error: 'Lỗi mạng: ' + e.message };

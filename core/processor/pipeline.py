@@ -38,11 +38,12 @@ from core.processor.subtitles import (
     _parse_srt, _parse_ass_file, _merge_segments_for_tts,
     _parse_srt_text_to_segments, burn_subtitles, _burn_ass, _burn_srt,
     _hex_color, _hex_to_ass_color, _hex_to_ass_color_alpha,
-    generate_frame_title, write_ass_with_frame
+    generate_frame_title, write_ass_with_frame, align_subtitles_to_voice, extract_speaker_from_text, process_speaker_tags_in_segments
 )
 from core.processor.transcription import (
     _GROQ_MODEL, _GROQ_MAX_MB, _whisper_model_cache,
     GroqWhisperTranscriber, AntigravityTranscriber, FasterWhisperTranscriber,
+    classify_dialogue_speakers,
     transcribe_to_srt
 )
 from core.processor.tts import (
@@ -84,6 +85,12 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
     import time as _pytime
     _t_pipeline_start = _pytime.time()
+
+    data = dict(data)
+    if _as_bool(data.get("frame_title_enabled", True), True) and not str(data.get("frame_title") or "").strip():
+        analysis = data.get("ai_video_analysis") or {}
+        suggestions = analysis.get("title_suggestions") or {} if isinstance(analysis, dict) else {}
+        data["frame_title"] = next((str(suggestions[k]) for k in ("short", "tiktok", "youtube", "facebook") if suggestions.get(k)), "")
 
     video_path = Path(data.get("video_path", "")).expanduser()
     yield send(log=f"🚀 Khởi tạo tiến trình xử lý: {video_path.name}...", level="info")
@@ -299,6 +306,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     yield send(overall=5, overall_lbl="Video sẵn sàng")
     yield send(log=f"[Bước 1/5] ✓ Chuẩn bị video hoàn tất trong {_pytime.time() - _t_step1_start:.2f}s", level="info")
 
+    _multi_speaker = _as_bool(data.get("multi_speaker", False), False)
+    _voice_male = str(data.get("tts_voice_male") or "").strip()
+    _voice_female = str(data.get("tts_voice_female") or "").strip()
+
     # ── Bước 2/5: Phiên âm (Transcribe) ──────────────────────────────────────
     _t_step2_start = _pytime.time()
     ass_path = out_dir / f"{stem}.ass"  # dùng ASS thay SRT
@@ -367,12 +378,12 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         try:
             selected_stt_model = str(data.get("transcribe_model") or model_name or "").strip()
             if transcribe_provider == "antigravity":
-                transcriber = AntigravityTranscriber(language=language, model_name=selected_stt_model)
+                transcriber = AntigravityTranscriber(language=language, model_name=selected_stt_model, multi_speaker=_multi_speaker)
             elif transcribe_provider == "gemini":
                 from core.ai_models_manager import get_active_provider_connections
                 g_conns = get_active_provider_connections("gemini")
                 g_key = (g_conns[0].get("api_key") or "").strip() if g_conns else ""
-                transcriber = AntigravityTranscriber(language=language, api_key=g_key, model_name=selected_stt_model)
+                transcriber = AntigravityTranscriber(language=language, api_key=g_key, model_name=selected_stt_model, multi_speaker=_multi_speaker)
             elif transcribe_provider == "model":
                 transcriber = FasterWhisperTranscriber(selected_stt_model or "base", language, use_vad=True)
             elif transcribe_provider == "groq":
@@ -399,7 +410,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     from core.ai_models_manager import get_active_provider_connections
                     p_conns = get_active_provider_connections(transcribe_provider)
                     p_key = p_conns[0].get("api_key", "").strip() if p_conns else ""
-                    transcriber = AntigravityTranscriber(language=language, api_key=p_key, model_name=selected_stt_model)
+                    transcriber = AntigravityTranscriber(language=language, api_key=p_key, model_name=selected_stt_model, multi_speaker=_multi_speaker)
                 except Exception:
                     transcriber = FasterWhisperTranscriber(selected_stt_model or "base", language, use_vad=True)
             res = transcriber.transcribe(video_path, ffmpeg, source_srt_path)
@@ -430,6 +441,24 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         yield send(log="[Bước 2/5] ✗ Không thể tính được thời lượng video", level="error", failed=True, overall=0, overall_lbl="Không đọc được video")
                         return
             else:
+                process_speaker_tags_in_segments(segments)
+                if _multi_speaker and segments:
+                    has_spk = sum(1 for s in segments if s.get("speaker"))
+                    if has_spk < len(segments) * 0.5:
+                        yield send(log="[Bước 2/5] 🎭 Đang nhận diện và phân vai nhân vật (Nam/Nữ) qua kịch bản hội thoại...", level="info")
+                        try:
+                            segments = classify_dialogue_speakers(
+                                segments,
+                                trans_cfg=cfg_raw.get("translation", {}),
+                                preferred_provider=transcribe_provider,
+                                target_lang=language,
+                            )
+                        except Exception as _ce:
+                            yield send(log=f"[Bước 2/5] ⚠ Lỗi phân vai AI: {_ce}", level="warning")
+                    m_cnt = sum(1 for s in segments if s.get("speaker") == "male")
+                    f_cnt = sum(1 for s in segments if s.get("speaker") == "female")
+                    yield send(log=f"[Bước 2/5] 🎭 Phân vai hoàn tất: {m_cnt} câu giọng Nam, {f_cnt} câu giọng Nữ", level="info")
+
                 write_ass(segments, ass_path, play_res_x=_vw, play_res_y=_vh)
                 yield send(log=f"[Bước 2/5] ✓ Phiên âm {len(segments)} đoạn trong {_pytime.time() - _t_step2_start:.1f}s → {ass_path.name}", level="success", subtitle_path=str(ass_path.resolve()))
             yield send(overall=35, overall_lbl=f"Phiên âm xong: {len(segments)} đoạn")
@@ -440,6 +469,22 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             yield send(log="[Bước 2/5] 💡 Vui lòng mở Nhà cung cấp để kiểm tra/cập nhật API Key hoặc chọn Engine phiên âm khác.", level="error")
             return
 
+
+    # Generate titles independently of subtitle translation, including edit-only jobs.
+    if (_as_bool(data.get("frame_enabled", False), False)
+            and _as_bool(data.get("frame_title_enabled", True), True)
+            and not str(data.get("frame_title") or "").strip()):
+        try:
+            data["frame_title"] = generate_frame_title(
+                translated_texts=[], original_texts=[seg.get("text", "") for seg in segments],
+                trans_cfg=dict((cfg_raw or {}).get("translation") or {}),
+                preferred_provider=str(data.get("translate_provider") or "antigravity"),
+                video_title=stem_source, target_lang=target_language,
+            )
+            if data["frame_title"]:
+                yield send(frame_title=data["frame_title"], log=f"Tiêu đề AI: {data['frame_title']}", level="success")
+        except Exception as exc:
+            yield send(log=f"Không tạo được tiêu đề AI: {exc}", level="warning")
 
     # ── Bước 3/5: Dịch ZH → VI ─────────────────────────────────────────────────
     _t_step3_start = _pytime.time()
@@ -518,8 +563,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     # Luôn dùng ASS — không dùng SRT
                     alignment = 8 if str(data.get("subtitle_position", "bottom")).lower() == "top" else 2
                     vi_ass_path = out_dir / f"{stem}_{target_language}.ass"
-                    vi_segs = [{"start": s["start"], "end": s["end"], "text": t}
+                    vi_segs = [{"start": s["start"], "end": s["end"], "text": t, "speaker": s.get("speaker")}
                                for s, t in zip(segments, translated_texts) if t]
+                    vi_segs = _merge_segments_for_tts(vi_segs)
 
                     # Scale font_size, margin_v, and outline_width dynamically based on actual video height vs 720
                     _orig_font_size = _as_int(data.get("font_size", 32), 32)
@@ -539,10 +585,9 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         if _duration <= 0:
                             _duration = 600.0
 
-                        # Empty title means no title bar. Do not auto-generate a
-                        # frame title, because it creates unexpected top padding.
+                        # Generate a contextual title only when the title toggle is on.
                         _frame_title = str(data.get("frame_title") or "").strip()
-                        if False and not _frame_title:
+                        if _as_bool(data.get("frame_title_enabled", True), True) and not _frame_title:
                             yield send(log=f"[Bước 3/5] 🤖 AI đang tạo tiêu đề khung...", level="info")
                             try:
                                 _frame_title = generate_frame_title(
@@ -553,6 +598,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                     video_title=stem_source,
                                     target_lang=target_language,
                                 )
+                                data["frame_title"] = _frame_title
+                                yield send(frame_title=_frame_title)
                                 yield send(log=f"[Bước 3/5] ✓ Tiêu đề AI: \"{_frame_title}\"", level="success")
                             except Exception as _e:
                                 yield send(log=f"[Bước 3/5] ⚠ Không tạo được tiêu đề: {_e}", level="warning")
@@ -565,64 +612,70 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         # Only use a logo explicitly selected/saved by the user.
                         _logo_path = str(data.get("frame_logo_path") or "").strip()
 
-                        write_ass_with_frame(
-                            segments=vi_segs,
-                            out_path=vi_ass_path,
-                            video_duration=_duration,
-                            play_res_x=_vw,
-                            play_res_y=_vh,
-                            font_size=_scaled_font_size,
-                            font_color=data.get("font_color", "white"),
-                            outline_color=data.get("outline_color", "black"),
-                            outline_width=_scaled_outline_width,
-                            margin_v=_scaled_margin_v,
-                            alignment=alignment,
-                            title_text=_frame_title if _frame_title_visible else "",
-                            title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
-                            title_weight=int(_as_float(data.get("frame_title_weight"), 400.0)),
-                            title_x_pct=_as_float(data.get("frame_title_x_pct"), 50.0),
-                            title_y_pct=_as_float(data.get("frame_title_y_pct"), 50.0),
-                            title_color=str(data.get("frame_title_color") or "#000000"),
-                            title_color_2=str(data.get("frame_title_color_2") or "#ff0000"),
-                            title_split_color=_as_bool(data.get("frame_title_split_color", True), True),
-                            title_bar_color=str(data.get("frame_title_bar_color") or "#ffffff"),
-                            # Khi user tắt "Hiện tiêu đề" → ép title_bar_h_pct=0 để
-                            # hoàn toàn không vẽ dải trắng (dù logic vẽ đã skip khi
-                            # title rỗng, đây là double-safe).
-                            title_bar_h_pct=(
-                                _as_float(data.get("frame_title_bar_h_pct"), 6.0)
-                                if _frame_title_visible
-                                else 0.0
-                            ),
-                            title_margin_x_pct=_as_float(data.get("frame_title_margin_x_pct"), 5.0),
-                            blur_w_pct=_as_float(data.get("frame_blur_w_pct"), 0.0),
-                            blur_top_pct=_as_float(data.get("frame_blur_top_pct"), 0.0),
-                            blur_bottom_pct=_as_float(data.get("frame_blur_bottom_pct"), 0.0),
-                            blur_opacity=_as_float(data.get("frame_blur_opacity"), 0.6),
-                            blur_color=str(data.get("frame_blur_color") or "#000000"),
-                            logo_path=_logo_path,
-                            logo_size_pct=_as_float(data.get("frame_logo_size_pct"), 6.0),
-                            logo_top_pct=_as_float(data.get("frame_logo_top_pct"), 3.0),
-                            logo_left_pct=_as_float(data.get("frame_logo_left_pct"), 3.0),
-                            logo_radius_pct=_as_float(data.get("frame_logo_radius_pct"), 50.0),
-                            logo_position=str(data.get("frame_logo_position") or "top-left"),
-                            frame_mode=str(data.get("frame_blur_mode") or "overlay"),
-                            target_aspect=_target_aspect,
-                            font_bold=_font_bold,
-                        )
+                    def _write_current_ass(target_segs, target_path=vi_ass_path):
+                        if frame_enabled:
+                            return write_ass_with_frame(
+                                segments=target_segs,
+                                out_path=target_path,
+                                video_duration=_duration,
+                                play_res_x=_vw,
+                                play_res_y=_vh,
+                                font_size=_scaled_font_size,
+                                font_color=data.get("font_color", "white"),
+                                outline_color=data.get("outline_color", "black"),
+                                outline_width=_scaled_outline_width,
+                                margin_v=_scaled_margin_v,
+                                alignment=alignment,
+                                title_text=_frame_title if _frame_title_visible else "",
+                                title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
+                                title_weight=int(_as_float(data.get("frame_title_weight"), 400.0)),
+                                title_x_pct=_as_float(data.get("frame_title_x_pct"), 50.0),
+                                title_y_pct=_as_float(data.get("frame_title_y_pct"), 50.0),
+                                title_color=str(data.get("frame_title_color") or "#000000"),
+                                title_color_2=str(data.get("frame_title_color_2") or "#ff0000"),
+                                title_split_color=_as_bool(data.get("frame_title_split_color", True), True),
+                                title_bar_color=str(data.get("frame_title_bar_color") or "#ffffff"),
+                                title_bar_h_pct=(
+                                    _as_float(data.get("frame_title_bar_h_pct"), 6.0)
+                                    if _frame_title_visible
+                                    else 0.0
+                                ),
+                                title_margin_x_pct=_as_float(data.get("frame_title_margin_x_pct"), 5.0),
+                                blur_w_pct=_as_float(data.get("frame_blur_w_pct"), 0.0),
+                                blur_top_pct=_as_float(data.get("frame_blur_top_pct"), 0.0),
+                                blur_bottom_pct=_as_float(data.get("frame_blur_bottom_pct"), 0.0),
+                                blur_opacity=_as_float(data.get("frame_blur_opacity"), 0.6),
+                                blur_color=str(data.get("frame_blur_color") or "#000000"),
+                                logo_path=_logo_path,
+                                logo_size_pct=_as_float(data.get("frame_logo_size_pct"), 6.0),
+                                logo_top_pct=_as_float(data.get("frame_logo_top_pct"), 3.0),
+                                logo_left_pct=_as_float(data.get("frame_logo_left_pct"), 3.0),
+                                logo_radius_pct=_as_float(data.get("frame_logo_radius_pct"), 50.0),
+                                logo_position=str(data.get("frame_logo_position") or "top-left"),
+                                frame_mode=str(data.get("frame_blur_mode") or "overlay"),
+                                target_aspect=_target_aspect,
+                                font_bold=_font_bold,
+                            )
+                        else:
+                            return write_ass(
+                                target_segs,
+                                target_path,
+                                font_size=_scaled_font_size,
+                                font_color=data.get("font_color", "white"),
+                                outline_color=data.get("outline_color", "black"),
+                                outline_width=_scaled_outline_width,
+                                margin_v=_scaled_margin_v,
+                                alignment=alignment,
+                                play_res_x=_vw,
+                                play_res_y=_vh,
+                                font_bold=_font_bold,
+                            )
+
+                    _write_current_ass(vi_segs)
+                    if frame_enabled:
                         yield send(log=f"[Bước 3/5] ✓ ASS (có khung) {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                         yield send(log=f"[Bước 3/5] 🎞 Khung: title=\"{_frame_title[:25]}\", blur={_as_float(data.get('frame_blur_w_pct'), 0.0)}%, logo={'✓' if _logo_path else '✗'}", level="info")
                     else:
-                        write_ass(vi_segs, vi_ass_path,
-                                  font_size=_scaled_font_size,
-                                  font_color=data.get("font_color", "white"),
-                                  outline_color=data.get("outline_color", "black"),
-                                  outline_width=_scaled_outline_width,
-                                  margin_v=_scaled_margin_v,
-                                  alignment=alignment,
-                                  play_res_x=_vw,
-                                  play_res_y=_vh,
-                                  font_bold=_font_bold)
                         yield send(log=f"[Bước 3/5] ✓ ASS {target_lang_name}: {vi_ass_path.name}", level="success", subtitle_path=str(vi_ass_path.resolve()))
                     # Signal frontend to review the ASS file before continuing
                     _skip_ass_review = _as_bool(data.get("skip_ass_review", False), False) or _as_bool(data.get("skip_ass", False), False)
@@ -919,7 +972,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     original_volume = min(2.0, max(0.0, _as_float(data.get("vol_orig", 1.0), 1.0)))
     voice_mix_config = {key: data.get(key) for key in (
         "tts_engine", "tts_voice", "tts_pitch", "tts_rate", "tts_speed",
-        "tts_emotion", "auto_speed", "tts_volume", "fx_enabled", "fx_pitch",
+        "tts_emotion", "auto_speed", "sync_sub_to_voice", "tts_volume", "fx_enabled", "fx_pitch",
         "fx_speed", "fx_bass", "fx_mid", "fx_treble", "fx_comp", "fx_reverb"
     )}
     voice_mix_config["original_volume"] = original_volume
@@ -973,12 +1026,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             except Exception:
                 _eng_sel, _voice_sel, _ev_changed, _ev_note = _req_engine, _req_voice, False, ""
             if _ev_changed:
+                if "alias" in _ev_note:
+                    _msg = f"[TTS] 🔄 Cập nhật tên giọng: {_req_voice or '∅'} → {_voice_sel} (phiên bản mới)"
+                elif _req_engine != _eng_sel:
+                    _msg = f"[TTS] 🌐 Chọn engine TTS: {_req_engine}/{_req_voice or '∅'} → {_eng_sel}/{_voice_sel or '∅'} ({_ev_note})"
+                else:
+                    _msg = f"[TTS] 🔄 Giọng '{_req_voice or '∅'}' không có trong danh mục, tự chọn: '{_voice_sel}'"
                 yield send(
-                    log=(
-                        f"[TTS song song] 🌐 Giọng không hợp với {target_lang_name} — "
-                        f"tự chọn: {_req_engine}/{_req_voice or '∅'} → "
-                        f"{_eng_sel}/{_voice_sel or '∅'} ({_ev_note})"
-                    ),
+                    log=_msg,
                     level="info",
                 )
 
@@ -1073,6 +1128,22 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 _tts_tmp_ctx = tempfile.TemporaryDirectory(prefix="tts_parallel_")
                 _tts_tmp_path = Path(_tts_tmp_ctx.name)
 
+                _sync_sub_to_voice = _as_bool(
+                    data.get("sync_sub_to_voice", _vp_cfg.get("sync_sub_to_voice", True)),
+                    True,
+                )
+
+                _tts_voice_map = None
+                if _multi_speaker:
+                    _tts_voice_map = {
+                        "male": _voice_male or _voice_sel,
+                        "female": _voice_female or _voice_sel,
+                        "default": _voice_sel,
+                    }
+
+                import queue as _queue
+                _tts_progress = _queue.Queue()
+
                 def _run_tts_indices(indices: list[int]) -> list[dict]:
                     batch_segments = [segments[i] for i in indices]
                     batch_texts = [translated_texts[i] for i in indices]
@@ -1084,25 +1155,78 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                             max_concurrency=_tts_concurrency,
                             retries=_tts_retries,
                             tts_speed=_as_float(data.get("tts_speed", 1.0), 1.0),
-                            auto_speed=_as_bool(data.get("auto_speed", True), True),
+                            auto_speed=False if _sync_sub_to_voice else _as_bool(data.get("auto_speed", True), True),
                             ffmpeg=ffmpeg,
                             pitch_semitones=_as_float(data.get("pitch_semitones", 0.0), 0.0),
                             indices=indices,
+                            voice_map=_tts_voice_map,
+                            progress_callback=lambda done, total: _tts_progress.put((done, total)),
                         )
                     )
 
-                import concurrent.futures as _cf
-                _tts_executor = _cf.ThreadPoolExecutor(max_workers=1)
-                _tts_future = _tts_executor.submit(_run_tts_indices, list(range(len(translated_texts))))
-                yield send(
-                    log=(
-                        f"[TTS song song] 🗣 Bắt đầu {len(translated_texts)} đoạn, "
-                        f"{_tts_concurrency} request đồng thời; burn chạy cùng lúc"
-                    ),
-                    level="info",
-                    overall=65,
-                    overall_lbl="Burn video + tạo TTS song song...",
-                )
+                if _sync_sub_to_voice:
+                    yield send(
+                        log=(
+                            f"[Lồng tiếng đồng bộ] 🗣 Đang tạo giọng đọc tự nhiên cho {len(translated_texts)} đoạn thoại..."
+                        ),
+                        level="info",
+                        overall=62,
+                        overall_lbl="Đang tạo giọng đọc đồng bộ...",
+                    )
+                    import concurrent.futures as _cf
+                    _tts_executor = _cf.ThreadPoolExecutor(max_workers=1)
+                    _tts_future = _tts_executor.submit(_run_tts_indices, list(range(len(translated_texts))))
+                    _started = _pytime.monotonic()
+                    while not _tts_future.done():
+                        try:
+                            done, total = _tts_progress.get(timeout=5)
+                            yield send(log=f"[VieNeu] Đã tạo {done}/{total} đoạn ({_pytime.monotonic() - _started:.0f}s)", level="info", overall=62 + int(8 * done / max(1, total)))
+                        except _queue.Empty:
+                            yield send(log=f"[VieNeu] Đang nạp mô hình / tạo giọng ({_pytime.monotonic() - _started:.0f}s)...", level="info")
+                    _tts_clips = _tts_future.result()
+
+
+                    # Căn mốc phụ đề khớp chuẩn 100% theo độ dài thực tế của giọng đọc
+                    _vid_dur = get_media_duration_seconds(ffmpeg, video_path)
+                    _tts_clips, aligned_segs = align_subtitles_to_voice(
+                        segments=segments,
+                        tts_clips=_tts_clips,
+                        ffmpeg=ffmpeg,
+                        video_duration=_vid_dur,
+                        min_gap=0.08,
+                    )
+
+                    # Ghi đè file ASS với timeline đã đồng bộ hoàn hảo
+                    if callable(_write_current_ass) and aligned_segs:
+                        try:
+                            _write_current_ass(aligned_segs)
+                            if vi_ass_path and vi_ass_path.exists():
+                                _encode_srt = vi_ass_path
+                                _burn_cache_valid = False
+                                _burn_cache_stale_reason = "căn mốc phụ đề khớp chuẩn theo giọng đọc"
+                                yield send(
+                                    log=f"[Lồng tiếng đồng bộ] 🎯 Đã căn mốc phụ đề khớp chuẩn 100% theo giọng đọc ({len(aligned_segs)} câu)",
+                                    level="success",
+                                    subtitle_path=str(vi_ass_path.resolve()),
+                                )
+                        except Exception as align_err:
+                            yield send(
+                                log=f"[Lồng tiếng đồng bộ] ⚠ Lỗi ghi ASS đồng bộ: {align_err}",
+                                level="warning"
+                            )
+                else:
+                    import concurrent.futures as _cf
+                    _tts_executor = _cf.ThreadPoolExecutor(max_workers=1)
+                    _tts_future = _tts_executor.submit(_run_tts_indices, list(range(len(translated_texts))))
+                    yield send(
+                        log=(
+                            f"[TTS song song] 🗣 Bắt đầu {len(translated_texts)} đoạn, "
+                            f"VieNeu tạo lần lượt từng đoạn; burn chạy cùng lúc"
+                        ),
+                        level="info",
+                        overall=65,
+                        overall_lbl="Burn video + tạo TTS song song...",
+                    )
             except Exception as tts_start_err:
                 if _tts_executor:
                     _tts_executor.shutdown(wait=False)

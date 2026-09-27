@@ -41,13 +41,78 @@ def _fmt_ass_time(seconds: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:02d}.{cs:02d}"
 
 
+def _sentence_parts(text: str) -> list[str]:
+    # Keep punctuation/closing quotes with the sentence they finish.
+    return [p.strip() for p in re.split(r'''(?<=[.!?…。！？])\s+|(?<=[.!?…。！？][”»"’'])\s+''', text) if p.strip()]
+
+
+def _smart_split_display_lines(text: str, max_words: int = 7) -> list[str]:
+    """
+    Tách câu thành các cụm phụ đề ngắn tối đa max_words từ (mặc định 7 từ),
+    cắt theo ngữ nghĩa tự nhiên, cân bằng độ dài, không để lại từ mồ côi (1 từ).
+    """
+    clean_text = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not clean_text:
+        return []
+    sentences = _sentence_parts(clean_text)
+    if len(sentences) > 1:
+        return [line for sentence in sentences
+                for line in _smart_split_display_lines(sentence, max_words)]
+    words = clean_text.split()
+    if len(words) <= max_words:
+        return [clean_text]
+
+    # Ưu tiên tách theo dấu ngắt tự nhiên (phẩy, chấm phẩy, hai chấm, gạch ngang, etc.)
+    clauses = re.split(r"([,;:!?…—]|\s+-\s+)", clean_text)
+    chunks: list[str] = []
+    current_clause = ""
+    for part in clauses:
+        if not part:
+            continue
+        if re.match(r"^[,;:!?…—]$", part.strip()) or part.strip() == "-":
+            current_clause += part
+            chunks.append(current_clause.strip())
+            current_clause = ""
+        else:
+            if current_clause:
+                chunks.append(current_clause.strip())
+            current_clause = part
+    if current_clause.strip():
+        chunks.append(current_clause.strip())
+
+    final_lines: list[str] = []
+    for c in chunks:
+        c_words = c.split()
+        if not c_words:
+            continue
+        if len(c_words) <= max_words:
+            final_lines.append(c)
+        else:
+            n = len(c_words)
+            idx = 0
+            while idx < n:
+                rem = n - idx
+                parts_needed = max(1, (rem + max_words - 1) // max_words)
+                take = (rem + parts_needed - 1) // parts_needed
+                take = min(max_words, max(1, take))
+                # Tránh để rơi 1 từ lẻ ở cuối (ví dụ còn 8 từ thì chia 4 + 4, không chia 7 + 1)
+                if rem - take == 1 and take > 2:
+                    take -= 1
+                chunk_str = " ".join(c_words[idx : idx + take])
+                if chunk_str:
+                    final_lines.append(chunk_str)
+                idx += take
+
+    return final_lines if final_lines else [clean_text]
+
+
 def write_ass(segments: list[dict], out_path: Path,
               font_size: int = 32, font_color: str = "white",
               outline_color: str = "black", outline_width: int = 2,
               shadow: int = 1, margin_v: int = 20,
               alignment: int = 2, font_name: str = "Arial",
               play_res_x: int = 1280, play_res_y: int = 720,
-              font_bold: bool = True) -> Path:
+              font_bold: bool = True, max_words_per_line: int = 7) -> Path:
     """
     Write ASS subtitle file from segments list.
     alignment: 2=bottom-center, 8=top-center
@@ -71,16 +136,6 @@ Style: Default,{font_name},{font_size},{primary},&H000000FF,{outline},{shadow_c}
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-    def _split_words(text, max_words=5):
-        """Tách text thành các dòng tối đa max_words từ mỗi dòng."""
-        words = text.split()
-        result = []
-        for i in range(0, len(words), max_words):
-            chunk = " ".join(words[i:i + max_words])
-            if chunk:
-                result.append(chunk)
-        return result if result else [text]
-
     lines = [header]
     for seg in segments:
         text = seg.get("text", "").replace("\n", " ").strip()
@@ -94,15 +149,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = ' '.join(text.split())
         if not text:
             continue
-        split_lines = _split_words(text, max_words=5)
-        n = len(split_lines)
-        seg_duration = (seg["end"] - seg["start"]) / n
+        split_lines = _smart_split_display_lines(text, max_words=max_words_per_line)
+        total_len = sum(len(c) for c in split_lines) or 1
+        seg_start = float(seg["start"])
+        seg_end = float(seg["end"])
+        seg_duration = max(0.2, seg_end - seg_start)
+        cur_t = seg_start
         for i, line in enumerate(split_lines):
-            sub_start = seg["start"] + i * seg_duration
-            sub_end = seg["start"] + (i + 1) * seg_duration - 0.01
+            chunk_ratio = len(line) / total_len
+            chunk_dur = seg_duration * chunk_ratio
+            sub_start = cur_t
+            sub_end = cur_t + chunk_dur
+            if i == len(split_lines) - 1:
+                sub_end = seg_end
+            else:
+                sub_end = max(sub_start + 0.1, sub_end - 0.01)
+            cur_t = sub_end + 0.01
             s = _fmt_ass_time(sub_start)
             e = _fmt_ass_time(sub_end)
-            lines.append(f"Dialogue: 0,{s},{e},Default,,0,0,0,,{line}")
+            spk_name = "Nam" if seg.get("speaker") == "male" else ("Nữ" if seg.get("speaker") == "female" else "")
+            lines.append(f"Dialogue: 0,{s},{e},Default,{spk_name},0,0,0,,{line}")
 
     out_path = Path(out_path)
     out_path.write_text("\n".join(lines), encoding="utf-8")
@@ -204,24 +270,131 @@ def _parse_ass_file(ass_path: Path) -> list[dict]:
             ).strip()
             text  = re.sub(r'\[\s*\]', '', text).strip()
             text  = re.sub(r"\s+", " ", text).strip()
+            clean_text, detected_spk = extract_speaker_from_text(text)
+            text = clean_text
+            spk = None
+            if len(parts) >= 5:
+                name_val = parts[4].strip().lower()
+                if "nam" in name_val or "male" in name_val:
+                    spk = "male"
+                elif "nữ" in name_val or "nu" in name_val or "female" in name_val:
+                    spk = "female"
+            spk = spk or detected_spk
             if text:
-                segments.append({"start": start, "end": end, "text": text})
+                seg_dict = {"start": start, "end": end, "text": text}
+                if spk:
+                    seg_dict["speaker"] = spk
+                segments.append(seg_dict)
         except Exception:
             continue
     return segments
 
 
+def extract_speaker_from_text(text: str) -> tuple[str, str | None]:
+    """
+    Tách nhãn người nói (speaker tag) ra khỏi text của phụ đề.
+    Ví dụ:
+      "[Nam]: Xin chào các bạn" -> ("Xin chào các bạn", "male")
+      "[Nữ]: Cho em hỏi chút"   -> ("Cho em hỏi chút", "female")
+      "(Nam) - Đi thôi em"     -> ("Đi thôi em", "male")
+      "Nữ: Vâng anh ơi!"       -> ("Vâng anh ơi!", "female")
+      "[男]: 大家好"           -> ("大家好", "male")
+      "Speaker 1: Hi"          -> ("Hi", "male")
+      "Speaker 2: Hello"       -> ("Hello", "female")
+    
+    Returns:
+      (clean_text, speaker_type)
+      speaker_type: 'male' | 'female' | None
+    """
+    if not text:
+        return "", None
+    t = text.strip()
+    
+    # 1. Khớp có dấu hai chấm / gạch ngang ngăn cách
+    # Nam:
+    m_male = re.match(
+        r'^(?:\[|\()?\s*(nam|đàn\s*ông|male|man|anh|trai|chú|bác|bố|ông|cậu|speaker\s*1|người\s*1|nhân\s*vật\s*1|男|男人|男生|男声|男1)\s*(?:\]|\))?\s*[:：\-]\s*',
+        t, flags=re.IGNORECASE
+    )
+    if m_male:
+        clean = t[m_male.end():].strip()
+        return clean, "male"
+
+    # Nữ:
+    m_fem = re.match(
+        r'^(?:\[|\()?\s*(nữ|nu|phụ\s*nữ|female|woman|chị|gái|cô|bà|mẹ|em|bé\s*gái|speaker\s*2|người\s*2|nhân\s*vật\s*2|女|女人|女生|女声|女1)\s*(?:\]|\))?\s*[:：\-]\s*',
+        t, flags=re.IGNORECASE
+    )
+    if m_fem:
+        clean = t[m_fem.end():].strip()
+        return clean, "female"
+
+    # 2. Khớp trong ngoặc vuông không cần dấu hai chấm: [Nam] Xin chào / [Nữ] Chào anh
+    m_b_male = re.match(
+        r'^\[\s*(nam|đàn\s*ông|male|man|anh|speaker\s*1|người\s*1|男|男声)\s*\]\s*',
+        t, flags=re.IGNORECASE
+    )
+    if m_b_male:
+        clean = t[m_b_male.end():].strip()
+        return clean, "male"
+
+    m_b_fem = re.match(
+        r'^\[\s*(nữ|nu|phụ\s*nữ|female|woman|chị|speaker\s*2|người\s*2|女|女声)\s*\]\s*',
+        t, flags=re.IGNORECASE
+    )
+    if m_b_fem:
+        clean = t[m_b_fem.end():].strip()
+        return clean, "female"
+
+    return t, None
+
+
+def process_speaker_tags_in_segments(segments: list[dict]) -> list[dict]:
+    """Tách nhãn người nói trong từng segment, làm sạch text và lưu vào seg['speaker']."""
+    for seg in (segments or []):
+        raw_text = str(seg.get("text") or "")
+        clean_text, spk = extract_speaker_from_text(raw_text)
+        seg["text"] = clean_text
+        if spk and not seg.get("speaker"):
+            seg["speaker"] = spk
+    return segments
+
+
 def _merge_segments_for_tts(
     segments: list[dict],
-    max_gap: float = 0.08,
-    max_chars: int = 260,
-    max_duration: float = 8.0,
+    max_gap: float = 1.5,
+    max_words: int = 28,
+    max_chars: int = 200,
+    max_duration: float = 14.0,
 ) -> list[dict]:
-    """Merge display chunks into bounded TTS windows while preserving punctuation."""
+    """
+    Gộp các đoạn phụ đề thành các câu thoại hoàn chỉnh, có ý nghĩa trọn vẹn cho TTS đọc.
+    - Không cắt câu máy móc theo số từ.
+    - Một câu chỉ kết thúc khi gặp dấu kết thúc câu thực sự (. ! ? …).
+    - Câu dài (> max_words hoặc > max_duration) chỉ tách tại điểm ngắt tự nhiên (phẩy, chấm phẩy, liên từ)
+      để người đọc nhấp nhả, lấy hơi tự nhiên mà không bị ngắt ngứ giữa chừng.
+    """
     merged: list[dict] = []
     current: dict | None = None
+    _SENT_END_PUNCT = ('.', '!', '?', '…', '。', '！', '？')
+    _PAUSE_PUNCT = (',', ';', ':', ' - ', '—', '；', '：')
 
-    for seg in sorted(segments or [], key=lambda s: float(s.get("start", 0.0))):
+    # An ASS display row can contain the end of one sentence and the beginning
+    # of the next. Recover those boundaries before joining adjacent rows.
+    sentence_segments = []
+    for seg in segments or []:
+        text = re.sub(r"\s+", " ", str(seg.get("text") or "")).strip()
+        parts = _sentence_parts(text)
+        start = float(seg.get("start", 0.0))
+        end = float(seg.get("end", start))
+        weight = sum(len(p) for p in parts) or 1
+        cursor = start
+        for index, part in enumerate(parts):
+            stop = end if index == len(parts) - 1 else cursor + (end - start) * len(part) / weight
+            sentence_segments.append({**seg, "text": part, "start": cursor, "end": stop})
+            cursor = stop
+
+    for seg in sorted(sentence_segments, key=lambda s: float(s.get("start", 0.0))):
         text = re.sub(r"\s+", " ", str(seg.get("text") or "")).strip()
         if not text:
             continue
@@ -230,21 +403,46 @@ def _merge_segments_for_tts(
         if end <= start:
             continue
 
+        spk = seg.get("speaker")
         item = {"start": start, "end": end, "text": text}
+        if spk:
+            item["speaker"] = spk
+
         if current is None:
             current = item
             continue
 
-        gap = start - float(current.get("end", start))
-        combined_text = f"{current.get('text', '')} {text}".strip()
-        combined_duration = end - float(current.get("start", start))
-        can_merge = (
-            gap <= max_gap
-            and len(combined_text) <= max_chars
-            and combined_duration <= max_duration
-        )
+        # Không gộp nếu hai câu thuộc hai nhân vật (speaker) khác nhau!
+        if current.get("speaker") != spk:
+            merged.append(current)
+            current = item
+            continue
 
-        if can_merge:
+        gap = start - float(current.get("end", start))
+        curr_text = current.get("text", "").rstrip()
+        curr_words = curr_text.split()
+        new_words = text.split()
+        combined_words = len(curr_words) + len(new_words)
+        combined_text = f"{curr_text} {text}".strip()
+        combined_duration = end - float(current.get("start", start))
+
+        # 1. Nếu đoạn trước đã kết thúc câu bằng dấu chấm/hỏi/cảm thán
+        current_ends_sentence = curr_text.rstrip('”»"\'’').endswith(_SENT_END_PUNCT)
+        if current_ends_sentence:
+            merged.append(current)
+            current = item
+            continue
+
+        # 2. Nếu đoạn trước CHƯA hết câu, nhưng độ dài đã quá lớn (cần nhấp nhả/ngắt nghỉ)
+        if combined_words > max_words or combined_duration > max_duration or len(combined_text) > max_chars:
+            current_has_pause = curr_text.endswith(_PAUSE_PUNCT)
+            if current_has_pause:
+                merged.append(current)
+                current = item
+                continue
+
+        # 3. Gộp câu nếu khoảng cách nghỉ trong cùng một câu hợp lý (gap <= max_gap)
+        if gap <= max_gap:
             current["end"] = max(float(current["end"]), end)
             current["text"] = combined_text
         else:
@@ -254,6 +452,115 @@ def _merge_segments_for_tts(
     if current is not None:
         merged.append(current)
     return merged
+
+
+def align_subtitles_to_voice(
+    segments: list[dict],
+    tts_clips: list[dict],
+    ffmpeg: str = "ffmpeg",
+    video_duration: float | None = None,
+    min_gap: float = 0.08,
+    max_speed_factor: float = 1.25,
+) -> tuple[list[dict], list[dict]]:
+    """
+    Căn mốc thời gian phụ đề khớp chuẩn 100% theo thời lượng thực tế của giọng đọc (TTS).
+    
+    Phương án A:
+    1. Đo thời lượng thực tế (duration) của từng file âm thanh TTS vừa tạo.
+    2. Nếu tổng thời gian đọc của toàn bộ video vượt quá thời lượng video,
+       tự động điều chỉnh time-stretch nhẹ (tối đa max_speed_factor, mặc định 1.25x) bằng ffmpeg atempo.
+    3. Sắp xếp timeline liên tục (ripple alignment):
+       - Mỗi câu thoại bắt đầu đúng khi giọng đọc phát ra, kết thúc khi giọng đọc dứt.
+       - Tự động dịch chuyển các câu kế tiếp để không bao giờ bị đè âm thanh (giữ khoảng nghỉ min_gap).
+       - Khắc phục triệt để hiện tượng đọc quá nhanh (không còn auto-speed 2x-3x) và hiện tượng ngắt quãng.
+    
+    Returns:
+        (aligned_clips, aligned_segments)
+    """
+    if not tts_clips or not segments:
+        return tts_clips, segments
+
+    from core.processor.ffmpeg_base import _get_audio_duration
+    from core.processor.tts import _apply_atempo
+
+    # Sắp xếp clips theo index
+    sorted_clips = sorted(
+        [c for c in tts_clips if c.get("index") is not None],
+        key=lambda c: int(c["index"])
+    )
+    if not sorted_clips:
+        sorted_clips = list(tts_clips)
+
+    # 1. Đo độ dài thực tế của từng clip
+    prepared_clips = []
+    for c in sorted_clips:
+        clip_copy = dict(c)
+        dur = float(clip_copy.get("duration") or 0.0)
+        path = Path(clip_copy.get("path") or "")
+        if dur <= 0 and path.exists():
+            dur = _get_audio_duration(ffmpeg, path)
+        idx = int(clip_copy.get("index", 0))
+        seg = segments[idx] if idx < len(segments) else {}
+        if dur <= 0:
+            dur = max(0.5, float(seg.get("end", 0.0)) - float(seg.get("start", 0.0)))
+        clip_copy["duration"] = dur
+        clip_copy["text"] = str(seg.get("text") or clip_copy.get("text") or "").strip()
+        prepared_clips.append(clip_copy)
+
+    # 2. Kiểm tra nếu tổng thời gian nói vượt quá thời lượng video
+    first_orig_start = max(0.0, float(segments[0].get("start", 0.0))) if segments else 0.0
+    total_raw_speech = sum(c["duration"] for c in prepared_clips) + max(0, len(prepared_clips) - 1) * min_gap
+    if video_duration and video_duration > 0:
+        avail_time = max(1.0, video_duration - first_orig_start - 0.2)
+        if total_raw_speech > avail_time and avail_time > 3.0:
+            needed_speed = total_raw_speech / avail_time
+            speed_factor = min(max_speed_factor, max(1.0, needed_speed))
+            if speed_factor > 1.05:
+                for c in prepared_clips:
+                    src_p = Path(c["path"])
+                    sped_p = src_p.parent / f"{src_p.stem}_sync.mp3"
+                    if _apply_atempo(ffmpeg, src_p, sped_p, speed_factor) and sped_p.exists() and sped_p.stat().st_size > 0:
+                        c["path"] = sped_p
+                        c["duration"] = _get_audio_duration(ffmpeg, sped_p)
+
+    # 3. Tính toán mốc thời gian start & end mới (Ripple alignment)
+    current_cursor = 0.0
+    aligned_clips: list[dict] = []
+    aligned_segments: list[dict] = []
+
+    for i, c in enumerate(prepared_clips):
+        idx = int(c.get("index", i))
+        seg = segments[idx] if idx < len(segments) else {}
+        orig_start = float(seg.get("start", 0.0))
+        dur = float(c["duration"])
+
+        if i == 0:
+            start_t = max(0.0, orig_start)
+        else:
+            if orig_start >= current_cursor + min_gap:
+                start_t = orig_start
+            else:
+                start_t = current_cursor + min_gap
+
+        end_t = start_t + dur
+        current_cursor = end_t
+
+        c_res = dict(c)
+        c_res["start"] = round(start_t, 3)
+        c_res["end"] = round(end_t, 3)
+        aligned_clips.append(c_res)
+
+        seg_res = {
+            "start": round(start_t, 3),
+            "end": round(end_t, 3),
+            "text": c["text"],
+        }
+        spk = seg.get("speaker") or c.get("speaker")
+        if spk:
+            seg_res["speaker"] = spk
+        aligned_segments.append(seg_res)
+
+    return aligned_clips, aligned_segments
 
 
 
@@ -776,7 +1083,7 @@ def _burn_ass(
             filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
             filter_complex_parts.append(
                 f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_left:.4f}:ih*{y:.4f},"
-                f"boxblur=luma_radius=20:luma_power=3:chroma_radius=15:chroma_power=2[blurred_{idx}]"
+                f"boxblur=luma_radius='min(20,min(w,h)/2)':luma_power=3:chroma_radius='min(15,min(cw,ch)/2)':chroma_power=2[blurred_{idx}]"
             )
             filter_complex_parts.append(
                 f"[orig_{idx}][blurred_{idx}]overlay=W*{_left:.4f}:H*{y:.4f}{_en_expr}[{next_label}]"
@@ -1231,7 +1538,7 @@ def _burn_srt(
                 filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
                 filter_complex_parts.append(
                     f"[copy_{idx}]crop=iw*{w:.4f}:ih*{h:.4f}:iw*{_left:.4f}:ih*{y:.4f},"
-                    f"boxblur=luma_radius=20:luma_power=3:chroma_radius=15:chroma_power=2[blurred_{idx}]"
+                    f"boxblur=luma_radius='min(20,min(w,h)/2)':luma_power=3:chroma_radius='min(15,min(cw,ch)/2)':chroma_power=2[blurred_{idx}]"
                 )
                 filter_complex_parts.append(
                     f"[orig_{idx}][blurred_{idx}]overlay=W*{_left:.4f}:H*{y:.4f}{_en_expr}[{next_label}]"
@@ -1442,7 +1749,7 @@ def write_ass_with_frame(
     margin_v: int = 20,
     alignment: int = 2,
     font_name: str = "Arial",
-    max_words_per_line: int = 5,
+    max_words_per_line: int = 7,
     # Frame: Title bar (overlay on top of video)
     title_text: str = "",
     title_size_pct: float = 7.0,
@@ -1735,15 +2042,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         )
 
     # ── Subtitle dialogue lines (layer 2 — below title bar, above blur) ──────
-    def _split_words(text, max_words=5):
-        words = text.split()
-        result = []
-        for i in range(0, len(words), max_words):
-            chunk = " ".join(words[i:i + max_words])
-            if chunk:
-                result.append(chunk)
-        return result if result else [text]
-
     for seg in segments:
         text = seg.get("text", "").replace("\n", " ").strip()
         # Clean any remaining timestamp leak or brackets
@@ -1756,15 +2054,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = ' '.join(text.split())
         if not text:
             continue
-        split_lines = _split_words(text, max_words=max_words_per_line)
-        n = len(split_lines)
-        seg_duration = (seg["end"] - seg["start"]) / n
+        split_lines = _smart_split_display_lines(text, max_words=max_words_per_line)
+        total_len = sum(len(c) for c in split_lines) or 1
+        seg_start = float(seg["start"])
+        seg_end = float(seg["end"])
+        seg_duration = max(0.2, seg_end - seg_start)
+        cur_t = seg_start
         for i, line in enumerate(split_lines):
-            sub_start = seg["start"] + i * seg_duration
-            sub_end = seg["start"] + (i + 1) * seg_duration - 0.01
+            chunk_ratio = len(line) / total_len
+            chunk_dur = seg_duration * chunk_ratio
+            sub_start = cur_t
+            sub_end = cur_t + chunk_dur
+            if i == len(split_lines) - 1:
+                sub_end = seg_end
+            else:
+                sub_end = max(sub_start + 0.1, sub_end - 0.01)
+            cur_t = sub_end + 0.01
             s = _fmt_ass_time(sub_start)
             e = _fmt_ass_time(sub_end)
-            lines.append(f"Dialogue: 2,{s},{e},Default,,0,0,0,,{line}")
+            spk_name = "Nam" if seg.get("speaker") == "male" else ("Nữ" if seg.get("speaker") == "female" else "")
+            lines.append(f"Dialogue: 2,{s},{e},Default,{spk_name},0,0,0,,{line}")
 
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path

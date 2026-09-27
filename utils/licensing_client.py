@@ -20,8 +20,12 @@ import sys
 import time
 from pathlib import Path
 
+import urllib3
 import requests
 import yaml
+
+# Suppress SSL warnings for self-signed certificate on licensing server
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from utils.security_core import (
     HARDCODED_SERVER_URL,
@@ -103,7 +107,9 @@ def safe_request(method: str, url: str, **kwargs) -> requests.Response:
         c_kwargs = kwargs.copy()
         if "impersonate" not in c_kwargs:
             c_kwargs["impersonate"] = "chrome"
-        
+        # Disable SSL verification for self-signed certificate
+        c_kwargs["verify"] = False
+
         # Make request using curl_cffi
         resp = curl_requests.request(method.upper(), url, **c_kwargs)
         return resp
@@ -112,6 +118,8 @@ def safe_request(method: str, url: str, **kwargs) -> requests.Response:
 
     s_kwargs = kwargs.copy()
     s_kwargs.pop("impersonate", None)
+    # Disable SSL verification for self-signed certificate
+    s_kwargs["verify"] = False
     return requests.request(method.upper(), url, **s_kwargs)
 
 
@@ -154,6 +162,7 @@ def check_licensing() -> tuple[bool, dict]:
             data=payload_str,
             headers=headers,
             timeout=6,
+            verify=False,
         )
 
         if resp.status_code == 200:

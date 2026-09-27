@@ -116,6 +116,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "tts_concurrency": 4,
         "tts_retries": 2,
         "auto_speed": True,
+        "sync_sub_to_voice": True,  # Căn mốc phụ đề khớp chuẩn theo giọng đọc (Phương án A)
+        "multi_speaker": False,  # Tự nhận diện và phân vai đa giọng đọc (Nam/Nữ)
+        "tts_voice_male": "",
+        "tts_voice_female": "",
         "pitch_semitones": 0.0,
         "vieneu_ref_audio": "",  # WAV/MP3 3-8 giây; trống = dùng preset
         "bg_volume": 0.15,
@@ -126,7 +130,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "outline_width": 2,
         "blur_height": 15,
         "subtitle_format": "ass",
-        "max_words_per_segment": 6,  # Số từ tối đa trong 1 câu (cho tiếng Việt/Anh, 0 = không giới hạn)
+        "max_words_per_segment": 7,  # Số từ tối đa hiển thị trong 1 cụm phụ đề (cho tiếng Việt/Anh, tối đa 7 từ)
         "max_chars_per_segment": 15,  # Số ký tự tối đa trong 1 câu (cho tiếng Trung, ưu tiên hơn max_words, 0 = không giới hạn)
     },
     "capcut": {
@@ -216,5 +220,20 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "webhook_url": "",                      # default Production webhook URL to trigger
         "default_payload": "{\n  \"source\": \"toolvideo\"\n}",
         "timeout_sec": 30,
+    },
+    # ── DTK (Douyin_TikTok_Download_API) fallback ──────────────────────────
+    # Khi DouyinAPIClient gốc thất bại (cookie hết hạn, rate-limit,
+    # risk-control), toolvideo tự động gọi DTK để lấy CDN URL sạch.
+    # Chạy DTK local: cd Douyin_TikTok_Download_API && docker compose up
+    # Hoặc dùng demo công khai: https://demo.douyin.wtf (giới hạn 30 req/10s)
+    "dtk": {
+        "enabled": False,
+        "base_url": "http://localhost:8000",   # URL instance DTK của bạn
+        "api_key": "",                          # X-API-Key (tạo trong console DTK)
+        "username": "",                         # login fallback nếu không có api_key
+        "password": "",                         # mật khẩu tương ứng
+        "timeout": 40,                          # giây chờ tối đa cho 1 lần parse
+        "use_as_fallback": True,               # True = chỉ dùng khi Douyin gốc fail
+        "use_as_primary": False,               # True = dùng DTK thay hoàn toàn Douyin
     },
 }

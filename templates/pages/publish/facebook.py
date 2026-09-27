@@ -589,64 +589,19 @@ def fb_post_video():
 
             file_size_mb = video_path.stat().st_size / 1024 / 1024
             yield send(log=f"🔗 Đang gửi video lên Facebook ({file_size_mb:.1f} MB)...", level="info", overall=30)
-            try:
-                with open(str(video_path), "rb") as _vf:
-                    files_data = {"source": (video_path.name, _vf, "video/mp4")}
-                    resp = _req.post(
-                        f"{FB_API_BASE}/{page_id}/videos",
-                        data=post_data,
-                        files=files_data,
-                        timeout=600,
-                    )
-            except _req.exceptions.Timeout:
-                yield send(log="❌ Timeout khi upload — Facebook không phản hồi sau 10 phút. Thử lại sau.", level="error", overall=0)
-                return
-            except _req.exceptions.ConnectionError as _ce:
-                yield send(log=f"❌ Lỗi kết nối: {_ce}", level="error", overall=0)
-                return
-
-            # Handle empty or non-JSON responses
-            if not resp.text or not resp.text.strip():
-                err_reasons = {
-                    413: "Video quá lớn — Facebook giới hạn 10GB cho video thường, 1GB cho Reel.",
-                    400: "Token hết hạn hoặc yêu cầu không hợp lệ — thử gia hạn token rồi đăng lại.",
-                    401: "Token hết hạn hoặc không hợp lệ — cần kết nối lại Facebook.",
-                    403: "Không có quyền đăng — kiểm tra quyền pages_manage_posts.",
-                }
-                reason = err_reasons.get(resp.status_code, f"Facebook trả về HTTP {resp.status_code} với body rỗng.")
-                is_token_err = resp.status_code in (400, 401, 403)
-                yield send(
-                    log=f"❌ {reason} (HTTP {resp.status_code})",
-                    level="error", overall=0, token_error=is_token_err,
-                )
-                return
-            try:
-                result = resp.json()
-            except Exception as _je:
-                yield send(
-                    log=f"❌ Facebook trả về dữ liệu không hợp lệ (HTTP {resp.status_code}): {resp.text[:300]}",
-                    level="error", overall=0,
-                )
-                return
-
-            if "error" in result:
-                err = result["error"]
-                err_msg = err.get("message", "Upload thất bại")
-                err_code = err.get("code", "")
-                err_subcode = err.get("error_subcode", "")
-                err_type = err.get("type", "")
-                code_info = f" [code={err_code}" + (f", subcode={err_subcode}" if err_subcode else "") + (f", type={err_type}" if err_type else "") + "]"
-                is_token = _is_token_error(err)
-                yield send(
-                    log=f"❌ Lỗi Facebook: {err_msg}{code_info}",
-                    level="error",
-                    overall=0,
-                    token_error=is_token,
-                    error=err_msg,
-                )
-                return
-
-            video_id = result.get("id", "")
+            from core.facebook_upload import upload_video_chunks
+            uploader = upload_video_chunks(
+                _req, f"{FB_API_BASE}/{page_id}/videos", video_path, post_data,
+            )
+            video_id = ""
+            for progress in uploader:
+                if progress.get("video_id"):
+                    video_id = progress["video_id"]
+                else:
+                    yield send(log=f"Đã gửi {progress['sent'] / 1024 / 1024:.1f}/{file_size_mb:.1f} MB",
+                               level="info", overall=30 + int(65 * progress['sent'] / progress['total']))
+            if not video_id:
+                raise RuntimeError("Facebook chưa xác nhận hoàn tất upload.")
             page_url = f"https://www.facebook.com/{page_id}/videos/{video_id}" if video_id else ""
             yield send(log=f"✅ Upload thành công! Video ID: {video_id}", level="success", overall=100)
             if page_url:

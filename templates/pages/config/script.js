@@ -916,18 +916,47 @@ async function validateCookie() {
   }
 }
 
+let douyinCaptureTimer;
 async function autoFetchCookie() {
   try {
-    const res = await fetch('/api/auto_fetch_cookie', { method: 'POST' });
-    const data = await res.json();
-    if (data.ok) {
-      toast('Đang mở trình duyệt để lấy cookie... Vui lòng đăng nhập và đợi!', 'info');
-    } else {
-      toast('Lỗi: ' + (data.error || ''), 'error');
+    const data = await (await fetch('/api/auto_fetch_cookie', {method: 'POST'})).json();
+    if (!data.ok) throw new Error(data.error || 'Không mở được trình duyệt');
+    let button = document.getElementById('douyin-finish-login');
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'douyin-finish-login';
+      button.className = 'btn btn-primary btn-sm';
+      button.textContent = 'Đã đăng nhập / xác minh xong — Lưu cookie';
+      button.type = 'button';
+      document.querySelector('[onclick="autoFetchCookie()"]')?.after(button);
     }
-  } catch (e) {
-    toast('Lỗi: ' + e.message, 'error');
-  }
+    button.disabled = false;
+    button.onclick = async () => {
+      try {
+        const result = await (await fetch('/api/auto_fetch_cookie/finish', {method: 'POST'})).json();
+        if (!result.ok) throw new Error(result.error);
+        button.disabled = true;
+      } catch (e) { toast(e.message, 'error'); }
+    };
+    toast('Đăng nhập và giải CAPTCHA trong trình duyệt. Giữ cửa sổ mở, quay lại bấm Lưu cookie. Thời gian chờ: 10 phút.', 'info');
+    clearInterval(douyinCaptureTimer);
+    douyinCaptureTimer = setInterval(async () => {
+      try {
+        const status = await (await fetch('/api/auto_fetch_cookie/status')).json();
+        if (status.state === 'waiting') return;
+        clearInterval(douyinCaptureTimer);
+        button.remove();
+        toast(status.state === 'saved' ? 'Đã lưu cookie. Có thể tìm và tải video Douyin.' : (status.error || 'Phiên đăng nhập đã kết thúc.'), status.state === 'saved' ? 'success' : 'error');
+        if (status.state === 'saved') {
+          if (typeof loadCookieFields === 'function') await loadCookieFields();
+          if (typeof loadCookieMode === 'function') await loadCookieMode();
+        }
+      } catch (e) {
+        clearInterval(douyinCaptureTimer);
+        toast('Không đọc được trạng thái đăng nhập: ' + e.message, 'error');
+      }
+    }, 2000);
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 async function browseSavePath() {

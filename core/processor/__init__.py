@@ -64,6 +64,9 @@ from core.processor.subtitles import (
     _hex_to_ass_color_alpha,
     generate_frame_title,
     write_ass_with_frame,
+    align_subtitles_to_voice,
+    extract_speaker_from_text,
+    process_speaker_tags_in_segments,
 )
 from core.processor.transcription import (
     _GROQ_MODEL,
@@ -73,6 +76,7 @@ from core.processor.transcription import (
     _whisper_model_cache,
     FasterWhisperTranscriber,
     transcribe_to_srt,
+    classify_dialogue_speakers,
 )
 from core.processor.tts import (
     FPT_TTS_ENDPOINT,
@@ -168,6 +172,9 @@ __all__ = [
     "_hex_to_ass_color_alpha",
     "generate_frame_title",
     "write_ass_with_frame",
+    "align_subtitles_to_voice",
+    "extract_speaker_from_text",
+    "process_speaker_tags_in_segments",
     "_GROQ_MODEL",
     "_GROQ_MAX_MB",
     "GroqWhisperTranscriber",
@@ -175,6 +182,7 @@ __all__ = [
     "_whisper_model_cache",
     "FasterWhisperTranscriber",
     "transcribe_to_srt",
+    "classify_dialogue_speakers",
     "FPT_TTS_ENDPOINT",
     "FPT_TTS_DEFAULT_KEY",
     "TTS_CACHE_VERSION",

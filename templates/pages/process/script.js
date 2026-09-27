@@ -11,17 +11,31 @@ window._procIsAutoPublishEnabled = _procIsAutoPublishEnabled;
 
 const TTS_VOICE_PRESETS = {
   vieneu: [
-    { value: 'Minh Quân Pro', label: 'Minh Quân Pro (Nam, mặc định)' },
-    { value: 'Ngọc Linh', label: 'Ngọc Linh (VieNeu - Nữ, tươi sáng)' },
-    { value: 'Ngọc Lan', label: 'Ngọc Lan (VieNeu - Nữ, dịu dàng)' },
-    { value: 'Mỹ Duyên', label: 'Mỹ Duyên (VieNeu - Nữ, mượt mà)' },
-    { value: 'Trúc Ly', label: 'Trúc Ly (VieNeu - Nữ, trẻ trung)' },
-    { value: 'Gia Bảo', label: 'Gia Bảo (VieNeu - Nam, mượt mà)' },
-    { value: 'Thái Sơn', label: 'Thái Sơn (VieNeu - Nam, chắc khỏe)' },
-    { value: 'Đức Trí', label: 'Đức Trí (VieNeu - Nam, rõ ràng)' },
-    { value: 'Xuân Vĩnh', label: 'Xuân Vĩnh (VieNeu - Nam, vui tươi)' },
-    { value: 'Trọng Hữu', label: 'Trọng Hữu (VieNeu - Nam, uyên bác)' },
-    { value: 'Bình An', label: 'Bình An (VieNeu - Nam, điềm đạm)' },
+    { value: 'Minh Quân Pro', label: '[Tuyển chọn] Minh Quân Pro (Nam · Bắc · Tự nhiên, Mặc định)' },
+    { value: 'Phạm Tuyên', label: 'Phạm Tuyên (Nam · Bắc · Tự nhiên)' },
+    { value: 'Mai Anh', label: '[Tuyển chọn] Mai Anh (Nữ · Bắc · Tin tức)' },
+    { value: 'Trúc Ly', label: '[Tuyển chọn] Trúc Ly (Nữ · Bắc · Tự nhiên)' },
+    { value: 'Thanh Bình', label: 'Thanh Bình (Nam · Bắc · Kể chuyện)' },
+    { value: 'Thùy Dung', label: '[Tuyển chọn] Thùy Dung (Nữ · Nam · Tin tức)' },
+    { value: 'Anh Khôi', label: '[Tuyển chọn] Anh Khôi (Nam · Bắc · Kể chuyện)' },
+    { value: 'Thiền Tâm Đức', label: '[Tuyển chọn] Thiền Tâm Đức (Nam · Bắc · Kể chuyện)' },
+    { value: 'Ngọc Huyền', label: '[Tuyển chọn] Ngọc Huyền (Nữ · Bắc · Tự nhiên)' },
+    { value: 'Quang Sơn', label: '[Tuyển chọn] Quang Sơn (Nam · Trung · Tự nhiên)' },
+    { value: 'Ngọc Trân', label: '[Tuyển chọn] Ngọc Trân (Nữ · Trung · Tự nhiên)' },
+    { value: 'Minh Đức', label: 'Minh Đức (Nam · Bắc · Tin tức)' },
+    { value: 'Thái Sơn', label: 'Thái Sơn (Nam · Nam · Kể chuyện)' },
+    { value: 'Xuân Vĩnh', label: 'Xuân Vĩnh (Nam · Bắc · Tự nhiên)' },
+    { value: 'Ngọc Linh', label: 'Ngọc Linh (Nữ · Bắc · Kể chuyện)' },
+    { value: 'Đoan Trang', label: 'Đoan Trang (Nữ · Bắc · Tự nhiên)' },
+    { value: 'Thục Đoan', label: 'Thục Đoan (Nữ · Nam · Kể chuyện)' },
+    { value: 'Minh Triết', label: 'Minh Triết (Nam · Nam · Tin tức)' },
+    { value: 'Mỹ Duyên', label: 'Mỹ Duyên (Nữ · Nam · Đọc truyện)' },
+    { value: 'Quỳnh Anh', label: 'Quỳnh Anh (Nữ · Bắc · Đọc truyện)' },
+    { value: 'Đức Trí', label: 'Đức Trí (Nam · Nam · Đọc truyện)' },
+    { value: 'Kim Thanh', label: 'Kim Thanh (Nữ · Nam · Đọc truyện)' },
+    { value: 'Adam', label: 'Adam (Nam · Nam · Tự nhiên)' },
+    { value: 'Adam bựa', label: '[Tuyển chọn] Adam bựa (Nam · Bắc · Tự nhiên)' },
+    { value: 'Mạnh Dũng', label: 'Mạnh Dũng (Nam · Bắc · Tự nhiên)' },
   ],
   'fpt-ai': [
     { value: 'banmai', label: 'Ban Mai (FPT - Nữ)' },
@@ -447,6 +461,59 @@ function _isProcTranslateSubsEnabled() {
   return true;
 }
 
+
+function _populateMultiSpeakerVoiceSelects(preset, engine) {
+  const maleEl = document.getElementById('proc-tts-voice-male');
+  const femaleEl = document.getElementById('proc-tts-voice-female');
+  if (!maleEl || !femaleEl || !preset || !preset.length) return;
+
+  const currentMale = maleEl.value || '';
+  const currentFemale = femaleEl.value || '';
+
+  maleEl.innerHTML = '';
+  femaleEl.innerHTML = '';
+
+  preset.forEach(item => {
+    const optM = document.createElement('option');
+    optM.value = item.value;
+    optM.textContent = item.label;
+    maleEl.appendChild(optM);
+
+    const optF = document.createElement('option');
+    optF.value = item.value;
+    optF.textContent = item.label;
+    femaleEl.appendChild(optF);
+  });
+
+  // Pick best default for Male: look for "nam" or "male"
+  const maleCandidate = preset.find(i => /nam|male/i.test(i.label || i.value)) || preset[0];
+  const keepMale = preset.some(i => i.value === currentMale);
+  maleEl.value = (keepMale && currentMale) ? currentMale : maleCandidate.value;
+
+  // Pick best default for Female: look for "nữ|nu|female"
+  const femaleCandidate = preset.find(i => /nữ|nu|female/i.test(i.label || i.value)) || preset[preset.length > 1 ? 1 : 0];
+  const keepFemale = preset.some(i => i.value === currentFemale);
+  femaleEl.value = (keepFemale && currentFemale) ? currentFemale : femaleCandidate.value;
+}
+
+function toggleMultiSpeakerOptions(enabled) {
+  const wrap = document.getElementById('cfg-wrap-multi-voice');
+  if (wrap) {
+    if (enabled) {
+      wrap.classList.remove('hidden');
+      wrap.style.display = 'grid';
+      _syncVoiceOptions('proc-tts-engine', 'proc-tts-voice');
+    } else {
+      wrap.classList.add('hidden');
+      wrap.style.display = 'none';
+    }
+  }
+  try {
+    localStorage.setItem('cfg_multi_speaker', enabled ? '1' : '0');
+  } catch (_) {}
+}
+window.toggleMultiSpeakerOptions = toggleMultiSpeakerOptions;
+
 function _syncVoiceOptions(engineSelectId, voiceSelectId) {
   const engineEl = document.getElementById(engineSelectId);
   const voiceEl = document.getElementById(voiceSelectId);
@@ -512,6 +579,7 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
       const keep = preset.some(item => item.value === current);
       voiceEl.value = keep ? current : (catalogEngine.default || preset[0].value);
       if (!preset.some(item => item.value === voiceEl.value)) voiceEl.value = preset[0].value;
+      if (voiceSelectId === 'proc-tts-voice') _populateMultiSpeakerVoiceSelects(preset, engine);
       return;
     }
   } else if (!TTS_ENGINE_CATALOG_PROMISE) {
@@ -535,6 +603,7 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
     });
     const keep = voices.some(item => item.value === current);
     voiceEl.value = keep ? current : voices[0].value;
+    if (voiceSelectId === 'proc-tts-voice') _populateMultiSpeakerVoiceSelects(voices, engine);
     return;
   }
 
@@ -553,6 +622,7 @@ function _syncVoiceOptions(engineSelectId, voiceSelectId) {
 
   const keep = preset.some(item => item.value === current);
   voiceEl.value = keep ? current : (TTS_DEFAULT_VOICE[engine] || preset[0].value);
+  if (voiceSelectId === 'proc-tts-voice') _populateMultiSpeakerVoiceSelects(preset, engine);
 }
 
 
@@ -1649,19 +1719,9 @@ function startProcessVideo() {
   })();
 }
 
-function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
-
-  const btn = document.getElementById('btn-proc');
-  if (btn) { btn.disabled = true; btn.textContent = 'Đang xử lý...'; }
-
-  // Reset UI (logBox is already cleared in startProcessVideo)
-  _setProcProgress(0, 'Khởi chạy...');
-  if (typeof _appendProcLog === 'function') {
-    _appendProcLog('📡 Đang gửi request xử lý video tới server backend...', 'info');
-  }
-
-  const originalAudioVolume = Math.max(0, parseFloat(document.getElementById('proc-vol-orig')?.value ?? '100') / 100);
-  const baseFields = {
+function collectProcessConfig(videoPath = "", videoUrl = "") {
+  const originalAudioVolume = Math.min(2, Math.max(0, parseFloat(document.getElementById('proc-vol-orig')?.value ?? '100') / 100));
+  return {
     video_path:       videoPath,
     video_url:        videoUrl || '',
     out_dir:          document.getElementById('proc-out')?.value?.trim() || '',
@@ -1675,7 +1735,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     skip_ass_review:  (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
     skip_ass:         (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
     burn_subs:        (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn')?.checked ?? true),
-    blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
+    blur_original:    (window._procUseAiAnalysis && window._procVideoAiAnalysis?.result) ? false : (document.getElementById('proc-blur-original')?.checked ?? true),
     blur_by_subtitles: document.getElementById('proc-blur-by-subtitles')?.checked ?? false,
     blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
     blur_width_pct:   parseFloat(document.getElementById('proc-blur-width')?.value || '80') / 100,
@@ -1688,7 +1748,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
       return (v !== '' && v !== undefined) ? parseFloat(v) / 100 : null;  // null = 50%
     })(),
     blur_zone:        'bottom',  // legacy compat
-    blur_extra_zones: (window._procExtraBlurZones || []).map(z => ({
+    blur_extra_zones: (window._procExtraBlurZones || []).filter(z => !(window._procUseAiAnalysis && window._procVideoAiAnalysis?.result) || z.source === 'ai' || z.zone === 'ai').map(z => ({
       height_pct: (z.height || 12) / 100,
       position_pct: (z.position || 50) / 100,
       width_pct: (z.width || 80) / 100,
@@ -1732,6 +1792,10 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     font_bold:        document.getElementById('proc-font-bold')?.checked ?? true,
     tts_speed:        parseFloat(document.getElementById('proc-tts-speed')?.value || '1.0'),
     auto_speed:       document.getElementById('proc-auto-speed')?.checked ?? true,
+    sync_sub_to_voice: document.getElementById('proc-sync-sub-voice')?.checked ?? true,
+    multi_speaker:     document.getElementById('proc-multi-speaker')?.checked ?? false,
+    tts_voice_male:    document.getElementById('proc-tts-voice-male')?.value || '',
+    tts_voice_female:  document.getElementById('proc-tts-voice-female')?.value || '',
     process_mode:     window._procMode || 'ai',
     // Voice FX (Review style)
     fx_enabled:       document.getElementById('proc-fx-enabled')?.checked ?? false,
@@ -1765,6 +1829,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     // Frame video (step 6)
     frame_enabled:        document.getElementById('frame-enabled')?.checked ?? false,
     frame_title:          document.getElementById('frame-title')?.value || '',
+    frame_title_auto:     !document.getElementById('frame-title')?.value?.trim() || document.getElementById('frame-title')?.value === document.getElementById('frame-title')?.dataset?.aiTitle,
     frame_title_enabled:  document.getElementById('frame-title-enabled')?.checked ?? true,
     frame_title_size_pct: parseFloat(document.getElementById('frame-title-size')?.value || 5),
     frame_title_weight:   parseInt(document.getElementById('frame-title-weight')?.value || 400, 10),
@@ -1802,6 +1867,22 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     thumb_title:          '',
     thumb_duration:       0,
   };
+
+}
+window.collectProcessConfig = collectProcessConfig;
+
+function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
+
+  const btn = document.getElementById('btn-proc');
+  if (btn) { btn.disabled = true; btn.textContent = 'Đang xử lý...'; }
+
+  // Reset UI (logBox is already cleared in startProcessVideo)
+  _setProcProgress(0, 'Khởi chạy...');
+  if (typeof _appendProcLog === 'function') {
+    _appendProcLog('📡 Đang gửi request xử lý video tới server backend...', 'info');
+  }
+
+  const baseFields = collectProcessConfig(videoPath, videoUrl);
 
   // Keep an inspectable snapshot of the exact Step 2 values used by this run.
   window._procLastSubmittedConfig = JSON.parse(JSON.stringify(baseFields));
@@ -1920,6 +2001,14 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
                   window._publishLastOutputPath = match[1];
                   window._ytLastOutputPath = match[1];
                 }
+              }
+            }
+            if (d.frame_title && document.getElementById('frame-title-enabled')?.checked) {
+              const input = document.getElementById('frame-title');
+              if (input && (!input.value.trim() || input.value === input.dataset.aiTitle)) {
+                input.value = d.frame_title;
+                input.dataset.aiTitle = d.frame_title;
+                if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
               }
             }
             if (d.file_path) {
