@@ -3,7 +3,7 @@
       const editor = button.closest('.pe2-editor');
       const open = editor.classList.toggle('pe2-mobile-panel-open');
       button.setAttribute('aria-expanded', String(open));
-      button.querySelector('span').textContent = open ? 'Đóng bảng chỉnh sửa' : 'Mở bảng chỉnh sửa';
+      button.querySelector('span').textContent = open ? 'Đóng bảng' : 'Chỉnh sửa';
     };
     window._procWizStep = window._procWizStep || 1;
     window._step3Started = false;

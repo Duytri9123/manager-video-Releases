@@ -741,15 +741,15 @@
           <div id="pe2-timeline-resize" role="separator" tabindex="0" aria-label="Điều chỉnh chiều cao timeline" aria-orientation="horizontal" title="Kéo lên để mở rộng timeline; dùng phím mũi tên lên hoặc xuống" style="height:12px;cursor:ns-resize;touch-action:none;display:flex;align-items:center;justify-content:center"><span style="width:48px;height:4px;border-radius:4px;background:var(--accent,#6366f1)"></span></div>
           <div class="pe2-tl-controls">
     <button type="button" class="btn btn-secondary pe2-mobile-panel-toggle"
-      aria-controls="pe2-panel" aria-expanded="false" onclick="procToggleMobilePanel(this)">
+      title="Mở/đóng bảng chỉnh sửa" aria-label="Mở/đóng bảng chỉnh sửa" aria-controls="pe2-panel" aria-expanded="false" onclick="procToggleMobilePanel(this)">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18M6 8h6M6 12h6M6 16h6"/></svg>
-      <span>Mở bảng chỉnh sửa</span>
+      <span>Chỉnh sửa</span>
     </button>
             <button type="button" class="btn btn-primary btn-sm" id="pe2-play-btn" onclick="pe2TogglePlayback()"
               title="Phát hoặc tạm dừng video (phím Space)" style="display:inline-flex;align-items:center;gap:4px">
               <span>▶</span><span>Phát video</span>
             </button>
-            <button type="button" class="btn btn-primary btn-sm" onclick="subPreviewFetchFrame()"
+            <button type="button" class="btn btn-primary btn-sm" id="pe2-frame-btn" title="Lấy frame" aria-label="Lấy frame" onclick="subPreviewFetchFrame()"
               style="display:inline-flex;align-items:center;gap:4px">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
