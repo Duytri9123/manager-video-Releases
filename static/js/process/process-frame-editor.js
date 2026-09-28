@@ -5,6 +5,19 @@ function procParseContentAspect(value) {
   const ratio = w / h;
   return w > 0 && h > 0 && Number.isFinite(w) && Number.isFinite(h) && Number.isFinite(ratio) && ratio > 0 ? ratio : null;
 }
+function procOutputFrameSize(aspect, sourceW, sourceH, contentRatio) {
+  if (aspect === '9x16') return {width:1080, height:1920};
+  if (aspect === '16x9') return {width:1920, height:1080};
+  if (contentRatio) return {width:sourceW, height:Math.max(2, Math.round(sourceW / contentRatio / 2) * 2)};
+  return {width:sourceW, height:sourceH};
+}
+function procLogoVisibleAtTime(start, end, time) {
+  const t = Number(time) || 0;
+  const first = start === '' || start == null ? null : Number(start);
+  const last = end === '' || end == null ? null : Number(end);
+  return (first === null || !Number.isFinite(first) || t >= first)
+    && (last === null || !Number.isFinite(last) || t < last);
+}
 function procContentAspectInput(input) {
   const valid = !input.value.trim() || input.value.trim() === 'auto' || procParseContentAspect(input.value) !== null;
   input.setCustomValidity(valid ? '' : 'Nhập tỉ lệ hợp lệ, ví dụ 3:4 hoặc 4:5.');
@@ -86,6 +99,9 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     else if (key === 'size_pct') ov.size_pct = _ovClamp(value, 0.01, 0.30);
     else if (key === 'weight') ov.weight = Math.max(300, Math.min(900, parseInt(value, 10) || 700));
     else if (key === 'padding_pct') ov.padding_pct = _ovClamp(value, 0, 1.5);
+    else if (key === 'motion') ov.motion = ['none','figure8','horizontal','vertical','circle','diamond'].includes(value) ? value : 'none';
+    else if (key === 'motion_amp_pct') ov.motion_amp_pct = _ovClamp(value, 0, 1);
+    else if (key === 'motion_period_sec') ov.motion_period_sec = _ovClamp(value, 1, 60);
     else if (key === 'box_opacity' || key === 'opacity' || key === 'text_opacity') ov[key] = _ovClamp(value, 0, 1);
     else if (key === 'radius_pct') ov.radius_pct = _ovClamp(value, 0, 0.5);
     else if (key === 'width_pct' || key === 'height_pct') ov[key] = _ovClamp(value, 0.01, 1);
@@ -411,6 +427,12 @@ function ovSelectLayer(id, open, skipSubUpdate) {
 
     function _drawLayerLogo(c) {
       if (window._frameLogoImg && logoSizePct > 0) {
+        const player = document.getElementById('pe2-video-player');
+        const previewTime = player && player.style.display !== 'none'
+          ? player.currentTime : Number(document.getElementById('sub-preview-ts')?.value || 0);
+        const logoStart = document.getElementById('frame-logo-start')?.value;
+        const logoEnd = document.getElementById('frame-logo-end')?.value;
+        if (!procLogoVisibleAtTime(logoStart, logoEnd, previewTime)) return;
         const logoNW = window._frameLogoImg.naturalWidth  || window._frameLogoImg.width;
         const logoNH = window._frameLogoImg.naturalHeight || window._frameLogoImg.height;
         const logoAR = logoNW / (logoNH || 1);
@@ -470,10 +492,15 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     const isForced = (aspectValue === '16x9' || aspectValue === '9x16');
     const targetAspect = isForced ? aspectValue : (sourceIsVertical ? '9x16' : '16x9');
     const contentRatio = procParseContentAspect(document.getElementById('proc-content-aspect')?.value);
-    const shouldConvert = !!contentRatio || isForced && (
-      (aspectValue === '9x16' && !sourceIsVertical) ||
-      (aspectValue === '16x9' && sourceIsVertical)
-    );
+    const contentMode = document.getElementById('proc-content-aspect-mode')?.value || 'crop';
+    const targetRatio = targetAspect === '9x16' ? 9 / 16 : 16 / 9;
+    const targetW = targetAspect === '9x16' ? 1080 : 1920;
+    const targetH = targetAspect === '9x16' ? 1920 : 1080;
+    const forcePixelSize = contentMode === 'stretch' || contentMode === 'original_crop';
+    const shouldConvert = !!contentRatio || (isForced && (
+      Math.abs(srcNW / srcNH - targetRatio) > 0.01 ||
+      (forcePixelSize && (srcNW !== targetW || srcNH !== targetH))
+    ));
 
     let finalCW = cW;
     let finalCH = cH;
@@ -483,6 +510,8 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     let finalVidH = vidH;
     let finalTitleBarH = titleBarH;
     let fgScale = 1;
+    let fgScaleX = 1;
+    let fgScaleY = 1;
     let fgX = 0;
     let fgY = 0;
 
@@ -492,8 +521,9 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       composed.height = cH;
       composed.getContext('2d').drawImage(canvas, 0, 0);
 
-      finalCW = !isForced && contentRatio ? cW : (targetAspect === '9x16' ? 1080 : 1920);
-      finalCH = !isForced && contentRatio ? cH : (targetAspect === '9x16' ? 1920 : 1080);
+      const outputFrame = procOutputFrameSize(aspectValue, cW, cH, contentRatio);
+      finalCW = outputFrame.width;
+      finalCH = outputFrame.height;
       canvas.width = finalCW;
       canvas.height = finalCH;
       const outCtx = canvas.getContext('2d');
@@ -512,19 +542,33 @@ function ovSelectLayer(id, open, skipSubUpdate) {
 
       const innerW = contentRatio ? Math.max(2,Math.floor(Math.min(finalCW, finalCH*contentRatio)/2)*2) : finalCW;
       const innerH = contentRatio ? Math.max(2,Math.floor(Math.min(finalCH, finalCW/contentRatio)/2)*2) : finalCH;
-      fgScale = contentRatio ? Math.max(innerW/cW,innerH/cH) : Math.min(finalCW / cW, finalCH / cH);
-      const fgW = cW * fgScale;
-      const fgH = cH * fgScale;
+      if (contentMode === 'stretch') {
+        fgScaleX = innerW / cW;
+        fgScaleY = innerH / cH;
+      } else if (contentMode === 'original_crop') {
+        fgScaleX = fgScaleY = 1;
+      } else if (contentMode === 'keep_width_crop_height') {
+        fgScaleX = fgScaleY = innerW / cW;
+      } else if (contentMode === 'keep_height_crop_width') {
+        fgScaleX = fgScaleY = innerH / cH;
+      } else {
+        fgScaleX = fgScaleY = contentMode === 'pad'
+          ? Math.min(innerW / cW, innerH / cH)
+          : Math.max(innerW / cW, innerH / cH);
+      }
+      fgScale = fgScaleX;
+      const fgW = cW * fgScaleX;
+      const fgH = cH * fgScaleY;
       fgX = (finalCW - fgW) / 2;
       fgY = (finalCH - fgH) / 2;
       outCtx.save(); outCtx.beginPath(); outCtx.rect((finalCW-innerW)/2,(finalCH-innerH)/2,innerW,innerH); outCtx.clip();
       outCtx.drawImage(composed, fgX, fgY, fgW, fgH); outCtx.restore();
 
-      finalVidX = fgX + vidX * fgScale;
-      finalVidY = fgY + vidY * fgScale;
-      finalVidW = vidW * fgScale;
-      finalVidH = vidH * fgScale;
-      finalTitleBarH = titleBarH * fgScale;
+      finalVidX = fgX + vidX * fgScaleX;
+      finalVidY = fgY + vidY * fgScaleY;
+      finalVidW = vidW * fgScaleX;
+      finalVidH = vidH * fgScaleY;
+      finalTitleBarH = titleBarH * fgScaleY;
     }
 
     canvas.style.display = 'block';
@@ -566,6 +610,8 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       srcVidH: vidH,
       srcTitleBarH: titleBarH,
       fgScale,
+      fgScaleX,
+      fgScaleY,
       fgX,
       fgY
     };
@@ -573,10 +619,10 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     window._frameInteractive = Object.fromEntries(Object.entries(frameInteractiveSource).map(([key, box]) => ([
       key,
       {
-        x: fgX + box.x * fgScale,
-        y: fgY + box.y * fgScale,
-        w: box.w * fgScale,
-        h: box.h * fgScale
+        x: fgX + box.x * fgScaleX,
+        y: fgY + box.y * fgScaleY,
+        w: box.w * fgScaleX,
+        h: box.h * fgScaleY
       }
     ])));
   }
@@ -614,10 +660,8 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     const _origAspect = _haveDims ? (_srcW + ' / ' + _srcH) : '16 / 9';
 
     const _forced = (value === '16x9' || value === '9x16');
-    const _shouldConvert = _forced && (
-      (aspect === '9x16' && !_srcIsVertical) ||
-      (aspect === '16x9' &&  _srcIsVertical)
-    );
+    const _targetRatio = aspect === '9x16' ? 9 / 16 : 16 / 9;
+    const _shouldConvert = _forced && Math.abs(_srcW / _srcH - _targetRatio) > 0.01;
     const _blurBg = document.getElementById('proc-aspect-blur-bg')?.checked || false;
     const _bgEl = document.getElementById('sub-preview-bgblur');
     const _frameEnabled = document.getElementById('frame-enabled')?.checked || false;

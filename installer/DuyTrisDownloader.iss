@@ -1,23 +1,40 @@
+#define AppVersion "2.0.6"
+#ifdef CustomerBuild
+#define AppName "DuyTris Customer"
+#define AppExeName "DuyTrisCustomer.exe"
+#define DistDir "..\dist\DuyTrisCustomer"
+#define SetupName "DuyTrisCustomer_Setup"
+#else
 #define AppName "DuyTris Downloader"
-#define AppVersion "2.0.5"
 #define AppExeName "DuyTrisDownloader.exe"
+#define DistDir "..\dist\DuyTrisDownloader"
+#define SetupName "setup"
+#endif
 
-#ifnexist "..\dist\DuyTrisDownloader\DuyTrisDownloader.exe"
+#ifnexist DistDir + "\" + AppExeName
   #error "Missing DuyTrisDownloader.exe. Run build_exe.ps1 first."
 #endif
-#ifnexist "..\dist\DuyTrisDownloader\ffmpeg.exe"
+#ifnexist DistDir + "\ffmpeg.exe"
   #error "Missing ffmpeg.exe. Run build_exe.ps1 first."
 #endif
-#ifnexist "..\dist\DuyTrisDownloader\ffprobe.exe"
+#ifnexist DistDir + "\ffprobe.exe"
   #error "Missing ffprobe.exe. Run build_exe.ps1 first."
 #endif
 
 [Setup]
+#ifdef CustomerBuild
+AppId={{07123A26-A546-467C-83DF-9083FBB5E5BE}
+#else
 AppId={{B926E6F8-8064-4BF5-94AE-E5FD59F63287}
+#endif
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=DuyTris
+#ifdef CustomerBuild
+DefaultDirName={localappdata}\Programs\DuyTrisCustomer
+#else
 DefaultDirName={localappdata}\Programs\DuyTrisDownloader
+#endif
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -28,7 +45,7 @@ UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2/max
 SolidCompression=yes
 OutputDir=..\output
-OutputBaseFilename=setup
+OutputBaseFilename={#SetupName}
 WizardStyle=modern
 DisableWelcomePage=no
 DisableDirPage=no
@@ -46,9 +63,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
+[InstallDelete]
+; Older builds bundled Poppler's incompatible ICU DLL. Inno Setup keeps files
+; removed from newer builds unless they are explicitly deleted on upgrade.
+Type: files; Name: "{app}\icuuc.dll"
+
 [Files]
-Source: "..\dist\DuyTrisDownloader\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config.yml"
-Source: "..\dist\DuyTrisDownloader\_internal\config.example.yml"; DestName: "config.yml"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
+Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "config.yml,*.db,.state\*,.accounts\*,.youtube_tokens\*"
+Source: "{#DistDir}\config.example.yml"; DestName: "config.yml"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"

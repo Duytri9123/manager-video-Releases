@@ -24,6 +24,7 @@ from pathlib import Path
 import yaml
 from flask import Flask, jsonify, redirect, render_template, request, send_file
 from flask_socketio import SocketIO, emit
+from utils.edition import is_customer_edition
 
 try:
     from utils.license_guard import is_license_active, LicenseGuard
@@ -501,7 +502,7 @@ def require_valid_license(f):
     """
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        if not LicenseGuard.is_allowed():
+        if not is_customer_edition() and not LicenseGuard.is_allowed():
             return redirect("/license/activate")
         return f(*args, **kwargs)
     return decorated_function

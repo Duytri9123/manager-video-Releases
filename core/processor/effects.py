@@ -5,6 +5,7 @@ Video overlay filters, color grading, anti-fingerprint, vertical video conversio
 and thumbnail generation.
 """
 import os
+import math
 import re
 import shutil
 import subprocess
@@ -285,6 +286,9 @@ def _normalize_video_overlays(raw) -> list[dict]:
                 "box_color": _normalize_hex_rgb(item.get("box_color"), "#000000"),
                 "box_opacity": pct("box_opacity", 0.5),
                 "text_opacity": pct("text_opacity", 1.0),
+                "motion": str(item.get("motion") or "none") if str(item.get("motion") or "none") in ("none", "figure8", "horizontal", "vertical", "circle", "diamond") else "none",
+                "motion_amp_pct": pct("motion_amp_pct", 1.0, 0.0, 1.0),
+                "motion_period_sec": pct("motion_period_sec", 6.0, 1.0, 60.0),
                 "start_sec": start_sec,
                 "end_sec": end_sec,
             })
@@ -367,12 +371,55 @@ def _append_video_overlay_filters(
             size_pct = _clamp_float(ov.get("size_pct", 0.05), 0.01, 0.30)
             font_size = max(8, int(round(bh * size_pct)))
             weight = int(_clamp_float(ov.get("weight", 700), 300, 900))
-            overlay_font = "Arial Bold" if weight >= 600 else "Arial"
+            is_bold = weight >= 600
+            
+            # Danh sách các font hỗ trợ tốt tiếng Việt trên nhiều HĐH
+            possible_fonts = [
+                "C:/Windows/Fonts/arialbd.ttf" if is_bold else "C:/Windows/Fonts/arial.ttf",
+                "C:/Windows/Fonts/tahomabd.ttf" if is_bold else "C:/Windows/Fonts/tahoma.ttf",
+                "C:/Windows/Fonts/segoeuib.ttf" if is_bold else "C:/Windows/Fonts/segoeui.ttf",
+                "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/System/Library/Fonts/Supplemental/Arial.ttf",
+            ]
+            
+            import os
+            font_opt = f"font='{'Arial Bold' if is_bold else 'Arial'}'" # fallback
+            custom_font = ov.get("font_path") or ov.get("fontfile")
+            font_candidates = ([custom_font] if custom_font else []) + possible_fonts
+            for fpath in font_candidates:
+                if fpath and os.path.exists(fpath):
+                    escaped_fpath = str(fpath).replace("\\", "/").replace(":", "\\:").replace("'", "'\\\\\\''")
+                    font_opt = f"fontfile='{escaped_fpath}'"
+                    break
+                
             padding_pct = _clamp_float(ov.get("padding_pct", 0.55), 0.0, 1.5)
             x_pct = _clamp_float(ov.get("x_pct", 0.5), 0.0, 1.0)
             y_pct = _clamp_float(ov.get("y_pct", 0.18), 0.0, 1.0)
+            motion = ov.get("motion", "none")
             x_expr = f"{bx:.3f}+{bw:.3f}*{x_pct:.6f}-text_w/2"
             y_expr = f"{by:.3f}+{bh:.3f}*{y_pct:.6f}-text_h/2"
+            if motion != "none":
+                amp = _clamp_float(ov.get("motion_amp_pct", 1.0), 0.0, 1.0)
+                period = _clamp_float(ov.get("motion_period_sec", 6.0), 1.0, 60.0)
+                start = float(ov.get("start_sec") or 0.0)
+                phase = f"(2*PI*(t-{start:.3f})/{period:.3f})"
+                x_expr = f"{bx:.3f}+({bw:.3f}-text_w)/2"
+                y_expr = f"{by:.3f}+({bh:.3f}-text_h)/2"
+                travel_x = f"({bw:.3f}-text_w)/2*{amp:.6f}"
+                travel_y = f"({bh:.3f}-text_h)/2*{amp:.6f}"
+                if motion in ("figure8", "horizontal", "circle"):
+                    x_expr += f"+{travel_x}*sin{phase}"
+                elif motion == "diamond":
+                    x_expr += f"+{travel_x}*2/PI*asin(sin{phase})"
+                if motion == "figure8":
+                    y_expr += f"+{travel_y}*sin(2*{phase})"
+                elif motion == "circle":
+                    y_expr += f"+{travel_y}*cos{phase}"
+                elif motion == "vertical":
+                    y_expr += f"+{travel_y}*sin{phase}"
+                elif motion == "diamond":
+                    y_expr += f"-{travel_y}*2/PI*asin(cos{phase})"
             font_color = _ffmpeg_color(ov.get("color", "#FFFFFF"), _clamp_float(ov.get("text_opacity", 1.0), 0.0, 1.0))
             box_opacity = _clamp_float(ov.get("box_opacity", 0.5), 0.0, 1.0)
             if box_opacity > 0.001:
@@ -381,7 +428,7 @@ def _append_video_overlay_filters(
             else:
                 box_opts = ":box=0"
             filter_complex_parts.append(
-                f"[{curr_label}]drawtext=text='{text}':font='{overlay_font}':fontcolor={font_color}:fontsize={font_size}:"
+                f"[{curr_label}]drawtext=text='{text}':{font_opt}:fontcolor={font_color}:fontsize={font_size}:"
                 f"x='{x_expr}':y='{y_expr}'{box_opts}{enable}[{next_label}]"
             )
             curr_label = next_label
@@ -787,6 +834,8 @@ def make_vertical_video(
     logo_top_pct: float = 3.0,
     logo_left_pct: float = 3.0,
     logo_radius_pct: float = 50.0,  # 0=square, 50=circle
+    logo_start_sec: Optional[float] = None,
+    logo_end_sec: Optional[float] = None,
     target_w: int = 1080,
     target_h: int = 1920,
 ) -> tuple[bool, str]:
@@ -962,11 +1011,26 @@ def make_vertical_video(
                     f"if(lte(hypot(X-{inner_x2},Y-{inner_y2}),{r2}),255,0))))))"
                 )
 
+            def _logo_second(value):
+                try:
+                    number = float(value)
+                    return max(0.0, number) if math.isfinite(number) else None
+                except (TypeError, ValueError):
+                    return None
+            logo_start = _logo_second(logo_start_sec)
+            logo_end = _logo_second(logo_end_sec)
+            logo_enable = ""
+            if logo_start is not None and logo_end is not None and logo_end > logo_start:
+                logo_enable = f":enable='gte(t,{logo_start:.3f})*lt(t,{logo_end:.3f})'"
+            elif logo_start is not None and logo_end is None:
+                logo_enable = f":enable='gte(t,{logo_start:.3f})'"
+            elif logo_end is not None and logo_start is None:
+                logo_enable = f":enable='lt(t,{logo_end:.3f})'"
             logo_filter = (
                 f"[1:v]scale={logo_w_px}:{logo_h_px},"
                 f"format=rgba,"
                 f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{mask_expr}'[logo];"
-                f"[0:v][logo]overlay={logo_left_px}:{logo_top_px}"
+                f"[0:v][logo]overlay={logo_left_px}:{logo_top_px}{logo_enable}"
             )
             ok2, _ = run_ffmpeg([
                 ffmpeg, "-i", str(output_path), "-i", str(logo_path),

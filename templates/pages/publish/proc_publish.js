@@ -37,7 +37,7 @@ function pPubTogglePlatform(platform) {
   const on = window._pPubEnabled[platform];
 
   if (toggle) {
-    toggle.textContent = on ? '+' : '×';
+    toggle.textContent = on ? '✓' : '×';
     toggle.style.background = on ? 'var(--accent)' : 'var(--text-muted)';
   }
   if (tab) tab.style.opacity = on ? '1' : '0.4';

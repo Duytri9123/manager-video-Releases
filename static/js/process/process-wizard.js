@@ -85,6 +85,8 @@
     }
 
     window.procWizGo = function(n, _forceForward){
+      if (n > 1 && window._procWizStep === 1 && typeof window.procValidatePublishPage === 'function'
+          && !window.procValidatePublishPage()) return;
       // Auto-save previous step configuration silently before moving
       if (typeof procSaveDefaults === 'function') {
         try { procSaveDefaults(true); } catch (_) {}

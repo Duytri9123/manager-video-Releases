@@ -169,11 +169,18 @@ def extract_frames_for_ai(video_path: Path, count: int) -> Tuple[List[Dict[str, 
     return frames, duration
 
 
-def build_ai_prompt(language: str, target_language: str, duration: float, timestamps: List[float]) -> str:
+def build_ai_prompt(language: str, target_language: str, duration: float, timestamps: List[float], audit_mode: str = "") -> str:
     lang_hint = language or "auto"
     target_hint = target_language or "vi"
+    audit_focus = (
+        "Focus this pass on visible source markers: channel logos, creator handles, "
+        "stock-preview watermarks, platform marks, QR codes and embedded subtitles. "
+        "Report only visible evidence and suggest tight time-limited masks; do not infer ownership or legal status."
+        if audit_mode == "source_markers" else ""
+    )
     return f"""
 Analyze the chronological story: setting, characters, actions, developments and outcome visible in the supplied frames. Suggest accurate, engaging titles without inventing unseen events or unheard dialogue. Also detect unwanted hardcoded subtitles, watermarks, platform logos, and text overlays.
+{audit_focus}
 Source language: {lang_hint}. Output language for summary & titles: {target_hint}.
 Video duration: {duration:.2f}s. Analyzed frame timestamps: {timestamps}.
 
@@ -225,7 +232,7 @@ If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones"
 """.strip()
 
 
-def analyze_video_batches(frames, duration, language, target_language, call):
+def analyze_video_batches(frames, duration, language, target_language, call, audit_mode=""):
     """Analyze every sampled interval, then synthesize story and titles."""
     results = []
     zones = []
@@ -233,7 +240,7 @@ def analyze_video_batches(frames, duration, language, target_language, call):
         batch = frames[offset:offset + 12]
         lower = 0 if offset == 0 else (frames[offset - 1]["timestamp"] + batch[0]["timestamp"]) / 2
         upper = duration if offset + 12 >= len(frames) else (batch[-1]["timestamp"] + frames[offset + 12]["timestamp"]) / 2
-        prompt = build_ai_prompt(language, target_language, duration, [f["timestamp"] for f in batch])
+        prompt = build_ai_prompt(language, target_language, duration, [f["timestamp"] for f in batch], audit_mode)
         prompt += f"\nThis batch covers [{lower}, {upper}] seconds. Restrict masks to this interval."
         result = clean_ai_result(call(prompt, batch))
         for zone in result["suggested_blur_zones"]:

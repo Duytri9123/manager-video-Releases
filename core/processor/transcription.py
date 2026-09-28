@@ -613,7 +613,7 @@ def classify_dialogue_speakers(
             base_url = (conn.get("base_url") or "").strip().rstrip("/")
             if not base_url:
                 base_url = "https://generativelanguage.googleapis.com"
-            model = "gemini-3.7-flash"
+            model = "gemini-3.8-flash-high"
             url = f"{base_url}/v1beta/models/{model}:generateContent?key={api_key}"
             req_data = {
                 "contents": [{"parts": [{"text": prompt_content}]}],

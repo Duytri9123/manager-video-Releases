@@ -268,12 +268,9 @@ window._batchQueue = window._batchQueue || [];
 
     const hasReady = window._batchQueue.some(t => t.status === 'ready' || t.status === 'done');
     const hasPending = window._batchQueue.some(t => t.status === 'pending');
-    const hasAny = window._batchQueue.length > 0;
     const nextWrap = document.getElementById('step1-next-btn-wrap');
     if (nextWrap) {
-      // Show "Tiếp theo" button as soon as there's anything in queue (not just when ready)
-      // Hide only when auto-flow is on (it handles navigation automatically)
-      nextWrap.style.display = (hasAny && !document.getElementById('proc-auto-flow')?.checked) ? 'block' : 'none';
+      nextWrap.style.display = (hasPending || hasReady) ? 'block' : 'none';
     }
 
     // Update download button state
@@ -370,7 +367,17 @@ window._batchQueue = window._batchQueue || [];
   };
 
   /** Called when user clicks "Bắt đầu xử lý" in step 3 */
+  window.procValidatePublishPage = function() {
+    const publishing = document.getElementById('step1-autopub-toggle')?.checked;
+    const facebook = window._pPubEnabled?.facebook !== false;
+    const page = document.getElementById('step1-fb-page-select');
+    if (!publishing || !facebook || page?.value?.trim()) return true;
+    toast('Vui lòng chọn Facebook Page trước khi tiếp tục đăng bài.', 'warning');
+    page?.focus();
+    return false;
+  };
   window.procStartQueueFromStep1 = function() {
+    if (!window.procValidatePublishPage()) return;
     if (window._procRunning || window._step1Downloading ||
         (window._batchQueue || []).some(t => t.status === 'processing' || t.status === 'downloading')) {
       toast('Hàng chờ đang tải hoặc xử lý video, vui lòng đợi hoàn tất.', 'info');
@@ -776,6 +783,8 @@ window._batchQueue = window._batchQueue || [];
       logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
       logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
       logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
+      logo_start_sec: document.getElementById('frame-logo-start')?.value || null,
+      logo_end_sec: document.getElementById('frame-logo-end')?.value || null,
     };
 
     _appendProcLog(' Đang tạo khung video...', 'info');
@@ -970,6 +979,7 @@ window._batchQueue = window._batchQueue || [];
 
 
   window.procWizStep2Continue = function(targetStep) {
+    if (!window.procValidatePublishPage()) return;
     const queue = window._batchQueue || [];
     const selectedReady = queue.find(t => t.id === window._procCurrentTaskId && t.status === 'ready');
     const activeReady = (typeof window._resolveActiveQueueItem === 'function')
@@ -1160,7 +1170,9 @@ window._batchQueue = window._batchQueue || [];
     const canvasRect = ctx.canvas.getBoundingClientRect();
     const displayScaleX = canvasRect.width > 0 ? canvasRect.width / ctx.canvas.width : 1;
     const displayScaleY = canvasRect.height > 0 ? canvasRect.height / ctx.canvas.height : displayScaleX;
-    const displayScale = Math.max(0.01, Math.min(displayScaleX, displayScaleY));
+    // Canvas is sized from its displayed width; an absolute preview wrapper can
+    // temporarily report a shorter height while its aspect is being updated.
+    const displayScale = Math.max(0.01, displayScaleX || displayScaleY);
     const screenPx = px => px / displayScale;
 
     ctx.strokeStyle = 'rgba(255,255,255,0.9)';
@@ -1173,7 +1185,7 @@ window._batchQueue = window._batchQueue || [];
     ctx.strokeRect(rx, ry, rw, rh);
 
     if (withHandles) {
-      const hs = screenPx(8);
+      const hs = Math.min(screenPx(7), Math.max(screenPx(4), Math.min(rw, rh) * 0.22));
       const hh = hs / 2;
       const pts = cornersOnly ? [
         [rx, ry],

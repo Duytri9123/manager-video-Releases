@@ -515,18 +515,54 @@ def user_info():
         parsed = URLParser.parse(url)
         sec_uid = (parsed.get("sec_uid") or URLParser._extract_user_id(url)) if parsed else URLParser._extract_user_id(url)
         if not sec_uid:
-            return None, [], False
+            return None, [], False, None
         async with DouyinAPIClient(cm.get_cookies(), proxy=resolve_proxy(config)) as api:
-            info = await api.get_user_info(sec_uid)
+            async def browser_posts(expected_count=0):
+                browser_cfg = config.get("browser_fallback") or {}
+                try:
+                    ids = await api.collect_user_post_ids_via_browser(
+                        sec_uid,
+                        expected_count=expected_count,
+                        headless=bool(browser_cfg.get("headless", False)),
+                        max_scrolls=min(60, int(browser_cfg.get("max_scrolls", 60) or 60)),
+                        idle_rounds=min(6, int(browser_cfg.get("idle_rounds", 6) or 6)),
+                        wait_timeout_seconds=min(90, int(browser_cfg.get("wait_timeout_seconds", 90) or 90)),
+                    )
+                except Exception as exc:
+                    return [], f"Douyin chặn danh sách video. Hãy hoàn tất xác minh trong trình duyệt Douyin rồi thử lại. ({exc})"
+                cached = api.pop_browser_post_aweme_items() or {}
+                if not ids:
+                    return [], "Douyin chặn danh sách video. Hãy đăng nhập hoặc hoàn tất xác minh trong trình duyệt Douyin rồi thử lại."
+                return [cached.get(aid) or {"aweme_id": aid} for aid in ids], None
+
+            try:
+                info = await api.get_user_info(sec_uid)
+            except Exception:
+                info = None
             if not info:
-                return None, [], False
+                # Douyin frequently returns an empty HTTP 200 for the profile
+                # endpoint. Reuse the existing browser collector instead of
+                # reporting a valid profile URL as "user not found".
+                items, browser_error = await browser_posts()
+                if browser_error:
+                    return None, [], False, browser_error
+                author = next((item.get("author") for item in items if isinstance(item.get("author"), dict)), {})
+                info = dict(author)
+                info.setdefault("sec_uid", sec_uid)
+                info.setdefault("nickname", sec_uid)
+                info.setdefault("aweme_count", len(items))
+                return info, items, False, None
 
             all_items = []
             seen_ids = set()
             cursor = 0
             pagination_blocked = False
             for _ in range(200):
-                result = await api.get_user_post(sec_uid, max_cursor=cursor, count=20)
+                try:
+                    result = await api.get_user_post(sec_uid, max_cursor=cursor, count=20)
+                except Exception:
+                    pagination_blocked = True
+                    break
                 page_items = result.get("items") or result.get("aweme_list") or []
                 added = 0
                 for item in page_items:
@@ -542,7 +578,13 @@ def user_info():
                 cursor = new_cursor
                 await _asyncio.sleep(0.3)
 
-            return info, all_items, pagination_blocked
+            if pagination_blocked and not all_items and int(info.get("aweme_count") or 0) > 0:
+                all_items, browser_error = await browser_posts(int(info.get("aweme_count") or 0))
+                if browser_error:
+                    return info, [], True, browser_error
+                pagination_blocked = False
+
+            return info, all_items, pagination_blocked, None
 
     def parse_item(item):
         cover = _extract_cover(item)
@@ -563,9 +605,11 @@ def user_info():
         }
 
     try:
-        info, all_items, pagination_blocked = asyncio.run(fetch())
+        info, all_items, pagination_blocked, fetch_error = asyncio.run(fetch())
+        if fetch_error:
+            return jsonify({"error": fetch_error}), 502
         if not info:
-            return jsonify({"error": "User not found or invalid URL"}), 404
+            return jsonify({"error": "Không tìm thấy tài khoản Douyin hoặc URL không hợp lệ."}), 404
 
         videos = [parse_item(i) for i in all_items]
         aweme_count = info.get("aweme_count", 0)

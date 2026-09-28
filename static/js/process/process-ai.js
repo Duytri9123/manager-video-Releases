@@ -170,10 +170,10 @@
         if (savedTarget && Array.from(sel.options).some(o => o.value === savedTarget)) {
           sel.value = savedTarget;
         } else {
-          sel.value = agModels[0]?.id || 'none';
+          sel.value = agModels.some(m => m.id === 'gemini-3.8-flash-high') ? 'gemini-3.8-flash-high' : (agModels[0]?.id || 'none');
         }
       });
-      if (agModels.length && !savedTarget) _syncAiVideoModel(agModels[0].id);
+      if (agModels.length && !savedTarget) _syncAiVideoModel(agModels.some(m => m.id === 'gemini-3.8-flash-high') ? 'gemini-3.8-flash-high' : agModels[0].id);
     } catch (_) {
       window._procAiVideoModelsLoaded = false;
     }
@@ -211,10 +211,16 @@
     const result = payload?.result;
     if (!result) {
       box.innerHTML = '';
+      const review = document.getElementById('proc-ai-copyright-result');
+      if (review) review.textContent = '';
       return;
     }
     const cover = Array.isArray(result.needs_cover) ? result.needs_cover : [];
     const zones = Array.isArray(result.suggested_blur_zones) ? result.suggested_blur_zones : [];
+    const review = document.getElementById('proc-ai-copyright-result');
+    if (review) review.textContent = cover.length || zones.length
+      ? `Phát hiện ${cover.length} dấu nguồn/chữ, đề xuất ${zones.length} vùng xử lý. Kiểm tra từng vùng trước khi xuất.`
+      : 'Chưa thấy dấu nguồn hoặc chữ rõ trong các khung hình đã lấy mẫu.';
     const titles = result.title_suggestions || {};
     const titleInput = document.getElementById('frame-title');
     if (document.getElementById('frame-title-enabled')?.checked && titleInput) {
@@ -253,6 +259,13 @@
       ${result.analysis_notes ? `<div class="pe2-ai-box"><h4>Ghi chú</h4><div>${_procAiEsc(result.analysis_notes)}</div></div>` : ''}
     `;
   }
+  async function procAnalyzeCopyrightCues() {
+    const review = document.getElementById('proc-ai-copyright-result');
+    if (review) review.textContent = 'Đang rà soát các khung hình mẫu…';
+    const result = await procAnalyzeVideoAI({force:true, auditMode:'source_markers'});
+    if (!result && review) review.textContent = 'Chưa thể phân tích video này.';
+  }
+  window.procAnalyzeCopyrightCues = procAnalyzeCopyrightCues;
   function procToggleAiAnalysis(input) {
     window._procUseAiAnalysis = !!input?.checked;
     if (window._procUseAiAnalysis) {
@@ -308,6 +321,7 @@
             || localStorage.getItem('proc_ai_video_nine_model')
             || '',
           sample_count: sampleValue === 'full' ? 0 : parseInt(sampleValue || '5', 10),
+          audit_mode: opts.auditMode === 'source_markers' ? 'source_markers' : '',
           language: document.getElementById('proc-lang')?.value || '',
           target_language: document.getElementById('proc-target-lang')?.value || 'vi'
         })

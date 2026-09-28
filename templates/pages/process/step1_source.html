@@ -146,7 +146,7 @@
                 <span>YouTube</span>
               </span>
               <span id="step1-pub-check-yt"
-                class="w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px] font-bold">+</span>
+                class="w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
             </button>
 
             <!-- TikTok Pill -->
@@ -160,7 +160,7 @@
                 <span>TikTok</span>
               </span>
               <span id="step1-pub-check-tt"
-                class="w-4 h-4 rounded-full bg-slate-700 dark:bg-slate-600 text-white flex items-center justify-center text-[9px] font-bold">+</span>
+                class="w-4 h-4 rounded-full bg-slate-700 dark:bg-slate-600 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
             </button>
 
             <!-- Facebook Pill -->
@@ -174,7 +174,7 @@
                 <span>Facebook</span>
               </span>
               <span id="step1-pub-check-fb"
-                class="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold">+</span>
+                class="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-bold">✓</span>
             </button>
           </div>
 
@@ -329,8 +329,8 @@
           </button>
         </div>
 
-        <!-- 4 Quick Option Checkboxes: 1 hàng ngang duy nhất -->
-        <div class="grid grid-cols-4 gap-1 mb-2.5 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+        <!-- Quick options use an active state while retaining inputs for settings. -->
+        <div class="proc-step1-quick-options grid grid-cols-4 gap-1 mb-2.5 pb-2 border-b border-slate-100 dark:border-slate-700/60">
           <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
             title="Tự động hóa toàn bộ quy trình sau khi tải">
             <input type="checkbox" id="proc-auto-flow" class="accent-indigo-500">
@@ -380,9 +380,8 @@
               <span>Tải hàng chờ</span>
             </button>
             <button type="button" class="btn btn-primary text-[11px] py-1 px-2.5 flex items-center gap-1.5 h-[30px]"
-              id="btn-step1-process" onclick="procStartQueueFromStep1()"
-              title="Xử lý hàng chờ bằng cấu hình hiện tại ở Bước 2">
-              <span>Xử lý video</span>
+              id="btn-step1-next" onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
+              <span>Tiếp tục sang Bước 2</span>
             </button>
           </div>
         </div>
@@ -391,8 +390,9 @@
         <div class="mt-2" id="step1-next-btn-wrap" style="display:none">
           <button type="button"
             class="btn btn-primary w-full py-1.5 font-semibold text-[11px] flex justify-center items-center gap-1.5 h-[34px]"
-            onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
-            <span>Tiếp tục sang Bước 2</span>
+            id="btn-step1-process" onclick="procStartQueueFromStep1()"
+            title="Xử lý hàng chờ bằng cấu hình hiện tại ở Bước 2">
+            <span>Xử lý video</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -925,7 +925,7 @@
         const check = document.getElementById(`step1-pub-check-${shortId}`);
         const isOn = enabled[p] !== false;
         if (check) {
-          check.textContent = isOn ? '+' : '×';
+          check.textContent = isOn ? '✓' : '×';
           check.className = isOn
             ? `w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold ${p === 'youtube' ? 'bg-red-500' : (p === 'tiktok' ? 'bg-slate-700 dark:bg-slate-600' : 'bg-blue-600')}`
             : 'w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-600 dark:text-slate-300 flex items-center justify-center text-[9px] font-bold';

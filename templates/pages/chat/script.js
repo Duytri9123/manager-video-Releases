@@ -446,7 +446,7 @@
       if (sp) sp.value = data.system_prompt || '';
       if (t)  t.value  = String(data.temperature ?? 0.7);
       if (mt) mt.value = String(data.max_tokens ?? 4096);
-      state.defaultModel = data.default_model || 'gemini-3.7-flash';
+      state.defaultModel = data.default_model || 'gemini-3.8-flash-high';
       state.loadedConfig = true;
     } catch (e) {
       console.error('[chat] load config failed:', e);
@@ -505,7 +505,7 @@
     }
 
     state.models = data.models || [];
-    state.defaultModel = data.default || state.defaultModel || 'gemini-3.7-flash';
+    state.defaultModel = data.default || state.defaultModel || 'gemini-3.8-flash-high';
     state.loadedModels = true;
 
     const renderInto = (el, autoSelectSaved = false) => {

@@ -773,6 +773,7 @@ async function searchUser() {
   document.getElementById('user-loading')?.classList.remove('hidden');
   document.getElementById('user-result')?.classList.add('hidden');
   document.getElementById('user-videos-section')?.classList.add('hidden');
+  document.getElementById('user-search-error')?.classList.add('hidden');
 
   try {
     const info = await API.post('/api/user_info', { url });
@@ -858,6 +859,11 @@ async function searchUser() {
     if (_viEnabled) _translateVisibleDebounced(500);
   } catch (e) {
     toast('Error: ' + e.message, 'error');
+    const errorEl = document.getElementById('user-search-error');
+    if (errorEl) {
+      errorEl.textContent = e.message || 'Không tải được dữ liệu người dùng.';
+      errorEl.classList.remove('hidden');
+    }
   } finally {
     document.getElementById('user-loading')?.classList.add('hidden');
   }

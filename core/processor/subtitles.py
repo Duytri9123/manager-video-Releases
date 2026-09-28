@@ -5,6 +5,7 @@ Subtitle file parsing (SRT / ASS), time formatting, ASS frame & title generation
 and hardcoded subtitle burning via FFmpeg.
 """
 import os
+import math
 import re
 import shutil
 import subprocess
@@ -847,6 +848,8 @@ def burn_subtitles(
     blur_x_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
     video_overlays: Optional[list] = None,
+    logo_start_sec: Optional[float] = None,
+    logo_end_sec: Optional[float] = None,
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
     content_aspect: str = "auto",
@@ -919,6 +922,7 @@ def burn_subtitles(
                          blur_extra_zones=blur_extra_zones,
                          blur_subtitle_segments=blur_subtitle_segments,
                          video_overlays=video_overlays,
+                         logo_start_sec=logo_start_sec, logo_end_sec=logo_end_sec,
                          target_aspect=target_aspect,
                          aspect_pad_blur=aspect_pad_blur,
                          content_aspect=content_aspect, content_aspect_mode=content_aspect_mode, mask_config=mask_config,
@@ -966,6 +970,8 @@ def _burn_ass(
     blur_x_pct: Optional[float] = None,
     blur_extra_zones: Optional[list] = None,
     video_overlays: Optional[list] = None,
+    logo_start_sec: Optional[float] = None,
+    logo_end_sec: Optional[float] = None,
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
     content_aspect: str = "auto",
@@ -1049,10 +1055,13 @@ def _burn_ass(
         _src_is_vertical = _src_h > _src_w
         _content_ratio = _parse_content_aspect(content_aspect)
         if _content_ratio and _target_aspect == "auto":
-            _target_w, _target_h = int(_src_w), int(_src_h)
-        _aspect_convert = bool(_content_ratio) or _target_aspect in ("9x16", "16x9") and (
-            (_target_aspect == "9x16" and not _src_is_vertical)
-            or (_target_aspect == "16x9" and _src_is_vertical)
+            _target_w = max(2, int(_src_w // 2 * 2))
+            _target_h = max(2, int(round(_target_w / _content_ratio / 2) * 2))
+        _force_pixel_size = content_aspect_mode in ("stretch", "original_crop")
+        _aspect_convert = bool(_content_ratio) or (
+            _target_aspect in ("9x16", "16x9")
+            and (abs(_src_w / _src_h - _target_w / _target_h) > 0.01
+                 or (_force_pixel_size and (_src_w != _target_w or _src_h != _target_h)))
         )
         if _aspect_convert:
             _log(
@@ -1440,9 +1449,26 @@ def _burn_ass(
                 # No radius — square logo
                 logo_filter = f"[1:v]scale=-1:{logo_h_px}[logo]"
 
+            def _logo_time(value):
+                try:
+                    number = float(value)
+                    return max(0.0, number) if math.isfinite(number) else None
+                except (TypeError, ValueError):
+                    return None
+
+            _logo_start = _logo_time(logo_start_sec)
+            _logo_end = _logo_time(logo_end_sec)
+            _logo_enable = ""
+            if _logo_start is not None and _logo_end is not None and _logo_end > _logo_start:
+                _logo_enable = f":enable='gte(t,{_logo_start:.3f})*lt(t,{_logo_end:.3f})'"
+            elif _logo_start is not None and _logo_end is None:
+                _logo_enable = f":enable='gte(t,{_logo_start:.3f})'"
+            elif _logo_end is not None and _logo_start is None:
+                _logo_enable = f":enable='lt(t,{_logo_end:.3f})'"
+
             filter_complex += (
                 f";{logo_filter};"
-                f"[{curr_label}][logo]overlay={logo_x_px}:{logo_y_px}[composited]"
+                f"[{curr_label}][logo]overlay={logo_x_px}:{logo_y_px}{_logo_enable}[composited]"
             )
             _log(f"🏷 Logo: {_logo_file.name} (h={logo_h_px}px, x={logo_x_px}, y={logo_y_px}, radius={r_pct}%)")
         else:
@@ -1454,9 +1480,22 @@ def _burn_ass(
                 _inner_w = max(2, int(min(_target_w, _target_h * _content_ratio) // 2 * 2))
                 _inner_h = max(2, int(min(_target_h, _target_w / _content_ratio) // 2 * 2))
             if content_aspect_mode == "pad":
-                _fg_filter = (f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=decrease" if _content_ratio else f"scale={_target_w}:{_target_h}:force_original_aspect_ratio=decrease")
+                _fg_filter = f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=decrease"
+            elif content_aspect_mode == "stretch":
+                _fg_filter = f"scale={_inner_w}:{_inner_h}"
+            elif content_aspect_mode == "original_crop":
+                _fg_filter = (
+                    f"crop=w='min(iw\\,{_inner_w})':h='min(ih\\,{_inner_h})'"
+                )
+            elif content_aspect_mode == "keep_width_crop_height":
+                _fg_filter = f"scale={_inner_w}:-2,crop={_inner_w}:min(ih\\,{_inner_h})"
+            elif content_aspect_mode == "keep_height_crop_width":
+                _fg_filter = f"scale=-2:{_inner_h},crop=min(iw\\,{_inner_w}):{_inner_h}"
             else:
-                _fg_filter = (f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=increase,crop={_inner_w}:{_inner_h}" if _content_ratio else f"scale={_target_w}:{_target_h}:force_original_aspect_ratio=decrease")
+                _fg_filter = (
+                    f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=increase,"
+                    f"crop={_inner_w}:{_inner_h}"
+                )
             if aspect_pad_blur:
                 # Blur at preview resolution, then upscale. The background is
                 # already intentionally soft, so processing it at full 1080p
@@ -1794,8 +1833,8 @@ def generate_frame_title(
     }
     target_lang_name = _LANG_FULL.get(target_lang, target_lang)
 
-    if not translated_texts:
-        # Return empty so Step 3 can generate it properly with translated Vietnamese text, instead of raw filename
+    texts_to_use = translated_texts if translated_texts else original_texts
+    if not texts_to_use:
         return ""
 
     cfg = trans_cfg or {}
@@ -1829,17 +1868,77 @@ def generate_frame_title(
         api_url = "https://api.openai.com/v1/chat/completions"
         model = "gpt-4o-mini"
 
+    # Try direct Antigravity first if selected or if no external keys are available
+    if preferred_provider in ("antigravity", "gemini", "auto") or not api_key:
+        try:
+            from core.direct_ai_provider import dispatch_chat_completion
+            import re as _re
+            
+            # Clean raw stem for the prompt
+            raw_stem = video_title or ""
+            raw_stem = _re.sub(r'_?\d{10,}$', '', raw_stem)
+            raw_stem = raw_stem.replace("_", " ").strip()
+            
+            content_sample = " ".join(t for t in texts_to_use[:20] if t).strip()
+            if len(content_sample) > 800:
+                content_sample = content_sample[:800]
+            mid_idx = len(texts_to_use) // 2
+            mid_sample = " ".join(t for t in texts_to_use[mid_idx:mid_idx+5] if t).strip()
+            if mid_sample and mid_sample not in content_sample:
+                content_sample += " ... " + mid_sample[:200]
+                
+            prompt = (
+                f"Phiên âm/phụ đề video ({target_lang_name}):\n{content_sample}\n\n"
+                + (f"Tên file gốc (tham khảo, có thể không có ý nghĩa): {raw_stem}\n\n" if raw_stem else "")
+                + f"NHIỆM VỤ: Đọc kỹ nội dung phiên âm ở trên, xác định CHỦ ĐỀ CHÍNH và SỰ KIỆN nổi bật nhất của video.\n"
+                f"Sau đó tạo 1 tiêu đề tiếng Việt ngắn gọn (20-40 ký tự) phản ánh đúng nội dung video.\n\n"
+                f"QUY TẮC:\n"
+                f"- Tiêu đề PHẢI dựa trên nội dung phiên âm, KHÔNG bịa thêm thông tin\n"
+                f"- Dùng | để chia tiêu đề thành 2 phần màu. Phần sau | là chi tiết gây tò mò/sốc nhất\n"
+                f"- Viết IN HOA toàn bộ\n"
+                f"- Ngắn gọn, súc tích, dễ đọc trên thumbnail\n"
+                f"- Ví dụ tốt: 'MUỖI BẮC CỰC|CÓ THỂ HÚT CẠN MÁU SÓI CON'\n"
+                f"- Ví dụ tốt: 'CÁ MẬP TRẮNG|SĂN HẢI CẨU GIỮA KHÔNG TRUNG'\n"
+                f"- Ví dụ xấu (quá chung chung): 'THIÊN NHIÊN KỲ THÚ|KHÁM PHÁ THẾ GIỚI'\n\n"
+                f"Chỉ trả về tiêu đề, không giải thích.\n\n"
+                f"Tiêu đề:"
+            )
+            
+            res = dispatch_chat_completion(
+                model="gemini-3.8-flash-high",
+                messages=[
+                    {"role": "user", "content": f"You are a video title expert. Read the transcript carefully and create a short, impactful title in {target_lang_name} that captures the MOST INTERESTING or SURPRISING fact from the content. Use | to split the title into 2 color parts. The part after | should be the most curiosity-provoking detail. Write in ALL CAPS.\n\n" + prompt}
+                ],
+                max_tokens=80,
+                temperature=0.7,
+                timeout=15,
+            )
+            title = res["choices"][0]["message"]["content"].strip()
+            title = title.strip('"\'').split("\n")[0].strip()
+            if len(title) > 50:
+                title = title[:47] + "..."
+            return title
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("generate_frame_title direct antigravity failed: %s", e)
+
     if not api_key:
         # Fallback: use first 30 chars of first translated text
-        for t in translated_texts:
+        for t in texts_to_use:
             if t and t.strip():
                 return t.strip()[:35]
         return video_title.replace("_", " ")[:35] if video_title else ""
 
-    # Build content summary from translated texts
-    content_sample = " ".join(t for t in translated_texts[:10] if t).strip()
-    if len(content_sample) > 500:
-        content_sample = content_sample[:500]
+    # Build content summary from translated texts — take more lines to capture main idea
+    content_sample = " ".join(t for t in texts_to_use[:20] if t).strip()
+    if len(content_sample) > 800:
+        content_sample = content_sample[:800]
+
+    # Also grab middle/end portion for better context if available
+    mid_idx = len(texts_to_use) // 2
+    mid_sample = " ".join(t for t in texts_to_use[mid_idx:mid_idx+5] if t).strip()
+    if mid_sample and mid_sample not in content_sample:
+        content_sample += " ... " + mid_sample[:200]
 
     # Clean raw stem: remove numeric suffixes, replace underscores with spaces
     import re as _re
@@ -1848,14 +1947,19 @@ def generate_frame_title(
     raw_stem = raw_stem.replace("_", " ").strip()
 
     prompt = (
-        f"Tên file video (không dấu): {raw_stem}\n"
-        f"Nội dung phụ đề ({target_lang_name}): {content_sample[:300]}\n\n"
-        f"Từ tên file và nội dung trên, tạo 1 tiêu đề ngắn gọn (20-35 ký tự) có ý nghĩa với video.\n"
-        f"- Thêm dấu tiếng Việt đúng vào các từ lấy từ tên file\n"
-        f"- Kết hợp ý chính từ tên file + nội dung để tạo tiêu đề hấp dẫn\n"
-        f"- Dùng | để chia tiêu đề thành 2 phần màu. Phần sau | là phần gây tò mò nhất\n"
-        f"- Ví dụ: 'MUỖI BẮC CỰC HÚT MÁU SÓI CON|ĐÀN SÓI BUỘC PHẢI ĐI'\n"
-        f"- Chỉ trả về tiêu đề, không giải thích.\n\n"
+        f"Phiên âm/phụ đề video ({target_lang_name}):\n{content_sample}\n\n"
+        + (f"Tên file gốc (tham khảo, có thể không có ý nghĩa): {raw_stem}\n\n" if raw_stem else "")
+        + f"NHIỆM VỤ: Đọc kỹ nội dung phiên âm ở trên, xác định CHỦ ĐỀ CHÍNH và SỰ KIỆN nổi bật nhất của video.\n"
+        f"Sau đó tạo 1 tiêu đề tiếng Việt ngắn gọn (20-40 ký tự) phản ánh đúng nội dung video.\n\n"
+        f"QUY TẮC:\n"
+        f"- Tiêu đề PHẢI dựa trên nội dung phiên âm, KHÔNG bịa thêm thông tin\n"
+        f"- Dùng | để chia tiêu đề thành 2 phần màu. Phần sau | là chi tiết gây tò mò/sốc nhất\n"
+        f"- Viết IN HOA toàn bộ\n"
+        f"- Ngắn gọn, súc tích, dễ đọc trên thumbnail\n"
+        f"- Ví dụ tốt: 'MUỖI BẮC CỰC|CÓ THỂ HÚT CẠN MÁU SÓI CON'\n"
+        f"- Ví dụ tốt: 'CÁ MẬP TRẮNG|SĂN HẢI CẨU GIỮA KHÔNG TRUNG'\n"
+        f"- Ví dụ xấu (quá chung chung): 'THIÊN NHIÊN KỲ THÚ|KHÁM PHÁ THẾ GIỚI'\n\n"
+        f"Chỉ trả về tiêu đề, không giải thích.\n\n"
         f"Tiêu đề:"
     )
 
@@ -1863,7 +1967,7 @@ def generate_frame_title(
         payload = json.dumps({
             "model": model,
             "messages": [
-                {"role": "system", "content": f"You create short, catchy video titles in {target_lang_name}. Use | to mark the emphasis part."},
+                {"role": "system", "content": f"You are a video title expert. Read the transcript carefully and create a short, impactful title in {target_lang_name} that captures the MOST INTERESTING or SURPRISING fact from the content. Use | to split the title into 2 color parts. The part after | should be the most curiosity-provoking detail. Write in ALL CAPS."},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.7,

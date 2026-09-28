@@ -562,7 +562,7 @@ def ai_plan():
     if not sources:
         return jsonify({"ok": False, "error": "Chưa có nội dung nguồn"}), 400
 
-    model = (data.get("model") or "gemini-3.7-flash").strip()
+    model = (data.get("model") or "gemini-3.8-flash-high").strip()
     tone = data.get("tone") or "Hấp dẫn, viral, kích thích tương tác"
     default_hashtags = data.get("default_hashtags") or ""
     start = data.get("start_at") or (datetime.now() + timedelta(hours=2)).replace(minute=0, second=0).isoformat()
@@ -731,7 +731,7 @@ Chỉ trả về cú pháp JSON array hợp lệ, không kèm văn bản giải 
 
     try:
         from core.direct_ai_provider import dispatch_chat_completion
-        model = "gemini-3.7-flash"
+        model = "gemini-3.8-flash-high"
         result = dispatch_chat_completion(model, [{"role": "user", "content": prompt}], temperature=0.6, max_tokens=3000, timeout=60)
         text = (((result.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
         text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.I | re.M).strip()

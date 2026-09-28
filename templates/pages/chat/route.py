@@ -1595,7 +1595,7 @@ def chatbot_chat():
     antigravity_conn = _get_active_provider_connection("antigravity")
     if antigravity_conn:
         try:
-            fb_model = m_name if any(k in m_name.lower() for k in ("gemini", "claude", "flash", "antigravity", "gpt-oss")) else "gemini-3.7-flash"
+            fb_model = m_name if any(k in m_name.lower() for k in ("gemini", "claude", "flash", "antigravity", "gpt-oss")) else "gemini-3.8-flash-high"
             LOGGER.info("chatbot_chat: using direct Antigravity connection (%s)", fb_model)
             reply_text = _chat_with_antigravity(antigravity_conn, fb_model, data.get("messages") or [])
             return jsonify({
@@ -1652,7 +1652,7 @@ def chatbot_chat_stream():
         antigravity_conn = _get_active_provider_connection("antigravity")
         if antigravity_conn:
             try:
-                resolved_model = m_name if any(k in m_name.lower() for k in ("gemini", "claude", "flash", "antigravity", "gpt-oss")) else "gemini-3.7-flash"
+                resolved_model = m_name if any(k in m_name.lower() for k in ("gemini", "claude", "flash", "antigravity", "gpt-oss")) else "gemini-3.8-flash-high"
                 reply_text = _chat_with_antigravity(antigravity_conn, resolved_model, data.get("messages") or [])
             except Exception as exc2:
                 LOGGER.warning("chatbot_chat_stream Antigravity fallback failed: %s", exc2)

@@ -9,6 +9,8 @@ const elements = {
   'frame-title-enabled': {checked: false},
   'frame-logo-path': {value: 'logo.png', dataset: {serverPath: '/test/logo.png'}},
   'frame-logo-size': {value: '0'},
+  'frame-logo-start': {value: '1.5'},
+  'frame-logo-end': {value: '8.5'},
   'proc-preview-aspect': {value: '16x9'},
 };
 const sandbox = {
@@ -26,6 +28,8 @@ assert.equal(config.bg_volume, 0);
 assert.equal(config.keep_bg_music, false);
 assert.equal(config.frame_title_enabled, false);
 assert.equal(config.frame_logo_size_pct, 0);
+assert.equal(config.frame_logo_start_sec, 1.5);
+assert.equal(config.frame_logo_end_sec, 8.5);
 assert.equal(config.frame_logo_path, '/test/logo.png');
 assert.equal(config.target_aspect, '16x9');
 assert.equal(config.ext_audios[0].vol, .25);

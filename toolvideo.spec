@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+import os
 import sys
 
 from PyInstaller.utils.hooks import (
@@ -11,6 +12,7 @@ from PyInstaller.utils.hooks import (
 
 
 project_root = Path(SPECPATH)
+app_name = "DuyTrisCustomer" if os.environ.get("DUYTRIS_BUILD_EDITION") == "customer" else "DuyTrisDownloader"
 
 datas = [
     (str(project_root / "templates"), "templates"),
@@ -163,6 +165,11 @@ a = Analysis(
     optimize=0,
 )
 
+# Qt6Core links against the Windows ICU shim in System32. PyInstaller can pick
+# up Poppler's incompatible icuuc.dll from the build host's PATH; bundling it
+# beside the EXE makes importing PySide6.QtCore fail with WinError 127.
+a.binaries = [entry for entry in a.binaries if entry[0].lower() != "icuuc.dll"]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -170,7 +177,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="DuyTrisDownloader",
+    name=app_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -192,5 +199,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="DuyTrisDownloader",
+    name=app_name,
 )

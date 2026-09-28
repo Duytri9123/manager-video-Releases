@@ -388,7 +388,7 @@ def antigravity_generate_content(
     if not project_id:
         raise ProviderError("Tài khoản Google chưa có Cloud Code Assist project")
 
-    clean_model = str(model or "gemini-3.7-flash").split("/", 1)[-1]
+    clean_model = str(model or "gemini-3.8-flash-high").split("/", 1)[-1]
     clean_model = ANTIGRAVITY_MODEL_ALIASES.get(clean_model, clean_model)
     request_payload = dict(request_body or {})
     request_payload.setdefault("sessionId", str(uuid.uuid4().int)[:19])
@@ -856,4 +856,3 @@ def dispatch_chat_completion(
     if last_error:
         raise last_error
     raise ProviderError(f"Không thực hiện được cuộc gọi tới {resolved_provider}")
-

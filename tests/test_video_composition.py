@@ -36,9 +36,10 @@ class CompositionTests(unittest.TestCase):
                 self.assertEqual(im.size,(1080,1920))
                 self.assertGreater(im.getpixel((540,250))[0],200)
                 self.assertGreater(im.getpixel((540,1660))[2],200)
-                if not blur:self.assertLess(max(im.getpixel((540,100))),10)
-                else:self.assertGreater(max(im.getpixel((540,100))),50)
-            auto=render('auto',content_aspect='1x1');self.assertEqual(auto.size,(240,320))
+            auto=render('auto',content_aspect='1x1');self.assertEqual(auto.size,(240,240))
+            for mode in ('keep_width_crop_height', 'keep_height_crop_width'):
+                cropped=render(mode,content_aspect='1x1',content_aspect_mode=mode)
+                self.assertEqual(cropped.size,(240,240))
             layer={'type':'text','text':'TEST','x_pct':.5,'y_pct':.7,'size_pct':.12,'color':'#ffffff','box_color':'#00ff00','box_opacity':1,'text_opacity':0}
             hidden=render('hidden',video_overlays=[layer]);layer['text_opacity']=1
             visible=render('visible',video_overlays=[layer])

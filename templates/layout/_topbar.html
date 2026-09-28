@@ -30,6 +30,7 @@
   </span>
 
   <!-- ═══ LICENSE INFO TOOLTIP ═══ -->
+  {% if not customer_edition %}
   <div id="license-tooltip-wrap" class="relative">
     <button onclick="toggleLicenseTooltip()" id="btn-license-info"
       class="p-1 px-2.5 rounded-full text-[12px] font-bold flex items-center gap-1.5 border-[1.5px] cursor-pointer transition-all
@@ -144,6 +145,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
   <!-- Dark mode toggle -->
   <button onclick="toggleTheme()" id="btn-theme"

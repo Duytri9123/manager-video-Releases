@@ -90,11 +90,6 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     data = dict(data)
     if _as_bool(data.get("frame_title_auto", False), False):
         data["frame_title"] = ""
-    if _as_bool(data.get("frame_title_enabled", True), True) and not str(data.get("frame_title") or "").strip():
-        analysis = data.get("ai_video_analysis") or {}
-        suggestions = analysis.get("title_suggestions") or {} if isinstance(analysis, dict) else {}
-        data["frame_title"] = next((str(suggestions[k]) for k in ("short", "tiktok", "youtube", "facebook") if suggestions.get(k)), "")
-
     video_path = Path(data.get("video_path", "")).expanduser()
     yield send(log=f"Khởi tạo tiến trình xử lý: {video_path.name}...", level="info")
     
@@ -122,9 +117,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _target_aspect = str(data.get("target_aspect") or "auto").lower()
     _pad_blur = _as_bool(data.get("aspect_pad_blur", False), False)
     _source_is_vertical = _vh > _vw
-    _aspect_should_convert = _parse_content_aspect(data.get("content_aspect")) is not None or _target_aspect in ("9x16", "16x9") and (
-        (_target_aspect == "9x16" and not _source_is_vertical)
-        or (_target_aspect == "16x9" and _source_is_vertical)
+    _content_ratio_requested = _parse_content_aspect(data.get("content_aspect"))
+    _requested_ratio = (9 / 16) if _target_aspect == "9x16" else (16 / 9)
+    _target_size = (1080, 1920) if _target_aspect == "9x16" else (1920, 1080)
+    _force_pixel_size = str(data.get("content_aspect_mode") or "crop") in ("stretch", "original_crop")
+    _aspect_should_convert = _content_ratio_requested is not None or (
+        _target_aspect in ("9x16", "16x9")
+        and (abs(_vw / _vh - _requested_ratio) > 0.01
+             or (_force_pixel_size and (_vw, _vh) != _target_size))
     )
 
     # Output dir logic:
@@ -473,9 +473,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             return
 
 
-    # Generate titles independently of subtitle translation, including edit-only jobs.
+    # For translated subtitles, generate the title from the translated text in step 3.
+    # Generate early only for jobs that do not run subtitle translation.
     if (_as_bool(data.get("frame_enabled", False), False)
             and _as_bool(data.get("frame_title_enabled", True), True)
+            and (skip_trans or not do_translate)
             and not str(data.get("frame_title") or "").strip()):
         try:
             data["frame_title"] = generate_frame_title(
@@ -606,6 +608,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                     video_title=stem_source,
                                     target_lang=target_language,
                                 )
+                                if target_language != "zh" and any("\u4e00" <= ch <= "\u9fff" for ch in _frame_title):
+                                    translated_titles, _ = translator.translate(
+                                        [_frame_title], provider, context=stem_source,
+                                        target_lang=target_language,
+                                    )
+                                    if translated_titles and translated_titles[0].strip():
+                                        _frame_title = translated_titles[0].strip()
                                 data["frame_title"] = _frame_title
                                 yield send(frame_title=_frame_title)
                                 yield send(log=f"[Bước 3/5] Tiêu đề AI: \"{_frame_title}\"", level="success")
@@ -870,7 +879,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                               "visual_config": {key: data.get(key) for key in (
                                   "content_aspect", "content_aspect_mode", "target_aspect", "aspect_pad_blur", "mask_config",
                                   "blur_original", "blur_zone", "blur_height_pct", "blur_width_pct",
-                                  "blur_x_pct", "blur_y_pct", "blur_extra_zones", "video_overlays")}}
+                                  "blur_x_pct", "blur_y_pct", "blur_extra_zones", "video_overlays",
+                                  "frame_logo_start_sec", "frame_logo_end_sec")}}
     _blur_zone_val = str(data.get("blur_zone", "bottom"))
 
     _blur_y_raw = data.get("blur_y_pct")
@@ -1300,6 +1310,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             blur_x_pct=_blur_x_pct,
             blur_extra_zones=_blur_extra_zones,
             video_overlays=_video_overlays,
+            logo_start_sec=data.get("frame_logo_start_sec"),
+            logo_end_sec=data.get("frame_logo_end_sec"),
             target_aspect=_target_aspect,
             aspect_pad_blur=_pad_blur,
             content_aspect=data.get("content_aspect", "auto"),
@@ -1359,11 +1371,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             _src_w, _src_h = 1280, 720
 
         src_is_vertical = _src_h > _src_w
-        target_w, target_h = (1080, 1920) if _target_aspect == "9x16" else (1920, 1080)
-        should_convert = (
-            (_target_aspect == "9x16" and not src_is_vertical)
-            or (_target_aspect == "16x9" and src_is_vertical)
-        )
+        target_w, target_h = _target_size
+        _inner_ratio = _parse_content_aspect(data.get("content_aspect"))
+        should_convert = (bool(_inner_ratio)
+                          or abs(_src_w / _src_h - target_w / target_h) > 0.01
+                          or (_force_pixel_size and (_src_w, _src_h) != (target_w, target_h)))
 
         if not should_convert:
             mode_label = "doc" if _target_aspect == "9x16" else "ngang"
@@ -1374,6 +1386,23 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             )
         else:
             aspect_video = out_dir / f"{stem}_subbed_{_target_aspect}.mp4"
+            _inner_w, _inner_h = target_w, target_h
+            if _inner_ratio:
+                _inner_w = max(2, int(min(target_w, target_h * _inner_ratio) // 2 * 2))
+                _inner_h = max(2, int(min(target_h, target_w / _inner_ratio) // 2 * 2))
+            _fit_mode = str(data.get("content_aspect_mode") or "crop")
+            if _fit_mode == "pad":
+                _fg_filter = f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=decrease"
+            elif _fit_mode == "stretch":
+                _fg_filter = f"scale={_inner_w}:{_inner_h}"
+            elif _fit_mode == "original_crop":
+                _fg_filter = f"crop=w='min(iw\\,{_inner_w})':h='min(ih\\,{_inner_h})'"
+            elif _fit_mode == "keep_width_crop_height":
+                _fg_filter = f"scale={_inner_w}:-2,crop={_inner_w}:min(ih\\,{_inner_h})"
+            elif _fit_mode == "keep_height_crop_width":
+                _fg_filter = f"scale=-2:{_inner_h},crop=min(iw\\,{_inner_w}):{_inner_h}"
+            else:
+                _fg_filter = f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=increase,crop={_inner_w}:{_inner_h}"
             yield send(
                 log=f"[Aspect] Chuyen huong video: {_src_w}x{_src_h} -> {target_w}x{target_h} ({_target_aspect})",
                 level="info",
@@ -1395,7 +1424,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     f"crop={blur_w}:{blur_h},gblur=sigma=23,"
                     f"colorchannelmixer=rr=0.7:gg=0.7:bb=0.7,"
                     f"scale={target_w}:{target_h}:flags=bicubic[bgb];"
-                    f"[fg]scale={target_w}:{target_h}:force_original_aspect_ratio=decrease[fgs];"
+                    f"[fg]{_fg_filter}[fgs];"
                     f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1[vout]"
                 )
                 ok_a, err_a = run_ffmpeg([
@@ -1408,7 +1437,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 ], timeout=600)
             else:
                 vf = (
-                    f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
+                    f"{_fg_filter},"
                     f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
                 )
                 ok_a, err_a = run_ffmpeg([

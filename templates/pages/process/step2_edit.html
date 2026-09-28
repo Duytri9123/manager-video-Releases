@@ -16,6 +16,36 @@
     #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard {min-height:48px;padding:8px 3px;}
     #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard-ic {display:none;}
     #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard-lbl {font-size:11px;line-height:1.35;}
+    #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-subs-divider {border-top:0;padding-top:0;margin-top:20px;}
+    #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-grp:not(:has(label)),
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-grp {
+      position:relative;padding:8px 10px;border-left:3px solid var(--accent,#6366f1);
+      border-radius:0 6px 6px 0;background:rgba(99,102,241,.09);
+      color:var(--accent,#4f46e5);font-size:12px;font-weight:750;line-height:1.35;
+      margin-top:20px;margin-bottom:10px;
+    }
+    #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-grp:not(:has(label)):not(:first-child)::before,
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-grp:not(:first-child)::before {
+      content:"";position:absolute;left:0;right:0;top:-11px;height:1px;background:var(--border,#e2e8f0);
+    }
+    #pe2-panel .pe2-subs-details {border:0;border-top:1px solid var(--border);border-radius:0;margin-top:20px;padding:10px 0 0;background:transparent;}
+    #pe2-panel .pe2-subs-details[open] {padding-bottom:4px;}
+    #pe2-panel .pe2-subs-details summary {font-size:12px;font-weight:750;color:var(--accent,#4f46e5);cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;min-height:36px;padding:5px 9px;background:rgba(99,102,241,.09);border-left:3px solid var(--accent,#6366f1);border-radius:0 6px 6px 0;}
+    #pe2-panel .pe2-subs-details summary::-webkit-details-marker {display:none;}
+    #pe2-panel .pe2-subs-details summary:focus-visible {outline:2px solid var(--accent,#6366f1);outline-offset:2px;}
+    #pe2-panel .pe2-subs-details summary svg {width:16px;height:16px;flex:none;color:var(--accent,#6366f1);}
+    #pe2-panel .pe2-subs-details summary .pe2-details-caret {margin-left:auto;color:var(--text-muted);transition:transform .15s ease;}
+    #pe2-panel .pe2-subs-details[open] summary .pe2-details-caret {transform:rotate(180deg);}
+    #pe2-panel .pe2-collapsible-section {border:0;border-top:1px solid var(--border,#e2e8f0);margin-top:10px;padding-top:10px;}
+    #pe2-panel #frame-controls>.pe2-collapsible-section:first-of-type {border-top:0;margin-top:0;padding-top:0;}
+    #pe2-panel .pe2-collapsible-section>summary.pe2-grp {display:flex;align-items:center;gap:8px;min-height:34px;margin:0 0 9px!important;cursor:pointer;list-style:none;user-select:none;}
+    #pe2-panel .pe2-collapsible-section>summary::-webkit-details-marker {display:none;}
+    #pe2-panel .pe2-collapsible-section>summary:focus-visible {outline:2px solid var(--accent,#6366f1);outline-offset:2px;}
+    #pe2-panel .pe2-collapsible-section .pe2-details-caret {width:16px;height:16px;flex:none;margin-left:auto;color:var(--accent,#6366f1);transition:transform .15s ease;}
+    #pe2-panel .pe2-collapsible-section[open] .pe2-details-caret {transform:rotate(180deg);}
+    #pe2-panel .pe2-section-body {padding:1px 0 5px;}
+    #pe2-panel .pe2-section-body>.toggle-wrap {display:inline-flex;margin:2px 0 10px!important;}
+    #pe2-panel .pe2-subs-details > .pe2-export-row,#pe2-panel .pe2-subs-details > .pe2-setting-field,#pe2-panel .pe2-subs-details > .pe2-sample-card {margin-top:10px;}
     #pe2-panel .pe2-optcard:focus-within {outline:2px solid var(--accent);outline-offset:2px;}
     #pe2-panel .pe2-pane .pe2-grp:first-child {margin-top:0;}
     #pe2-tl-track {height:220px;}
@@ -23,7 +53,23 @@
     #pe2-tl-empty {height:66px;bottom:auto;}
     #pe2-tl-ranges {top:84px;bottom:0;overflow-y:auto;overflow-x:hidden;pointer-events:auto;border-top:1px solid var(--border);background:var(--bg3,#f3f4f6);}
     #pe2-tl-ranges .pe2-tl-range {box-sizing:border-box;overflow:hidden;}
+    #pe2-tl-ranges .pe2-tl-range.pe2-range-editable {cursor:grab;touch-action:none;overflow:visible;}
+    #pe2-tl-ranges .pe2-range-handle {position:absolute;top:-3px;bottom:-3px;width:9px;background:var(--accent,#6366f1);border:1px solid #fff;border-radius:3px;cursor:ew-resize;touch-action:none;z-index:2;}
+    #pe2-tl-ranges .pe2-range-handle[data-edge="start"] {left:2px;}
+    #pe2-tl-ranges .pe2-range-handle[data-edge="end"] {right:2px;left:auto;}
+    #pe2-tl-ranges .pe2-tl-range {display:flex;align-items:center;min-width:0;}
+    #pe2-tl-ranges .pe2-tl-range>span:not(.pe2-range-handle) {position:relative;top:auto;left:auto;display:inline-flex;align-items:center;gap:4px;max-width:calc(100% - 22px);margin:0 11px;padding:2px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:1.3;color:var(--text,#1f2937);background:rgba(255,255,255,.88);border-radius:4px;pointer-events:none;}
+    #pe2-tl-ranges .pe2-tl-range>span svg {width:11px;height:11px;flex:none;}
+    #pe2-tl-ranges .pe2-range-handle {width:7px;top:3px;bottom:3px;background:var(--accent,#6366f1);border-radius:4px;}
     #pe2-panel .pe2-frame-grid {gap:12px;}
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-grp:not(:first-child) {border-top:0;}
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-grp:first-child {margin-top:0;}
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-frame-grid .field {display:flex;flex-direction:column;align-items:stretch;gap:5px;margin:0;}
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-frame-grid .field>label {font-size:11px;font-weight:600;color:var(--text-muted);}
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-frame-grid input[type=number],#pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-frame-grid select {width:100%;flex:none;}
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-frame-grid input[type=color] {flex:0 0 36px;}
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-frame-grid input[type=text] {min-width:0;}
+    #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-title-colors {grid-template-columns:1fr;}
     #pe2-panel .pe2-pane .field {min-width:0;}
     #pe2-panel .pe2-pane .field input:not([type="checkbox"]):not([type="radio"]),
     #pe2-panel .pe2-pane .field select {min-width:0;max-width:100%;box-sizing:border-box;}
@@ -33,8 +79,9 @@
 #pe2-panel .ov-layer-body .field input,#pe2-panel .ov-layer-body .field select {max-width:100%;min-width:0;box-sizing:border-box;flex:none!important;}
 #pe2-panel .ov-layer-body .field > div input[type=text] {width:0!important;flex:1 1 0%!important;}
 #pe2-panel .ov-layer-body input[type=range] {width:100%;margin:0;box-sizing:border-box;}
-#pe2-panel .ov-layer-head {flex-wrap:wrap;gap:8px;box-sizing:border-box;}
-#pe2-panel .ov-layer-actions {margin-left:0;flex:0 0 100%;justify-content:flex-end;}
+#pe2-panel .ov-layer-head {gap:8px;box-sizing:border-box;}
+#pe2-panel .ov-layer-actions {margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;}
+#pe2-panel .ov-layer-action-row {display:flex;align-items:center;justify-content:flex-end;gap:5px;min-height:24px;}
 
     #pe2-panel .pe2-setting-field {display:flex;flex-direction:column;gap:7px;min-width:0;margin:12px 0;}
     #pe2-panel .pe2-setting-field label {font-size:11px;font-weight:600;}
@@ -43,12 +90,12 @@
     #pe2-panel .pe2-setting-grid .pe2-setting-field {margin:4px 0 0;}
     #pe2-panel .pe2-sample-card {padding:12px;border:1px solid var(--border,#dce4f0);border-radius:10px;background:var(--bg2,#f8fafc);margin:12px 0;}
     #pe2-panel .pe2-sample-card strong,#pe2-panel .pe2-setting-row strong {font-size:12px;font-weight:600;}
-    #pe2-panel .pe2-pane[data-pe2pane="overlay"]:not(:has(#proc-mask-mode option[value="patch"]:checked)) #proc-mask-source {display:none;}
+    #pe2-panel .pe2-pane[data-pe2pane="subs"]:not(:has(#proc-mask-mode option[value="patch"]:checked)) #proc-mask-source {display:none;}
     #pe2-panel .pe2-setting-note {font-size:11px;line-height:1.6;color:var(--text-muted,#708099);margin:7px 0 10px;}
     #pe2-panel .pe2-setting-row {display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border,#dce4f0);border-radius:10px;padding:12px;margin:16px 0 10px;}
     #pe2-panel .pe2-setting-row small {display:block;font-size:11px;line-height:1.5;color:var(--text-muted,#708099);margin-top:4px;}
     #pe2-panel .pe2-setting-row .pe2-switch {flex-shrink:0;}
-    #pe2-panel [data-pe2pane="ratio"] .pe2-aspect-grid {margin-bottom:18px;}
+    #pe2-panel [data-pe2pane="subs"] .pe2-aspect-grid {margin-bottom:18px;}
   </style>
 
 
@@ -169,6 +216,7 @@
             <!-- ══ PANE: Phụ đề & Dịch ══ -->
             <div class="pe2-pane active" data-pe2pane="subs">
 
+              <details class="pe2-subs-details"><summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="13" height="14" rx="2"/><path d="m8 11 4 3-4 3zM17 3h4v4M14 10l7-7"/></svg><span>Xuất video</span><svg class="pe2-details-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
               <div class="pe2-export-row">
               <div>
               <div class="pe2-grp"><label for="proc-encode-device">Bộ mã hóa</label></div>
@@ -191,6 +239,33 @@
               </div>
               </div>
 
+              </details>
+
+              <!-- Chế độ video: lưới tỉ lệ -->
+              <div class="pe2-grp pe2-subs-divider">Tỷ lệ khung hình</div>
+              <select id="proc-preview-aspect"
+                onchange="_onPreviewAspectChange();if(window._syncAspectBtns)_syncAspectBtns()" style="display:none">
+                <option value="auto" selected>Tự nhận diện</option>
+                <option value="16x9">16:9 (ngang)</option>
+                <option value="9x16">9:16 (dọc)</option>
+              </select>
+              <div class="pe2-aspect-grid">
+                <button type="button" class="pe2-aspect-btn active" data-pe2aspect="auto"
+                  onclick="pe2SetAspect('auto')">
+                  <span class="box" style="width:22px;height:16px"></span>
+                  <span>Tự động</span>
+                </button>
+                <button type="button" class="pe2-aspect-btn" data-pe2aspect="16x9" onclick="pe2SetAspect('16x9')">
+                  <span class="box" style="width:26px;height:15px"></span>
+                  <span>16:9</span>
+                </button>
+                <button type="button" class="pe2-aspect-btn" data-pe2aspect="9x16" onclick="pe2SetAspect('9x16')">
+                  <span class="box" style="width:13px;height:22px"></span>
+                  <span>9:16</span>
+                </button>
+              </div>
+
+              <div class="pe2-grp pe2-subs-divider">Phụ đề</div>
               <div class="pe2-grp"><label for="sub-preview-sample">Chữ xem trước</label></div>
               <input type="text" id="sub-preview-sample" value="Phụ đề mẫu tiếng Việt"
                 style="width:100%;font-size:11px;height:32px;box-sizing:border-box" oninput="subPreviewUpdate()">
@@ -209,7 +284,7 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Dịch</span>
-                  <span class="pe2-optcard-badge">+</span>
+                  <span class="pe2-optcard-badge">✓</span>
                 </label>
                 <label class="pe2-optcard" title="Ghi phụ đề vào video">
                   <input type="checkbox" id="proc-burn-vi" checked onchange="subPreviewUpdate()">
@@ -220,7 +295,7 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Ghi sub</span>
-                  <span class="pe2-optcard-badge">+</span>
+                  <span class="pe2-optcard-badge">✓</span>
                 </label>
                 <label class="pe2-optcard" title="Che phụ đề gốc">
                   <input type="checkbox" id="proc-blur-original" checked onchange="subPreviewUpdate()">
@@ -231,7 +306,7 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Che gốc</span>
-                  <span class="pe2-optcard-badge">+</span>
+                  <span class="pe2-optcard-badge">✓</span>
                 </label>
 
                 <label class="pe2-optcard" title="Chỉ che vùng phụ đề gốc trong các khoảng thời gian có nội dung ASS/SRT; không dùng OCR">
@@ -244,18 +319,66 @@
                     </svg>
                   </span>
                   <span class="pe2-optcard-lbl">Che theo sub</span>
-                  <span class="pe2-optcard-badge">+</span>
+                  <span class="pe2-optcard-badge">✓</span>
                 </label>
                 <label class="pe2-optcard" title="Lấp vùng ngoài video bằng nền mờ; tắt để dùng nền đen">
                   <input type="checkbox" id="proc-aspect-blur-bg"
                     onchange="if(window._onPreviewAspectChange)_onPreviewAspectChange();subPreviewUpdate()">
                   <span class="pe2-optcard-lbl">Nền mờ</span>
-                  <span class="pe2-optcard-badge">+</span>
+                  <span class="pe2-optcard-badge">✓</span>
                 </label>
               </div>
 
 
-              <div class="pe2-grp">Kiểu chữ</div>
+              <details class="pe2-subs-details"><summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h10M7 15h6"/><path d="M4 20 20 4"/></svg><span>Che phụ đề gốc</span><svg class="pe2-details-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+              <div class="pe2-setting-field">
+                <label for="proc-mask-mode">Kiểu che</label>
+                <select id="proc-mask-mode" onchange="framePreviewUpdate()">
+                  <option value="blur">Làm mờ</option><option value="patch">Che bằng vùng chọn</option>
+                </select>
+              </div>
+              <div id="proc-mask-source" class="pe2-sample-card">
+                <strong>Vùng lấy mẫu</strong>
+                <p class="pe2-setting-note">Lấy ảnh từ vùng này để che.</p>
+                <div class="pe2-setting-grid">
+                  <div class="pe2-setting-field"><label for="proc-mask-source-x">Tâm X (%)</label>
+                    <input id="proc-mask-source-x" type="number" min="0" max="100" step="0.1" value="50" oninput="framePreviewUpdate()"></div>
+                  <div class="pe2-setting-field"><label for="proc-mask-source-y">Tâm Y (%)</label>
+                    <input id="proc-mask-source-y" type="number" min="0" max="100" step="0.1" value="75" oninput="framePreviewUpdate()"></div>
+                </div>
+              </div>
+              <div class="pe2-grp">Vị trí &amp; kích thước vùng che</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                <div class="field"><label>Che rộng (%)</label><input type="number" id="proc-blur-width" min="10"
+                    max="100" step="1" value="80" oninput="subPreviewUpdate()"></div>
+                <div class="field"><label>Che cao (%)</label><input type="number" id="proc-blur-height" min="3" max="45"
+                    step="1" value="15" oninput="subPreviewUpdate()"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                <div class="field"><label>Vị trí X (%)</label><input type="number" id="proc-blur-x" min="0" max="100"
+                    step="1" value="" placeholder="50" oninput="subPreviewUpdate()"
+                    title="Vị trí X vùng che (0=trái, 100=phải). Để trống = 50"></div>
+                <div class="field"><label>Vị trí Y (%)</label><input type="number" id="proc-blur-y" min="0" max="100"
+                    step="1" value="" placeholder="auto" oninput="subPreviewUpdate()"
+                    title="Vị trí Y vùng che (0=trên, 100=dưới). Để trống = tự theo phụ đề"></div>
+              </div>
+
+              <div class="pe2-grp" style="margin-top:10px">Vùng che bổ sung</div>
+              <div id="proc-blur-extra-list" style="margin-bottom:10px"></div>
+              <button type="button" class="btn btn-secondary btn-sm"
+                style="font-size:11px;padding:6px 12px;margin-bottom:14px;display:inline-flex;align-items:center;gap:4px"
+                onclick="procAddBlurZone()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>Thêm vùng che</span>
+              </button>
+
+              </details>
+
+              <div class="pe2-grp pe2-subs-divider">Kiểu chữ</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
                 <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="proc-font-size" min="1" max="20"
                     step="0.5" value="4" oninput="subPreviewUpdate()" onchange="subPreviewUpdate()"></div>
@@ -288,7 +411,7 @@
                     max="10" step="1" value="2" oninput="subPreviewUpdate()" onchange="subPreviewUpdate()"></div>
               </div>
 
-              <div class="pe2-grp">Âm thanh</div>
+              <div class="pe2-grp pe2-subs-divider">Âm thanh</div>
               <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg3)">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
                   <label for="proc-vol-orig-quick" style="font-size:11px;font-weight:600;color:var(--text2)">Âm thanh gốc</label>
@@ -345,6 +468,12 @@
                 </div>
               </div>
               <div id="proc-ai-video-status" class="pe2-ai-status">Chưa phân tích video.</div>
+              <div class="pe2-ai-box" style="margin-top:12px">
+                <h4>Rà soát dấu nguồn</h4>
+                <p class="pe2-setting-note">AI tìm logo, watermark, chữ và QR trong các khung hình mẫu để đề xuất vùng che.</p>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="procAnalyzeCopyrightCues()">AI đề xuất vùng xử lý</button>
+                <div id="proc-ai-copyright-result" class="pe2-setting-note" aria-live="polite"></div>
+              </div>
               <div id="proc-ai-video-result" class="pe2-ai-result" style="margin-top:10px"></div>
             </div>
 
@@ -399,7 +528,7 @@
 
                 <!-- COLOR: Màu sắc tiêu đề -->
                 <div class="pe2-grp">Màu tiêu đề</div>
-                <div class="pe2-frame-grid" style="margin-bottom:8px">
+                <div class="pe2-frame-grid pe2-title-colors" style="margin-bottom:8px">
                   <div class="field">
                     <label>Màu 1</label>
                     <div style="display:flex;gap:4px;height:36px;align-items:center">
@@ -484,41 +613,20 @@
                       type="range" id="frame-logo-radius" min="0" max="50" step="1" value="50" style="width:100%"
                       oninput="document.getElementById('frame-logo-radius-val').textContent=this.value;framePreviewUpdate()">
                   </div>
+                  <div class="field"><label>Từ (s)</label><input type="number" id="frame-logo-start" min="0" step="0.1" placeholder="Đầu video" oninput="framePreviewUpdate();if(window.pe2RenderRanges)pe2RenderRanges()"></div>
+                  <div class="field"><label>Đến (s)</label><input type="number" id="frame-logo-end" min="0" step="0.1" placeholder="Cuối video" oninput="framePreviewUpdate();if(window.pe2RenderRanges)pe2RenderRanges()"></div>
                 </div>
               </div>
             </div>
 
             <!-- ══ PANE: Chữ / Khối ══ -->
             <div class="pe2-pane" data-pe2pane="ratio">
-              <!-- Chế độ video: lưới tỉ lệ -->
-              <div class="pe2-grp">Tỷ lệ khung hình</div>
-              <select id="proc-preview-aspect"
-                onchange="_onPreviewAspectChange();if(window._syncAspectBtns)_syncAspectBtns()" style="display:none">
-                <option value="auto" selected>Tự nhận diện</option>
-                <option value="16x9">16:9 (ngang)</option>
-                <option value="9x16">9:16 (dọc)</option>
-              </select>
-              <div class="pe2-aspect-grid">
-                <button type="button" class="pe2-aspect-btn active" data-pe2aspect="auto"
-                  onclick="pe2SetAspect('auto')">
-                  <span class="box" style="width:22px;height:16px"></span>
-                  <span>Tự động</span>
-                </button>
-                <button type="button" class="pe2-aspect-btn" data-pe2aspect="16x9" onclick="pe2SetAspect('16x9')">
-                  <span class="box" style="width:26px;height:15px"></span>
-                  <span>16:9</span>
-                </button>
-                <button type="button" class="pe2-aspect-btn" data-pe2aspect="9x16" onclick="pe2SetAspect('9x16')">
-                  <span class="box" style="width:13px;height:22px"></span>
-                  <span>9:16</span>
-                </button>
-              </div>
-
+              <div class="pe2-grp">Tỷ lệ video nâng cao</div>
               <div class="pe2-setting-field">
                 <label for="proc-content-aspect">Tỉ lệ video bên trong</label>
                 <input id="proc-content-aspect" type="text" value="" placeholder="Ví dụ: 3:4, 4:5, 2.35:1"
                   aria-describedby="proc-content-aspect-help proc-content-aspect-error" oninput="procContentAspectInput(this)">
-                <small id="proc-content-aspect-help" class="pe2-setting-note">Nhập rộng:cao. Để trống để giữ tỉ lệ gốc.</small>
+                <small id="proc-content-aspect-help" class="pe2-setting-note">Tỉ lệ này điều chỉnh video bên trong khung 16:9 hoặc 9:16. Với Tự động, khung xuất sẽ theo tỉ lệ đã nhập.</small>
                 <small id="proc-content-aspect-error" hidden style="color:#dc2626">Nhập hai số lớn hơn 0, ví dụ 3:4.</small>
               </div>
               <div class="pe2-setting-field" style="margin-top:8px">
@@ -526,59 +634,15 @@
                 <select id="proc-content-aspect-mode" onchange="framePreviewUpdate()">
                   <option value="crop">Cắt giữa (Fill & Crop)</option>
                   <option value="pad">Giữ toàn bộ (Fit & Pad)</option>
+                  <option value="stretch">Kéo giãn (Stretch)</option>
+                  <option value="original_crop">Chỉ cắt (Không thay đổi kích thước)</option>
+                  <option value="keep_width_crop_height">Giữ chiều ngang, cắt chiều dọc</option>
+                  <option value="keep_height_crop_width">Giữ chiều dọc, cắt chiều ngang</option>
                 </select>
               </div>
-              <p class="pe2-setting-note">"Cắt giữa" kéo giãn hình ảnh lấp đầy rồi cắt phần thừa. "Giữ toàn bộ" sẽ tạo viền hoặc nền mờ ở chỗ bị thiếu, giữ nguyên chiều rộng/cao nguyên bản.</p>
+              <p class="pe2-setting-note">Giữ chiều ngang/dọc: cố định cạnh đó khi thu phóng, rồi cắt cạnh còn lại nếu vượt khung.</p>
             </div>
 <div class="pe2-pane" data-pe2pane="overlay">
-              <div class="pe2-grp" style="margin-top:0">Che phụ đề gốc</div>
-              <div class="pe2-setting-field">
-                <label for="proc-mask-mode">Kiểu che</label>
-                <select id="proc-mask-mode" onchange="framePreviewUpdate()">
-                  <option value="blur">Làm mờ</option><option value="patch">Che bằng vùng chọn</option>
-                </select>
-              </div>
-              <div id="proc-mask-source" class="pe2-sample-card">
-                <strong>Vùng lấy mẫu</strong>
-                <p class="pe2-setting-note">Chọn tâm vùng ảnh dùng để che. Kích thước bằng vùng che bên dưới.</p>
-                <div class="pe2-setting-grid">
-                  <div class="pe2-setting-field"><label for="proc-mask-source-x">Tâm X (%)</label>
-                    <input id="proc-mask-source-x" type="number" min="0" max="100" step="0.1" value="50" oninput="framePreviewUpdate()"></div>
-                  <div class="pe2-setting-field"><label for="proc-mask-source-y">Tâm Y (%)</label>
-                    <input id="proc-mask-source-y" type="number" min="0" max="100" step="0.1" value="75" oninput="framePreviewUpdate()"></div>
-                </div>
-              </div>
-              <div class="pe2-grp">Vị trí &amp; kích thước vùng che</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-                <div class="field"><label>Che rộng (%)</label><input type="number" id="proc-blur-width" min="10"
-                    max="100" step="1" value="80" oninput="subPreviewUpdate()"></div>
-                <div class="field"><label>Che cao (%)</label><input type="number" id="proc-blur-height" min="3" max="45"
-                    step="1" value="15" oninput="subPreviewUpdate()"></div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-                <div class="field"><label>Vị trí X (%)</label><input type="number" id="proc-blur-x" min="0" max="100"
-                    step="1" value="" placeholder="50" oninput="subPreviewUpdate()"
-                    title="Vị trí X vùng che (0=trái, 100=phải). Để trống = 50"></div>
-                <div class="field"><label>Vị trí Y (%)</label><input type="number" id="proc-blur-y" min="0" max="100"
-                    step="1" value="" placeholder="auto" oninput="subPreviewUpdate()"
-                    title="Vị trí Y vùng che (0=trên, 100=dưới). Để trống = tự theo phụ đề"></div>
-              </div>
-
-              <div class="pe2-grp" style="margin-top:10px">Vùng che bổ sung</div>
-              <div id="proc-blur-extra-list" style="margin-bottom:10px"></div>
-              <button type="button" class="btn btn-secondary btn-sm"
-                style="font-size:11px;padding:6px 12px;margin-bottom:14px;display:inline-flex;align-items:center;gap:4px"
-                onclick="procAddBlurZone()">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>Thêm vùng che</span>
-              </button>
-
-              <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
-
               <div class="flex-between" style="margin-bottom:8px;gap:8px">
                 <div class="pe2-grp" style="margin:0">Chữ &amp; khối</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -703,13 +767,12 @@
               <line x1="16" y1="16" x2="16" y2="16" />
             </svg>
           </button>
-          <button type="button" class="pe2-vtab" data-pe2tab="ratio" onclick="pe2Tool('ratio')" title="Tỉ lệ video"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="2" width="18" height="20" rx="2"/><rect x="6" y="6" width="12" height="12"/></svg></button><button type="button" class="pe2-vtab" data-pe2tab="frame" onclick="pe2Tool('frame')"
-            title="Khung hình & Tỉ lệ">
+          <button type="button" class="pe2-vtab" data-pe2tab="ratio" onclick="pe2Tool('ratio')" title="Tỉ lệ video" aria-label="Tỉ lệ video"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M8 9h8M8 15h8"/></svg></button><button type="button" class="pe2-vtab" data-pe2tab="frame" onclick="pe2Tool('frame')"
+            title="Khung video & mẫu khung" aria-label="Khung video & mẫu khung">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="3" y1="9" x2="21" y2="9" />
-              <line x1="3" y1="15" x2="21" y2="15" />
+              <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" />
+              <rect x="7" y="7" width="10" height="10" rx="1" /><path d="M9 10h6M9 13h4" />
             </svg>
           </button>
           <button type="button" class="pe2-vtab" data-pe2tab="overlay" onclick="pe2Tool('overlay')"
@@ -892,6 +955,51 @@
       return false;
     };
     (function () {
+      function makeCollapsibleSections(root, paneName) {
+        if (!root) return;
+        const isSectionHeading = el => el?.nodeType === 1 && el.classList.contains('pe2-grp')
+          && (paneName === 'frame' || !el.querySelector('label'));
+        const headings = Array.from(root.children).filter(isSectionHeading);
+        headings.forEach((heading, index) => {
+          const details = document.createElement('details');
+          details.className = 'pe2-collapsible-section';
+          const key = 'pe2_section_' + paneName + '_' + index;
+          try { details.open = localStorage.getItem(key) !== '0'; } catch (_) { details.open = true; }
+          details.addEventListener('toggle', () => {
+            try { localStorage.setItem(key, details.open ? '1' : '0'); } catch (_) {}
+          });
+
+          const summary = document.createElement('summary');
+          summary.className = heading.className;
+          const body = document.createElement('div');
+          body.className = 'pe2-section-body';
+          const titleToggle = paneName === 'frame' ? heading.querySelector('label.toggle-wrap') : null;
+          if (titleToggle) body.appendChild(titleToggle);
+          while (heading.firstChild) summary.appendChild(heading.firstChild);
+          const caret = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          caret.setAttribute('class', 'pe2-details-caret');
+          caret.setAttribute('viewBox', '0 0 24 24');
+          caret.setAttribute('fill', 'none');
+          caret.setAttribute('stroke', 'currentColor');
+          caret.setAttribute('stroke-width', '2');
+          caret.setAttribute('stroke-linecap', 'round');
+          caret.setAttribute('aria-hidden', 'true');
+          caret.innerHTML = '<path d="m6 9 6 6 6-6"/>';
+          summary.appendChild(caret);
+          heading.replaceWith(details);
+          details.append(summary, body);
+          let next = details.nextSibling;
+          while (next && !isSectionHeading(next)
+            && !(paneName === 'subs' && next.nodeType === 1 && next.matches('details.pe2-subs-details'))) {
+            const following = next.nextSibling;
+            body.appendChild(next);
+            next = following;
+          }
+        });
+      }
+      makeCollapsibleSections(document.querySelector('#pe2-panel .pe2-pane[data-pe2pane="subs"]'), 'subs');
+      makeCollapsibleSections(document.getElementById('frame-controls'), 'frame');
+
       window.pe2Tool = function (name) {
         if (name === 'blur') name = 'overlay';
         var root = document.querySelector('[data-proc-step="2"] .pe2-editor');
@@ -906,10 +1014,10 @@
           tracks: 'Quản lý Lớp & Track'
         };
         var icons = {
-          ratio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="2" width="18" height="20" rx="2"/><rect x="6" y="6" width="12" height="12"/></svg>',
+          ratio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M8 9h8M8 15h8"/></svg>',
           subs: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>',
           ai: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>',
-          frame: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>',
+          frame: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 8h20M6 12h12v6H6z"/></svg>',
           overlay: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>',
           audio: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
           tracks: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>'
@@ -1154,12 +1262,12 @@
         var drag = null;
         var clamp = function (v, min, max) { return Math.max(min, Math.min(max, v)); };
         var undoFields = [
-          'proc-font-size', 'proc-margin-v', 'proc-sub-pos', 'proc-mask-mode', 'proc-mask-source-x', 'proc-mask-source-y', 'proc-content-aspect', 'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y',
+          'proc-font-size', 'proc-margin-v', 'proc-sub-pos', 'proc-mask-mode', 'proc-mask-source-x', 'proc-mask-source-y', 'proc-content-aspect', 'proc-content-aspect-mode', 'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y',
           'proc-burn', 'proc-burn-vi', 'proc-blur-original', 'proc-preview-aspect', 'proc-aspect-blur-bg',
           'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y',
           'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex',
           'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity',
-          'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'ov-layers-json',
+          'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'frame-logo-start', 'frame-logo-end', 'ov-layers-json',
           'proc-font-color-picker', 'proc-font-color-hex', 'proc-font-weight'
         ];
         window._onSubFontWeightChange = function (val) {
@@ -1596,10 +1704,9 @@
           var crect = canvas ? canvas.getBoundingClientRect() : wrap.getBoundingClientRect();
           var cx = (e.clientX - crect.left) / (crect.width || 1) * (g.cW || 1);
           var cy = (e.clientY - crect.top) / (crect.height || 1) * (g.cH || 1);
-          var scale = g.fgScale || 1;
           return {
-            x: (cx - (g.fgX || 0)) / scale,
-            y: (cy - (g.fgY || 0)) / scale
+            x: (cx - (g.fgX || 0)) / (g.fgScaleX || g.fgScale || 1),
+            y: (cy - (g.fgY || 0)) / (g.fgScaleY || g.fgScale || 1)
           };
         }
         function _frameGeomForHit(canvas) {
@@ -2570,14 +2677,87 @@
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(e); }
           });
         }
+        function bindTimeDrag(row, item, kind, start, end) {
+          row.classList.add('pe2-range-editable');
+          row.title = (row.title ? row.title + ' — ' : '') + 'Kéo cả dải để dời thời gian; kéo hai mép để đổi điểm bắt đầu/kết thúc';
+          ['start', 'end'].forEach(function (edge) {
+            var handle = document.createElement('span');
+            handle.className = 'pe2-range-handle';
+            handle.dataset.edge = edge;
+            handle.setAttribute('aria-label', edge === 'start' ? 'Kéo điểm bắt đầu' : 'Kéo điểm kết thúc');
+            row.appendChild(handle);
+          });
+          row.addEventListener('pointerdown', function (ev) {
+            if (ev.button !== 0 || !_dur()) return;
+            ev.preventDefault(); ev.stopPropagation();
+            var mode = ev.target.dataset.edge || 'move';
+            var pointerId = ev.pointerId;
+            var originX = ev.clientX;
+            var originalStart = start, originalEnd = end;
+            var changed = false;
+            var minimum = Math.min(0.25, _dur());
+            var sourceWidth = box.getBoundingClientRect().width || 1;
+            function update(moveEv) {
+              if (moveEv.pointerId !== pointerId) return;
+              var delta = (moveEv.clientX - originX) / sourceWidth * _dur();
+              if (Math.abs(delta) < 0.01) return;
+              if (!changed) {
+                changed = true;
+                if (window.pe2PushUndo && !window._pe2Restoring) window.pe2PushUndo();
+              }
+              var nextStart = originalStart, nextEnd = originalEnd;
+              if (mode === 'start') nextStart = Math.max(0, Math.min(originalEnd - minimum, originalStart + delta));
+              else if (mode === 'end') nextEnd = Math.min(_dur(), Math.max(originalStart + minimum, originalEnd + delta));
+              else {
+                var length = originalEnd - originalStart;
+                nextStart = Math.max(0, Math.min(_dur() - length, originalStart + delta));
+                nextEnd = nextStart + length;
+              }
+              nextStart = Math.round(nextStart * 100) / 100;
+              nextEnd = Math.round(nextEnd * 100) / 100;
+              if (kind === 'overlay') { item.start_sec = nextStart; item.end_sec = nextEnd; }
+              else if (kind === 'logo') {
+                const startInput = document.getElementById('frame-logo-start');
+                const endInput = document.getElementById('frame-logo-end');
+                if (startInput) startInput.value = String(nextStart);
+                if (endInput) endInput.value = String(nextEnd);
+              } else { item.start = nextStart; item.end = nextEnd; }
+              row.style.left = (nextStart / _dur() * 100) + '%';
+              row.style.width = ((nextEnd - nextStart) / _dur() * 100) + '%';
+              row.dataset.rangeStart = String(nextStart);
+              row.dataset.rangeEnd = String(nextEnd);
+            }
+            function finish(endEv) {
+              if (endEv.pointerId !== pointerId) return;
+              document.removeEventListener('pointermove', update);
+              document.removeEventListener('pointerup', finish);
+              document.removeEventListener('pointercancel', finish);
+              if (changed) {
+                if (kind === 'overlay' && window.ovRenderLayerList) window.ovRenderLayerList();
+                if (kind === 'extra' && typeof _renderExtraBlurZones === 'function') _renderExtraBlurZones();
+                if (kind === 'logo' && window.framePreviewUpdate) window.framePreviewUpdate();
+                if (window.subPreviewUpdate) window.subPreviewUpdate();
+                if (window.pe2RenderRanges) window.pe2RenderRanges();
+              } else row.click();
+            }
+            document.addEventListener('pointermove', update);
+            document.addEventListener('pointerup', finish);
+            document.addEventListener('pointercancel', finish);
+          });
+        }
 
         // 1. Track Logo (nếu có chọn logo)
         var logoPath = document.getElementById('frame-logo-path')?.value;
         if (logoPath && window._pe2TrackVisibility?.logo !== false) {
+          var logoStartRaw = document.getElementById('frame-logo-start')?.value;
+          var logoEndRaw = document.getElementById('frame-logo-end')?.value;
+          var logoStart = logoStartRaw === '' ? 0 : Math.max(0, Math.min(dur, Number(logoStartRaw) || 0));
+          var logoEnd = logoEndRaw === '' ? dur : Math.max(0, Math.min(dur, Number(logoEndRaw) || 0));
+          if (logoEnd > logoStart) {
           var logoSeg = document.createElement('div');
           logoSeg.className = 'pe2-tl-range';
-          logoSeg.style.left = '0%';
-          logoSeg.style.width = '100%';
+          logoSeg.style.left = (logoStart / dur * 100) + '%';
+          logoSeg.style.width = ((logoEnd - logoStart) / dur * 100) + '%';
           logoSeg.style.top = '2px';
           logoSeg.style.height = '14px';
           logoSeg.style.background = 'rgba(59,130,246,0.35)';
@@ -2588,10 +2768,11 @@
           logoSeg.style.padding = '0 6px';
           logoSeg.style.fontSize = '9px';
           logoSeg.style.color = '#93c5fd';
-          logoSeg.style.pointerEvents = 'none';
-          logoSeg.textContent = 'Logo: ' + (logoPath.split(/[\\/]/).pop() || logoPath);
-          bindTrack(logoSeg, {type:'frame-logo'}, 0, dur);
+          logoSeg.textContent = 'Logo: ' + (logoPath.split(/[\\/]/).pop() || logoPath) + ' · ' + _fmt(logoStart) + '–' + _fmt(logoEnd);
+          bindTrack(logoSeg, {type:'frame-logo'}, logoStart, logoEnd);
+          bindTimeDrag(logoSeg, null, 'logo', logoStart, logoEnd);
           box.appendChild(logoSeg);
+          }
         }
 
         // 2. Track Vùng che bổ sung (Blur Zones)
@@ -2621,6 +2802,7 @@
           lab.textContent = 'Che: ' + _fmt(s) + '→' + _fmt(e);
           bindTrack(seg, {type:'extra', id:z.id}, s, e);
           seg.appendChild(lab);
+          bindTimeDrag(seg, z, 'extra', s, e);
           box.appendChild(seg);
         });
 
@@ -2638,8 +2820,8 @@
           seg.className = 'pe2-tl-range';
           seg.style.left = left + '%';
           seg.style.width = width + '%';
-          seg.style.top = (34 + (oIdx % 2) * 16) + 'px';
-          seg.style.height = '14px';
+          seg.style.top = (50 + oIdx * 28) + 'px';
+          seg.style.height = '22px';
           var bg = ov.type === 'text' ? 'rgba(34,197,94,0.35)' : (ov.type === 'image' ? 'rgba(236,72,153,0.35)' : 'rgba(99,102,241,0.35)');
           var border = ov.type === 'text' ? 'rgba(34,197,94,0.6)' : (ov.type === 'image' ? 'rgba(236,72,153,0.6)' : 'rgba(99,102,241,0.6)');
           var color = ov.type === 'text' ? '#86efac' : (ov.type === 'image' ? '#f472b6' : '#a5b4fc');
@@ -2654,9 +2836,16 @@
           var icon = ov.type === 'text' ? 'Text: ' : (ov.type === 'image' ? 'Ảnh: ' : 'Khối: ');
           var name = ov.type === 'text' ? (ov.text || 'Text') : (ov.type === 'image' ? (ov.name || 'Ảnh') : 'Khối');
           var lab = document.createElement('span');
-          lab.textContent = icon + (name.length > 15 ? name.slice(0, 15) + '…' : name) + ' (' + _fmt(s) + '→' + _fmt(e) + ')';
+          lab.innerHTML = ov.type === 'text'
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5h16M12 5v15M8 20h8"/></svg>'
+            : ov.type === 'image'
+              ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1"/><path d="m4 17 5-5 4 4 3-3 4 4"/></svg>'
+              : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>';
+          lab.appendChild(document.createTextNode((name.length > 15 ? name.slice(0, 15) + '…' : name) + ' · ' + _fmt(s) + '–' + _fmt(e)));
+          seg.title = icon + name + ' (' + _fmt(s) + '→' + _fmt(e) + ')';
           bindTrack(seg, {type:'overlay', id:ov.id}, s, e);
           seg.appendChild(lab);
+          bindTimeDrag(seg, ov, 'overlay', s, e);
           box.appendChild(seg);
         });
 
@@ -3301,13 +3490,13 @@
           'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-aspect-blur-bg',
           'sub-preview-sample', 'proc-font-size', 'proc-sub-pos', 'proc-font-color-picker',
           'proc-font-color-hex', 'proc-font-weight', 'proc-margin-v', 'proc-outline-width',
-          'proc-mask-mode', 'proc-mask-source-x', 'proc-mask-source-y', 'proc-content-aspect', 'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y', 'proc-blur-zone',
+          'proc-mask-mode', 'proc-mask-source-x', 'proc-mask-source-y', 'proc-content-aspect', 'proc-content-aspect-mode', 'proc-blur-height', 'proc-blur-width', 'proc-blur-x', 'proc-blur-y', 'proc-blur-zone',
           'proc-blur-by-subtitles',
           'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight',
           'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y',
           'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex',
           'frame-title-split-color', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-w',
-          'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius'
+          'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'frame-logo-start', 'frame-logo-end'
         ];
         sidebarInputs.forEach(function(id) {
           var el = document.getElementById(id);

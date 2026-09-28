@@ -1860,6 +1860,8 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     frame_logo_top_pct:   parseFloat(document.getElementById('frame-logo-top')?.value || 3),
     frame_logo_left_pct:  parseFloat(document.getElementById('frame-logo-left')?.value || 3),
     frame_logo_radius_pct: parseFloat(document.getElementById('frame-logo-radius')?.value ?? 50),
+    frame_logo_start_sec: (() => { const v = document.getElementById('frame-logo-start')?.value; return v === '' || v == null ? null : Number(v); })(),
+    frame_logo_end_sec: (() => { const v = document.getElementById('frame-logo-end')?.value; return v === '' || v == null ? null : Number(v); })(),
     video_overlays:       (typeof window._collectVideoOverlays === 'function') ? window._collectVideoOverlays() : [],
     ai_video_analysis:    (window._procUseAiAnalysis && window._procVideoAiAnalysis?.video_path === videoPath && window._procVideoAiAnalysis?.result) ? window._procVideoAiAnalysis.result : null,
     ai_video_analysis_text: (window._procUseAiAnalysis && window._procVideoAiAnalysis?.video_path === videoPath && window._procVideoAiAnalysis?.analysis_text) ? window._procVideoAiAnalysis.analysis_text : '',

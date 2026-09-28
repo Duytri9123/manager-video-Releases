@@ -118,6 +118,8 @@ async function onTranscribeProviderChanged(restoreValue) {
 
     if (restoreValue && Array.from(modelSel.options).some(o => o.value === currentVal)) {
       modelSel.value = currentVal;
+    } else if ((provider === 'antigravity' || provider === 'gemini') && Array.from(modelSel.options).some(o => o.value === 'gemini-3.8-flash-high')) {
+      modelSel.value = 'gemini-3.8-flash-high';
     }
   } catch (err) {
     modelSel.innerHTML = `<option value="${currentVal || 'gemini-3.8-flash-high'}">${currentVal || 'Mặc định'}</option>`;
@@ -163,6 +165,8 @@ async function onTranslationProviderChanged(restoreValue) {
 
       if (currentVal && Array.from(modelSel.options).some(o => o.value === currentVal)) {
         modelSel.value = currentVal;
+      } else if ((provider === 'antigravity' || provider === 'gemini') && Array.from(modelSel.options).some(o => o.value === 'gemini-3.8-flash-high')) {
+        modelSel.value = 'gemini-3.8-flash-high';
       }
     } else if (modelSel.options.length <= 1) {
       modelSel.innerHTML = '<option value="" selected>Tự động theo Provider</option>';

@@ -16,6 +16,7 @@ from typing import List, Tuple
 from flask import jsonify, request
 
 from core_app import LOGGER, STATE_DIR, app, socketio
+from utils.edition import is_customer_edition
 
 
 # (module_path, blueprint_attr, friendly_name)
@@ -69,14 +70,20 @@ def create_app():
     for mod_path, attr, name in _BLUEPRINTS:
         _register_safe(mod_path, attr, name)
 
-    # Initialize licensing gateway + guard thread
-    try:
-        from utils.licensing_routes import init_licensing_app
-        init_licensing_app(app)
-        LOGGER.info("Licensing guard system initialized successfully.")
-    except Exception as exc:
-        LOGGER.error("Failed to initialize licensing system: %s", exc)
-        traceback.print_exc()
+    # The customer edition is packaged separately and has no key activation UI.
+    if is_customer_edition():
+        @app.context_processor
+        def customer_edition_context():
+            return {"customer_edition": True}
+        LOGGER.info("Customer edition initialized without license activation.")
+    else:
+        try:
+            from utils.licensing_routes import init_licensing_app
+            init_licensing_app(app)
+            LOGGER.info("Licensing guard system initialized successfully.")
+        except Exception as exc:
+            LOGGER.error("Failed to initialize licensing system: %s", exc)
+            traceback.print_exc()
 
     # SocketIO handlers (only register if download blueprint loaded successfully)
     if "download" in _REGISTERED:

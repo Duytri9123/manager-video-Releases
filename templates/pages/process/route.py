@@ -310,6 +310,7 @@ def analyze_video_ai():
     requested_nine_model = str(data.get("nine_model") or data.get("model") or "").strip()
     language = str(data.get("language") or "").strip()
     target_language = str(data.get("target_language") or "vi").strip()
+    audit_mode = "source_markers" if data.get("audit_mode") == "source_markers" else ""
     sample_value = data.get("sample_count")
     sample_raw = str("5" if sample_value in (None, "") else sample_value).strip().lower()
     full_video = sample_raw in ("0", "full", "all", "video", "entire")
@@ -351,7 +352,7 @@ def analyze_video_ai():
     if not frames:
         return jsonify({"ok": False, "error": "Không đọc được video hoặc không trích được frame"}), 500
 
-    prompt = build_ai_prompt(language, target_language, duration, [f["timestamp"] for f in frames])
+    prompt = build_ai_prompt(language, target_language, duration, [f["timestamp"] for f in frames], audit_mode)
 
     try:
         m_target = requested_nine_model.split("/")[-1] if "/" in requested_nine_model else requested_nine_model
@@ -369,7 +370,7 @@ def analyze_video_ai():
                     )
                 if full_video:
                     from .ai_service import analyze_video_batches
-                    result = analyze_video_batches(frames, duration, language, target_language, analyze)
+                    result = analyze_video_batches(frames, duration, language, target_language, analyze, audit_mode)
                 else:
                     result = analyze(prompt, frames)
                 return jsonify({
@@ -1240,7 +1241,10 @@ def make_vertical_video_route():
         logo_size_pct=float(data.get("logo_size_pct") or 12.0),
         logo_top_pct=float(data.get("logo_top_pct") or 3.0),
         logo_left_pct=float(data.get("logo_left_pct") or 3.0),
-        logo_radius_pct=float(data.get("logo_radius_pct") or 50.0),        target_w=int(data.get("target_w") or 1080),
+        logo_radius_pct=float(data.get("logo_radius_pct") or 50.0),
+        logo_start_sec=data.get("logo_start_sec"),
+        logo_end_sec=data.get("logo_end_sec"),
+        target_w=int(data.get("target_w") or 1080),
         target_h=int(data.get("target_h") or 1920),
     )
 

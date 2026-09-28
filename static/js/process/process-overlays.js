@@ -39,6 +39,7 @@ function _ovClamp(v, min, max) {
         text: 'Text mới', x_pct: 0.50, y_pct: 0.18, size_pct: 0.05,
         weight: 700, padding_pct: 0.55,
         color: '#ffffff', box_color: '#000000', box_opacity: 0.50, text_opacity: 1,
+        motion: 'none', motion_amp_pct: 1, motion_period_sec: 6,
         start_sec: '', end_sec: ''
       };
     }
@@ -77,6 +78,9 @@ function _ovClamp(v, min, max) {
       base.box_color = _ovHexValue(raw.box_color, base.box_color);
       base.text_opacity = _ovClamp(raw.text_opacity ?? 1, 0, 1);
       base.box_opacity = _ovClamp(raw.box_opacity ?? base.box_opacity, 0, 1);
+      base.motion = ['none','figure8','horizontal','vertical','circle','diamond'].includes(raw.motion) ? raw.motion : 'none';
+      base.motion_amp_pct = _ovClamp(raw.motion_amp_pct ?? base.motion_amp_pct, 0, 1);
+      base.motion_period_sec = _ovClamp(raw.motion_period_sec ?? base.motion_period_sec, 1, 60);
     } else if (type === 'image') {
       base.path = String(raw.path ?? base.path);
       base.name = String(raw.name ?? base.name);
@@ -122,6 +126,25 @@ function _ovClamp(v, min, max) {
     if (e !== '' && ts > e) return false;
     return true;
   }
+  function _ovMotionPosition(ov, textWidth = 0, textHeight = 0) {
+    let x = Number(ov.x_pct ?? 0.5), y = Number(ov.y_pct ?? 0.18);
+    const motion = ov.motion || 'none';
+    if (motion === 'none') return {x, y};
+    const player = document.getElementById('pe2-video-player');
+    const current = player && !player.paused && player.style.display !== 'none'
+      ? player.currentTime : Number(document.getElementById('sub-preview-ts')?.value || 0);
+    const period = Math.max(1, Number(ov.motion_period_sec || 6));
+    const amp = Math.max(0, Math.min(1, Number(ov.motion_amp_pct ?? 1)));
+    const travelX = Math.max(0, (1 - textWidth) / 2) * amp;
+    const travelY = Math.max(0, (1 - textHeight) / 2) * amp;
+    const phase = 2 * Math.PI * Math.max(0, current - Number(ov.start_sec || 0)) / period;
+    if (motion === 'figure8') { x = 0.5 + travelX * Math.sin(phase); y = 0.5 + travelY * Math.sin(2 * phase); }
+    else if (motion === 'circle') { x = 0.5 + travelX * Math.sin(phase); y = 0.5 + travelY * Math.cos(phase); }
+    else if (motion === 'diamond') { x = 0.5 + travelX * 2 / Math.PI * Math.asin(Math.sin(phase)); y = 0.5 - travelY * 2 / Math.PI * Math.asin(Math.cos(phase)); }
+    else if (motion === 'horizontal') x = 0.5 + travelX * Math.sin(phase);
+    else if (motion === 'vertical') y = 0.5 + travelY * Math.sin(phase);
+    return {x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y))};
+  }
   function _ovSummary(ov) {
     if (ov.type === 'text') {
       return (ov.text || 'Text').slice(0, 32);
@@ -162,6 +185,9 @@ function _ovClamp(v, min, max) {
           <div class="field"><label>Cỡ %</label><input type="number" value="${_ovRoundPct(ov.size_pct)}" min="1" max="30" step="0.5" oninput="ovUpdateLayer('${id}','size_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
           <div class="field"><label>Độ đậm</label><select style="height:38px" oninput="ovUpdateLayer('${id}','weight',parseInt(this.value,10),true)" onchange="ovRenderLayerList()">${_ovWeightOptions(ov.weight)}</select></div>
           <div class="field"><label>Lề text %</label><input type="number" value="${Math.round((ov.padding_pct ?? 0.55) * 100)}" min="0" max="150" step="5" oninput="ovUpdateLayer('${id}','padding_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+          <div class="field"><label>Đường di chuyển</label><select onchange="ovUpdateLayer('${id}','motion',this.value)" style="height:38px"><option value="none" ${ov.motion === 'none' ? 'selected' : ''}>Đứng yên</option><option value="figure8" ${ov.motion === 'figure8' ? 'selected' : ''}>Hình số 8</option><option value="diamond" ${ov.motion === 'diamond' ? 'selected' : ''}>Hình thoi</option><option value="horizontal" ${ov.motion === 'horizontal' ? 'selected' : ''}>Qua lại ngang</option><option value="vertical" ${ov.motion === 'vertical' ? 'selected' : ''}>Lên xuống</option><option value="circle" ${ov.motion === 'circle' ? 'selected' : ''}>Vòng tròn</option></select></div>
+          <div class="field"><label>Phạm vi khung %</label><input type="number" min="0" max="100" step="1" value="${Math.round((ov.motion_amp_pct ?? 1) * 100)}" oninput="ovUpdateLayer('${id}','motion_amp_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
+          <div class="field"><label>Chu kỳ (s)</label><input type="number" min="1" max="60" step="0.5" value="${ov.motion_period_sec ?? 6}" oninput="ovUpdateLayer('${id}','motion_period_sec',this.value,true)" onchange="ovRenderLayerList()"></div>
           <div style="display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
             <div class="field">
               <label>Màu chữ</label>
@@ -240,6 +266,16 @@ function _ovClamp(v, min, max) {
               <span class="ov-layer-meta">${_ovEsc(_ovTimeLabel(ov))} · X ${_ovRoundPct(ov.x_pct)}% · Y ${_ovRoundPct(ov.y_pct)}%</span>
             </span>
             <span class="ov-layer-actions" onclick="event.stopPropagation()">
+              <span class="ov-layer-action-row">
+                <label class="pe2-switch" title="${ov.enabled ? 'Ẩn' : 'Hiện'}" onclick="event.stopPropagation();">
+                  <input type="checkbox" ${ov.enabled ? 'checked' : ''} onchange="ovUpdateLayer('${_ovEsc(ov.id)}','enabled',this.checked)">
+                  <span class="pe2-slider"></span>
+                </label>
+                <button type="button" style="border:none;background:transparent;padding:4px 6px;cursor:pointer;font-size:16px;color:#ef4444;line-height:1;vertical-align:middle;display:inline-flex;align-items:center"
+                  onclick="ovRemoveLayer('${_ovEsc(ov.id)}')"
+                  title="Xóa" aria-label="Xóa lớp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+              </span>
+              <span class="ov-layer-action-row">
               <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 5px;height:24px;line-height:1;border-radius:4px" 
                 onclick="ovMoveLayerUp('${_ovEsc(ov.id)}')" 
                 title="Đưa lên trên (ưu tiên hiển thị)" ${idx === 0 ? 'disabled' : ''}>
@@ -250,13 +286,7 @@ function _ovClamp(v, min, max) {
                 title="Đưa xuống dưới" ${idx === totalLayers - 1 ? 'disabled' : ''}>
                 ▼
               </button>
-              <label class="pe2-switch" title="${ov.enabled ? 'Ẩn' : 'Hiện'}" onclick="event.stopPropagation();">
-                <input type="checkbox" ${ov.enabled ? 'checked' : ''} onchange="ovUpdateLayer('${_ovEsc(ov.id)}','enabled',this.checked)">
-                <span class="pe2-slider"></span>
-              </label>
-              <button type="button" style="border:none;background:transparent;padding:4px 6px;cursor:pointer;font-size:16px;color:#ef4444;line-height:1;vertical-align:middle;display:inline-flex;align-items:center" 
-                onclick="ovRemoveLayer('${_ovEsc(ov.id)}')" 
-                title="Xóa" aria-label="Xóa lớp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+              </span>
             </span>
           </div>
           <div class="ov-layer-body" onclick="if(!event.target.closest('input,select,textarea,button,label')) ovSelectLayer('${_ovEsc(ov.id)}', false, true)">
@@ -414,6 +444,9 @@ function _ovClamp(v, min, max) {
         out.box_color = ov.box_color;
         out.box_opacity = ov.box_opacity;
         out.text_opacity = ov.text_opacity;
+        out.motion = ov.motion;
+        out.motion_amp_pct = ov.motion_amp_pct;
+        out.motion_period_sec = ov.motion_period_sec;
       } else if (ov.type === 'image') {
         out.path = ov.path;
         out.name = ov.name;
@@ -460,8 +493,9 @@ function _ovClamp(v, min, max) {
     const textW = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width), 1));
     const boxW = textW + padX * 2;
     const boxH = lines.length * lineH + padY * 2;
-    const cx = x + w * Math.max(0, Math.min(1, ov.x_pct ?? 0.5));
-    const cy = y + h * Math.max(0, Math.min(1, ov.y_pct ?? 0.18));
+    const motionPosition = _ovMotionPosition(ov, boxW / w, boxH / h);
+    const cx = x + w * motionPosition.x;
+    const cy = y + h * motionPosition.y;
     if ((ov.box_opacity || 0) > 0) {
       ctx.fillStyle = _ovRgba(ov.box_color || '#000000', ov.box_opacity || 0);
       ctx.beginPath();
@@ -607,8 +641,6 @@ function _ovClamp(v, min, max) {
         el.style.display = 'inline-block';
         el.style.width = 'auto';
         el.style.whiteSpace = 'nowrap';
-        el.style.left = (imgOffX + dispW * (ov.x_pct ?? 0.5)) + 'px';
-        el.style.top = (imgOffY + dispH * (ov.y_pct ?? 0.18)) + 'px';
         el.style.transform = 'translate(-50%, -50%)';
         el.style.maxWidth = (dispW * 0.9) + 'px';
         el.style.textAlign = 'center';
@@ -620,6 +652,10 @@ function _ovClamp(v, min, max) {
         el.style.padding = (padMul * 0.65) + 'em ' + padMul + 'em';
         el.style.borderRadius = '0.35em';
         el.style.background = _ovRgba(ov.box_color || '#000000', ov.box_opacity || 0);
+        wrap.appendChild(el);
+        const motionPosition = _ovMotionPosition(ov, el.offsetWidth / dispW, el.offsetHeight / dispH);
+        el.style.left = (imgOffX + dispW * motionPosition.x) + 'px';
+        el.style.top = (imgOffY + dispH * motionPosition.y) + 'px';
       }
       const handles = ['nw','n','ne','e','se','s','sw','w'];
       handles.forEach(function(edge){
