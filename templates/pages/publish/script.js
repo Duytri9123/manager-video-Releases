@@ -510,6 +510,7 @@ function pubTtToggleSchedule() {
 
 /* ── Facebook API integration (publish page) ── */
 async function pubFbInit() {
+  pubFbLoadAppCredentials();
   try {
     const res  = await fetch('/api/facebook/status');
     const data = await res.json();
@@ -520,6 +521,28 @@ async function pubFbInit() {
       _pubFbShowDisconnected();
     }
   } catch (_) { _pubFbShowDisconnected(); }
+}
+
+async function pubFbLoadAppCredentials() {
+  try {
+    const data = await fetch('/api/facebook/app_credentials').then(r => r.json());
+    const input = document.getElementById('pub-fb-app-id');
+    if (input) input.value = data.app_id || '';
+  } catch (_) {}
+}
+
+async function pubFbSaveAppCredentials() {
+  const app_id = document.getElementById('pub-fb-app-id')?.value.trim() || '';
+  const app_secret = document.getElementById('pub-fb-app-secret')?.value.trim() || '';
+  try {
+    const res = await fetch('/api/facebook/app_credentials', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({app_id, app_secret})});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Không lưu được cấu hình');
+    document.getElementById('pub-fb-app-secret').value = '';
+    if (typeof toast === 'function') toast('Đã lưu Facebook App ID / Secret', 'success');
+  } catch (error) {
+    if (typeof toast === 'function') toast(error.message, 'error');
+  }
 }
 
 function _pubFbShowDisconnected() {
@@ -1101,4 +1124,3 @@ async function pubRevokeVideoById() {
     }
   }
 }
-

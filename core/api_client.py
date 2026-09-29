@@ -504,11 +504,16 @@ class DouyinAPIClient:
 
         # API path failed — try Playwright browser fallback if configured
         if browser_fallback is not None and browser_fallback.get("enabled"):
-            return await self.fetch_single_video_via_browser(
-                aweme_id,
-                headless=bool(browser_fallback.get("headless", False)),
-                wait_timeout_seconds=int(browser_fallback.get("wait_timeout_seconds", 600)),
-            )
+            try:
+                return await self.fetch_single_video_via_browser(
+                    aweme_id,
+                    headless=bool(browser_fallback.get("headless", False)),
+                    wait_timeout_seconds=int(browser_fallback.get("wait_timeout_seconds", 600)),
+                )
+            except Exception as exc:
+                # A browser startup failure should still allow the caller's
+                # yt-dlp fallback to try the same video URL.
+                logger.warning("Single-video browser fallback failed for %s: %s", aweme_id, exc)
 
         return None
 
@@ -548,14 +553,26 @@ class DouyinAPIClient:
             from pathlib import Path
             from utils.helpers import launch_playwright_browser_async
             from auth.account_manager import get_douyin_account_manager
-            context = await launch_playwright_browser_async(
-                playwright.chromium,
-                is_persistent=True,
-                user_data_dir=str(get_douyin_account_manager().get_profile_dir()),
-                headless=headless,
-                locale="zh-CN",
-                viewport={"width": 1600, "height": 900},
-            )
+            browser = None
+            try:
+                context = await launch_playwright_browser_async(
+                    playwright.chromium,
+                    is_persistent=True,
+                    user_data_dir=str(get_douyin_account_manager().get_profile_dir()),
+                    headless=headless,
+                    locale="zh-CN",
+                    viewport={"width": 1600, "height": 900},
+                )
+            except Exception as exc:
+                # Chrome refuses to start when the account profile is already
+                # open. A fresh context can use the saved cookie payload.
+                logger.warning("Douyin profile could not launch; trying a temporary browser: %s", exc)
+                browser = await launch_playwright_browser_async(
+                    playwright.chromium, is_persistent=False, headless=headless,
+                )
+                context = await browser.new_context(
+                    locale="zh-CN", viewport={"width": 1600, "height": 900},
+                )
             cookies = self._browser_cookie_payload()
             if cookies and not await context.cookies("https://www.douyin.com"):
                 await context.add_cookies(cookies)
@@ -608,6 +625,8 @@ class DouyinAPIClient:
                 except Exception as exc:
                     logger.debug("Sync browser cookies skipped: %s", exc)
                 await context.close()
+                if browser is not None:
+                    await browser.close()
 
         if result:
             logger.warning(
@@ -758,7 +777,6 @@ class DouyinAPIClient:
             logger.error("Failed to resolve short URL: %s, error: %s", short_url, e)
             return None
 
-    @hidden_download_browser
     async def collect_user_post_ids_via_browser(
         self,
         sec_uid: str,

@@ -21,6 +21,7 @@ from typing import Generator, Optional, List, Tuple, Dict, Any
 
 from core.processor.ffmpeg_base import (
     find_ffmpeg, run_ffmpeg, _run_ffmpeg, _get_encoding_args,
+    is_proc_cancelled,
     get_media_duration_seconds, _get_media_duration, _get_audio_duration,
     _safe_stem, _winlong, _as_bool, _as_int, _as_float,
     _clamp_float, _normalize_hex_rgb, _ffmpeg_color,
@@ -91,6 +92,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if _as_bool(data.get("frame_title_auto", False), False):
         data["frame_title"] = ""
     video_path = Path(data.get("video_path", "")).expanduser()
+    if is_proc_cancelled():
+        yield send(log="[Tiến trình] Đã hủy xử lý theo yêu cầu.", level="warning", cancelled=True, failed=True)
+        yield send(overall=0, overall_lbl="Đã hủy")
+        return
     yield send(log=f"Khởi tạo tiến trình xử lý: {video_path.name}...", level="info")
     
     if not video_path.exists():
@@ -314,6 +319,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _voice_female = str(data.get("tts_voice_female") or "").strip()
 
     # ── Bước 2/5: Phiên âm (Transcribe) ──────────────────────────────────────
+    if is_proc_cancelled():
+        yield send(log="[Bước 2/5] Đã hủy trước bước phiên âm.", level="warning", cancelled=True, failed=True)
+        yield send(overall=0, overall_lbl="Đã hủy")
+        return
     _t_step2_start = _pytime.time()
     ass_path = out_dir / f"{stem}.ass"  # dùng ASS thay SRT
     source_srt_path = out_dir / f"{stem}.srt"  # transcriber output gốc
@@ -709,6 +718,11 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                         import time as _t
                         _start_wait = _t.time()
                         while not _proc_review_event.is_set():
+                            if is_proc_cancelled():
+                                _proc_review_event.set()
+                                yield send(log="[Bước 3/5] Đã hủy trong lúc chờ duyệt ASS.", level="warning", cancelled=True, failed=True)
+                                yield send(overall=0, overall_lbl="Đã hủy")
+                                return
                             if _t.time() - _start_wait > 600:
                                 _proc_review_event.set()
                                 break
@@ -1561,6 +1575,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 pass
 
     # ── Bước 5/5: Chờ TTS song song, retry đoạn thiếu, rồi ghép giọng ─────────
+    if is_proc_cancelled():
+        yield send(log="[Bước 5/5] Đã hủy trước bước lồng tiếng TTS.", level="warning", cancelled=True, failed=True)
+        yield send(overall=0, overall_lbl="Đã hủy")
+        return
     _t_step5_start = _pytime.time()
     try:
         if do_voice and _voice_cache_valid:

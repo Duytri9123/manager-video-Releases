@@ -212,6 +212,50 @@ def preview_file():
     )
 
 
+@bp.route('/api/files/preview-compatible')
+def preview_compatible_file():
+    """Make a browser-compatible preview for codecs unsupported by Qt WebEngine."""
+    import hashlib
+    import subprocess
+    import tempfile
+    from utils.ffprobe import find_ffmpeg
+
+    raw_path = request.args.get('path', '').strip()
+    if not raw_path:
+        return jsonify({'error': 'No path'}), 400
+    base_dir = Path(load_cfg().get('path') or './Downloaded').expanduser().resolve()
+    source = Path(raw_path)
+    if not source.is_absolute():
+        rel = raw_path.lstrip('/\\')
+        if rel.lower().startswith(('downloaded/', 'downloaded\\')):
+            rel = rel[11:]
+        source = base_dir / rel
+    source = source.resolve()
+    if not source.is_file() or source.suffix.lower() not in ('.mp4', '.mkv', '.mov', '.webm', '.avi', '.m4v'):
+        return jsonify({'error': 'Video not found'}), 404
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return jsonify({'error': 'FFmpeg not available'}), 503
+    stat = source.stat()
+    key = hashlib.sha256(f'{source}:{stat.st_size}:{stat.st_mtime_ns}'.encode()).hexdigest()
+    cache = Path(tempfile.gettempdir()) / 'DuyTrisDownloader' / 'preview'
+    cache.mkdir(parents=True, exist_ok=True)
+    target = cache / f'{key}.mp4'
+    if not target.is_file():
+        pending = cache / f'{key}.pending.mp4'
+        try:
+            subprocess.run([ffmpeg, '-y', '-i', str(source), '-map', '0:v:0', '-map', '0:a:0?',
+                            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p',
+                            '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', str(pending)],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=1800)
+            pending.replace(target)
+        except (OSError, subprocess.SubprocessError) as exc:
+            pending.unlink(missing_ok=True)
+            LOGGER.exception('Compatible video preview failed: %s', exc)
+            return jsonify({'error': 'Could not prepare video preview'}), 500
+    return send_file(str(target), mimetype='video/mp4', conditional=True)
+
+
 @bp.route("/api/files/open", methods=["POST"])
 @bp.route("/api/files/open_folder", methods=["POST"])
 def open_in_explorer():

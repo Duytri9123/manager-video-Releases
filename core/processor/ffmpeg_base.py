@@ -18,6 +18,50 @@ def find_ffmpeg() -> Optional[str]:
     return utils_find_ffmpeg()
 
 
+# Subprocess and cancellation registry
+_active_subprocesses = set()
+_active_subprocesses_lock = None
+_cancel_checkers = []
+
+def register_cancel_checker(fn):
+    if fn not in _cancel_checkers:
+        _cancel_checkers.append(fn)
+
+def is_proc_cancelled() -> bool:
+    for fn in _cancel_checkers:
+        try:
+            if fn():
+                return True
+        except Exception:
+            pass
+    return False
+
+def register_subprocess(proc):
+    global _active_subprocesses, _active_subprocesses_lock
+    if _active_subprocesses_lock is None:
+        import threading
+        _active_subprocesses_lock = threading.Lock()
+    with _active_subprocesses_lock:
+        _active_subprocesses.add(proc)
+
+def unregister_subprocess(proc):
+    global _active_subprocesses, _active_subprocesses_lock
+    if _active_subprocesses_lock:
+        with _active_subprocesses_lock:
+            _active_subprocesses.discard(proc)
+
+def kill_active_subprocesses():
+    global _active_subprocesses, _active_subprocesses_lock
+    if _active_subprocesses_lock:
+        with _active_subprocesses_lock:
+            procs = list(_active_subprocesses)
+            _active_subprocesses.clear()
+            for p in procs:
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+
 def run_ffmpeg(args: list, desc: str = "", timeout: int = 600) -> tuple[bool, str]:
     """Run ffmpeg command with non-blocking eventlet polling, return (success, stderr)."""
     try:
@@ -38,13 +82,23 @@ def run_ffmpeg(args: list, desc: str = "", timeout: int = 600) -> tuple[bool, st
             encoding="utf-8",
             errors="replace",
         )
-        while proc.poll() is None:
-            if _t.time() - start_t > timeout:
-                proc.kill()
-                return False, f"FFmpeg timeout sau {timeout}s — video quá dài hoặc filter quá nặng"
-            _sleep(0.05)
-        stdout, stderr = proc.communicate()
-        return proc.returncode == 0, (stderr or "").strip()
+        register_subprocess(proc)
+        try:
+            while proc.poll() is None:
+                if is_proc_cancelled():
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    return False, "Tiến trình bị hủy bởi người dùng"
+                if _t.time() - start_t > timeout:
+                    proc.kill()
+                    return False, f"FFmpeg timeout sau {timeout}s — video quá dài hoặc filter quá nặng"
+                _sleep(0.05)
+            stdout, stderr = proc.communicate()
+            return proc.returncode == 0, (stderr or "").strip()
+        finally:
+            unregister_subprocess(proc)
     except Exception as e:
         return False, str(e)
 

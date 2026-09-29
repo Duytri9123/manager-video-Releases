@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -716,12 +717,24 @@ def _load_vieneu_tts(engine="vieneu"):
         if engine == "vieneu-nano":
             instance = Vieneu(mode="v3nano")
         else:
-            backend = {"vieneu-cpu": "onnx", "vieneu-gpu": "pytorch"}.get(engine, os.getenv("VIENEU_BACKEND", "auto"))
+            # Packaged Windows builds may lack the optional GPU runtime probed by
+            # auto. The bundled ONNX CPU backend is the dependable default there.
+            default_backend = "onnx" if getattr(sys, "frozen", False) else "auto"
+            backend = {"vieneu-cpu": "onnx", "vieneu-gpu": "pytorch"}.get(engine, os.getenv("VIENEU_BACKEND", default_backend))
             if engine == "vieneu-gpu":
                 import torch
                 if not torch.cuda.is_available():
                     raise RuntimeError("GPU CUDA chưa khả dụng. Cần GPU NVIDIA và PyTorch CUDA; hãy chọn CPU hoặc Tự động.")
-            instance = Vieneu(mode="v3turbo", backend=backend, max_batch_size=2)
+            try:
+                instance = Vieneu(mode="v3turbo", backend=backend, max_batch_size=2)
+            except (OSError, FileNotFoundError) as exc:
+                if backend != "auto":
+                    raise
+                # On some packaged Windows systems the auto backend probes a
+                # missing GPU helper. The ONNX CPU backend can still run.
+                import logging
+                logging.getLogger(__name__).warning("VieNeu auto backend failed; retrying ONNX CPU: %s", exc)
+                instance = Vieneu(mode="v3turbo", backend="onnx", max_batch_size=2)
         _VIENEU_TTS_INSTANCE = instance
         _VIENEU_ENGINE = engine
     except Exception as exc:
@@ -760,9 +773,14 @@ def _tts_vieneu_locked(
         "max_chars": 140 if engine == "vieneu-nano" else 240,
     }
     if ref_audio:
+        if not Path(ref_audio).is_file():
+            raise FileNotFoundError(f"Không tìm thấy file giọng mẫu VieNeu: {ref_audio}")
         infer_kwargs.pop("voice", None)
         infer_kwargs["ref_audio"] = ref_audio
-    wav = tts.infer(_vieneu_text_with_cue(payload_text, style), **infer_kwargs)
+    try:
+        wav = tts.infer(_vieneu_text_with_cue(payload_text, style), **infer_kwargs)
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"VieNeu thiếu tệp khi tạo giọng: {exc}") from exc
     if wav is None or len(wav) == 0:
         return False
 

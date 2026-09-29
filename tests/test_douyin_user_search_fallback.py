@@ -48,7 +48,7 @@ class _Api:
         return self.ids
 
     def pop_browser_post_aweme_items(self):
-        return {"123": {"aweme_id": "123", "author": {"nickname": "Test User"}}}
+        return {"123": {"aweme_id": "123", "desc": "Test video", "video": {"cover": {"url_list": ["https://example.com/cover.jpg"]}}, "author": {"nickname": "Test User"}}}
 
 
 class _ApiWithEmptyPosts(_Api):

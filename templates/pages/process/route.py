@@ -91,6 +91,42 @@ _proc_pause_event.set()  # not paused by default
 _proc_review_event = _threading.Event()
 _proc_review_event.set()  # not waiting for review by default
 
+# ── Cancellation state ────────────────────────────────────────────────────────
+_proc_cancel_event = _threading.Event()
+_proc_cancel_event.clear()
+
+def is_proc_cancelled() -> bool:
+    return _proc_cancel_event.is_set()
+
+def request_proc_cancel():
+    _proc_cancel_event.set()
+    _proc_pause_event.set()
+    _proc_review_event.set()
+    _proc_thumb_retry_event.set()
+    _proc_tts_retry_event.set()
+    try:
+        from core.processor.ffmpeg_base import kill_active_subprocesses
+        kill_active_subprocesses()
+    except Exception:
+        pass
+
+def reset_proc_cancel():
+    _proc_cancel_event.clear()
+
+try:
+    from core.processor.ffmpeg_base import register_cancel_checker
+    register_cancel_checker(is_proc_cancelled)
+except Exception:
+    pass
+
+@bp.route("/api/proc_cancel", methods=["POST"])
+def proc_cancel():
+    """Cancel currently processing video or all processing."""
+    data = request.json or {}
+    scope = str(data.get("scope") or "current").strip().lower()
+    request_proc_cancel()
+    return jsonify({"ok": True, "scope": scope})
+
 # Thumbnail config được set bởi user khi chọn từ modal sau review ASS.
 # Pipeline sẽ đọc dict này thay vì giá trị ban đầu trong request body.
 _proc_thumb_override: dict = {}
@@ -927,18 +963,73 @@ def process_video():
                 yield (_j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=True) + "\n").encode("utf-8")
                 return
 
-            for line in process_video_full(req):
-                # Cooperative pause: stop forwarding/advancing between pipeline
-                # events until the user resumes from Step 3.
-                while not _proc_pause_event.is_set():
-                    if _ev_sleep:
-                        _ev_sleep(0.1)
-                    else:
+            # Reset control events to fresh running state
+            reset_proc_cancel()
+            _proc_pause_event.set()
+            _proc_review_event.set()
+            _proc_thumb_retry_event.set()
+            _proc_tts_retry_event.set()
+
+            try:
+                import eventlet
+                import eventlet.queue
+                _q = eventlet.queue.Queue()
+                _use_eq = True
+            except Exception:
+                _use_eq = False
+
+            if _use_eq:
+                def _pipeline_worker():
+                    try:
+                        for line in process_video_full(req):
+                            if _proc_cancel_event.is_set():
+                                break
+                            while not _proc_pause_event.is_set():
+                                if _proc_cancel_event.is_set():
+                                    break
+                                eventlet.sleep(0.1)
+                            _q.put(line)
+                    except Exception as err:
+                        _q.put(err)
+                    finally:
+                        _q.put(None)
+
+                eventlet.spawn(_pipeline_worker)
+
+                while True:
+                    if _proc_cancel_event.is_set():
+                        yield (_j.dumps({"log": "⛔ Tiến trình xử lý đã bị hủy.", "level": "warning", "cancelled": True, "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
+                        yield (_j.dumps({"overall": 0, "overall_lbl": "Đã hủy"}, ensure_ascii=True) + "\n").encode("utf-8")
+                        break
+                    try:
+                        item = _q.get(timeout=4.0)
+                    except eventlet.queue.Empty:
+                        yield (_j.dumps({"heartbeat": True}, ensure_ascii=True) + "\n").encode("utf-8")
+                        continue
+
+                    if item is None:
+                        break
+                    if isinstance(item, Exception):
+                        yield (_j.dumps({"log": f"Fatal error: {item}", "level": "error", "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
+                        yield (_j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=True) + "\n").encode("utf-8")
+                        break
+                    yield item.encode("utf-8") if isinstance(item, str) else item
+            else:
+                for line in process_video_full(req):
+                    if _proc_cancel_event.is_set():
+                        yield (_j.dumps({"log": "⛔ Tiến trình xử lý đã bị hủy.", "level": "warning", "cancelled": True, "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
+                        break
+                    while not _proc_pause_event.is_set():
+                        if _proc_cancel_event.is_set():
+                            break
                         import time as _time
                         _time.sleep(0.1)
-                yield line.encode("utf-8") if isinstance(line, str) else line
-                if _ev_sleep:
-                    _ev_sleep(0.002)
+                    yield line.encode("utf-8") if isinstance(line, str) else line
+                    if _ev_sleep:
+                        _ev_sleep(0.002)
+        except (GeneratorExit, ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+            request_proc_cancel()
+            return
         except Exception as e:
             yield (_j.dumps({"log": f"Fatal error: {e}", "level": "error", "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
             yield (_j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=True) + "\n").encode("utf-8")

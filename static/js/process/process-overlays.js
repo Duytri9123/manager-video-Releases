@@ -39,7 +39,7 @@ function _ovClamp(v, min, max) {
         text: 'Text mới', x_pct: 0.50, y_pct: 0.18, size_pct: 0.05,
         weight: 700, padding_pct: 0.55,
         color: '#ffffff', box_color: '#000000', box_opacity: 0.50, text_opacity: 1,
-        motion: 'none', motion_amp_pct: 1, motion_period_sec: 6,
+        motion: 'none', motion_amp_pct: 1, motion_period_sec: 12,
         start_sec: '', end_sec: ''
       };
     }
@@ -80,7 +80,7 @@ function _ovClamp(v, min, max) {
       base.box_opacity = _ovClamp(raw.box_opacity ?? base.box_opacity, 0, 1);
       base.motion = ['none','figure8','horizontal','vertical','circle','diamond'].includes(raw.motion) ? raw.motion : 'none';
       base.motion_amp_pct = _ovClamp(raw.motion_amp_pct ?? base.motion_amp_pct, 0, 1);
-      base.motion_period_sec = _ovClamp(raw.motion_period_sec ?? base.motion_period_sec, 1, 60);
+      base.motion_period_sec = _ovClamp(raw.motion_period_sec ?? base.motion_period_sec, 1, 120);
     } else if (type === 'image') {
       base.path = String(raw.path ?? base.path);
       base.name = String(raw.name ?? base.name);
@@ -187,7 +187,7 @@ function _ovClamp(v, min, max) {
           <div class="field"><label>Lề text %</label><input type="number" value="${Math.round((ov.padding_pct ?? 0.55) * 100)}" min="0" max="150" step="5" oninput="ovUpdateLayer('${id}','padding_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
           <div class="field"><label>Đường di chuyển</label><select onchange="ovUpdateLayer('${id}','motion',this.value)" style="height:38px"><option value="none" ${ov.motion === 'none' ? 'selected' : ''}>Đứng yên</option><option value="figure8" ${ov.motion === 'figure8' ? 'selected' : ''}>Hình số 8</option><option value="diamond" ${ov.motion === 'diamond' ? 'selected' : ''}>Hình thoi</option><option value="horizontal" ${ov.motion === 'horizontal' ? 'selected' : ''}>Qua lại ngang</option><option value="vertical" ${ov.motion === 'vertical' ? 'selected' : ''}>Lên xuống</option><option value="circle" ${ov.motion === 'circle' ? 'selected' : ''}>Vòng tròn</option></select></div>
           <div class="field"><label>Phạm vi khung %</label><input type="number" min="0" max="100" step="1" value="${Math.round((ov.motion_amp_pct ?? 1) * 100)}" oninput="ovUpdateLayer('${id}','motion_amp_pct',this.value/100,true)" onchange="ovRenderLayerList()"></div>
-          <div class="field"><label>Chu kỳ (s)</label><input type="number" min="1" max="60" step="0.5" value="${ov.motion_period_sec ?? 6}" oninput="ovUpdateLayer('${id}','motion_period_sec',this.value,true)" onchange="ovRenderLayerList()"></div>
+          <div class="field"><label>Chu kỳ (s)</label><input type="number" min="1" max="120" step="0.5" value="${ov.motion_period_sec ?? 12}" oninput="ovUpdateLayer('${id}','motion_period_sec',this.value,true)" onchange="ovRenderLayerList()"></div>
           <div style="display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
             <div class="field">
               <label>Màu chữ</label>

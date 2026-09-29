@@ -29,6 +29,28 @@ def _get_fb_app_credentials() -> tuple[str, str]:
     return app_id, app_secret
 
 
+@bp.route('/api/facebook/app_credentials', methods=['GET', 'POST'])
+def fb_app_credentials():
+    if request.method == 'GET':
+        app_id, app_secret = _get_fb_app_credentials()
+        return jsonify({'app_id': app_id, 'configured': bool(app_id and app_secret)})
+    data = request.get_json(silent=True) or {}
+    app_id = str(data.get('app_id') or '').strip()
+    app_secret = str(data.get('app_secret') or '').strip()
+    if not app_id:
+        return jsonify({'error': 'Nhập App ID'}), 400
+    cfg = load_cfg()
+    fb_cfg = dict(cfg.get('facebook') or {})
+    fb_cfg['app_id'] = app_id
+    if app_secret:
+        fb_cfg['app_secret'] = app_secret
+    if not fb_cfg.get('app_secret'):
+        return jsonify({'error': 'Nhập App Secret'}), 400
+    cfg['facebook'] = fb_cfg
+    save_cfg(cfg)
+    return jsonify({'ok': True})
+
+
 def _fb_exchange_long_lived_token(short_token: str) -> tuple[str, str]:
     """Exchange a short-lived User token for a long-lived one (60 days).
     Returns (long_lived_token, error_message).

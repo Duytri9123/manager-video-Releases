@@ -599,14 +599,27 @@
         }
     };
 
-    window.startAntigravityOAuth = function() {
-        const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-        const redirectUri = encodeURIComponent(`http://localhost:${port}/callback`);
-        const state = Date.now() + '_' + Math.random().toString(36).substring(2, 8);
-        const clientId = atob('MTA3MTAwNjA2MDU5MS10bWhzc2luMmgyMWxjcmUyMzV2dG9sb2poNGc0MDNlcC5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbQ==');
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs&access_type=offline&prompt=consent&state=${state}`;
-
-        window.open(authUrl, "antigravity_oauth", "width=600,height=720,menubar=no,toolbar=no,location=no,status=no");
+    window.startAntigravityOAuth = async function() {
+        const statusEl = document.getElementById('modal-test-status');
+        try {
+            const start = await fetch('/api/antigravity/oauth/start', { method: 'POST' });
+            const session = await start.json();
+            if (!start.ok) throw new Error(session.error || 'Không mở được đăng nhập Google');
+            if (statusEl) statusEl.textContent = 'Đã mở trình duyệt. Hãy đăng nhập Google tại đó...';
+            for (let attempt = 0; attempt < 120; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, 2500));
+                const response = await fetch('/api/antigravity/oauth/status?state=' + encodeURIComponent(session.state));
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Đăng nhập Google thất bại');
+                if (result.pending) continue;
+                await _handleOAuthCallbackData({ code: result.code, fullUrl: result.redirect_uri + '?code=' + encodeURIComponent(result.code) });
+                return;
+            }
+            throw new Error('Phiên đăng nhập Google đã hết hạn. Vui lòng thử lại.');
+        } catch (error) {
+            if (statusEl) statusEl.textContent = '❌ ' + error.message;
+            toast(error.message, 'error');
+        }
     };
 
     // Auto-receive OAuth callback data from popup window
@@ -833,7 +846,7 @@
                     body: JSON.stringify({ providers: localConfig.providers })
                 });
 
-                if (res.ok) {
+                if (res.ok && (await res.json()).ok) {
                     toast('Đã lưu kết nối thành công', 'success');
                     closeCredentialModal();
                     loadProvidersConfig();

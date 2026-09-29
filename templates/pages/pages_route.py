@@ -1,8 +1,50 @@
 """Page routes Blueprint — serves the SPA for each tab."""
-from flask import Blueprint
+from flask import Blueprint, jsonify, request
+import secrets
+import time
+import webbrowser
+from threading import Lock
 from core_app import _render_spa
 
 bp = Blueprint("pages", __name__)
+_oauth_pending = {}
+_oauth_lock = Lock()
+
+
+@bp.post('/api/antigravity/oauth/start')
+def antigravity_oauth_start():
+    from core.direct_ai_provider import build_antigravity_auth_url
+    state = secrets.token_urlsafe(32)
+    # Use the actual local server port; desktop_launcher may choose a free one.
+    port = request.environ.get('SERVER_PORT') or '9123'
+    redirect_uri = f'http://localhost:{port}/callback'
+    with _oauth_lock:
+        now = time.time()
+        for old_state in list(_oauth_pending):
+            if now - _oauth_pending[old_state]['created'] > 600:
+                del _oauth_pending[old_state]
+        _oauth_pending[state] = {'created': now, 'redirect_uri': redirect_uri}
+    if not webbrowser.open(build_antigravity_auth_url(redirect_uri, state)):
+        with _oauth_lock:
+            _oauth_pending.pop(state, None)
+        return jsonify(error='Không mở được trình duyệt mặc định.'), 500
+    return jsonify(state=state)
+
+
+@bp.get('/api/antigravity/oauth/status')
+def antigravity_oauth_status():
+    state = request.args.get('state', '')
+    with _oauth_lock:
+        entry = _oauth_pending.get(state)
+        if not entry or time.time() - entry['created'] > 600:
+            _oauth_pending.pop(state, None)
+            return jsonify(error='Phiên đăng nhập đã hết hạn.'), 404
+        if 'code' not in entry and 'error' not in entry:
+            return jsonify(pending=True)
+        result = _oauth_pending.pop(state)
+    if result.get('error'):
+        return jsonify(error=result['error']), 400
+    return jsonify(code=result['code'], redirect_uri=result['redirect_uri'])
 
 
 @bp.route("/")
@@ -68,6 +110,14 @@ def page_chat():
 @bp.route("/callback")
 @bp.route("/auth/callback")
 def oauth_callback_page():
+    state = request.args.get('state', '')
+    with _oauth_lock:
+        entry = _oauth_pending.get(state)
+        if entry and time.time() - entry['created'] <= 600:
+            if request.args.get('error'):
+                entry['error'] = request.args['error']
+            elif request.args.get('code'):
+                entry['code'] = request.args['code']
     return """<!DOCTYPE html>
 <html>
 <head>

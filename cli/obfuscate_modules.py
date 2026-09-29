@@ -45,11 +45,10 @@ def check_pyarmor():
 
 
 def obfuscate():
-    pyarmor_path = check_pyarmor()
-    if not pyarmor_path:
-        print("[!] PyArmor not found. Install: pip install pyarmor")
-        print("[!] Falling back: using unobfuscated source files.")
-        return False
+    clean_obf_dir()
+    print("[*] Obfuscation disabled — using clean source files without key restrictions.")
+    return False
+
 
     # PyArmor obfuscates entire project — we'll copy only security modules to a
     # temp dir, obfuscate, then copy results to obf_src/

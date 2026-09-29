@@ -3144,7 +3144,7 @@
         if (typeof _getPreviewVideoPath !== 'function') return null;
         var source = _getPreviewVideoPath();
         if (!source || source.type !== 'file' || !source.val) return null;
-        return '/api/files/preview?path=' + encodeURIComponent(source.val);
+        return '/api/files/preview-compatible?path=' + encodeURIComponent(source.val);
       }
 
       function _syncPlayerBtn(playing) {
@@ -3350,13 +3350,11 @@
       var sel = document.getElementById('pe2-queue-select');
       if (!sel) return;
       var q = window._batchQueue || [];
-      var items = q.filter(function (t) { return t.status === 'ready' || t.status === 'done' || t.status === 'processing'; });
+      var items = q.filter(function (t) { return t.type === 'file' && t.val && t.status !== 'error'; });
       // Preserve current selection
       var cur = sel.value;
       sel.innerHTML = '';
-      if (items.length === 0) {
-        sel.innerHTML = '<option value="">Chọn video hàng chờ…</option>';
-      }
+      sel.innerHTML = '<option value="">Chọn video hàng chờ…</option>';
       items.forEach(function (t) {
         var rawLabel = t.desc || t.val || t.id || '';
         var label = rawLabel.split(/[\\/]/).pop() || rawLabel;

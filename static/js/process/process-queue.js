@@ -1,4 +1,32 @@
 window._batchQueue = window._batchQueue || [];
+window._moveBatchQueueItem = function (index, delta) {
+  const queue = window._batchQueue;
+  const other = index + delta;
+  if (!Array.isArray(queue) || other < 0 || other >= queue.length || window._procRunning) return;
+  [queue[index], queue[other]] = [queue[other], queue[index]];
+  _renderBatchQueue();
+  if (typeof _step3RenderQueue === 'function') _step3RenderQueue();
+  if (typeof window.pe2RefreshQueueSelect === 'function') window.pe2RefreshQueueSelect();
+};
+
+// Fallback SVG icon helper — the canonical version lives in process/script.js
+// which loads *after* this file.  Provide a minimal fallback so early calls
+// don't throw ReferenceError; after DOMContentLoaded the real one takes over.
+if (typeof _processSvgIcon !== 'function') {
+  var _processSvgIcon = function(name, className, size) {
+    size = size || 14;
+    className = className || '';
+    var paths = {
+      refresh: '<path d="M20 7v5h-5"></path><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"></path>',
+      settings: '<path d="M4 7h16M4 17h16"></path><circle cx="9" cy="7" r="3"></circle><circle cx="15" cy="17" r="3"></circle>',
+      video: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m10 9 5 3-5 3Z"></path>',
+      close: '<path d="m6 6 12 12M18 6 6 18"></path>',
+      folder: '<path d="M3 6h7l2 2h9l-2 11H3Z"></path>'
+    };
+    var body = paths[name] || paths.video || '';
+    return '<svg class="proc-svg-icon ' + className + '" width="' + size + '" height="' + size + '" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:' + size + 'px;height:' + size + 'px;flex-shrink:0;display:inline-block;vertical-align:middle;">' + body + '</svg>';
+  };
+}
 
   // Listen for Step 1 download log updates from backend
   if (typeof socket !== 'undefined' && socket) {
@@ -262,6 +290,8 @@ window._batchQueue = window._batchQueue || [];
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
         <span class="badge ${badgeClass}">${label}</span>
         ${cfgBtnHtml}
+        <button type="button" onclick="window._moveBatchQueueItem(${i},-1)" class="btn-icon" title="Lên" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" onclick="window._moveBatchQueueItem(${i},1)" class="btn-icon" title="Xuống" ${i === window._batchQueue.length - 1 ? 'disabled' : ''}>↓</button>
         <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px" ${disableDel}>×</button>
       </div>`;
     }).join('');
@@ -329,8 +359,8 @@ window._batchQueue = window._batchQueue || [];
         startBtn.disabled = false;
         startBtn.classList.remove('opacity-70', 'cursor-not-allowed');
         startBtn.innerHTML = `
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          <span>Bắt đầu xử lý hàng chờ</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
+          <span>Xử lý tất cả</span>
         `;
       }
     }
@@ -344,6 +374,10 @@ window._batchQueue = window._batchQueue || [];
         cfgCard.classList.remove('step3-config-disabled');
       }
     }
+
+    // Toggle cancel buttons & running actions visibility
+    const runActs = document.getElementById('step3-running-actions');
+    if (runActs) runActs.style.display = isRunning ? 'grid' : 'none';
   }
 
   window._resetQueueItemStatus = function(taskId) {
@@ -393,6 +427,9 @@ window._batchQueue = window._batchQueue || [];
   };
 
   window._step3StartProc = function() {
+    // Process all videos in the queue automatically
+    window._procProcessAll = true;
+
     // Apply skip flags from checkboxes before starting
     window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
     window._procSkipThumbSession  = false;
@@ -513,6 +550,13 @@ window._batchQueue = window._batchQueue || [];
         </div>
       ` : '';
 
+      const cancelBtnHtml = isRunningNow ? `
+        <button onclick="procCancelCurrentVideo()" class="btn btn-outline btn-xs" title="Hủy video đang xử lý này" style="font-size:10px;padding:2px 7px;height:24px;line-height:20px;border-color:#ef4444;color:#ef4444;border-radius:6px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;background:rgba(239,68,68,0.08);cursor:pointer;font-weight:600">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <span>Hủy</span>
+        </button>
+      ` : '';
+
       const resetBtnHtml = (!isRunningNow && (t.status === 'done' || t.status === 'error' || t.status === 'processing')) ? `
         <button onclick="window._resetQueueItemStatus('${t.id}')" class="btn-icon text-accent" title="Đặt lại trạng thái Sẵn sàng" style="font-size:12px;padding:2px 4px;border:none;background:transparent;cursor:pointer">${_processSvgIcon('refresh')}</button>
       ` : '';
@@ -527,6 +571,7 @@ window._batchQueue = window._batchQueue || [];
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
         <span class="badge ${badgeClass[t.status] || 'badge-gray'}">${statusLabel[t.status] || t.status}</span>
         ${cfgBtnHtml}
+        ${cancelBtnHtml}
         ${resetBtnHtml}
         ${deleteBtnHtml}
       </div>`;
@@ -670,19 +715,23 @@ window._batchQueue = window._batchQueue || [];
 
     // Stay on Step 3 after both success and failure so the result/log remains visible.
 
-    // Auto-drain: immediately pick the next pending task (or wait if none)
-    if (window._procAutoDrain) {
+    // Auto-process entire queue when "Xử lý tất cả" was clicked or auto-drain is enabled
+    if (window._procProcessAll || window._procAutoDrain) {
       const next = _pickNextPendingTask();
       if (next) {
+        window._step3Started = true;
+        _appendProcLog?.(` Chuyển sang video tiếp theo: "${next.desc || next.val}"...`, 'info');
         // Small delay to let UI breathe
-        setTimeout(() => _runBatchQueueFlow(), 800);
+        setTimeout(() => _runBatchQueueFlow(), 1000);
       } else {
-        const status = document.getElementById('batch-drain-status');
-        if (status) status.textContent = ' Đang chờ video mới...';
+        window._procProcessAll = false;
+        window._step3Started = false;
+        _step3RefreshStartCard();
+        if (typeof toast === 'function') toast('🎉 Đã hoàn tất xử lý toàn bộ hàng chờ video!', 'success');
+        _appendProcLog?.('🎉 Đã hoàn tất xử lý toàn bộ hàng chờ video!', 'success');
       }
     } else {
       // Reset session-only skip flag when a manual batch ends
-      // (so "Bỏ qua" doesn't carry over to the next separate batch)
       window._procSkipReviewSession = false;
     }
   };
@@ -835,8 +884,99 @@ window._batchQueue = window._batchQueue || [];
   function _procShowPauseBtn(show) {
     const btn = document.getElementById('btn-proc-pause');
     if (btn) btn.style.display = show ? 'inline-flex' : 'none';
+    const act = document.getElementById('step3-running-actions');
+    if (act) act.style.display = show ? 'grid' : 'none';
     if (!show) { window._procPaused = false; if (btn) { btn.textContent = ' Dừng'; btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; } }
   }
+
+  window.procCancelCurrentVideo = function() {
+    window._procCurrentCancelled = true;
+    fetch('/api/proc_cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'current' })
+    }).catch(() => {});
+
+    try { if (window._procAbortController) window._procAbortController.abort(); } catch(_) {}
+    try { if (window._procReader) window._procReader.cancel(); } catch(_) {}
+
+    if (typeof _appendProcLog === 'function') {
+      _appendProcLog('⛔ Đã hủy xử lý video hiện tại.', 'warning');
+    }
+    if (typeof _setProcProgress === 'function') {
+      _setProcProgress(0, 'Đã hủy');
+    }
+
+    const cur = (window._batchQueue || []).find(t => t.id === window._procCurrentTaskId || t.status === 'processing');
+    if (cur) {
+      cur.status = 'error';
+      cur.desc = (cur.desc || cur.val) + ' (Đã hủy)';
+    }
+
+    window._procRunning = false;
+    window._procPaused = false;
+    _step3RefreshStartCard();
+    _step3RenderQueue();
+    _procShowPauseBtn(false);
+
+    if (typeof toast === 'function') toast('Đã hủy xử lý video hiện tại', 'warning');
+
+    // If "Xử lý tất cả" is active, skip to the next pending video
+    if (window._procProcessAll) {
+      const next = _pickNextPendingTask();
+      if (next) {
+        _appendProcLog?.(` Đang chuyển sang video tiếp theo trong hàng chờ: "${next.desc || next.val}"...`, 'info');
+        setTimeout(() => _runBatchQueueFlow(), 1200);
+      } else {
+        window._procProcessAll = false;
+        window._step3Started = false;
+        _step3RefreshStartCard();
+      }
+    }
+  };
+  window.procCancelCurrent = window.procCancelCurrentVideo;
+
+  window.procCancelAll = function() {
+    window._procCancelled = true;
+    window._procCurrentCancelled = true;
+    window._procProcessAll = false; // STOP entire queue flow
+
+    fetch('/api/proc_cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: 'all' })
+    }).catch(() => {});
+
+    try { if (window._procAbortController) window._procAbortController.abort(); } catch(_) {}
+    try { if (window._procReader) window._procReader.cancel(); } catch(_) {}
+
+    window._procRunning = false;
+    window._step3Started = false;
+    window._procAutoDrain = false;
+    window._procPaused = false;
+
+    const drainEl = document.getElementById('batch-auto-drain');
+    if (drainEl) drainEl.checked = false;
+
+    (window._batchQueue || []).forEach(t => {
+      if (t.status === 'processing') {
+        t.status = 'ready';
+      }
+    });
+
+    if (typeof _appendProcLog === 'function') {
+      _appendProcLog('⛔ Đã dừng toàn bộ hàng chờ và hủy tiến trình xử lý.', 'warning');
+    }
+    if (typeof _setProcProgress === 'function') {
+      _setProcProgress(0, 'Đã dừng tất cả');
+    }
+
+    _step3RefreshStartCard();
+    _step3RenderQueue();
+    _procShowPauseBtn(false);
+
+    if (typeof toast === 'function') toast('Đã dừng và hủy toàn bộ tiến trình xử lý', 'info');
+  };
 
   // A reload interrupts the response stream. Restore the task as ready so the
   // user can safely continue; pipeline caches allow completed stages to be reused.

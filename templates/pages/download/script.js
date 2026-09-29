@@ -32,7 +32,7 @@ function renderQueue() {
     return;
   }
 
-  list.innerHTML = q.map(item => {
+  list.innerHTML = q.map((item, index) => {
     const url = item.url || '';
     const desc = item.desc || url;
     const running = url === window._downloadingUrl;
@@ -48,6 +48,8 @@ function renderQueue() {
       + thumb
       + '<div class="queue-desc" title="' + _dlEsc(desc) + '">' + _dlEsc(desc) + '</div>'
       + badge
+      + '<button class="btn-icon" title="Lên" onclick="moveQueueItem(' + index + ',-1)" ' + (index === 0 ? 'disabled' : '') + '>↑</button>'
+      + '<button class="btn-icon" title="Xuống" onclick="moveQueueItem(' + index + ',1)" ' + (index === q.length - 1 ? 'disabled' : '') + '>↓</button>'
       + '<button class="btn-icon" title="' + (typeof t === 'function' ? t('ttl_remove_queue_item') : 'Xóa')
       + '" onclick="removeQueueItem(\'' + encodeURIComponent(url) + '\')">🗑</button>'
       + '</div>'
@@ -55,6 +57,16 @@ function renderQueue() {
       + 'data-url-bar="' + _dlEsc(url) + '" style="width:0"></div></div>'
       + '</div>';
   }).join('');
+}
+
+async function moveQueueItem(index, delta) {
+  const q = window._queue || [];
+  const other = index + delta;
+  if (other < 0 || other >= q.length || window._dlRunning) return;
+  [q[index], q[other]] = [q[other], q[index]];
+  renderQueue();
+  await API.post('/api/queue/reorder', q.map(item => item.url));
+  loadQueue();
 }
 
 /** Nạp hàng chờ từ server. */

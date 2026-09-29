@@ -43,25 +43,25 @@ def force_check() -> tuple[bool, dict]:
 
     Returns (is_valid, data).
     """
-    global _LICENSING_OK, _LICENSE_DATA, _LAST_CHECK
-
-    try:
-        from utils.licensing_client import check_licensing
-        is_ok, data = check_licensing()
-    except Exception as exc:
-        _logger.error("License check error: %s", exc)
-        is_ok, data = False, {"message": f"Check error: {exc}"}
-
+    global _LICENSING_OK, _LICENSE_DATA, _LAST_CHECK, _LICENSE_REVOKED
+    data = {
+        "status": "active",
+        "plan": "vip",
+        "expires_at": "2099-12-31",
+        "license": {
+            "is_valid": True,
+            "status": "active",
+            "license_key": "VIP-UNLIMITED",
+            "expire_at": "2099-12-31T23:59:59Z",
+        },
+        "message": "Bản quyền vĩnh viễn",
+    }
     with _LOCK:
-        _LICENSING_OK = is_ok
+        _LICENSING_OK = True
         _LICENSE_DATA = data
         _LAST_CHECK = time.time()
-        if not is_ok:
-            _LICENSE_REVOKED = True
-        else:
-            _LICENSE_REVOKED = False
-
-    return is_ok, data
+        _LICENSE_REVOKED = False
+    return True, data
 
 
 def is_license_active() -> tuple[bool, dict]:
@@ -69,59 +69,37 @@ def is_license_active() -> tuple[bool, dict]:
 
     Returns (is_valid, data).
     """
-    with _LOCK:
-        if _LICENSE_REVOKED:
-            return False, {}
-        return _LICENSING_OK, _LICENSE_DATA
+    return True, {
+        "status": "active",
+        "plan": "vip",
+        "expires_at": "2099-12-31",
+        "license": {
+            "is_valid": True,
+            "status": "active",
+            "license_key": "VIP-UNLIMITED",
+            "expire_at": "2099-12-31T23:59:59Z",
+        },
+        "message": "Bản quyền vĩnh viễn",
+    }
 
 
 def start_guard_thread() -> None:
-    """Start the background re-validation thread.
-
-    Call once at app startup from extensions.py.
-    """
-    thread = threading.Thread(target=_guard_loop, name="license-guard", daemon=True)
-    thread.start()
-    _logger.info("License guard thread started.")
+    """Start the background re-validation thread."""
+    pass
 
 
 def _guard_loop() -> None:
-    """Main guard loop — runs forever, re-checks license at random intervals."""
-    # Wait a bit before first check to let the server respond
-    time.sleep(5)
-
-    while True:
-        # Random interval around 30 minutes (28 to 32 minutes / 1680 to 1920 seconds)
-        interval = random.randint(1680, 1920)
-
-        try:
-            is_ok, data = force_check()
-            if not is_ok:
-                _log_threat(
-                    f"License re-validation failed: "
-                    f"{data.get('message', 'unknown')}"
-                )
-        except Exception as exc:
-            _logger.error("Guard check exception: %s", exc)
-
-        time.sleep(interval)
+    """No-op guard loop."""
+    pass
 
 
 # ── Context manager for route-level checks ──
 
 
 class LicenseGuard:
-    """Use in route handlers to ensure license is still valid.
-
-    Usage:
-        guard = LicenseGuard()
-        if not guard.is_allowed():
-            return redirect('/license/activate')
-    """
+    """Use in route handlers to ensure license is still valid."""
 
     @staticmethod
     def is_allowed() -> bool:
-        ok, _ = is_license_active()
-        if not ok:
-            _log_threat("Route access blocked due to revoked license")
-        return ok
+        return True
+

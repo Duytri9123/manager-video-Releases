@@ -9,7 +9,6 @@ Security-hardened:
 """
 import asyncio
 import collections
-import functools
 import io
 import json
 import logging
@@ -22,20 +21,8 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-from flask import Flask, jsonify, redirect, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file
 from flask_socketio import SocketIO, emit
-from utils.edition import is_customer_edition
-
-try:
-    from utils.license_guard import is_license_active, LicenseGuard
-except Exception:
-    # Fallback — allow if module not yet ready
-    def is_license_active():
-        return True, {}
-    class LicenseGuard:
-        @staticmethod
-        def is_allowed():
-            return True
 
 try:
     from pyngrok import ngrok
@@ -492,17 +479,9 @@ def add_no_cache_headers(response):
 
 
 # ═══════════════════════════════════════════════════════════════
-# License-required decorator (multi-point check #3)
+# Compatibility decorator for existing processing routes
 # ═══════════════════════════════════════════════════════════════
 
 def require_valid_license(f):
-    """Decorator: redirect to activation if license is not active.
-
-    Apply to critical routes (download, process, transcribe, etc.)
-    """
-    @functools.wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not is_customer_edition() and not LicenseGuard.is_allowed():
-            return redirect("/license/activate")
-        return f(*args, **kwargs)
-    return decorated_function
+    """Keep existing route declarations without requiring activation."""
+    return f

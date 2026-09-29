@@ -43,12 +43,16 @@ def queue_remove():
 @bp.route("/api/queue/reorder", methods=["POST"])
 def queue_reorder():
     urls = request.json or []
+    if not isinstance(urls, list):
+        return jsonify({'ok': False, 'error': 'Expected URL list'}), 400
     with _queue_lock:
         by_url = {i["url"]: i for i in _dl_queue}
         _dl_queue.clear()
         for u in urls:
             if u in by_url:
                 _dl_queue.append(by_url[u])
+                del by_url[u]
+        _dl_queue.extend(by_url.values())
     socketio.emit("queue_update", list(_dl_queue))
     return jsonify({"ok": True})
 

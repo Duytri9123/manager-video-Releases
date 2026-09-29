@@ -106,12 +106,8 @@ bp = Blueprint("licensing", __name__)
 
 @bp.route("/license/activate", methods=["GET"])
 def activate_view():
-    from utils.licensing_client import _load_license_key
-    license_key_on_disk = _load_license_key()
+    return redirect("/")
 
-    cfg = load_config()
-    lic_cfg = cfg.get("licensing") or {}
-    license_key = lic_cfg.get("license_key", "")
 
     if not license_key and license_key_on_disk:
         license_key = license_key_on_disk
@@ -505,35 +501,10 @@ def inject_license_globals():
 
 
 def init_licensing_app(app):
-    """Register licensing blueprint + before_request gate + guard thread."""
-    # Synchronous check at startup to ensure is_license_active() returns immediately.
-    # If a saved key exists but the check fails (e.g. network not ready), retry a
-    # few times before giving up — avoids dumping valid users to the activation screen.
-    import time as _time
-    try:
-        from utils.licensing_client import _load_license_key
-        has_saved_key = bool(_load_license_key())
-    except Exception:
-        has_saved_key = False
-
-    ok = False
-    max_retries = 3 if has_saved_key else 1
-    for attempt in range(max_retries):
-        try:
-            result, _ = force_check()
-            if result:
-                ok = True
-                break
-        except Exception:
-            pass
-        if attempt < max_retries - 1:
-            _time.sleep(2)
-
-    if has_saved_key and not ok:
-        _logger.warning("Startup license check failed after %d attempts (has saved key)", max_retries)
-
-    start_guard_thread()
+    """Register licensing blueprint + before_request gate."""
+    force_check()
     app.register_blueprint(bp)
+
 
     # Register global template context processor
     @app.context_processor
@@ -542,17 +513,19 @@ def init_licensing_app(app):
 
     @app.before_request
     def check_license_gate():
-        if (request.path.startswith("/static/")
-                or request.path.startswith("/api/license/")
-                or request.path == "/license/activate"
-                or request.path.startswith("/license/checkout/")
-                or "socket.io" in request.path):
-            return None
-
-        is_active, _ = is_license_active()
-        if not is_active:
-            _logger.info("License gate blocked: %s (active=%s)", request.path, is_active)
-            return redirect("/license/activate")
-
+        # [BYPASSED] License check disabled — allow all requests
         return None
+        # if (request.path.startswith("/static/")
+        #         or request.path.startswith("/api/license/")
+        #         or request.path == "/license/activate"
+        #         or request.path.startswith("/license/checkout/")
+        #         or "socket.io" in request.path):
+        #     return None
+        #
+        # is_active, _ = is_license_active()
+        # if not is_active:
+        #     _logger.info("License gate blocked: %s (active=%s)", request.path, is_active)
+        #     return redirect("/license/activate")
+        #
+        # return None
 

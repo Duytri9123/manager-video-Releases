@@ -185,8 +185,26 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
-              <span>Bắt đầu xử lý hàng chờ</span>
+              <span>Xử lý tất cả</span>
             </button>
+            <div id="step3-running-actions" class="grid grid-cols-2 gap-2 mt-1" style="display:none">
+              <button type="button"
+                class="btn btn-secondary border-red-200 dark:border-red-900/60 bg-red-50/50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100/60 dark:hover:bg-red-900/40 py-1 text-[10.5px] font-semibold flex justify-center items-center gap-1.5 h-[32px] rounded-xl transition"
+                onclick="procCancelCurrentVideo()" title="Hủy video hiện tại và chuyển video tiếp theo">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+                <span>Hủy video này</span>
+              </button>
+              <button type="button"
+                class="btn btn-secondary border-red-300 dark:border-red-800 bg-red-100/70 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-200/80 dark:hover:bg-red-900/60 py-1 text-[10.5px] font-semibold flex justify-center items-center gap-1.5 h-[32px] rounded-xl transition"
+                onclick="procCancelAll()" title="Dừng toàn bộ hàng chờ ngay lập tức">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/>
+                </svg>
+                <span>Hủy tất cả</span>
+              </button>
+            </div>
             <button type="button"
               class="btn btn-secondary w-full py-1 text-[10.5px] flex justify-center items-center gap-1.5 h-[30px]"
               onclick="procWizGo(2)">
@@ -212,7 +230,7 @@
                     stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="3" />
                     <path
-                      d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4" />
+                      d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
                 </span>
                 <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Cấu hình
@@ -455,10 +473,10 @@
             <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Nhật ký xử lý
               AI</h3>
           </div>
-          <div class="flex items-center gap-1.5">
-          <button type="button" id="btn-proc-pause" class="btn btn-secondary text-[9px] py-0.5 px-2 items-center gap-1"
+          <div class="flex items-center gap-1.5 flex-nowrap">
+          <button type="button" id="btn-proc-pause" class="btn btn-secondary text-[9.5px] py-1 px-2.5 inline-flex items-center gap-1 h-[26px]"
             style="display:none" onclick="procTogglePause()"> Dừng</button>
-          <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2 flex items-center gap-1"
+          <button type="button" class="btn btn-secondary text-[9.5px] py-1 px-2.5 flex items-center gap-1 h-[26px]"
             onclick="clearLog('step3-log')">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">

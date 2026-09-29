@@ -463,9 +463,11 @@
                       <a href="https://developers.facebook.com/tools/explorer/" target="_blank"
                         style="color:var(--accent)">Graph API Explorer</a>
                       để kết nối và đăng video lên Pages.
-                      <br><span style="color:var(--text-muted)">Cấu hình App ID + Secret trong config.yml để token tự
-                        động gia hạn.</span>
+                      <br><span style="color:var(--text-muted)">Nhập App ID và App Secret bên dưới để token tự động gia hạn.</span>
                     </div>
+                    <div class="field"><label>Facebook App ID</label><input id="pub-fb-app-id" autocomplete="off" placeholder="App ID"></div>
+                    <div class="field"><label>Facebook App Secret</label><input id="pub-fb-app-secret" type="password" autocomplete="new-password" placeholder="Để trống nếu đã lưu"></div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="pubFbSaveAppCredentials()">Lưu App ID / Secret</button>
                     <div class="field">
                       <label>User Access Token</label>
                       <div style="display:flex;gap:8px">

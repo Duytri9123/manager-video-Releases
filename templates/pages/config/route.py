@@ -294,6 +294,16 @@ def init_providers_db():
                 status TEXT DEFAULT 'active'
             )
         """)
+        existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(provider_connections)")}
+        for column, definition in {
+            "refresh_token": "TEXT DEFAULT ''",
+            "expires_at": "INTEGER DEFAULT 0",
+            "project_id": "TEXT DEFAULT ''",
+            "email": "TEXT DEFAULT ''",
+            "auth_type": "TEXT DEFAULT 'api_key'",
+        }.items():
+            if column not in existing_columns:
+                conn.execute(f"ALTER TABLE provider_connections ADD COLUMN {column} {definition}")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS provider_settings (
                 provider TEXT PRIMARY KEY,
@@ -395,7 +405,9 @@ def save_providers_to_db(providers):
                 ))
         conn.commit()
     except Exception as e:
+        conn.rollback()
         print("[Providers DB] Save failed:", e)
+        raise
     finally:
         conn.close()
 
@@ -415,7 +427,10 @@ def post_config():
     # Intercept providers data to save to SQLite database
     providers = data.get("providers")
     if providers is not None:
-        save_providers_to_db(providers)
+        try:
+            save_providers_to_db(providers)
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"Không lưu được kết nối: {exc}"}), 500
         # Remove from data so it doesn't get saved to config.yml
         data = {k: v for k, v in data.items() if k != "providers"}
         

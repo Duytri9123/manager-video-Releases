@@ -916,7 +916,7 @@ async function validateCookie() {
   }
 }
 
-let douyinCaptureTimer;
+if (typeof douyinCaptureTimer === 'undefined') { var douyinCaptureTimer; }
 async function autoFetchCookie() {
   try {
     const data = await (await fetch('/api/auto_fetch_cookie', {method: 'POST'})).json();

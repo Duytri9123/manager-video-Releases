@@ -810,7 +810,7 @@ async function openDownloadedPreviewModal(item) {
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
   modal.setAttribute('aria-label', `Xem trước ${item.name || 'file'}`);
-  const previewUrl = '/api/files/preview?path=' + encodeURIComponent(item.path);
+  const previewUrl = ((item.file_type === 'video' || /\.(mp4|mkv|mov|webm|avi|m4v)$/i.test(item.path)) ? '/api/files/preview-compatible?path=' : '/api/files/preview?path=') + encodeURIComponent(item.path);
 
   let bodyHtml = '';
   const ftype = item.file_type || '';
@@ -1896,10 +1896,14 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
   window._procLastSubmittedConfig = JSON.parse(JSON.stringify(baseFields));
   _appendProcLog(` Cấu hình âm thanh: âm gốc ${Math.round((baseFields.vol_orig || 0) * 100)}% · giữ nền ${baseFields.keep_bg_music ? 'Bật' : 'Tắt'} · âm ngoài ${baseFields.ext_audio_enabled ? `Bật (${baseFields.ext_audios.length} tệp)` : 'Tắt'}`, 'info');
 
+  window._procAbortController = new AbortController();
+  window._procCancelled = false;
+  window._procCurrentCancelled = false;
   const doRequest = (body, isFormData) => fetch('/api/process_video', {
     method: 'POST',
     headers: isFormData ? {} : { 'Content-Type': 'application/json' },
     body,
+    signal: window._procAbortController.signal,
   }).then(res => {
     if (!res.ok) {
       return res.text().then(text => {
@@ -1991,6 +1995,11 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
         lines.filter(l => l.trim()).forEach(line => {
           try {
             const d = JSON.parse(line);
+            if (d.heartbeat) return;
+            if (d.cancelled) {
+              processingFailed = true;
+              window._procCancelled = true;
+            }
             if (d.failed) processingFailed = true;
             if (d.log) {
               _appendProcLog(d.log, d.level || 'info');
@@ -2075,13 +2084,34 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
           } catch {}
         });
         read();
+      }).catch(err => {
+        if (err.name === 'AbortError' || window._procCancelled || window._procCurrentCancelled) {
+          _appendProcLog('⛔ Tiến trình xử lý đã bị dừng/hủy.', 'warning');
+          _setProcProgress(0, 'Đã hủy');
+        } else {
+          _appendProcLog('Lỗi kết nối: ' + err, 'error');
+        }
+        window._procRunning = false;
+        if (btn) { btn.disabled = false; btn.textContent = 'Xử lý Video'; }
+        if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(false);
+        if (typeof _step3RefreshStartCard === 'function') _step3RefreshStartCard();
+        if (typeof window._onProcTaskFinished === 'function') {
+          window._onProcTaskFinished(false);
+        }
       });
     }
     read();
   }).catch(err => {
-    _appendProcLog('Lỗi kết nối: ' + err, 'error');
+    if (err.name === 'AbortError' || window._procCancelled || window._procCurrentCancelled) {
+      _appendProcLog('⛔ Tiến trình xử lý đã bị dừng/hủy.', 'warning');
+      _setProcProgress(0, 'Đã hủy');
+    } else {
+      _appendProcLog('Lỗi kết nối: ' + err, 'error');
+    }
+    window._procRunning = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Xử lý Video'; }
     if (typeof _procShowPauseBtn === 'function') _procShowPauseBtn(false);
+    if (typeof _step3RefreshStartCard === 'function') _step3RefreshStartCard();
     if (typeof window._onProcTaskFinished === 'function') {
       window._onProcTaskFinished(false);
     }

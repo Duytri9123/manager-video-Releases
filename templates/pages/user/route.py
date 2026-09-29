@@ -533,7 +533,19 @@ def user_info():
                 cached = api.pop_browser_post_aweme_items() or {}
                 if not ids:
                     return [], "Douyin chặn danh sách video. Hãy đăng nhập hoặc hoàn tất xác minh trong trình duyệt Douyin rồi thử lại."
-                return [cached.get(aid) or {"aweme_id": aid} for aid in ids], None
+                items = []
+                for aid in ids:
+                    item = cached.get(aid)
+                    if not item or (not _extract_cover(item) and not item.get('desc')):
+                        try:
+                            item = await api.get_video_detail(aid, suppress_error=True) or item
+                        except Exception:
+                            pass
+                    if item and (_extract_cover(item) or item.get('desc')):
+                        items.append(item)
+                if not items:
+                    return [], "Douyin chỉ trả về ID video, chưa có ảnh và thông tin. Hãy đăng nhập hoặc hoàn tất xác minh trong trình duyệt Douyin rồi thử lại."
+                return items, None
 
             try:
                 info = await api.get_user_info(sec_uid)
@@ -547,9 +559,10 @@ def user_info():
                 if browser_error:
                     return None, [], False, browser_error
                 author = next((item.get("author") for item in items if isinstance(item.get("author"), dict)), {})
+                if not author.get('nickname'):
+                    return None, [], False, "Douyin chưa trả về thông tin tài khoản. Hãy đăng nhập hoặc hoàn tất xác minh trong trình duyệt Douyin rồi thử lại."
                 info = dict(author)
                 info.setdefault("sec_uid", sec_uid)
-                info.setdefault("nickname", sec_uid)
                 info.setdefault("aweme_count", len(items))
                 return info, items, False, None
 

@@ -168,7 +168,7 @@ async function parseCookie() {
   });
 }
 
-let douyinCaptureTimer;
+if (typeof douyinCaptureTimer === 'undefined') { var douyinCaptureTimer; }
 async function autoFetch() {
   try {
     const data = await (await fetch('/api/auto_fetch_cookie', {method: 'POST'})).json();

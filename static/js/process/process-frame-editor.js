@@ -101,7 +101,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     else if (key === 'padding_pct') ov.padding_pct = _ovClamp(value, 0, 1.5);
     else if (key === 'motion') ov.motion = ['none','figure8','horizontal','vertical','circle','diamond'].includes(value) ? value : 'none';
     else if (key === 'motion_amp_pct') ov.motion_amp_pct = _ovClamp(value, 0, 1);
-    else if (key === 'motion_period_sec') ov.motion_period_sec = _ovClamp(value, 1, 60);
+    else if (key === 'motion_period_sec') ov.motion_period_sec = _ovClamp(value, 1, 120);
     else if (key === 'box_opacity' || key === 'opacity' || key === 'text_opacity') ov[key] = _ovClamp(value, 0, 1);
     else if (key === 'radius_pct') ov.radius_pct = _ovClamp(value, 0, 0.5);
     else if (key === 'width_pct' || key === 'height_pct') ov[key] = _ovClamp(value, 0.01, 1);
@@ -915,7 +915,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
       if (layerId === 'overlays') {
         const count = (window._videoOverlays || []).length;
         extraInfo = `<span class="pe2-track-badge" style="background:rgba(99,102,241,0.12);color:var(--accent,#3b82f6)">${count} phần tử</span>`;
-      } else if (layerId === 'logo' && frameEnabled) {
+      } else if (layerId === 'logo' && (document.getElementById('frame-enabled')?.checked ?? false)) {
         const hasLogo = !!(document.getElementById('frame-logo-path')?.value);
         extraInfo = hasLogo ? `<span class="pe2-track-badge" style="background:rgba(34,197,94,0.12);color:#22c55e">Đã chọn</span>` : `<span class="pe2-track-badge" style="color:var(--text-muted)">Chưa có</span>`;
       } else if (layerId === 'subs') {

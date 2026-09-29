@@ -9,6 +9,7 @@ from __future__ import annotations
 import ctypes
 import os
 import socket
+import shutil
 import sys
 import threading
 import time
@@ -31,8 +32,14 @@ def _app_dir() -> Path:
 
 
 APP_DIR = _app_dir()
-STATE_DIR = APP_DIR / ".state"
+STATE_DIR = Path(os.environ.get("LOCALAPPDATA") or APP_DIR) / "DuyTrisDownloader" / ".state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
+_legacy_storage = APP_DIR / ".state" / "qt_storage"
+if _legacy_storage.is_dir() and not (STATE_DIR / "qt_storage").exists():
+    try:
+        shutil.copytree(_legacy_storage, STATE_DIR / "qt_storage")
+    except OSError:
+        pass
 LOG_FILE = STATE_DIR / "desktop_app.log"
 
 
@@ -202,6 +209,15 @@ def _check_update_and_notify():
 def main() -> int:
     _prepare_stdio()
     os.chdir(APP_DIR)
+    if os.getenv("DUYTRIS_TTS_SELFTEST") == "1":
+        try:
+            from core.processor.tts import _get_vieneu_tts
+            _get_vieneu_tts("vieneu-cpu")
+            _log("VieNeu CPU self-test: OK")
+            return 0
+        except Exception:
+            _log("VieNeu CPU self-test failed:\n" + traceback.format_exc())
+            return 1
     os.environ.setdefault("OPEN_BROWSER", "0")
     os.environ.setdefault("NGROK_ENABLED", "0")
     os.environ["FLASK_HOST"] = HOST
@@ -238,6 +254,7 @@ def main() -> int:
     profile = QWebEngineProfile.defaultProfile()
     profile.setCachePath(str(STATE_DIR / "qt_cache"))
     profile.setPersistentStoragePath(str(STATE_DIR / "qt_storage"))
+    profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
 
     window = QMainWindow()
     window.setWindowTitle(APP_TITLE)
@@ -367,6 +384,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
 
