@@ -128,7 +128,7 @@
                   <path d="M3 3v5h5" />
                 </svg>
               </button>
-              <button type="button" id="pe2-save-defaults" class="btn btn-primary btn-sm" onclick="procSaveStep(2)"
+              <button type="button" id="pe2-save-defaults" class="btn btn-secondary btn-sm" onclick="procSaveStep(2)"
                 title="Lưu cài đặt Bước 2 vào cấu hình mặc định theo tỷ lệ trong trình duyệt"
                 style="display:inline-flex;align-items:center;gap:4px">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -138,6 +138,15 @@
                   <polyline points="7 3 7 8 15 8" />
                 </svg>
                 <span id="pe2-save-defaults-label">Lưu mặc định</span>
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="procStartQueueFromStep2()"
+                title="Bắt đầu xử lý tất cả video trong hàng chờ bằng cấu hình Bước 2 này"
+                style="display:inline-flex;align-items:center;gap:4px;font-weight:600">
+                <span>Xử lý tất cả</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
               </button>
 
             </div>
@@ -823,13 +832,25 @@
                   style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:transparent;z-index:3;cursor:pointer"></video>
                 <img id="sub-preview-img" src="" alt="" style="width:100%;display:none;vertical-align:bottom;z-index:1;position:relative">
                 <div id="sub-preview-placeholder" style="color:#666;font-size:12px;padding:20px;text-align:center;z-index:1">
-                  <div style="display:inline-flex;align-items:center;gap:6px">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                      <circle cx="12" cy="13" r="4" />
-                    </svg>
-                    <span>Bấm <b>Lấy frame</b> để xem preview</span>
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+                    <div style="display:inline-flex;align-items:center;gap:6px">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                      </svg>
+                      <span>Bấm <b>Lấy frame</b> hoặc chọn video để xem preview</span>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="pe2TriggerVideoUpload()"
+                      style="display:inline-flex;align-items:center;gap:5px">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      <span>Chọn video từ máy</span>
+                    </button>
                   </div>
                 </div>
                 <div id="sub-preview-blur"
@@ -888,6 +909,20 @@
               onchange="pe2SelectQueueVideo(this.value)">
               <option value="">Chọn video hàng chờ…</option>
             </select>
+            <button type="button" class="btn btn-secondary btn-sm" id="pe2-btn-pick-video"
+              onclick="pe2TriggerVideoUpload()"
+              title="Chọn video từ máy tính để chỉnh sửa và xử lý ở Bước 2"
+              style="display:inline-flex;align-items:center;gap:5px;height:32px;white-space:nowrap">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span>Chọn video từ máy</span>
+            </button>
+            <input type="file" id="pe2-file-video-input" accept="video/*" multiple style="display:none"
+              onchange="pe2HandleExternalVideoSelect(this)">
             <span class="pe2-flex"></span>
             <button type="button" class="btn btn-secondary btn-sm" onclick="pe2Zoom(-0.1)" title="Thu nhỏ"
               style="display:inline-flex;align-items:center;padding:0 8px">
@@ -3419,6 +3454,67 @@
         setTimeout(function () { subPreviewFetchFrame(); }, 100);
       }
       if (window.toast) toast('Đã chọn: ' + (t.desc || t.val.split(/[\\/]/).pop()), 'info');
+    };
+
+    window.pe2TriggerVideoUpload = function () {
+      var input = document.getElementById('pe2-file-video-input');
+      if (input) {
+        input.value = '';
+        input.click();
+      }
+    };
+
+    window.pe2HandleExternalVideoSelect = async function (input) {
+      var files = input.files;
+      if (!files || files.length === 0) return;
+
+      if (window.toast) toast('Đang tải lên ' + files.length + ' video từ máy tính...', 'info');
+
+      var firstAddedId = null;
+      var successCount = 0;
+
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        var form = new FormData();
+        form.append('file', file);
+
+        try {
+          var res = await fetch('/api/upload_process_video', {
+            method: 'POST',
+            body: form
+          });
+          var d = await res.json();
+          if (d.ok && d.path) {
+            successCount++;
+            var taskId = 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            var newTask = {
+              id: taskId,
+              type: 'file',
+              val: d.path,
+              desc: file.name,
+              status: 'ready'
+            };
+            window._batchQueue = window._batchQueue || [];
+            window._batchQueue.push(newTask);
+            if (!firstAddedId) firstAddedId = taskId;
+          } else {
+            throw new Error(d.error || 'Upload thất bại');
+          }
+        } catch (err) {
+          if (window.toast) toast('Lỗi tải video ' + file.name + ': ' + err.message, 'danger');
+        }
+      }
+
+      if (successCount > 0) {
+        if (typeof window._procQueueSaveToLocalStorage === 'function') window._procQueueSaveToLocalStorage();
+        if (typeof window._renderBatchQueue === 'function') window._renderBatchQueue();
+        if (typeof window.pe2RefreshQueueSelect === 'function') window.pe2RefreshQueueSelect();
+
+        if (firstAddedId && typeof window.pe2SelectQueueVideo === 'function') {
+          window.pe2SelectQueueVideo(firstAddedId);
+        }
+        if (window.toast) toast('Đã thêm thành công ' + successCount + ' video và nạp vào Bước 2!', 'success');
+      }
     };
 
     // Patch _renderBatchQueue inside DOMContentLoaded to ensure window._renderBatchQueue has been declared in scripts.html

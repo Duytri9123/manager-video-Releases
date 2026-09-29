@@ -923,6 +923,9 @@ def process_video():
                 req["video_path"] = video_path
                 req["video_url"] = ""
 
+            if "delete_source_after_process" not in req:
+                req["delete_source_after_process"] = True
+
             try:
                 request.environ["eventlet.minimum_write_chunk_size"] = 0
             except Exception:

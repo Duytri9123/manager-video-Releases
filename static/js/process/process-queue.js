@@ -421,6 +421,46 @@ if (typeof _processSvgIcon !== 'function') {
       toast('Vui lòng thêm video vào hàng chờ để xử lý.', 'warning');
       return;
     }
+    window._procProcessAll = true;
+    if (typeof procSaveStep === 'function') procSaveStep(2, true);
+    procWizGo(3);
+    window._step3StartProc();
+  };
+
+  window.procStartQueueFromStep2 = function() {
+    if (!window.procValidatePublishPage()) return;
+    if (window._procRunning || window._step1Downloading ||
+        (window._batchQueue || []).some(t => t.status === 'processing' || t.status === 'downloading')) {
+      toast('Hàng chờ đang tải hoặc xử lý video, vui lòng đợi hoàn tất.', 'info');
+      return;
+    }
+    const pathEl = document.getElementById('proc-video');
+    const urlEl = document.getElementById('proc-url');
+    const hasPath = pathEl && pathEl.value.trim();
+    const hasUrl = urlEl && urlEl.value.trim();
+
+    if (!(window._batchQueue || []).some(t => t.status === 'pending' || t.status === 'ready')) {
+      if (hasPath || hasUrl) {
+        window._batchQueue = window._batchQueue || [];
+        const val = hasPath ? pathEl.value.trim() : urlEl.value.trim();
+        const type = hasPath ? 'file' : 'url';
+        const desc = val.split(/[\\/]/).pop() || val;
+        const newTask = {
+          id: 'task_' + Date.now(),
+          type: type,
+          val: val,
+          desc: desc,
+          status: 'ready'
+        };
+        window._batchQueue.push(newTask);
+        if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
+        if (typeof window.pe2RefreshQueueSelect === 'function') window.pe2RefreshQueueSelect();
+      } else {
+        toast('Vui lòng thêm hoặc chọn video để xử lý.', 'warning');
+        return;
+      }
+    }
+    window._procProcessAll = true;
     if (typeof procSaveStep === 'function') procSaveStep(2, true);
     procWizGo(3);
     window._step3StartProc();

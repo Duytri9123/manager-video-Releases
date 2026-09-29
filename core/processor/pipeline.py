@@ -178,7 +178,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     do_burn = _as_bool(data.get("burn_subs", True), True)
     do_voice = _as_bool(data.get("voice_convert", False), False)
     cleanup_outputs = _as_bool(data.get("cleanup_outputs", True), True)
-    delete_source_after = _as_bool(data.get("delete_source_after_process", False), False)
+    delete_source_after = _as_bool(data.get("delete_source_after_process", True), True)
     # Default: always translate to VI and burn VI subtitles
     do_translate = _as_bool(data.get("translate_subs", True), True)
     do_burn_vi = _as_bool(data.get("burn_vi_subs", True), True)
@@ -1893,13 +1893,23 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         from core.processor.completed_outputs import register_output
         register_output(final_output_path, vi_ass_path or srt_path)
 
-    if cleanup_outputs and final_output_path and final_output_path.exists():
-        # Giữ lại SRT/ASS để resume lần sau, chỉ xóa file trung gian không cần thiết
+    if final_output_path and final_output_path.exists():
+        yield send(log="[Dọn dẹp] Đang dọn dẹp file trung gian & video gốc...", level="info")
+
+        # 1. Xóa video gốc nếu khác video hoàn tất
+        if delete_source_after:
+            try:
+                src = Path(video_path)
+                if src.exists() and src.is_file() and src.resolve() != final_output_path.resolve():
+                    src.unlink(missing_ok=True)
+                    yield send(log=f"[Dọn dẹp] Đã xóa video gốc: {src.name}", level="info")
+            except Exception as _e_src:
+                yield send(log=f"[Dọn dẹp] Không thể xóa video gốc: {_e_src}", level="warning")
+
+        # 2. Xóa các file trung gian cụ thể
         intermediates_to_clean = []
-        # Xóa _subbed nếu đã có _voice hoặc _framed (bước sau đã dùng xong)
         if burned_path and burned_path != final_output_path:
             intermediates_to_clean.append(burned_path)
-        # Xóa _voice nếu đã có _framed
         voice_p = out_dir / f"{stem}_{target_language}_voice.mp4"
         if voice_p.exists() and voice_p != final_output_path:
             intermediates_to_clean.append(voice_p)
@@ -1907,17 +1917,37 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
         for extra in intermediates_to_clean:
             try:
                 if extra and Path(extra).exists() and Path(extra).resolve() != final_output_path.resolve():
-                    Path(extra).unlink()
+                    Path(extra).unlink(missing_ok=True)
             except Exception:
                 pass
 
-        if delete_source_after:
+        # 3. Quét out_dir: giữ lại DUY NHẤT:
+        #    - Video đã xử lý (final_output_path)
+        #    - Các file phụ đề .ass (*.ass)
+        #    - Các file cấu hình / metadata .json (*.json)
+        # Toàn bộ các file khác (.wav, .mp3, .aac, .m4a, .srt, .vtt, .txt, các video .mp4 khác) đều xóa sạch
+        if cleanup_outputs:
             try:
-                src = Path(video_path)
-                if src.exists() and src.resolve() != final_output_path.resolve():
-                    src.unlink()
-            except Exception:
-                pass
+                keep_suffixes = {".ass", ".json"}
+                final_res = final_output_path.resolve()
+                cleaned_count = 0
+                if out_dir.exists() and out_dir.is_dir():
+                    for item in list(out_dir.iterdir()):
+                        if item.is_file():
+                            try:
+                                item_res = item.resolve()
+                                if item_res == final_res:
+                                    continue
+                                if item.suffix.lower() in keep_suffixes:
+                                    continue
+                                item.unlink(missing_ok=True)
+                                cleaned_count += 1
+                            except Exception:
+                                pass
+                if cleaned_count > 0:
+                    yield send(log=f"[Dọn dẹp] Đã xóa {cleaned_count} file trung gian (giữ lại video đã xử lý, .ass và .json)", level="info")
+            except Exception as _e_sweep:
+                yield send(log=f"[Dọn dẹp] Lỗi khi dọn thư mục: {_e_sweep}", level="warning")
 
         yield send(log=f"[Hoàn tất] File cuối cùng: {final_output_path.name}", level="success", file_path=str(final_output_path.resolve()))
 
