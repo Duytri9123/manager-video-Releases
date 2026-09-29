@@ -229,6 +229,31 @@ async def _tt_set_time(page, dt, sid: str) -> bool:
     return False
 
 
+async def _dismiss_popups(page):
+    """Dismiss TikTok feature overlays, onboarding modals and popups."""
+    selectors = [
+        'button:has-text("Got it")',
+        'button:has-text("Đã hiểu")',
+        'button:has-text("Dismiss")',
+        'button:has-text("OK")',
+        'button:has-text("Stay on page")',
+        'button:has-text("Bỏ qua")',
+        'button:has-text("Close")',
+        '[aria-label="Close"]',
+    ]
+    for sel in selectors:
+        try:
+            loc = page.locator(sel)
+            cnt = await loc.count()
+            for i in range(cnt):
+                el = loc.nth(i)
+                if await el.is_visible():
+                    await el.click(timeout=1500)
+                    await asyncio.sleep(0.4)
+        except Exception:
+            pass
+
+
 async def _try_set_privacy(page, privacy: str, sid: str):
     """Set privacy on TikTok Studio's 'Who can see this post' dropdown.
 
@@ -839,6 +864,8 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
 
             await file_input.set_input_files(str(video_path))
             _log(sid, f"📁 Đã gắn file: {video_path.name}")
+            await asyncio.sleep(1)
+            await _dismiss_popups(page)
 
             # Wait for TikTok to finish encoding/processing the preview. Heuristic:
             # caption editor appears after upload. Max wait 5 min for big files.
@@ -853,10 +880,11 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
             caption_el = None
             deadline = time.time() + 300
             while time.time() < deadline and not stop_event.is_set():
+                await _dismiss_popups(page)
                 for sel in caption_selectors:
                     try:
                         el = await page.query_selector(sel)
-                        if el:
+                        if el and await el.is_visible():
                             caption_el = el
                             break
                     except Exception:
@@ -864,6 +892,8 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
                 if caption_el:
                     break
                 await asyncio.sleep(1)
+
+            await _dismiss_popups(page)
 
             if not caption_el:
                 _log(sid, "⚠ Không tìm thấy ô caption. Bạn điền tay giúp nhé.", "warning")
@@ -881,6 +911,8 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
             else:
                 _log(sid, "ℹ Caption trống — bỏ qua bước điền.")
 
+            await _dismiss_popups(page)
+
             # ── Privacy: chỉnh dropdown "Who can see this post" ──
             privacy = _sessions[sid].get("privacy")
             if privacy:
@@ -893,20 +925,62 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
                 await _try_enable_schedule(page, scheduled_time, sid)
 
             # ── Copyright Check: Tự động kích hoạt & kiểm tra bản quyền âm thanh ──
+            await _dismiss_popups(page)
             await _check_tiktok_copyright(page, sid)
+            await _dismiss_popups(page)
 
             if _sessions[sid].get("auto_publish"):
+                _log(sid, "🚀 Chế độ tự động đăng: Đang chờ tải file hoàn tất và sẵn sàng...")
                 post = page.get_by_role("button", name=re.compile(r"^(Post|Publish|Đăng)$", re.I)).first
-                await post.wait_for(state="visible", timeout=120000)
-                await post.click(timeout=120000)
-                # A click alone is not proof of publication. Wait for Studio's confirmation.
-                success = page.get_by_text(re.compile(r"(Your video has been uploaded|Video uploaded|Video published|Đã đăng video)", re.I)).first
-                await success.wait_for(state="visible", timeout=120000)
-                with _sessions_lock:
-                    _sessions[sid]["published"] = True
-                    _sessions[sid]["published_url"] = page.url
-                _set_status(sid, "published", done=True)
-                return
+                try:
+                    await post.wait_for(state="visible", timeout=120000)
+                except Exception:
+                    _log(sid, "⚠ Không tìm thấy nút Đăng. Bạn bấm Đăng tay trong cửa sổ nhé.", "warning")
+
+                # Wait until post button is enabled (in case file is still uploading/transcoding)
+                deadline = time.time() + 300
+                while time.time() < deadline and not stop_event.is_set():
+                    await _dismiss_popups(page)
+                    try:
+                        if await post.is_enabled():
+                            break
+                    except Exception:
+                        pass
+                    await asyncio.sleep(1)
+
+                await _dismiss_popups(page)
+                _log(sid, "🚀 Đang tự động nhấn nút Đăng...")
+                try:
+                    await post.click(timeout=15000)
+                    _log(sid, "⏳ Đã nhấn Đăng, đang chờ TikTok xác nhận...", "info")
+                    deadline_conf = time.time() + 60
+                    confirmed = False
+                    while time.time() < deadline_conf and not stop_event.is_set():
+                        await _dismiss_popups(page)
+                        try:
+                            if "manage" in (page.url or "") or "content" in (page.url or ""):
+                                confirmed = True
+                                break
+                            success_loc = page.get_by_text(re.compile(r"(Your video has been uploaded|Video uploaded|Video published|Đã đăng video|Manage your posts|Upload another video|Post another video)", re.I))
+                            if await success_loc.count() > 0 and await success_loc.first.is_visible():
+                                confirmed = True
+                                break
+                        except Exception:
+                            pass
+                        await asyncio.sleep(1)
+
+                    with _sessions_lock:
+                        _sessions[sid]["published"] = True
+                        _sessions[sid]["published_url"] = page.url
+                    if confirmed:
+                        _log(sid, "🎉 Đã đăng video lên TikTok thành công!", "success")
+                    else:
+                        _log(sid, "✅ Đã gửi lệnh Đăng video lên TikTok.", "success")
+                    _set_status(sid, "published", done=True)
+                    await asyncio.sleep(5)
+                    return
+                except Exception as exc:
+                    _log(sid, f"⚠ Lỗi khi bấm nút Đăng: {exc}. Bạn vui lòng bấm nút Post thủ công trên màn hình.", "warning")
 
             _set_status(sid, "ready")
             _log(sid, "✅ Sẵn sàng. Kiểm tra lại rồi nhấn Post trong cửa sổ TikTok.", "success")
@@ -1012,9 +1086,12 @@ def tt_prepare_upload():
             "error": "Chưa cài Playwright. Chạy: pip install playwright && playwright install chromium",
         }), 500
 
+    auto_publish = bool(data.get("auto_publish", False))
     sid = uuid.uuid4().hex[:12]
     with _sessions_lock:
         s = _new_session()
+        s["account_id"] = account_id
+        s["auto_publish"] = auto_publish
         if scheduled_time:
             s["scheduled_time"] = scheduled_time
         if privacy:

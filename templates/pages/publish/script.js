@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window._pubUploadedVideoPath = '';
     }
   });
+  pubLoadRecentVideos();
 });
 
 /* ── File inputs ── */
@@ -424,13 +425,45 @@ async function pubUploadYouTube() {
 }
 
 /* ── TikTok (semi-auto via Playwright) ── */
+let _currentTtSessionId = null;
+let _ttPollTimer = null;
+
 async function pubOpenTikTok() {
   try {
-    const videoPath = await _pubEnsureVideoServerPath({ requireDisk: true });
+    let videoPath = await _pubEnsureVideoServerPath({ requireDisk: true });
+
+    // If videoPath is empty, try to get from recent completed videos automatically
+    if (!videoPath) {
+      try {
+        const resp = await fetch('/api/files/completed');
+        const data = await resp.json();
+        const items = data.items || [];
+        if (items.length > 0) {
+          videoPath = items[0].abs_path || items[0].path;
+          const pathEl = document.getElementById('pub-video-path');
+          if (pathEl) pathEl.value = videoPath;
+          if (items[0].subtitle_path) {
+            const subEl = document.getElementById('pub-sub-path');
+            if (subEl) subEl.value = items[0].subtitle_path;
+          }
+          toast('ℹ Đã tự chọn video đã xử lý gần nhất: ' + items[0].name, 'info', 4000);
+        }
+      } catch (err) {
+        console.warn('Cannot fetch completed videos:', err);
+      }
+    }
+
+    if (!videoPath) {
+      toast('⚠ Vui lòng chọn hoặc duyệt file video trước khi mở TikTok Studio!', 'warning', 6000);
+      return;
+    }
+
     const ttTitle = document.getElementById('tt-title')?.value?.trim() || '';
     const ttTags  = document.getElementById('tt-tags')?.value?.trim()  || '';
     const caption = (window._pBuildCaption || ((a, b) => [a, b].filter(Boolean).join('\n')))(ttTitle, ttTags);
     const privacy = document.getElementById('tt-privacy')?.value || 'PUBLIC_TO_EVERYONE';
+    const accountId = document.getElementById('tt-account-select')?.value || '';
+    const autoPublish = document.getElementById('pub-tt-auto-post')?.checked || false;
 
     let scheduledTime = '';
     if (document.getElementById('pub-tt-use-schedule')?.checked) {
@@ -453,16 +486,25 @@ async function pubOpenTikTok() {
       try { await navigator.clipboard.writeText(caption); } catch (_) {}
     }
 
-    if (!videoPath) {
-      toast('ℹ Chưa có đường dẫn file video — mở TikTok Studio để bạn kéo-thả thủ công. Caption đã copy.', 'info', 5000);
-      window.open('https://www.tiktok.com/tiktokstudio/upload', '_blank');
-      return;
+    const btn = document.getElementById('pub-tt-btn') || document.querySelector('[onclick*="pubOpenTikTok"]');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang khởi động Chromium...'; }
+
+    const closeBtn = document.getElementById('pub-tt-close-btn');
+    if (closeBtn) closeBtn.style.display = 'none';
+
+    const logBox = document.getElementById('tt-upload-log');
+    if (logBox) {
+      logBox.style.display = 'block';
+      logBox.innerHTML = '<div style="color:var(--text-muted)">⏳ Đang gửi yêu cầu chuẩn bị upload TikTok...</div>';
     }
 
-    const btn = document.querySelector('[onclick*="pubOpenTikTok"]');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang mở Chromium...'; }
-
-    const payload = { video_path: videoPath, caption, privacy };
+    const payload = {
+      video_path: videoPath,
+      caption,
+      privacy,
+      account_id: accountId,
+      auto_publish: autoPublish
+    };
     if (scheduledTime) payload.scheduled_time = scheduledTime;
 
     const r = await fetch('/api/tiktok/prepare_upload', {
@@ -471,21 +513,148 @@ async function pubOpenTikTok() {
       body: JSON.stringify(payload)
     });
     const d = await r.json();
-    if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
 
     if (!d.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
       toast('❌ TikTok: ' + (d.error || 'Lỗi không xác định'), 'error', 8000);
+      if (logBox) logBox.innerHTML += `<div style="color:#ef4444">❌ Lỗi: ${d.error || 'Không thể tạo phiên'}</div>`;
       return;
     }
-    const schedMsg = scheduledTime ? ` (có đặt lịch)` : '';
-    toast(`✅ Đã mở Chromium TikTok Studio${schedMsg}. File sẽ tự gắn — hãy chờ rồi nhấn Post.`, 'success', 8000);
+
+    _currentTtSessionId = d.session_id;
+    if (closeBtn) closeBtn.style.display = 'inline-block';
+    if (btn) btn.textContent = autoPublish ? '⏳ Đang tự động đăng...' : '⏳ Đang xử lý trên TikTok...';
+
+    toast('✅ Đang mở trình duyệt TikTok Studio. Vui lòng theo dõi tiến trình bên dưới...', 'success', 5000);
+
+    // Start polling status
+    _pubPollTikTokSession(d.session_id);
   } catch (e) {
     console.error('pubOpenTikTok error:', e);
     toast('❌ TikTok lỗi: ' + (e.message || e), 'error', 8000);
-    const btn = document.querySelector('[onclick*="pubOpenTikTok"]');
+    const btn = document.getElementById('pub-tt-btn') || document.querySelector('[onclick*="pubOpenTikTok"]');
     if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
   }
 }
+
+function _pubPollTikTokSession(sessionId) {
+  if (_ttPollTimer) clearInterval(_ttPollTimer);
+
+  const btn = document.getElementById('pub-tt-btn') || document.querySelector('[onclick*="pubOpenTikTok"]');
+  const closeBtn = document.getElementById('pub-tt-close-btn');
+  const logBox = document.getElementById('tt-upload-log');
+
+  _ttPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/tiktok/prepare_status?session_id=${sessionId}`);
+      const data = await res.json();
+      if (!data.ok) return;
+
+      if (logBox && Array.isArray(data.log)) {
+        logBox.innerHTML = data.log.map(item => {
+          let color = '#93c5fd';
+          if (item.level === 'error') color = '#ef4444';
+          else if (item.level === 'warning') color = '#f59e0b';
+          else if (item.level === 'success') color = '#10b981';
+          return `<div style="color:${color}">${item.msg}</div>`;
+        }).join('');
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+
+      if (data.status === 'published') {
+        clearInterval(_ttPollTimer);
+        toast('🎉 Đã đăng video lên TikTok thành công!', 'success', 8000);
+        if (btn) { btn.disabled = false; btn.textContent = '✅ Đã đăng thành công!'; }
+        if (closeBtn) closeBtn.style.display = 'none';
+      } else if (data.status === 'ready') {
+        toast('✅ Trình duyệt TikTok đã sẵn sàng! Bạn hãy kiểm tra lại và nhấn Đăng.', 'success', 6000);
+        if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
+      } else if (data.done) {
+        clearInterval(_ttPollTimer);
+        if (data.status === 'error') {
+          toast('❌ Lỗi phiên TikTok: ' + (data.error || ''), 'error', 8000);
+        }
+        if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
+        if (closeBtn) closeBtn.style.display = 'none';
+      }
+    } catch (err) {
+      console.warn('Poll tiktok status failed:', err);
+    }
+  }, 1500);
+}
+
+async function pubCloseTikTokSession() {
+  if (!_currentTtSessionId) return;
+  try {
+    await fetch('/api/tiktok/prepare_close', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: _currentTtSessionId })
+    });
+    toast('Đã đóng trình duyệt TikTok', 'info');
+    const closeBtn = document.getElementById('pub-tt-close-btn');
+    if (closeBtn) closeBtn.style.display = 'none';
+    const btn = document.getElementById('pub-tt-btn') || document.querySelector('[onclick*="pubOpenTikTok"]');
+    if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+async function pubLoadRecentVideos() {
+  try {
+    const res = await fetch('/api/files/completed');
+    const data = await res.json();
+    const items = data.items || [];
+    const select = document.getElementById('pub-recent-videos');
+    const wrap = document.getElementById('pub-recent-select-wrap');
+    if (!select || !wrap) return;
+
+    if (items.length === 0) {
+      wrap.style.display = 'none';
+      return;
+    }
+
+    wrap.style.display = 'flex';
+    select.innerHTML = '<option value="">-- Chọn video đã xử lý gần đây (' + items.length + ' video) --</option>' +
+      items.map(it => `<option value="${it.abs_path || it.path}" data-sub="${it.subtitle_path || ''}">${it.name} (${it.size_str || ''})</option>`).join('');
+
+    // If current pub-video-path is empty, auto-fill with the first video!
+    const pathInput = document.getElementById('pub-video-path');
+    if (pathInput && !pathInput.value.trim() && items[0]) {
+      pathInput.value = items[0].abs_path || items[0].path;
+      select.value = items[0].abs_path || items[0].path;
+      const subInput = document.getElementById('pub-sub-path');
+      if (subInput && !subInput.value.trim() && items[0].subtitle_path) {
+        subInput.value = items[0].subtitle_path;
+      }
+    }
+  } catch (err) {
+    console.warn('pubLoadRecentVideos failed:', err);
+  }
+}
+
+function pubSelectRecentVideo(path) {
+  if (!path) return;
+  const pathInput = document.getElementById('pub-video-path');
+  if (pathInput) pathInput.value = path;
+  window._pubVideoFile = null;
+  window._pubUploadedVideoPath = '';
+
+  const select = document.getElementById('pub-recent-videos');
+  const opt = select ? select.selectedOptions[0] : null;
+  const sub = opt ? opt.getAttribute('data-sub') : '';
+  const subInput = document.getElementById('pub-sub-path');
+  if (subInput && sub) {
+    subInput.value = sub;
+  }
+  toast('✅ Đã chọn video: ' + path.split(/[\\/]/).pop(), 'success');
+}
+
+window.pubLoadRecentVideos = pubLoadRecentVideos;
+window.pubSelectRecentVideo = pubSelectRecentVideo;
+window.pubOpenTikTok = pubOpenTikTok;
+window.pubCloseTikTokSession = pubCloseTikTokSession;
 
 function pubTtToggleSchedule() {
   const checked = document.getElementById('pub-tt-use-schedule')?.checked;

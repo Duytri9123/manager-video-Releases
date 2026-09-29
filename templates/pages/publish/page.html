@@ -77,6 +77,14 @@
                         onchange="_pubSetVideoFile(this)">
                     </div>
                   </div>
+                  <div class="field" id="pub-recent-select-wrap" style="display:none;margin-top:6px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px dashed rgba(255,255,255,0.15)">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <span style="color:var(--text-muted);font-size:12px;white-space:nowrap">🎬 Gần đây:</span>
+                      <select id="pub-recent-videos" class="pub-select-sm" style="flex:1;font-size:12px;padding:2px 6px" onchange="pubSelectRecentVideo(this.value)">
+                        <option value="">-- Chọn video đã xử lý --</option>
+                      </select>
+                    </div>
+                  </div>
 
                   <div class="field">
                     <label><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -418,18 +426,32 @@
                     </div>
                   </div>
 
-                  <button class="btn btn-lg btn-tt w-full mt-8" onclick="pubOpenTikTok()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round"
-                      style="display:inline;vertical-align:middle;margin-right:4px">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg> Mở TikTok Studio &amp; tự điền nội dung
-                  </button>
-                  <div class="text-xs text-muted mt-4">
-                    Mở trình duyệt đã đăng nhập, gắn sẵn file và caption. Bạn chỉ việc kiểm tra rồi nhấn Post.
+                  <div class="field" style="margin-top:8px">
+                    <label class="check-item" style="margin:0">
+                      <input type="checkbox" id="pub-tt-auto-post">
+                      <span style="display:inline-flex;align-items:center;gap:4px">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        Tự động bấm Đăng (Auto Post sau khi tải lên xong)
+                      </span>
+                    </label>
                   </div>
+
+                  <div style="display:flex;gap:8px;margin-top:12px">
+                    <button id="pub-tt-btn" class="btn btn-lg btn-tt w-full" onclick="pubOpenTikTok()">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display:inline;vertical-align:middle;margin-right:4px">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" y1="14" x2="21" y2="3" />
+                      </svg> Mở TikTok Studio &amp; tự điền nội dung
+                    </button>
+                    <button id="pub-tt-close-btn" class="btn btn-secondary btn-sm" style="display:none" onclick="pubCloseTikTokSession()" title="Đóng trình duyệt TikTok">✕ Đóng</button>
+                  </div>
+                  <div class="text-xs text-muted mt-4">
+                    Mở trình duyệt Chromium đã đăng nhập, gắn sẵn file, caption và tự động xử lý popup/bản quyền.
+                  </div>
+                  <div id="tt-upload-log" class="upload-log" style="display:none;margin-top:10px;max-height:160px;overflow-y:auto;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:8px;font-family:monospace;font-size:12px;line-height:1.5"></div>
                 </div>
 
                 <!-- Facebook Panel -->

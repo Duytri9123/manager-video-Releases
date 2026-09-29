@@ -605,6 +605,7 @@ function switchPage(name) {
   if (name === 'scheduler' && typeof window.schedulerLoad === 'function') window.schedulerLoad();
   if (name === 'publish') {
     if (typeof window._pubQueueRefresh === 'function') window._pubQueueRefresh();
+    if (typeof window.pubLoadRecentVideos === 'function') window.pubLoadRecentVideos();
   }
   if (name === 'process') {
     if (typeof window._procQueueRefresh === 'function') window._procQueueRefresh();
