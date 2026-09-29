@@ -212,6 +212,65 @@ def preview_file():
     )
 
 
+@bp.route('/api/files/thumbnail')
+def file_thumbnail():
+    """Generate and return a fast cached JPEG thumbnail for video or image."""
+    import hashlib
+    import mimetypes
+    import subprocess
+    import tempfile
+    from utils.ffprobe import find_ffmpeg
+    
+    raw_path = request.args.get('path', '').strip()
+    if not raw_path:
+        return jsonify({'error': 'No path'}), 400
+        
+    cfg = load_cfg()
+    base_dir = Path(cfg.get('path') or './Downloaded').expanduser().resolve()
+    target = Path(raw_path)
+    if not target.is_absolute():
+        clean_rel = raw_path.lstrip('/\\')
+        if clean_rel.lower().startswith('downloaded/'):
+            clean_rel = clean_rel[11:]
+        elif clean_rel.lower().startswith('downloaded\\'):
+            clean_rel = clean_rel[11:]
+        target = (base_dir / clean_rel).resolve()
+        
+    if not target.exists() or not target.is_file():
+        return jsonify({'error': 'File not found'}), 404
+        
+    ext = target.suffix.lower()
+    # If already an image, return it directly
+    if ext in ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'):
+        return send_file(str(target), mimetype=mimetypes.guess_type(str(target))[0] or 'image/jpeg')
+        
+    if ext not in ('.mp4', '.mkv', '.mov', '.webm', '.avi', '.m4v', '.flv', '.wmv'):
+        return jsonify({'error': 'Not a media file'}), 400
+        
+    stat = target.stat()
+    key = hashlib.md5(f"{target}:{stat.st_size}:{stat.st_mtime_ns}".encode()).hexdigest()
+    cache_dir = Path(tempfile.gettempdir()) / 'DuyTrisDownloader' / 'thumbnails'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    thumb_path = cache_dir / f"{key}.jpg"
+    
+    if not thumb_path.exists():
+        ffmpeg = find_ffmpeg()
+        if not ffmpeg:
+            return jsonify({'error': 'FFmpeg not available'}), 503
+        try:
+            cmd = [
+                ffmpeg, '-y', '-ss', '00:00:01', '-i', str(target),
+                '-vframes', '1', '-q:v', '3', '-vf', 'scale=320:-1',
+                str(thumb_path)
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=12)
+        except Exception:
+            pass
+            
+    if thumb_path.exists():
+        return send_file(str(thumb_path), mimetype='image/jpeg', max_age=86400)
+    return jsonify({'error': 'Could not generate thumbnail'}), 500
+
 @bp.route('/api/files/preview-compatible')
 def preview_compatible_file():
     """Make a browser-compatible preview for codecs unsupported by Qt WebEngine."""

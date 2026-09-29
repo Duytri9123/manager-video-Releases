@@ -1,0 +1,7 @@
+tunnel: 19f72755-3a97-40a3-8bdf-4409e9f6d40c
+credentials-file: C:\Users\admin\.cloudflared\19f72755-3a97-40a3-8bdf-4409e9f6d40c.json
+
+ingress:
+  - hostname: toolvideo.dgpelectric.top
+    service: http://127.0.0.1:9123
+  - service: http_status:404

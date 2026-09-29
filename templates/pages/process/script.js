@@ -1066,6 +1066,55 @@ async function deleteSelectedDownloadedFiles() {
 }
 window.deleteSelectedDownloadedFiles = deleteSelectedDownloadedFiles;
 
+function _renderGridMediaPreview(item, index, safePath) {
+  const isVideo = item.file_type === 'video' || /\.(mp4|mkv|mov|webm|avi|m4v)$/i.test(item.name || item.path || '');
+  const isImage = item.file_type === 'image' || /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(item.name || item.path || '');
+  
+  if (isVideo) {
+    const thumbUrl = '/api/files/thumbnail?path=' + encodeURIComponent(item.path);
+    const videoUrl = '/api/files/preview-compatible?path=' + encodeURIComponent(item.path);
+    return `
+      <div class="proc-file-click proc-grid-media-preview" data-index="${index}" 
+           style="width:100%;height:78px;border-radius:8px;overflow:hidden;background:#090d16;position:relative;margin:2px 0 6px;cursor:pointer;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.08);box-shadow:0 1px 3px rgba(0,0,0,0.2)"
+           title="${safePath}"
+           onmouseenter="const v=this.querySelector('video');if(v){v.style.display='block';v.currentTime=0.5;try{v.play()}catch(_){}}"
+           onmouseleave="const v=this.querySelector('video');if(v){v.pause();v.currentTime=0;v.style.display='none'}">
+        <img src="${thumbUrl}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" alt="${safePath}" 
+             onerror="this.style.display='none';const f=this.nextElementSibling;if(f)f.style.display='flex';" />
+        <div style="display:none;align-items:center;justify-content:center;width:100%;height:100%;color:#f43f5e">
+          ${_processSvgIcon('video', '', 32)}
+        </div>
+        <div class="proc-grid-play-icon" style="position:absolute;inset:0;background:rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;pointer-events:none;transition:opacity 0.2s">
+          <div style="width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;color:#ffffff;box-shadow:0 2px 6px rgba(0,0,0,0.4)">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </div>
+        </div>
+        <video src="${videoUrl}" muted playsinline preload="none" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2;pointer-events:none"></video>
+      </div>`;
+  }
+  
+  if (isImage) {
+    const imgUrl = '/api/files/thumbnail?path=' + encodeURIComponent(item.path);
+    return `
+      <div class="proc-file-click proc-grid-media-preview" data-index="${index}" 
+           style="width:100%;height:78px;border-radius:8px;overflow:hidden;background:#090d16;position:relative;margin:2px 0 6px;cursor:pointer;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.08);box-shadow:0 1px 3px rgba(0,0,0,0.2)"
+           title="${safePath}">
+        <img src="${imgUrl}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" alt="${safePath}" 
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div style="display:none;align-items:center;justify-content:center;width:100%;height:100%;color:#3b82f6">
+          ${_processSvgIcon('image', '', 32)}
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="${item.is_dir ? 'proc-open-folder' : 'proc-file-click'}" data-index="${index}" 
+         style="margin:2px 0 6px;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:${item.is_dir ? 'rgba(245,158,11,0.1)' : 'rgba(99,102,241,0.08)'};cursor:pointer" 
+         title="${safePath}">
+      ${_processFileGridIcon(item)}
+    </div>`;
+}
+
 function _renderDownloadedItems(data) {
   const list = document.getElementById('proc-downloaded-list');
   if (!list) return;
@@ -1143,9 +1192,7 @@ function _renderDownloadedItems(data) {
             <input type="checkbox" class="proc-file-checkbox" data-path="${itemKey}" data-index="${index}" ${isSelected ? 'checked' : ''} style="cursor:pointer;width:14px;height:14px;accent-color:var(--accent,#6366f1)">
             ${renderAction(item, index)}
           </div>
-          <div class="${item.is_dir ? 'proc-open-folder' : 'proc-file-click'}" data-index="${index}" style="margin:2px 0 6px;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:${item.is_dir ? 'rgba(245,158,11,0.1)' : 'rgba(99,102,241,0.08)'};cursor:pointer" title="${safePath}">
-            ${_processFileGridIcon(item)}
-          </div>
+          ${_renderGridMediaPreview(item, index, safePath)}
           <div class="${item.is_dir ? 'proc-open-folder' : 'proc-file-click'}" data-index="${index}" style="width:100%;font-size:11.5px;font-weight:${item.is_dir ? '600' : '500'};color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;cursor:pointer" title="${_escapeDownloadedText(item.name)}">
             ${_escapeDownloadedText(item.name)}
           </div>
@@ -1157,7 +1204,7 @@ function _renderDownloadedItems(data) {
         </div>`;
     }).join('');
 
-    list.innerHTML = `<div class="proc-files-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:9px;padding:4px;overflow:visible">${backCard}${cardsHtml}</div>`;
+    list.innerHTML = `<div class="proc-files-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(136px, 1fr));gap:9px;padding:4px;overflow:visible">${backCard}${cardsHtml}</div>`;
   } else {
     // ── LIST VIEW ──
     const backRow = currentDir
