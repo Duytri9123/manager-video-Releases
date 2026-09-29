@@ -54,6 +54,41 @@ _sessions_lock = threading.Lock()
 # that copies the master profile before the first login completes).
 _TT_LOGIN_GATE = threading.Lock()
 
+def _bring_window_to_front():
+    """Bring any open Chromium / TikTok window to the foreground on Windows."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        
+        def enum_handler(hwnd, _):
+            if user32.IsWindowVisible(hwnd):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    title = buff.value.lower()
+                    if "tiktok" in title or "chrome" in title or "chromium" in title:
+                        user32.ShowWindow(hwnd, 9)  # 9 = SW_RESTORE
+                        user32.SetForegroundWindow(hwnd)
+            return True
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        user32.EnumWindows(WNDENUMPROC(enum_handler), 0)
+    except Exception:
+        pass
+
+_BROWSER_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--disable-dev-shm-usage",
+    "--no-sandbox",
+    "--start-maximized",
+    "--window-position=50,50",
+    "--window-size=1400,900",
+    "--no-first-run",
+    "--no-default-browser-check",
+]
+
+
 
 def _new_session() -> Dict[str, Any]:
     return {
@@ -654,15 +689,18 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
         _set_status(sid, "waiting_login_gate")
         # Block here until gate is free. We use a polling wait so stop_event works.
         stop_event: threading.Event = _sessions[sid]["stop_event"]
+        gate_deadline = time.time() + 15
         while not stop_event.is_set():
             if _TT_LOGIN_GATE.acquire(blocking=False):
                 gate_held = True
                 break
-            # If another session finished login in the meantime, we can skip the gate.
             if _has_login_cookies(profile_dir):
                 _log(sid, "✅ Session khác đã đăng nhập xong — tiếp tục.", "info")
                 break
-            await asyncio.sleep(2)
+            if time.time() > gate_deadline:
+                _log(sid, "ℹ Mở trình duyệt để tiếp tục xử lý.", "info")
+                break
+            await asyncio.sleep(1.5)
         if stop_event.is_set():
             return
 
@@ -686,12 +724,8 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
             context = await pw.chromium.launch_persistent_context(
                 user_data_dir=str(session_profile),
                 headless=False,
-                viewport={"width": 1440, "height": 900},
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-dev-shm-usage",
-                    "--no-sandbox",
-                ],
+                no_viewport=True,
+                args=_BROWSER_ARGS,
             )
         except Exception as exc:
             exc_str = str(exc).lower()
@@ -707,12 +741,8 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
                         context = await pw.chromium.launch_persistent_context(
                             user_data_dir=str(session_profile),
                             headless=False,
-                            viewport={"width": 1440, "height": 900},
-                            args=[
-                                "--disable-blink-features=AutomationControlled",
-                                "--disable-dev-shm-usage",
-                                "--no-sandbox",
-                            ],
+                            no_viewport=True,
+                            args=_BROWSER_ARGS,
                         )
                     else:
                         raise RuntimeError(f"Playwright driver returned exit code {proc.returncode}: {proc.stderr}")
@@ -736,12 +766,8 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
                     context = await pw.chromium.launch_persistent_context(
                         user_data_dir=str(session_profile),
                         headless=False,
-                        viewport={"width": 1440, "height": 900},
-                        args=[
-                            "--disable-blink-features=AutomationControlled",
-                            "--disable-dev-shm-usage",
-                            "--no-sandbox",
-                        ],
+                        no_viewport=True,
+                        args=_BROWSER_ARGS,
                     )
                 except Exception as exc2:
                     _set_status(sid, "error",
@@ -766,6 +792,11 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
 
         try:
             page = context.pages[0] if context.pages else await context.new_page()
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
+            _bring_window_to_front()
 
             _log(sid, f"🌐 Vào {TIKTOK_UPLOAD_URL}")
             try:
@@ -1194,12 +1225,8 @@ async def _run_login_flow(sid: str):
             context = await pw.chromium.launch_persistent_context(
                 user_data_dir=str(_TT_PROFILE_DIR),
                 headless=False,
-                viewport={"width": 1440, "height": 900},
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-dev-shm-usage",
-                    "--no-sandbox",
-                ],
+                no_viewport=True,
+                args=_BROWSER_ARGS,
             )
         except Exception as exc:
             _set_status(sid, "error", error=f"Không mở được trình duyệt: {exc}", done=True)
@@ -1214,6 +1241,11 @@ async def _run_login_flow(sid: str):
             await _load_tiktok_state(context, _TT_PROFILE_DIR, sid)
 
             page = context.pages[0] if context.pages else await context.new_page()
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
+            _bring_window_to_front()
             try:
                 await page.goto(TIKTOK_UPLOAD_URL, wait_until="domcontentloaded", timeout=60_000)
             except Exception as exc:

@@ -973,51 +973,54 @@ def process_video():
             _proc_thumb_retry_event.set()
             _proc_tts_retry_event.set()
 
-            try:
-                import eventlet
-                import eventlet.queue
-                _q = eventlet.queue.Queue()
-                _use_eq = True
-            except Exception:
-                _use_eq = False
+            import queue as _pyqueue
+            import threading as _pythreading
+            import time as _pytime_mod
+            _q = _pyqueue.Queue()
 
-            if _use_eq:
-                def _pipeline_worker():
-                    try:
-                        for line in process_video_full(req):
+            def _pipeline_worker():
+                try:
+                    for line in process_video_full(req):
+                        if _proc_cancel_event.is_set():
+                            break
+                        while not _proc_pause_event.is_set():
                             if _proc_cancel_event.is_set():
                                 break
-                            while not _proc_pause_event.is_set():
-                                if _proc_cancel_event.is_set():
-                                    break
-                                eventlet.sleep(0.1)
-                            _q.put(line)
-                    except Exception as err:
-                        _q.put(err)
-                    finally:
-                        _q.put(None)
+                            _pytime_mod.sleep(0.1)
+                        _q.put(line)
+                except Exception as err:
+                    _q.put(err)
+                finally:
+                    _q.put(None)
 
-                eventlet.spawn(_pipeline_worker)
+            _worker_t = _pythreading.Thread(target=_pipeline_worker, daemon=True)
+            _worker_t.start()
 
-                while True:
-                    if _proc_cancel_event.is_set():
-                        yield (_j.dumps({"log": "⛔ Tiến trình xử lý đã bị hủy.", "level": "warning", "cancelled": True, "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
-                        yield (_j.dumps({"overall": 0, "overall_lbl": "Đã hủy"}, ensure_ascii=True) + "\n").encode("utf-8")
-                        break
-                    try:
-                        item = _q.get(timeout=4.0)
-                    except eventlet.queue.Empty:
-                        yield (_j.dumps({"heartbeat": True}, ensure_ascii=True) + "\n").encode("utf-8")
-                        continue
+            try:
+                import eventlet
+                _ev_sleep = eventlet.sleep
+            except Exception:
+                _ev_sleep = _pytime_mod.sleep
 
-                    if item is None:
-                        break
-                    if isinstance(item, Exception):
-                        yield (_j.dumps({"log": f"Fatal error: {item}", "level": "error", "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
-                        yield (_j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=True) + "\n").encode("utf-8")
-                        break
-                    yield item.encode("utf-8") if isinstance(item, str) else item
-            else:
+            while True:
+                if _proc_cancel_event.is_set():
+                    yield (_j.dumps({"log": "⛔ Tiến trình xử lý đã bị hủy.", "level": "warning", "cancelled": True, "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
+                    yield (_j.dumps({"overall": 0, "overall_lbl": "Đã hủy"}, ensure_ascii=True) + "\n").encode("utf-8")
+                    break
+                try:
+                    item = _q.get_nowait()
+                except _pyqueue.Empty:
+                    _ev_sleep(0.05)
+                    continue
+
+                if item is None:
+                    break
+                if isinstance(item, Exception):
+                    yield (_j.dumps({"log": f"Fatal error: {item}", "level": "error", "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")
+                    yield (_j.dumps({"overall": 0, "overall_lbl": "Error"}, ensure_ascii=True) + "\n").encode("utf-8")
+                    break
+                yield item.encode("utf-8") if isinstance(item, str) else item
+            if False:
                 for line in process_video_full(req):
                     if _proc_cancel_event.is_set():
                         yield (_j.dumps({"log": "⛔ Tiến trình xử lý đã bị hủy.", "level": "warning", "cancelled": True, "failed": True}, ensure_ascii=True) + "\n").encode("utf-8")

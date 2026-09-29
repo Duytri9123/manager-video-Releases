@@ -455,6 +455,11 @@ async function pubOpenTikTok() {
 
     if (!videoPath) {
       toast('⚠ Vui lòng chọn hoặc duyệt file video trước khi mở TikTok Studio!', 'warning', 6000);
+      const logBox = document.getElementById('tt-upload-log');
+      if (logBox) {
+        logBox.style.display = 'block';
+        logBox.innerHTML = '<div style="color:#f59e0b">⚠ Chưa có video được chọn. Vui lòng chọn file video ở trên trước khi mở TikTok Studio!</div>';
+      }
       return;
     }
 
@@ -525,7 +530,7 @@ async function pubOpenTikTok() {
     if (closeBtn) closeBtn.style.display = 'inline-block';
     if (btn) btn.textContent = autoPublish ? '⏳ Đang tự động đăng...' : '⏳ Đang xử lý trên TikTok...';
 
-    toast('✅ Đang mở trình duyệt TikTok Studio. Vui lòng theo dõi tiến trình bên dưới...', 'success', 5000);
+    toast('✅ Đang mở trình duyệt Chromium trên màn hình máy tính. Vui lòng quan sát cửa sổ TikTok Studio...', 'success', 7000);
 
     // Start polling status
     _pubPollTikTokSession(d.session_id);

@@ -70,6 +70,9 @@ def _resolve_cors_origins(cfg: dict) -> list:
         o = f"http://{host}:{port}"
         if o not in origins:
             origins.append(o)
+    for extra in ["https://toolvideo.dgpelectric.top", "http://toolvideo.dgpelectric.top"]:
+        if extra not in origins:
+            origins.append(extra)
     if _NGROK_PUBLIC_URL and _NGROK_PUBLIC_URL not in origins and "*" not in origins:
         origins.append(_NGROK_PUBLIC_URL)
     public_cfg = ((cfg or {}).get("ngrok") or {}).get("public_url") or ""
@@ -99,7 +102,7 @@ _initial_origins = _resolve_cors_origins(_initial_cfg)
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins=_initial_origins if _initial_origins != ["*"] else "*",
+    cors_allowed_origins="*",
     ping_timeout=120,
     ping_interval=30,
 )
