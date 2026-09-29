@@ -14,6 +14,13 @@
       return false;
     };
     window.addEventListener('unhandledrejection', function(event) {
+      if (event && event.reason) {
+        const str = String(event.reason);
+        if (str.includes('AbortError') || str.includes('interrupted by a call to pause') || str.includes('play()') || str.includes('aborted')) {
+          event.preventDefault();
+          return;
+        }
+      }
       const errDiv = document.createElement('div');
       errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#fef2f2;border-bottom:2px solid #ef4444;color:#b91c1c;padding:12px;font-family:monospace;font-size:12px;z-index:99999;white-space:pre-wrap;';
       errDiv.textContent = '❌ UNHANDLED REJECTION: ' + event.reason + (event.reason && event.reason.stack ? '\nStack: ' + event.reason.stack : '');

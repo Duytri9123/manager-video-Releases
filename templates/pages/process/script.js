@@ -1066,6 +1066,31 @@ async function deleteSelectedDownloadedFiles() {
 }
 window.deleteSelectedDownloadedFiles = deleteSelectedDownloadedFiles;
 
+function _procGridPlayPreview(el) {
+  const v = el.querySelector('video');
+  if (!v) return;
+  v.style.display = 'block';
+  try {
+    if (v.readyState >= 1) v.currentTime = 0.5;
+    const p = v.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {});
+    }
+  } catch (_) {}
+}
+window._procGridPlayPreview = _procGridPlayPreview;
+
+function _procGridStopPreview(el) {
+  const v = el.querySelector('video');
+  if (!v) return;
+  try {
+    v.pause();
+    v.currentTime = 0;
+  } catch (_) {}
+  v.style.display = 'none';
+}
+window._procGridStopPreview = _procGridStopPreview;
+
 function _renderGridMediaPreview(item, index, safePath) {
   const isVideo = item.file_type === 'video' || /\.(mp4|mkv|mov|webm|avi|m4v)$/i.test(item.name || item.path || '');
   const isImage = item.file_type === 'image' || /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(item.name || item.path || '');
@@ -1077,8 +1102,8 @@ function _renderGridMediaPreview(item, index, safePath) {
       <div class="proc-file-click proc-grid-media-preview" data-index="${index}" 
            style="width:100%;height:78px;border-radius:8px;overflow:hidden;background:#090d16;position:relative;margin:2px 0 6px;cursor:pointer;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.08);box-shadow:0 1px 3px rgba(0,0,0,0.2)"
            title="${safePath}"
-           onmouseenter="const v=this.querySelector('video');if(v){v.style.display='block';v.currentTime=0.5;try{v.play()}catch(_){}}"
-           onmouseleave="const v=this.querySelector('video');if(v){v.pause();v.currentTime=0;v.style.display='none'}">
+           onmouseenter="_procGridPlayPreview(this)"
+           onmouseleave="_procGridStopPreview(this)">
         <img src="${thumbUrl}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" alt="${safePath}" 
              onerror="this.style.display='none';const f=this.nextElementSibling;if(f)f.style.display='flex';" />
         <div style="display:none;align-items:center;justify-content:center;width:100%;height:100%;color:#f43f5e">
@@ -2420,7 +2445,8 @@ async function previewProcessVoice() {
     if (audio) {
       audio.src = url;
       audio.style.display = 'inline-block';
-      audio.play();
+      const p = audio.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
     }
   } catch (err) {
     alert('Lỗi preview giọng: ' + err.message);

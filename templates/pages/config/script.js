@@ -42,7 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const audio = document.getElementById('vp-preview-audio') || new Audio();
         audio.src = url;
         audio.style.display = 'block';
-        audio.play();
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
         toast('Tạo giọng đọc thành công!', 'success');
       } else {
         toast('Không thể tạo giọng đọc!', 'error');
