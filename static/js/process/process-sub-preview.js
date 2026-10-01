@@ -202,7 +202,7 @@ async function initDynamicAiProviders() {
         if (sttProvSel) {
           const cur = sttProvSel.value;
           sttProvSel.innerHTML = '';
-          enabledProvs.filter(p => ['antigravity', 'gemini', 'groq', 'openai', 'deepgram'].includes(p.id.toLowerCase())).forEach(p => {
+          enabledProvs.filter(p => ['antigravity', 'gemini', 'groq'].includes(p.id.toLowerCase())).forEach(p => {
             const opt = document.createElement('option');
             opt.value = p.id;
             opt.textContent = p.name || p.id;

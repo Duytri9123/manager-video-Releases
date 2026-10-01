@@ -404,7 +404,7 @@ def get_translation_providers(trans_cfg: Dict, full_cfg: Dict | None = None) -> 
             return False
         return True
 
-    if "opencode" not in providers:
+    if "opencode" in {c["provider"] for c in db_conns} and "opencode" not in providers:
         providers.append("opencode")
 
     if "deepseek" not in providers and (trans_cfg or {}).get("deepseek_key") and is_provider_ok("deepseek"):
@@ -647,6 +647,46 @@ def translate_texts(
         return result
 
     _errors: List[str] = []
+
+    # Use the same enabled models and connection dispatcher as Chat Bot. This
+    # supports OAuth refresh, custom base URLs and multiple accounts uniformly.
+    try:
+        from core.ai_models_manager import get_available_models
+        from core.direct_ai_provider import dispatch_chat_completion
+
+        active_models = get_available_models("llm", active_only=True)
+        for provider in provider_order:
+            matching = [m for m in active_models if m.get("owned_by") == provider]
+            if model_req and prov_req == provider:
+                matching.sort(key=lambda m: m.get("id") != model_req)
+            for model_info in matching[:3]:
+                model_id = model_info["id"]
+                try:
+                    translated = []
+                    for start in range(0, len(source_texts), 30):
+                        chunk = source_texts[start:start + 30]
+                        lines = "\n".join(f"{i + 1}. {line}" for i, line in enumerate(chunk))
+                        prompt = (
+                            f"Dịch phụ đề sang {target_lang}. Giữ đúng số dòng và thứ tự. "
+                            "Chỉ trả về các dòng được đánh số 1., 2., ...; không giải thích. "
+                            "Viết ngắn gọn, tự nhiên để khớp thời lượng video.\n"
+                            f"Bối cảnh: {context}\n\n{lines}"
+                        )
+                        reply = dispatch_chat_completion(
+                            model=model_id, provider=provider,
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.2, max_tokens=3500, timeout=90,
+                        )
+                        raw = reply["choices"][0]["message"]["content"]
+                        parsed = _parse_numbered_translation(raw, len(chunk))
+                        if not all(parsed):
+                            raise ValueError(f"Model {model_id} trả về thiếu dòng dịch")
+                        translated.extend(parsed)
+                    return _rebuild(translated), f"{provider} ({model_id})"
+                except Exception as exc:
+                    _errors.append(f"{provider}/{model_id}: {exc}")
+    except Exception as exc:
+        _errors.append(f"provider dispatcher: {exc}")
 
     for provider in provider_order:
         try:

@@ -84,13 +84,19 @@ def start_backend():
         print(f" {C_RED}❌ Không tìm thấy file start.bat tại {start_bat}{C_RESET}")
         return False
 
-    # Launch in background
-    subprocess.Popen(
-        [str(start_bat)],
-        cwd=str(ROOT),
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
-        shell=True
-    )
+    # Launch interactively on user desktop (WinSta0\default) so GUI windows like Chromium are visible
+    try:
+        task_name = "DuyTrisToolVideoBackend"
+        cmd = f'cmd.exe /c start "" "{start_bat}"'
+        subprocess.run(
+            ["schtasks", "/create", "/tn", task_name, "/tr", cmd, "/sc", "once", "/st", "23:59", "/f"],
+            capture_output=True, text=True
+        )
+        subprocess.run(["schtasks", "/run", "/tn", task_name], capture_output=True, text=True)
+        time.sleep(1)
+        subprocess.run(["schtasks", "/delete", "/tn", task_name, "/f"], capture_output=True, text=True)
+    except Exception:
+        subprocess.Popen(f'cmd.exe /c start "" "{start_bat}"', cwd=str(ROOT), shell=True)
 
     # Wait for port to open
     for i in range(25):
@@ -158,8 +164,17 @@ def stop_all_system():
     # Stop cloudflared processes running toolvideo tunnel
     print(f" {C_CYAN}⏳ Dừng Cloudflare Tunnel...{C_RESET}")
     try:
-        subprocess.run(["taskkill", "/f", "/im", "cloudflared.exe"], capture_output=True)
-        print(f" {C_GREEN}✔ Đã đóng tiến trình cloudflared.{C_RESET}")
+        # Only kill cloudflared for toolvideo-backend, do NOT touch aide-backend!
+        out = subprocess.check_output(
+            ["wmic", "process", "where", "name='cloudflared.exe'", "get", "processid,commandline"],
+            text=True, stderr=subprocess.DEVNULL
+        )
+        for line in out.splitlines():
+            if "toolvideo" in line.lower():
+                parts = line.strip().split()
+                if parts and parts[-1].isdigit():
+                    subprocess.run(["taskkill", "/f", "/pid", parts[-1]], capture_output=True)
+        print(f" {C_GREEN}✔ Đã đóng tiến trình cloudflared của toolvideo.{C_RESET}")
     except Exception as e:
         print(f" ⚠ Lỗi: {e}")
 
@@ -319,6 +334,14 @@ def main():
         elif arg in ("status", "check"):
             show_status()
             return
+        elif arg in ("gui", "ui", "hub"):
+            setup_exe = ROOT / "setup.exe"
+            if setup_exe.exists():
+                os.startfile(str(setup_exe))
+                return
+            from tools.ui_system_controller import main as gui_main
+            gui_main()
+            return
 
     # Interactive menu
     while True:
@@ -331,10 +354,11 @@ def main():
         print(f"  [3] 🛑 {C_BOLD}Dừng toàn bộ hệ thống{C_RESET} (Stop)")
         print(f"  [4] 📦 {C_BOLD}{C_MAGENTA}Cập nhật & Build Setup EXE{C_RESET} ({C_GREEN}DuyTrisDownloader_Setup.exe{C_RESET})")
         print(f"  [5] 📊 {C_BOLD}Kiểm tra trạng thái kết nối & Cloudflare Tunnel{C_RESET}")
+        print(f"  [6] 🖥️ {C_BOLD}{C_CYAN}Mở Giao diện Điều khiển (setup.exe Manager){C_RESET}")
         print(f"  [0] ❌ {C_BOLD}Thoát{C_RESET}")
         print("=" * 65)
 
-        choice = input(f" Nhập lựa chọn của bạn [{C_CYAN}1-5, 0{C_RESET}]: ").strip()
+        choice = input(f" Nhập lựa chọn của bạn [{C_CYAN}1-6, 0{C_RESET}]: ").strip()
 
         if choice == "1":
             start_all_system()
@@ -353,6 +377,13 @@ def main():
         elif choice == "5":
             show_status()
             input(f"\n {C_CYAN}Nhấn Enter để tiếp tục...{C_RESET}")
+        elif choice == "6":
+            setup_exe = ROOT / "setup.exe"
+            if setup_exe.exists():
+                os.startfile(str(setup_exe))
+            else:
+                from tools.ui_system_controller import main as gui_main
+                gui_main()
         elif choice in ("0", "q", "exit"):
             print(f"\n {C_GREEN}Tạm biệt!{C_RESET}\n")
             break

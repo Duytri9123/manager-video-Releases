@@ -228,30 +228,50 @@ Hãy trả về JSON với cấu trúc sau (không có markdown, chỉ JSON thu�
   }}
 }}"""
 
-    # Try direct Antigravity first if selected or auto
-    if provider in ("antigravity", "gemini", "auto"):
-        try:
-            from core.direct_ai_provider import dispatch_chat_completion
-            res = dispatch_chat_completion(
-                model="gemini-3.8-flash-high",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1000,
-                temperature=0.7,
-                timeout=30,
-            )
-            raw = res["choices"][0]["message"]["content"].strip()
-            raw = _re.sub(r"<thought>.*?</thought>", "", raw, flags=_re.DOTALL)
-            raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
-            if "```" in raw:
-                raw = _re.sub(r"^```(?:json)?\s*", "", raw)
-                raw = _re.sub(r"\s*```$", "", raw)
-            result = _json.loads(raw.strip())
-            result = _sanitize_ai_content_result(result)
-            return jsonify({"ok": True, "result": result, "provider": "antigravity"})
-        except Exception as e:
-            LOGGER.info("analyze_video_content direct antigravity: %s", e)
+    def _parse_result(raw):
+        raw = _re.sub(r"<thought>.*?</thought>|<think>.*?</think>", "", str(raw or ""), flags=_re.DOTALL).strip()
+        raw = _re.sub(r"^```(?:json)?\s*", "", raw, flags=_re.IGNORECASE)
+        raw = _re.sub(r"\s*```$", "", raw).strip()
+        start = raw.find("{")
+        if start < 0:
+            raise ValueError("AI không trả về JSON nội dung đăng")
+        result, _ = _json.JSONDecoder().raw_decode(raw[start:])
+        if not isinstance(result, dict) or not any(k in result for k in ("youtube", "tiktok", "facebook")):
+            raise ValueError("JSON nội dung đăng không hợp lệ")
+        return _sanitize_ai_content_result(result)
 
+    # Use the same active provider connections and model resolver as Chat Bot.
+    # The legacy translation keys below remain a fallback for older installs.
     last_error = ""
+    try:
+        from core.ai_models_manager import get_available_models, get_default_model
+        from core.direct_ai_provider import dispatch_chat_completion
+
+        models = get_available_models("llm", active_only=True)
+        requested_model = next((m for m in models if m["id"] == provider), None)
+        preferred = ([requested_model] if requested_model else
+                     [m for m in models if m["owned_by"] in (("gemini", "antigravity") if provider == "gemini" else (provider,))])
+        if provider == "auto":
+            default_id = get_default_model(models)
+            preferred = [m for m in models if m["id"] == default_id]
+        candidates = preferred + [m for m in models if m not in preferred]
+        for model_info in candidates[:5]:
+            try:
+                reply = dispatch_chat_completion(
+                    model=model_info["id"], provider=model_info["owned_by"],
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2500, temperature=0.7, timeout=60,
+                )
+                raw = reply["choices"][0]["message"]["content"]
+                result = _parse_result(raw)
+                return jsonify({"ok": True, "result": result, "provider": model_info["owned_by"]})
+            except Exception as exc:
+                last_error = str(exc)
+                LOGGER.warning("analyze_video_content %s/%s failed: %s", model_info["owned_by"], model_info["id"], exc)
+    except Exception as exc:
+        last_error = str(exc)
+        LOGGER.warning("analyze_video_content provider lookup failed: %s", exc)
+
     for prov in order:
         api_url, api_key, model = api_configs.get(prov, ("", "", ""))
         if not api_key:
@@ -275,10 +295,8 @@ Hãy trả về JSON với cấu trúc sau (không có markdown, chỉ JSON thu�
             with urllib.request.urlopen(req, timeout=30) as resp:
                 resp_data = _json.loads(resp.read())
 
-            raw = resp_data["choices"][0]["message"]["content"].strip()
-            # Remove markdown code blocks if present
-            raw = raw.strip("```json").strip("```").strip()
-            result = _json.loads(raw)
+            raw = resp_data["choices"][0]["message"]["content"]
+            result = _parse_result(raw)
             # Sanitize: strip hashtags from prose fields and dedup tag arrays so
             # nothing gets duplicated when frontend joins caption + hashtags.
             result = _sanitize_ai_content_result(result)
@@ -288,4 +306,4 @@ Hãy trả về JSON với cấu trúc sau (không có markdown, chỉ JSON thu�
             LOGGER.warning("analyze_video_content %s failed: %s", prov, e)
             continue
 
-    return jsonify({"ok": False, "error": f"Tất cả AI provider thất bại: {last_error}"}), 500
+    return jsonify({"ok": False, "error": f"Tất cả AI provider thất bại: {last_error or 'Chưa có kết nối AI đang bật'}"}), 500

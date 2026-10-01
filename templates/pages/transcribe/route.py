@@ -328,7 +328,7 @@ def transcribe():
                 g_conns = get_active_provider_connections("gemini")
                 g_key = (g_conns[0].get("api_key") or "").strip() if g_conns else ""
                 yield send(log=f"Dùng Google Gemini Multimodal AI (Model: {model_name})", level="info")
-                transcriber = AntigravityTranscriber(api_key=g_key, language=language, model_name=model_name)
+                transcriber = AntigravityTranscriber(api_key=g_key, language=language, model_name=model_name, provider="gemini")
             elif provider == "model":
                 yield send(log=f"ℹ Đang load Whisper local: {model_name}…", level="info")
                 try:

@@ -308,28 +308,69 @@ window.removeYouTubeAccount = removeYouTubeAccount;
 
 /* ── Facebook account actions ── */
 async function addFacebookAccount() {
-  const token = prompt('Nhập Facebook User Access Token:');
-  if (!token || !token.trim()) return;
+  const modal = document.getElementById('add-facebook-account-modal');
+  if (!modal) return;
+  document.getElementById('add-fb-account-error').textContent = '';
+  document.getElementById('add-fb-user-token').value = '';
+  document.getElementById('add-fb-app-secret').value = '';
+  try {
+    const res = await fetch('/api/facebook/app_credentials');
+    const data = await res.json();
+    document.getElementById('add-fb-app-id').value = data.app_id || '';
+    modal.dataset.savedAppId = data.configured ? (data.app_id || '') : '';
+    document.getElementById('add-fb-app-secret').required = !data.configured;
+  } catch (_) {
+    modal.dataset.savedAppId = '';
+    document.getElementById('add-fb-app-secret').required = true;
+  }
+  modal.style.display = 'flex';
+  document.getElementById('add-fb-app-id').focus();
+}
+window.addFacebookAccount = addFacebookAccount;
+
+function closeFacebookAccountModal() {
+  document.getElementById('add-facebook-account-modal').style.display = 'none';
+}
+window.closeFacebookAccountModal = closeFacebookAccountModal;
+
+async function submitFacebookAccount(event) {
+  event.preventDefault();
+  const app_id = document.getElementById('add-fb-app-id').value.trim();
+  const app_secret = document.getElementById('add-fb-app-secret').value.trim();
+  const token = document.getElementById('add-fb-user-token').value.trim();
+  const error = document.getElementById('add-fb-account-error');
+  const button = document.getElementById('add-fb-account-submit');
+  if (app_id !== document.getElementById('add-facebook-account-modal').dataset.savedAppId && !app_secret) {
+    error.textContent = 'Nhập App Secret cho App ID mới.';
+    return;
+  }
+  error.textContent = '';
+  button.disabled = true;
 
   try {
-    toast('Đang kết nối Facebook...', 'info');
+    const credentialsRes = await fetch('/api/facebook/app_credentials', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app_id, app_secret })
+    });
+    const credentials = await credentialsRes.json();
+    if (!credentialsRes.ok || !credentials.ok) throw new Error(credentials.error || 'Không lưu được App ID / App Secret');
     const res = await fetch('/api/accounts/facebook/connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: token.trim() })
+      body: JSON.stringify({ token })
     });
     const data = await res.json();
-    if (data.ok) {
-      toast(`Đã thêm tài khoản Facebook: ${data.account.name}`, 'success');
-      loadAccounts();
-    } else {
-      toast(data.error || 'Token Facebook không hợp lệ', 'error');
-    }
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Token Facebook không hợp lệ');
+    closeFacebookAccountModal();
+    toast(`Đã thêm tài khoản Facebook: ${data.account.name}`, 'success');
+    loadAccounts();
   } catch (e) {
-    toast('Lỗi kết nối Facebook: ' + e.message, 'error');
+    error.textContent = e.message;
+  } finally {
+    button.disabled = false;
   }
 }
-window.addFacebookAccount = addFacebookAccount;
+window.submitFacebookAccount = submitFacebookAccount;
 
 async function setActiveFacebook(accountId) {
   try {

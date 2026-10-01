@@ -118,6 +118,24 @@ try {
         Write-Host "       $_ ($sz MB)"
     }
 
+    # ── Copy Tools and system batch launchers ──
+    Write-Host "       Copying tools and system controller launchers..."
+    $ToolsDest = Join-Path $AppDir "tools"
+    if (-not (Test-Path $ToolsDest)) { New-Item -ItemType Directory -Path $ToolsDest -Force | Out-Null }
+    Copy-Item -Path (Join-Path $ProjectRoot "tools\*") -Destination $ToolsDest -Recurse -Force
+    @("setup.exe", "start_backend_and_tunnel.bat", "start_backend_and_tunnel_silent.vbs", "stop_backend_and_tunnel.bat", "BẬT_TẮT_HỆ_THỐNG_UI.bat", "DuyTris_UI_Controller.bat", "BẬT_HỆ_THỐNG.bat", "DỪNG_HỆ_THỐNG.bat", "DuyTris_Manager.bat") | ForEach-Object {
+        $f = Join-Path $ProjectRoot $_
+        if (Test-Path $f) { Copy-Item -LiteralPath $f -Destination $AppDir -Force }
+    }
+
+    # Ensure sea_g2p.bin is in sea_g2p package folder for VieNeu TTS
+    $SeaG2pSrc = Join-Path $ProjectRoot ".venv\Lib\site-packages\sea_g2p\sea_g2p.bin"
+    $SeaG2pDest = Join-Path $AppDir "sea_g2p"
+    if (Test-Path $SeaG2pSrc) {
+        if (-not (Test-Path $SeaG2pDest)) { New-Item -ItemType Directory -Path $SeaG2pDest -Force | Out-Null }
+        Copy-Item -LiteralPath $SeaG2pSrc -Destination (Join-Path $SeaG2pDest "sea_g2p.bin") -Force
+    }
+
     # ── Create portable ZIP ──
     $ZipPath = $null
     $ZipSize = $null

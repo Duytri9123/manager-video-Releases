@@ -1695,22 +1695,9 @@ function startProcessVideo() {
     try {
       const providersToCheck = [];
 
-      // 1. Check Translation API if enabled
-      const translateSubs = _isProcTranslateSubsEnabled();
-      if (translateSubs) {
-        const transProv = _getProcessProvider('translate');
-        if (['deepseek', 'groq', 'openai', 'gemini'].includes(transProv)) {
-          providersToCheck.push(transProv);
-        }
-      }
-
-      // 2. Check Transcription API if enabled
-      const transcribeProv = _getProcessProvider('transcribe');
-      if (['groq', 'openai', 'gemini'].includes(transcribeProv)) {
-        providersToCheck.push(transcribeProv);
-      }
-
-      // 3. Check TTS API if voice conversion is enabled
+      // AI translation and transcription resolve active Provider Connections on
+      // the server. Legacy key checks here can reject a working connection.
+      // Only TTS engines that still use the legacy config key need preflight.
       const voiceConvert = _isProcVoiceConvertEnabled();
       if (voiceConvert) {
         const ttsEngine = _resolveTtsEngineVoice('proc')?.tts_engine || '';
@@ -1864,7 +1851,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     font_bold:        document.getElementById('proc-font-bold')?.checked ?? true,
     tts_speed:        parseFloat(document.getElementById('proc-tts-speed')?.value || '1.0'),
     auto_speed:       document.getElementById('proc-auto-speed')?.checked ?? true,
-    sync_sub_to_voice: true,
+    sync_sub_to_voice: document.getElementById('proc-sync-sub-voice')?.checked ?? false,
     multi_speaker:     document.getElementById('proc-multi-speaker')?.checked ?? false,
     tts_voice_male:    document.getElementById('proc-tts-voice-male')?.value || '',
     tts_voice_female:  document.getElementById('proc-tts-voice-female')?.value || '',
@@ -2075,7 +2062,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
             if (d.failed) processingFailed = true;
             if (d.log) {
               _appendProcLog(d.log, d.level || 'info');
-              if (d.log.includes('Antigravity STT thất bại') || d.log.includes('Chưa cấu hình khóa kết nối') || d.log.includes('hết hạn')) {
+              if (d.log.includes('Phiên âm đoạn') && d.log.includes('thất bại') || d.log.includes('Antigravity STT thất bại') || d.log.includes('Chưa cấu hình khóa kết nối') || d.log.includes('hết hạn')) {
                 if (typeof _showSttKeyModal === 'function') {
                   _showSttKeyModal(d.log);
                 }
@@ -2477,8 +2464,8 @@ function _showSttKeyModal(errorMsg) {
   let inputHtml = '';
 
   if (isAntigravity) {
-    title = 'Sự cố kết nối Antigravity';
-    desc = 'Kết nối Antigravity gặp sự cố hoặc token cần làm mới. Bạn có thể mở Cấu hình để kiểm tra kết nối tài khoản Google, hoặc nhấn Bỏ qua để xử lý tiếp mà không dùng phiên âm.';
+    title = 'Phiên âm Antigravity chưa hoàn thành';
+    desc = 'Yêu cầu phiên âm âm thanh chưa trả về phụ đề hợp lệ. Hãy xem lỗi chi tiết bên dưới, rồi thử lại hoặc kiểm tra kết nối trong Cấu hình.';
   } else if (isGemini) {
     title = 'Cập nhật Google Gemini API Key';
     desc = 'Kết nối Google Gemini gặp sự cố. Bạn có thể nhập Gemini API Key mới (dạng AIzaSy...) hoặc mở Cấu hình.';

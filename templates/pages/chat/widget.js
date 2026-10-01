@@ -3373,7 +3373,7 @@
       if (rafId){ cancelAnimationFrame(rafId); rafId = 0; pendingMove = null; }
       if (!wasDragging) return;
       // Suppress the click that follows a drag.
-      fab._suppressNextClick = true;
+      fab._suppressClickUntil = performance.now() + 250;
       // Commit transform → real left/top, then clear transform so hover/press
       // animations don't double-apply. Hard-clamp so icon never escapes viewport.
       const fr = fab.getBoundingClientRect();
@@ -3399,28 +3399,31 @@
 
     // Listen on window for move/up so drag continues even if the pointer
     // moves out of the (transform-translated) FAB.
-    fab.addEventListener('pointerdown', onDown);
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', guardedUp);
-    window.addEventListener('pointercancel', guardedUp);
-    fab.addEventListener('mousedown', onDown);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', guardedUp);
-    fab.addEventListener('touchstart', onDown, { passive: true });
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', guardedUp);
-    window.addEventListener('touchcancel', guardedUp);
+    if (window.PointerEvent){
+      fab.addEventListener('pointerdown', onDown);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', guardedUp);
+      window.addEventListener('pointercancel', guardedUp);
+    } else {
+      fab.addEventListener('mousedown', onDown);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', guardedUp);
+      fab.addEventListener('touchstart', onDown, { passive: true });
+      window.addEventListener('touchmove', onMove, { passive: false });
+      window.addEventListener('touchend', guardedUp);
+      window.addEventListener('touchcancel', guardedUp);
+    }
 
     function guardedUp(e){
       const wasDragging = dragging;
       onUp(e);
-      if (wasDragging) fab._suppressNextClick = true;
+      if (wasDragging) fab._suppressClickUntil = performance.now() + 250;
     }
 
     // Capture-phase click guard runs before the regular click handler.
     fab.addEventListener('click', (e) => {
-      if (fab._suppressNextClick){
-        fab._suppressNextClick = false;
+      if (performance.now() < (fab._suppressClickUntil || 0)){
+        fab._suppressClickUntil = 0;
         e.preventDefault(); e.stopPropagation();
       }
     }, true);
@@ -3781,6 +3784,7 @@
 
   function open(){
     $('cw-panel').classList.add('show');
+    $('cw-panel').classList.remove('minimized');
     $('cw-fab').classList.add('open');
     localStorage.setItem(LS_OPEN, '1');
     // Panel always follows the FAB. Reposition twice — once now (best effort

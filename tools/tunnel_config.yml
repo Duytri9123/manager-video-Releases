@@ -1,7 +1,15 @@
-tunnel: 19f72755-3a97-40a3-8bdf-4409e9f6d40c
-credentials-file: C:\Users\admin\.cloudflared\19f72755-3a97-40a3-8bdf-4409e9f6d40c.json
+tunnel: 6bb9942e-2258-478a-97da-52e886179fae
+credentials-file: C:\Users\admin\.cloudflared\6bb9942e-2258-478a-97da-52e886179fae.json
 
 ingress:
+  - hostname: dgpelectric.top
+    service: http://127.0.0.1:9123
   - hostname: toolvideo.dgpelectric.top
     service: http://127.0.0.1:9123
+  - hostname: video.dgpelectric.top
+    service: http://127.0.0.1:9123
+  - hostname: app.dgpelectric.top
+    service: http://127.0.0.1:9123
+  - hostname: admin.elquote.top
+    service: http://127.0.0.1:8000
   - service: http_status:404

@@ -113,7 +113,7 @@ class GroqWhisperTranscriber:
 class AntigravityTranscriber:
     """Speech-to-text via Antigravity provider connection with multi-key and model fallbacks."""
 
-    def __init__(self, language: str = "zh", api_key: str = "", model_name: str = "", multi_speaker: bool = False):
+    def __init__(self, language: str = "zh", api_key: str = "", model_name: str = "", multi_speaker: bool = False, provider: str = "antigravity"):
         self.language = language
         self.api_key = (api_key or "").strip()
         m = (model_name or "").strip()
@@ -123,6 +123,7 @@ class AntigravityTranscriber:
             m = m.split("/")[-1]
         self.model_name = m
         self.multi_speaker = bool(multi_speaker)
+        self.provider = provider
 
     def transcribe(self, video_path: Path, ffmpeg: str, out_srt: Path):
         import subprocess, base64, urllib.request, urllib.error, json, tempfile, re
@@ -134,8 +135,8 @@ class AntigravityTranscriber:
         candidates_keys = []
         try:
             from core.ai_models_manager import get_active_provider_connections
-            conns = get_active_provider_connections("antigravity")
-            if not conns:
+            conns = get_active_provider_connections(self.provider)
+            if not conns and self.provider == "antigravity":
                 conns = get_active_provider_connections("gemini")
             for conn in conns:
                 k = (conn.get("api_key") or conn.get("access_token") or "").strip()
@@ -168,7 +169,8 @@ class AntigravityTranscriber:
                 })
 
         # Fallback to env variable
-        env_key = os.getenv("ANTIGRAVITY_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
+        env_key = (os.getenv("GEMINI_API_KEY", "").strip() if self.provider == "gemini"
+                   else os.getenv("ANTIGRAVITY_API_KEY", "").strip())
         if env_key and not any(ck["key"] == env_key for ck in candidates_keys):
             candidates_keys.append({
                 "key": env_key,
@@ -203,8 +205,23 @@ class AntigravityTranscriber:
                 yield ("result", [])
                 return
 
-            audio_bytes = audio_path.read_bytes()
-            b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
+            # Long recordings can produce an empty/truncated response even when
+            # the same connection answers short text prompts successfully.
+            chunk_seconds = 120
+            audio_duration = _get_media_duration(audio_path, ffmpeg) or video_dur
+            audio_chunks = []
+            for offset in range(0, max(1, int(audio_duration + 0.999)), chunk_seconds):
+                chunk_path = Path(tmpdir) / f"chunk_{offset:05d}.mp3"
+                ok, err = run_ffmpeg([
+                    ffmpeg, "-ss", str(offset), "-t", str(chunk_seconds),
+                    "-i", str(audio_path), "-acodec", "copy",
+                    str(chunk_path), "-y", "-loglevel", "error"
+                ])
+                if not ok or not chunk_path.exists() or chunk_path.stat().st_size == 0:
+                    yield ("log", f"Không chia được âm thanh tại {offset}s: {err}", "error")
+                    yield ("result", [])
+                    return
+                audio_chunks.append((offset, chunk_path))
 
             lang_names = {"zh": "Tiếng Trung", "en": "Tiếng Anh", "vi": "Tiếng Việt", "ja": "Tiếng Nhật", "ko": "Tiếng Hàn", "th": "Tiếng Thái"}
             target_lang = lang_names.get(self.language, self.language)
@@ -250,11 +267,20 @@ class AntigravityTranscriber:
             )
 
 
-            # Chọn model chính: ưu tiên model người dùng chọn, nếu không lấy model đầu tiên được bật trong cấu hình
+            # Chọn model đang bật cho đúng provider, giống danh sách của Chat Bot.
             chosen_model = ""
+            available_stt_models = []
+            try:
+                from core.ai_models_manager import get_available_models
+                available_stt_models = [str(m["id"]) for m in get_available_models("llm", active_only=True)
+                                        if m.get("owned_by") == self.provider
+                                        and not any(bad in str(m["id"]).lower()
+                                                    for bad in ("thinking", "claude", "gpt-oss", "image"))]
+            except Exception:
+                pass
             if self.model_name:
                 m_lower = self.model_name.lower()
-                if not any(bad in m_lower for bad in ["thinking", "claude", "gpt-oss", "image"]):
+                if not any(bad in m_lower for bad in ["thinking", "claude", "gpt-oss", "image"]) and (not available_stt_models or self.model_name in available_stt_models):
                     chosen_model = self.model_name
 
             if not chosen_model:
@@ -271,7 +297,7 @@ class AntigravityTranscriber:
                             break
                     if not chosen_model:
                         for dm in avail:
-                            if dm.get("owned_by") in ("antigravity", "gemini") and dm.get("id"):
+                            if dm.get("owned_by") == self.provider and dm.get("id"):
                                 mid = str(dm["id"])
                                 mid_lower = mid.lower()
                                 if not any(bad in mid_lower for bad in ["thinking", "claude", "gpt-oss", "image"]):
@@ -285,139 +311,156 @@ class AntigravityTranscriber:
 
             # Chỉ thử 1 model (cùng lắm 1 fallback nếu 404 Model Not Found), KHÔNG lặp qua toàn bộ model khi lỗi tài khoản
             models_to_try = [chosen_model]
-            if chosen_model != "gemini-3.8-flash-high":
-                models_to_try.append("gemini-3.8-flash-high")
+            models_to_try.extend(m for m in available_stt_models if m != chosen_model)
+            models_to_try = models_to_try[:3]
 
-            srt_text = ""
-            stt_error = ""
+            all_segs = []
+            for chunk_index, (offset, chunk_path) in enumerate(audio_chunks, 1):
+                yield ("log", f"[Bước 2/5] Phiên âm đoạn {chunk_index}/{len(audio_chunks)} ({offset}s)...", "info")
+                b64_audio = base64.b64encode(chunk_path.read_bytes()).decode("ascii")
+                srt_text = ""
+                stt_error = ""
 
-            for conn_idx, conn_item in enumerate(candidates_keys, 1):
-                k = conn_item["key"]
-                b_url = conn_item.get("base_url") or ""
-                conn_name = (conn_item.get("conn") or {}).get("name") or (conn_item.get("conn") or {}).get("id") or f"Tài khoản #{conn_idx}"
+                for conn_idx, conn_item in enumerate(candidates_keys, 1):
+                    k = conn_item["key"]
+                    b_url = conn_item.get("base_url") or ""
+                    conn_name = (conn_item.get("conn") or {}).get("name") or (conn_item.get("conn") or {}).get("id") or f"Tài khoản #{conn_idx}"
 
-                from core.direct_ai_provider import (
-                    detect_key_type, antigravity_generate_content, ProviderError,
-                    ANTIGRAVITY_MODEL_ALIASES, ANTIGRAVITY_USER_AGENT
-                )
-                key_type = detect_key_type(k)
+                    from core.direct_ai_provider import (
+                        detect_key_type, antigravity_generate_content, ProviderError,
+                        ANTIGRAVITY_MODEL_ALIASES, ANTIGRAVITY_USER_AGENT
+                    )
+                    key_type = detect_key_type(k)
 
-                c_obj = conn_item.get("conn") or {
-                    "api_key": k,
-                    "refresh_token": (conn_item.get("conn") or {}).get("refresh_token") or (k if k.startswith("1//") else ""),
-                    "base_url": b_url,
-                    "project_id": conn_item.get("project_id", "aicode-consumers")
-                }
+                    c_obj = conn_item.get("conn") or {
+                        "api_key": k,
+                        "refresh_token": (conn_item.get("conn") or {}).get("refresh_token") or (k if k.startswith("1//") else ""),
+                        "base_url": b_url,
+                        "project_id": conn_item.get("project_id", "aicode-consumers")
+                    }
 
-                for model in models_to_try:
-                    yield ("log", f"[Bước 2/5] Đang gửi âm thanh tới Antigravity ({conn_name}, model={model})...", "info")
+                    for model in models_to_try:
+                        yield ("log", f"[Bước 2/5] Đang gửi âm thanh tới Antigravity ({conn_name}, model={model})...", "info")
 
-                    try:
-                        is_oauth = key_type in ("oauth_token", "refresh_token") or "cloudcode" in b_url or (c_obj.get("auth_type") == "oauth") or bool(c_obj.get("refresh_token"))
-                        if is_oauth:
-                            # Dùng antigravity_generate_content: tự refresh token, tự map model alias, tự điền project_id chuẩn
-                            req_body = {
-                                "contents": [{
-                                    "parts": [
-                                        {"text": prompt},
-                                        {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
-                                    ]
-                                }],
-                                "generationConfig": {
-                                    "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False}
+                        try:
+                            is_oauth = key_type in ("oauth_token", "refresh_token") or "cloudcode" in b_url or (c_obj.get("auth_type") == "oauth") or bool(c_obj.get("refresh_token"))
+                            if is_oauth:
+                                # Dùng antigravity_generate_content: tự refresh token, tự map model alias, tự điền project_id chuẩn
+                                req_body = {
+                                    "contents": [{
+                                        "parts": [
+                                            {"text": prompt},
+                                            {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
+                                        ]
+                                    }],
+                                    "generationConfig": {
+                                        "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False}
+                                    }
                                 }
-                            }
-                            resp_data, updates = antigravity_generate_content(c_obj, model, req_body, timeout=60)
-                            if updates and c_obj.get("id"):
-                                try:
-                                    from core.direct_ai_provider import update_db_connection
-                                    update_db_connection(c_obj["id"], updates)
-                                except Exception:
-                                    pass
-                        else:
-                            # API Key path: generativelanguage.googleapis.com
-                            base_endpoint = (b_url or "https://generativelanguage.googleapis.com").rstrip("/")
-                            url = f"{base_endpoint}/v1beta/models/{model}:generateContent?key={k}" if key_type == "api_key" else f"{base_endpoint}/v1beta/models/{model}:generateContent"
-                            headers = {"Content-Type": "application/json"}
-                            if key_type != "api_key":
-                                headers["Authorization"] = f"Bearer {k}"
-                            payload = json.dumps({
-                                "contents": [{
-                                    "parts": [
-                                        {"text": prompt},
-                                        {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
-                                    ]
-                                }],
-                                "generationConfig": {
-                                    "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False}
-                                }
-                            }).encode("utf-8")
-                            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-                            with urllib.request.urlopen(req, timeout=60) as resp:
-                                r_json = json.loads(resp.read().decode("utf-8"))
-                                resp_data = r_json.get("response") if isinstance(r_json.get("response"), dict) else r_json
+                                resp_data, updates = antigravity_generate_content(c_obj, model, req_body, timeout=60)
+                                if updates and c_obj.get("id"):
+                                    try:
+                                        from core.direct_ai_provider import update_db_connection
+                                        update_db_connection(c_obj["id"], updates)
+                                    except Exception:
+                                        pass
+                            else:
+                                # API Key path: generativelanguage.googleapis.com
+                                base_endpoint = (b_url or "https://generativelanguage.googleapis.com").rstrip("/")
+                                url = f"{base_endpoint}/v1beta/models/{model}:generateContent?key={k}" if key_type == "api_key" else f"{base_endpoint}/v1beta/models/{model}:generateContent"
+                                headers = {"Content-Type": "application/json"}
+                                if key_type != "api_key":
+                                    headers["Authorization"] = f"Bearer {k}"
+                                payload = json.dumps({
+                                    "contents": [{
+                                        "parts": [
+                                            {"text": prompt},
+                                            {"inlineData": {"mimeType": "audio/mp3", "data": b64_audio}}
+                                        ]
+                                    }],
+                                    "generationConfig": {
+                                        "thinkingConfig": {"thinkingBudget": 0, "includeThoughts": False}
+                                    }
+                                }).encode("utf-8")
+                                req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                                with urllib.request.urlopen(req, timeout=60) as resp:
+                                    r_json = json.loads(resp.read().decode("utf-8"))
+                                    resp_data = r_json.get("response") if isinstance(r_json.get("response"), dict) else r_json
 
-                        # Lấy text trả về
-                        candidates = resp_data.get("candidates") or []
-                        if candidates and "content" in candidates[0]:
-                            parts = candidates[0]["content"].get("parts") or []
-                            text_parts = []
-                            for p in parts:
-                                if isinstance(p, dict):
-                                    if p.get("thought") is True:
-                                        continue
-                                    t = p.get("text") or ""
-                                    if t:
-                                        text_parts.append(t)
-                                elif isinstance(p, str):
-                                    text_parts.append(p)
-                            srt_text = "".join(text_parts)
-                            srt_text = re.sub(r'<thought>.*?</thought>', '', srt_text, flags=re.DOTALL)
-                            srt_text = re.sub(r'<think>.*?</think>', '', srt_text, flags=re.DOTALL).strip()
-                            if srt_text:
-                                break
-                    except ProviderError as pe:
-                        stt_error = str(pe)
-                        yield ("log", f"{conn_name} gặp lỗi ({stt_error}). Đổi sang tài khoản tiếp theo...", "warning")
-                        break  # Lỗi tài khoản -> Chuyển ngay sang connection tiếp theo, KHÔNG lặp qua các model khác!
-                    except urllib.error.HTTPError as he:
-                        err_body = he.read().decode("utf-8", "replace") if hasattr(he, "read") else ""
-                        stt_error = f"HTTP Error {he.code}: {err_body[:200]}"
-                        if he.code in (401, 403, 429):
-                            yield ("log", f"{conn_name} gặp lỗi HTTP {he.code}. Đổi sang tài khoản tiếp theo...", "warning")
-                            break  # Lỗi xác thực/quota -> Chuyển ngay sang connection tiếp theo!
-                        if he.code == 404:
-                            # 404 Model Not Found: cho phép thử 1 model fallback
-                            continue
-                        yield ("log", f"{conn_name} gặp lỗi HTTP {he.code}. Đổi tài khoản...", "warning")
+                            # Lấy text trả về
+                            candidates = resp_data.get("candidates") or []
+                            if not candidates:
+                                stt_error = str(resp_data.get("promptFeedback") or "API trả về danh sách candidates rỗng")
+                            elif not candidates[0].get("content", {}).get("parts"):
+                                stt_error = f"API không trả nội dung (finishReason={candidates[0].get('finishReason', 'unknown')})"
+                            if candidates and "content" in candidates[0]:
+                                parts = candidates[0]["content"].get("parts") or []
+                                text_parts = []
+                                for p in parts:
+                                    if isinstance(p, dict):
+                                        if p.get("thought") is True:
+                                            continue
+                                        t = p.get("text") or ""
+                                        if t:
+                                            text_parts.append(t)
+                                    elif isinstance(p, str):
+                                        text_parts.append(p)
+                                srt_text = "".join(text_parts)
+                                srt_text = re.sub(r'<thought>.*?</thought>', '', srt_text, flags=re.DOTALL)
+                                srt_text = re.sub(r'<think>.*?</think>', '', srt_text, flags=re.DOTALL).strip()
+                                if srt_text:
+                                    break
+                        except ProviderError as pe:
+                            stt_error = str(pe)
+                            if pe.status == 404:
+                                yield ("log", f"Model {model} không khả dụng; thử model đang bật tiếp theo...", "warning")
+                                continue
+                            yield ("log", f"{conn_name} gặp lỗi ({stt_error}). Đổi sang tài khoản tiếp theo...", "warning")
+                            break  # Lỗi tài khoản -> Chuyển ngay sang connection tiếp theo, KHÔNG lặp qua các model khác!
+                        except urllib.error.HTTPError as he:
+                            err_body = he.read().decode("utf-8", "replace") if hasattr(he, "read") else ""
+                            stt_error = f"HTTP Error {he.code}: {err_body[:200]}"
+                            if he.code in (401, 403, 429):
+                                yield ("log", f"{conn_name} gặp lỗi HTTP {he.code}. Đổi sang tài khoản tiếp theo...", "warning")
+                                break  # Lỗi xác thực/quota -> Chuyển ngay sang connection tiếp theo!
+                            if he.code == 404:
+                                # 404 Model Not Found: cho phép thử 1 model fallback
+                                continue
+                            yield ("log", f"{conn_name} gặp lỗi HTTP {he.code}. Đổi tài khoản...", "warning")
+                            break
+                        except Exception as exc:
+                            stt_error = str(exc)
+                            yield ("log", f"{conn_name} lỗi kết nối ({stt_error[:100]}). Đổi tài khoản...", "warning")
+                            break
+
+                    if srt_text:
                         break
-                    except Exception as exc:
-                        stt_error = str(exc)
-                        yield ("log", f"{conn_name} lỗi kết nối ({stt_error[:100]}). Đổi tài khoản...", "warning")
-                        break
 
-                if srt_text:
-                    break
+                if not srt_text:
+                    yield ("log", f"Phiên âm đoạn {chunk_index}/{len(audio_chunks)} thất bại: {stt_error or 'API không trả văn bản'}.", "error")
+                    yield ("result", [])
+                    return
+                segs = _parse_srt_text_to_segments(srt_text, video_dur=chunk_seconds)
+                if not segs:
+                    yield ("log", f"Đoạn {chunk_index} không có mốc thời gian SRT hợp lệ.", "error")
+                    yield ("result", [])
+                    return
+                for seg in segs:
+                    seg["start"] = round(seg["start"] + offset, 3)
+                    seg["end"] = round(min(video_dur, seg["end"] + offset), 3)
+                all_segs.extend(seg for seg in segs if seg["end"] > seg["start"])
 
-            if srt_text:
-                segs = _parse_srt_text_to_segments(srt_text, video_dur=video_dur)
-                if segs:
-                    from core.processor.subtitles import process_speaker_tags_in_segments
-                    process_speaker_tags_in_segments(segs)
-                    srt_blocks = []
-                    for i, s in enumerate(segs, 1):
-                        start_str = _fmt_srt_time(s["start"])
-                        end_str = _fmt_srt_time(s["end"])
-                        spk_lbl = f"[{'Nam' if s.get('speaker') == 'male' else 'Nữ'}] " if s.get("speaker") else ""
-                        srt_blocks.append(f"{i}\n{start_str} --> {end_str}\n{spk_lbl}{s['text']}\n")
-                    with open(_winlong(out_srt), "w", encoding="utf-8") as _f:
-                        _f.write("\n".join(srt_blocks))
-                yield ("result", segs)
-                return
-
-            yield ("log", f"Antigravity STT thất bại ({stt_error or 'Không có dữ liệu'}).", "error")
-            yield ("log", "Vui lòng mở Cấu hình -> Nhà cung cấp để kiểm tra kết nối Antigravity.", "warning")
-            yield ("result", [])
+            from core.processor.subtitles import process_speaker_tags_in_segments
+            process_speaker_tags_in_segments(all_segs)
+            srt_blocks = []
+            for i, seg in enumerate(all_segs, 1):
+                start_str = _fmt_srt_time(seg["start"])
+                end_str = _fmt_srt_time(seg["end"])
+                spk_lbl = f"[{'Nam' if seg.get('speaker') == 'male' else 'Nữ'}] " if seg.get("speaker") else ""
+                srt_blocks.append(f"{i}\n{start_str} --> {end_str}\n{spk_lbl}{seg['text']}\n")
+            with open(_winlong(out_srt), "w", encoding="utf-8") as output:
+                output.write("\n".join(srt_blocks))
+            yield ("result", all_segs)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -54,6 +54,9 @@ hiddenimports += collect_submodules("vieneu")
 hiddenimports += collect_submodules("vieneu_utils")
 datas += collect_data_files("vieneu")
 datas += collect_data_files("vieneu_utils")
+hiddenimports += collect_submodules("sea_g2p")
+datas += collect_data_files("sea_g2p")
+binaries += collect_dynamic_libs("sea_g2p")
 
 python_dll = Path(sys.base_prefix) / f"python{sys.version_info.major}{sys.version_info.minor}.dll"
 if python_dll.exists():

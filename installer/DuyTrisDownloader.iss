@@ -75,6 +75,8 @@ Source: "{#DistDir}\config.example.yml"; DestName: "config.yml"; DestDir: "{app}
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
 Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\DuyTris System Hub"; Filename: "{app}\BẬT_TẮT_HỆ_THỐNG_UI.bat"; WorkingDir: "{app}"
+Name: "{userdesktop}\DuyTris System Hub"; Filename: "{app}\BẬT_TẮT_HỆ_THỐNG_UI.bat"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\App Paths\{#AppExeName}"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName}"; Flags: uninsdeletekey

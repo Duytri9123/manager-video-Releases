@@ -3,5 +3,7 @@
   "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/download/v2.0.5/DuyTrisDownloader_Setup.exe",
   "message": "Sửa lỗi không hiển thị danh sách gói bản quyền khi khởi chạy EXE (đồng bộ hóa luồng lấy cài đặt đầu tiên và thêm tự động reload dự phòng).",
   "release_date": "2026-07-15",
-  "minimum_version": "1.5.0"
+  "minimum_version": "1.5.0",
+  "updated_at": "2026-09-30 01:57:00",
+  "file_size_mb": 464.0
 }

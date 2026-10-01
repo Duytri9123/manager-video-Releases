@@ -55,21 +55,33 @@ _sessions_lock = threading.Lock()
 _TT_LOGIN_GATE = threading.Lock()
 
 def _bring_window_to_front():
-    """Bring any open Chromium / TikTok window to the foreground on Windows."""
+    """Bring any open Chromium / TikTok window to the foreground on Windows, unminimizing if needed."""
+    import sys
+    if sys.platform != "win32":
+        return
     try:
         import ctypes
         user32 = ctypes.windll.user32
+        try:
+            hdesk = user32.OpenDesktopW("default", 0, False, 0x01FF)
+            if hdesk:
+                user32.SetThreadDesktop(hdesk)
+        except Exception:
+            pass
         
         def enum_handler(hwnd, _):
-            if user32.IsWindowVisible(hwnd):
-                length = user32.GetWindowTextLengthW(hwnd)
-                if length > 0:
-                    buff = ctypes.create_unicode_buffer(length + 1)
-                    user32.GetWindowTextW(hwnd, buff, length + 1)
-                    title = buff.value.lower()
-                    if "tiktok" in title or "chrome" in title or "chromium" in title:
-                        user32.ShowWindow(hwnd, 9)  # 9 = SW_RESTORE
-                        user32.SetForegroundWindow(hwnd)
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buff = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buff, length + 1)
+                title = buff.value.lower()
+                # Check for Chrome for Testing, Chromium, TikTok Studio
+                if ("chrome for testing" in title) or ("tiktok studio" in title) or ("chromium" in title):
+                    # Force restore from minimized (-32000) and maximize
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE = 9
+                    user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE = 3
+                    user32.SetForegroundWindow(hwnd)
+                    user32.BringWindowToTop(hwnd)
             return True
 
         WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
@@ -799,6 +811,7 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
             _bring_window_to_front()
 
             _log(sid, f"🌐 Vào {TIKTOK_UPLOAD_URL}")
+            _bring_window_to_front()
             try:
                 await page.goto(TIKTOK_UPLOAD_URL, wait_until="domcontentloaded", timeout=60_000)
             except Exception as exc:
@@ -1015,6 +1028,11 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
 
             _set_status(sid, "ready")
             _log(sid, "✅ Sẵn sàng. Kiểm tra lại rồi nhấn Post trong cửa sổ TikTok.", "success")
+            _bring_window_to_front()
+            try:
+                await page.bring_to_front()
+            except Exception:
+                pass
 
             # Hold open: user reviews and posts manually. We close when:
             #  - user explicitly requests close via /prepare_close, or

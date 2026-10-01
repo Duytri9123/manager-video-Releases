@@ -1554,7 +1554,10 @@ def _test_api_key_impl():
             if key:
                 headers["Authorization"] = f"Bearer {key}"
 
-            models_url = f"{base_url}/models" if not base_url.endswith("/models") else base_url
+            # Runtime URLs point at chat/completions; /models belongs to the API root.
+            if base_url.endswith("/chat/completions"):
+                base_url = base_url[:-len("/chat/completions")]
+            models_url = base_url if base_url.endswith("/models") else f"{base_url}/models"
             req = urllib.request.Request(models_url, headers=headers)
             with urllib.request.urlopen(req, timeout=10) as r:
                 resp = _json.loads(r.read())
@@ -1566,8 +1569,6 @@ def _test_api_key_impl():
             except Exception: pass
             return jsonify({"ok": False, "error": f"HTTP {e.code}: {body or e.reason}"})
         except Exception as e:
-            if key and len(key) >= 5:
-                return jsonify({"ok": True, "model": f"{provider.capitalize()} API", "quota": "Xác thực cấu hình thành công"})
             return jsonify({"ok": False, "error": str(e)})
 
 

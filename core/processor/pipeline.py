@@ -359,6 +359,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             yield send(log=f"[Bước 2/5] Video không có audio track", level="warning")
         
         selected_stt_model = str(data.get("transcribe_model") or model_name or "").strip()
+        if transcribe_provider not in ("antigravity", "gemini", "groq", "model"):
+            yield send(log=f"[Bước 2/5] {transcribe_provider} chưa hỗ trợ phiên âm; chuyển sang Whisper local.", level="warning")
+            transcribe_provider = "model"
+            selected_stt_model = "base"
         display_model = selected_stt_model if selected_stt_model and selected_stt_model not in ["tiny", "base", "small", "medium", "large", "auto", "model"] else "Tự động theo Provider"
         if transcribe_provider == "antigravity":
             yield send(log=f"[Bước 2/5] Đang phiên âm bằng Antigravity (model={display_model})...", level="info")
@@ -388,14 +392,14 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
 
     if not skip_trans and not segments:
         try:
-            selected_stt_model = str(data.get("transcribe_model") or model_name or "").strip()
+            selected_stt_model = "base" if transcribe_provider == "model" and str(data.get("transcribe_provider") or "").lower() not in ("model", "") else str(data.get("transcribe_model") or model_name or "").strip()
             if transcribe_provider == "antigravity":
                 transcriber = AntigravityTranscriber(language=language, model_name=selected_stt_model, multi_speaker=_multi_speaker)
             elif transcribe_provider == "gemini":
                 from core.ai_models_manager import get_active_provider_connections
                 g_conns = get_active_provider_connections("gemini")
                 g_key = (g_conns[0].get("api_key") or "").strip() if g_conns else ""
-                transcriber = AntigravityTranscriber(language=language, api_key=g_key, model_name=selected_stt_model, multi_speaker=_multi_speaker)
+                transcriber = AntigravityTranscriber(language=language, api_key=g_key, model_name=selected_stt_model, multi_speaker=_multi_speaker, provider="gemini")
             elif transcribe_provider == "model":
                 transcriber = FasterWhisperTranscriber(selected_stt_model or "base", language, use_vad=True)
             elif transcribe_provider == "groq":
@@ -1164,8 +1168,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 _tts_tmp_ctx = tempfile.TemporaryDirectory(prefix="tts_parallel_")
                 _tts_tmp_path = Path(_tts_tmp_ctx.name)
 
-                # Voice and displayed text share one measured timeline.
-                _sync_sub_to_voice = True
+                # If sync_sub_to_voice is False, TTS runs in parallel with video burn (much faster).
+                _sync_sub_to_voice = _as_bool(data.get("sync_sub_to_voice", False), False)
 
                 _tts_voice_map = None
                 if _multi_speaker:
@@ -1263,11 +1267,13 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     _tts_tmp_ctx.cleanup()
                     _tts_tmp_ctx = None
                 _run_tts_indices = None
+                _tts_clips = []
+                do_voice = False
+                _sync_sub_to_voice = False
                 yield send(
-                    log=f"[Đồng bộ giọng đọc] Không thể hoàn tất: {tts_start_err}",
-                    level="error", failed=True,
+                    log=f"[Cảnh báo] Lồng tiếng không hoàn tất ({tts_start_err}) — hệ thống sẽ bỏ qua lồng tiếng và tiếp tục burn video phụ đề!",
+                    level="warning",
                 )
-                return
 
     if _encode_mode == "sub" and not _frame_enabled_for_burn and _burn_cache_valid:
         burned_path = burned_path_cached
@@ -1730,12 +1736,20 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     yield send(overall=96, overall_lbl="Ghép giọng xong")
                     final_output_path = voice_path
                 else:
-                    yield send(log=f"[Bước 5/5] Ghép giọng thất bại: {err}", level="error")
-                    pipeline_failed = f"Không thể ghép giọng vào video: {err}"
+                    if burned_path and Path(burned_path).exists():
+                        yield send(log=f"[Bước 5/5] Ghép giọng thất bại ({err}) — hệ thống giữ lại video đã burn phụ đề thành công", level="warning")
+                        final_output_path = burned_path
+                    else:
+                        yield send(log=f"[Bước 5/5] Ghép giọng thất bại: {err}", level="error")
+                        pipeline_failed = f"Không thể ghép giọng vào video: {err}"
     except Exception as e:
-        yield send(log=f"[Bước 5/5] Lỗi xử lý giọng: {e}", level="error")
-        if do_voice:
-            pipeline_failed = f"Lỗi xử lý giọng: {e}"
+        if burned_path and Path(burned_path).exists():
+            yield send(log=f"[Bước 5/5] Lỗi xử lý giọng ({e}) — hệ thống giữ lại video đã burn phụ đề thành công", level="warning")
+            final_output_path = burned_path
+        else:
+            yield send(log=f"[Bước 5/5] Lỗi xử lý giọng: {e}", level="error")
+            if do_voice:
+                pipeline_failed = f"Lỗi xử lý giọng: {e}"
     finally:
         try:
             if _tts_executor:
