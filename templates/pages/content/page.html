@@ -22,6 +22,7 @@
   <!-- Platform sub-tabs -->
   <div class="content-platform-tabs mb-16"
     style="display:flex;gap:4px;border-bottom:1px solid var(--border);padding-bottom:0">
+    <button class="cpt-tab" id="cpt-tab-history" onclick="cptSwitch('history')">Video đã đăng</button>
     <button class="cpt-tab active" id="cpt-tab-files" onclick="cptSwitch('files')"
       style="display:inline-flex;align-items:center;gap:6px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -54,6 +55,16 @@
       </svg>
       <span>TikTok</span>
     </button>
+  </div>
+
+  <div id="cpt-panel-history" class="cpt-panel" style="display:none">
+    <div class="card" style="padding:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+        <div><strong>Lịch sử đăng từ hệ thống</strong><div class="text-xs text-muted">Kết quả đăng trên Facebook, YouTube và TikTok</div></div>
+        <button class="btn btn-sm btn-secondary" onclick="loadPublishHistory()">Làm mới</button>
+      </div>
+      <div id="content-publish-history" style="display:grid;gap:8px"></div>
+    </div>
   </div>
 
   <!-- ══════════════════════════════════════════════════════════
@@ -462,7 +473,7 @@
         <div class="card" id="fb-mgr-recent-empty"
           style="text-align:center;padding:36px 20px;color:var(--text-muted);font-size:12px">
           <div style="font-size:26px;margin-bottom:8px">📋</div>
-          <div style="font-weight:600;font-size:13px;color:var(--text);margin-bottom:4px">Bài đăng gần đây</div>
+          <div style="font-weight:600;font-size:13px;color:var(--text);margin-bottom:4px">Bài đăng của Page</div>
           <div>Chọn một Page từ danh sách bên trái để xem bài đăng và thống kê tương tác</div>
         </div>
 
@@ -474,7 +485,7 @@
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
-              <span>Bài đăng gần đây</span>
+              <span>Bài đăng của Page</span>
             </span>
             <button class="btn btn-secondary btn-sm" onclick="fbMgrLoadPosts()" style="height:28px;padding:0 8px"
               title="Làm mới bài đăng">

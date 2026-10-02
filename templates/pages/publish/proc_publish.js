@@ -10,6 +10,107 @@ window._pPubEnabled = { youtube: true, tiktok: true, facebook: true };
 window._pPubActive  = 'youtube';
 window._pPubAIResult = null;
 window._pBschedCounter = 0;
+window._pPubLastErrors = {};
+
+async function pTtRefreshLoginState() {
+  const accountId = document.getElementById('step1-tt-account-select')?.value || '';
+  const label = document.getElementById('step1-tt-login-state');
+  const button = document.getElementById('step1-tt-login-btn');
+  if (!label || !button) return;
+  if (!accountId || accountId === '__add__') {
+    label.textContent = '';
+    button.textContent = 'Đăng nhập TikTok';
+    return;
+  }
+  label.textContent = 'Đang kiểm tra...';
+  try {
+    const response = await fetch('/api/tiktok/check_login?account_id=' + encodeURIComponent(accountId));
+    const result = await response.json();
+    if (document.getElementById('step1-tt-account-select')?.value !== accountId) return;
+    label.textContent = result.logged_in ? '✓ Đã đăng nhập' : 'Chưa xác nhận phiên';
+    label.className = result.logged_in ? 'text-[10px] text-emerald-600' : 'text-[10px] text-amber-600';
+    button.textContent = result.logged_in ? 'Mở lại phiên TikTok' : 'Đăng nhập TikTok';
+  } catch (_) {
+    label.textContent = 'Chưa kiểm tra được phiên';
+    button.textContent = 'Mở phiên TikTok';
+  }
+}
+window.pTtRefreshLoginState = pTtRefreshLoginState;
+
+async function pTtStartLogin() {
+  const accountId = document.getElementById('step1-tt-account-select')?.value ||
+    document.getElementById('p-tt-account-select')?.value || '';
+  try {
+    const response = await fetch('/api/tiktok/open_login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_id: accountId, force_open: true })
+    });
+    const started = await response.json();
+    if (!response.ok || !started.ok) throw new Error(started.error || 'Không mở được Chromium');
+    toast('Đang mở Chromium để đăng nhập TikTok trên máy chạy ứng dụng', 'info');
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const poll = await fetch('/api/tiktok/prepare_status?session_id=' + encodeURIComponent(started.session_id));
+      const state = await poll.json();
+      if (!state.done) continue;
+      if (state.status === 'ready') {
+        toast('Đã lưu phiên đăng nhập TikTok', 'success');
+        await pTtRefreshLoginState();
+        return;
+      }
+      throw new Error(state.error || 'Đăng nhập TikTok chưa hoàn tất');
+    }
+    throw new Error('Hết thời gian chờ đăng nhập TikTok');
+  } catch (error) {
+    toast('TikTok: ' + error.message, 'error');
+  }
+}
+window.pTtStartLogin = pTtStartLogin;
+
+function _pPubSetError(platform, error) {
+  window._pPubLastErrors[platform] = error;
+}
+
+function pYtLoginMethodChanged() {
+  const browser = document.getElementById('p-yt-login-method')?.value === 'browser';
+  const wrap = document.getElementById('p-yt-browser-auto-wrap');
+  if (wrap) wrap.style.display = browser ? 'flex' : 'none';
+}
+
+async function pYtStartLogin() {
+  if (document.getElementById('p-yt-login-method')?.value !== 'browser') {
+    if (typeof youtubeLogin === 'function') return youtubeLogin();
+    toast('Không mở được đăng nhập OAuth', 'error');
+    return;
+  }
+  const status = document.getElementById('p-yt-browser-status');
+  try {
+    const accountId = document.getElementById('p-yt-account-select')?.value || document.getElementById('step1-yt-account-select')?.value || '';
+    const res = await fetch('/api/youtube_browser/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_id: accountId })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Không mở được trình duyệt');
+    if (status) status.textContent = 'Đang chờ đăng nhập...';
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const check = await fetch('/api/youtube_browser/status?session_id=' + encodeURIComponent(data.session_id));
+      const state = await check.json();
+      if (!state.done) continue;
+      if (state.error) throw new Error(state.error);
+      if (status) status.textContent = 'Đã đăng nhập YouTube Studio';
+      toast('Đã đăng nhập YouTube bằng trình duyệt', 'success');
+      return;
+    }
+    throw new Error('Hết thời gian chờ đăng nhập');
+  } catch (error) {
+    if (status) status.textContent = error.message;
+    toast('YouTube: ' + error.message, 'error');
+  }
+}
 
 const _P_PLATFORMS = ['youtube', 'tiktok', 'facebook'];
 const _P_TAB_ID = { youtube: 'yt', tiktok: 'tt', facebook: 'fb' };
@@ -152,9 +253,16 @@ async function pPubAnalyzeFromAss(assContent, options = {}) {
   if (!document.getElementById('p-autopub-enabled')?.checked) return null;
   const plain = _pExtractPlainFromAss(assContent || '');
   const visualAnalysis = options.ignoreVideoAnalysis ? '' : _pVideoAiAnalysisHint();
+  const sourceKey = [plain, visualAnalysis, document.getElementById('proc-target-lang')?.value || 'vi'].join('\u001f');
+  if (!options.forceAi && window._pPubAIResult && window._pPubSourceKey === sourceKey) {
+    return window._pPubAIResult;
+  }
   if (!plain && !visualAnalysis) {
     _appendProcLog?.(' ASS trống và chưa có phân tích video — bỏ qua AI phân tích', 'warning');
     return null;
+  }
+  if (!options.forceAi && window._pPubPendingAnalyze?.key === sourceKey) {
+    return window._pPubPendingAnalyze.promise;
   }
 
   const provider = document.getElementById('p-pub-ai-provider')?.value || 'deepseek';
@@ -163,7 +271,7 @@ async function pPubAnalyzeFromAss(assContent, options = {}) {
     ? ' AI đang dùng phân tích video + ASS để tạo tiêu đề/hashtag...'
     : ' AI đang phân tích nội dung ASS để tạo tiêu đề/hashtag...', 'info');
 
-  try {
+  const analyzePromise = (async () => {
     const res = await fetch('/api/analyze_video_content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -179,11 +287,18 @@ async function pPubAnalyzeFromAss(assContent, options = {}) {
 
     const info = data.result || {};
     pPubApplyAIResult(info);
+    window._pPubSourceKey = sourceKey;
     _appendProcLog?.(' AI đã tạo nội dung đăng video', 'success');
     return info;
+  })();
+  window._pPubPendingAnalyze = { key: sourceKey, promise: analyzePromise };
+  try {
+    return await analyzePromise;
   } catch (e) {
     _appendProcLog?.(' AI phân tích thất bại: ' + e.message, 'error');
     return null;
+  } finally {
+    if (window._pPubPendingAnalyze?.promise === analyzePromise) window._pPubPendingAnalyze = null;
   }
 }
 
@@ -349,15 +464,18 @@ async function pPubAutoUploadAll(videoPath) {
 
   const videoName = (videoPath || '').split(/[\\/]/).pop();
 
-  for (const plat of platforms) {
-    if (window._pPubCancelled) break;
-    const action = await _pPubUploadWithRetry(plat, videoPath, scheduledDate, videoName);
-    if (action === 'cancel') {
-      window._pPubCancelled = true;
-      _appendProcLog?.(' User đã huỷ pipeline đăng video', 'error');
-      break;
+  _appendProcLog?.(`Bắt đầu đăng đồng thời lên ${platforms.join(', ')}...`, 'info');
+  const results = await Promise.allSettled(platforms.map(plat =>
+    _pPubUploadWithRetry(plat, videoPath, scheduledDate, videoName)
+  ));
+  results.forEach((result, index) => {
+    const platform = platforms[index];
+    if (result.status === 'rejected') {
+      _appendProcLog?.(`${platform}: ${result.reason?.message || result.reason}`, 'error');
+    } else if (result.value === 'cancel') {
+      _appendProcLog?.(`${platform}: đã hủy đăng`, 'warning');
     }
-  }
+  });
 }
 
 async function _pPubUploadWithRetry(platform, videoPath, scheduledDate, videoName) {
@@ -373,17 +491,16 @@ async function _pPubUploadWithRetry(platform, videoPath, scheduledDate, videoNam
   let attempt = 0;
   while (true) {
     attempt += 1;
-    if (window._pPubCancelled) return 'cancel';
 
     let ok = false;
     let errorInfo = null;
     try {
-      window._pPubLastError = null;
+      _pPubSetError(platform, null);
       await fn();
-      if (!window._pPubLastError) {
+      if (!window._pPubLastErrors[platform]) {
         ok = true;
       } else {
-        errorInfo = window._pPubLastError;
+        errorInfo = window._pPubLastErrors[platform];
       }
     } catch (e) {
       errorInfo = { error: e.message };
@@ -391,7 +508,9 @@ async function _pPubUploadWithRetry(platform, videoPath, scheduledDate, videoNam
 
     if (ok) return 'ok';
 
-    const action = await window.showUploadErrorModal({
+    // Uploads run together; show their error dialogs one at a time.
+    const previousModal = window._pPubModalQueue || Promise.resolve();
+    const modal = previousModal.then(() => window.showUploadErrorModal({
       platform,
       title: `Upload ${platform} thất bại (lần ${attempt})`,
       video: videoName,
@@ -399,7 +518,9 @@ async function _pPubUploadWithRetry(platform, videoPath, scheduledDate, videoNam
       errorCode: errorInfo?.errorCode || '',
       tokenError: !!errorInfo?.tokenError,
       diagnostic: errorInfo ? JSON.stringify(errorInfo, null, 2) : '',
-    });
+    }));
+    window._pPubModalQueue = modal.catch(() => {});
+    const action = await modal;
 
     if (action === 'retry') {
       _appendProcLog?.(`  [${PLATFORM_LABELS[platform]}]  Thử lại lần ${attempt + 1}...`, 'info');
@@ -421,13 +542,24 @@ async function pPubPreflightCheck({ interactive = true } = {}) {
 
   if (window._pPubEnabled.youtube) {
     try {
-      const r = await fetch('/api/youtube_auth');
+      const browser = document.getElementById('p-yt-login-method')?.value === 'browser';
+      const accountId = document.getElementById('p-yt-account-select')?.value || document.getElementById('step1-yt-account-select')?.value || '';
+      const r = await fetch(browser
+        ? '/api/youtube_browser/status?account_id=' + encodeURIComponent(accountId)
+        : '/api/youtube_auth');
       const d = await r.json();
-      if (!d.authenticated) {
+      if (!(browser ? d.connected : d.authenticated)) {
         issues.push({
           platform: 'youtube', label: 'YouTube', severity: 'blocker',
           message: 'Chưa đăng nhập YouTube.',
-          fix: 'Vào tab "Đăng video" → Nhấn "Kết nối YouTube".',
+          fix: browser ? 'Nhấn "Đăng nhập theo cách đã chọn" trong tab YouTube.' : 'Nhấn "Đăng nhập theo cách đã chọn" để kết nối OAuth.',
+        });
+      }
+      if (browser && document.getElementById('p-bsched-enabled')?.checked) {
+        issues.push({
+          platform: 'youtube', label: 'YouTube', severity: 'blocker',
+          message: 'Đặt lịch YouTube qua trình duyệt chưa hỗ trợ.',
+          fix: 'Chọn Google OAuth / API để đặt lịch hoặc tắt lịch cho YouTube.'
         });
       }
     } catch (_) {
@@ -439,6 +571,10 @@ async function pPubPreflightCheck({ interactive = true } = {}) {
   }
 
   if (window._pPubEnabled.facebook) {
+    if (document.getElementById('p-fb-method')?.value === 'browser') {
+      const pageId = document.getElementById('p-fb-page-select')?.value || document.getElementById('p-fb-browser-page-id')?.value?.trim();
+      if (!pageId) issues.push({platform:'facebook', label:'Facebook', severity:'blocker', message:'Chưa chọn hoặc nhập ID Page Facebook.'});
+    } else {
     try {
       const r = await fetch('/api/facebook/status');
       const d = await r.json();
@@ -514,11 +650,13 @@ async function pPubPreflightCheck({ interactive = true } = {}) {
         message: 'Không kiểm tra được trạng thái Facebook (server lỗi).',
       });
     }
+    }
   }
 
   if (window._pPubEnabled.tiktok) {
     try {
-      const r = await fetch('/api/tiktok/check_login');
+      const accountId = document.getElementById('p-tt-account-select')?.value || document.getElementById('step1-tt-account-select')?.value || '';
+      const r = await fetch('/api/tiktok/check_login?account_id=' + encodeURIComponent(accountId));
       const d = await r.json();
       if (!d.logged_in) {
         issues.push({
@@ -621,7 +759,11 @@ function _pPubShowPreflightModal(issues) {
         btn.disabled = true;
         btn.textContent = ' Đang mở cửa sổ đăng nhập...';
         try {
-          const r = await fetch('/api/tiktok/open_login', { method: 'POST' });
+          const accountId = document.getElementById('p-tt-account-select')?.value || document.getElementById('step1-tt-account-select')?.value || '';
+          const r = await fetch('/api/tiktok/open_login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: accountId })
+          });
           const d = await r.json();
           if (!d.ok) {
             toast(' ' + (d.error || 'Không mở được cửa sổ đăng nhập'), 'error');
@@ -677,6 +819,7 @@ window.pPubPreflightCheck = pPubPreflightCheck;
 async function pPubUploadYouTube(videoPath, scheduledDate) {
   const title = _pYtTruncateTitle(document.getElementById('p-yt-title')?.value || '');
   if (!title) {
+    _pPubSetError('youtube', { error: 'YouTube chưa có tiêu đề' });
     _appendProcLog?.(' YouTube: chưa có tiêu đề — bỏ qua', 'warning');
     return;
   }
@@ -706,6 +849,36 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
     publish_at:     publishAt
   };
 
+  payload.account_id = document.getElementById('p-yt-account-select')?.value || document.getElementById('step1-yt-account-select')?.value || '';
+
+  if (document.getElementById('p-yt-login-method')?.value === 'browser') {
+    payload.auto_publish = document.getElementById('p-yt-browser-auto-post')?.checked || false;
+    try {
+      const start = await fetch('/api/youtube_browser/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      const started = await start.json();
+      if (!started.ok) throw new Error(started.error || 'Không mở được YouTube Studio');
+      let seen = 0;
+      const deadline = Date.now() + 15 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const result = await fetch('/api/youtube_browser/status?session_id=' + encodeURIComponent(started.session_id));
+        const state = await result.json();
+        for (const message of (state.log || []).slice(seen)) _appendProcLog?.('[YT] ' + message, 'info');
+        seen = (state.log || []).length;
+        if (!state.done) continue;
+        if (state.error) throw new Error(state.error);
+        return;
+      }
+      throw new Error('YouTube Studio quá thời gian chờ');
+    } catch (error) {
+      _pPubSetError('youtube', { error: error.message });
+      _appendProcLog?.(' YouTube: ' + error.message, 'error');
+      return;
+    }
+  }
+
   _appendProcLog?.(' Đang đăng lên YouTube...', 'info');
   try {
     const res = await fetch('/api/youtube_upload', {
@@ -720,7 +893,7 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
         errMsg = errData.error || errMsg;
       } catch (_) {}
       const tokenErr = res.status === 401 || /not authenticated|token|expired|oauth/i.test(errMsg);
-      window._pPubLastError = { error: errMsg, errorCode: res.status, tokenError: tokenErr };
+      _pPubSetError('youtube', { error: errMsg, errorCode: res.status, tokenError: tokenErr });
       if (tokenErr) {
         _appendProcLog?.(' YouTube: chưa đăng nhập. Vào tab Đăng video → Đăng nhập YouTube', 'error');
       } else {
@@ -729,7 +902,7 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
       return;
     }
     if (!res.body) {
-      window._pPubLastError = { error: 'Server không trả về stream' };
+      _pPubSetError('youtube', { error: 'Server không trả về stream' });
       throw new Error('Server không trả về stream');
     }
 
@@ -759,16 +932,16 @@ async function pPubUploadYouTube(videoPath, scheduledDate) {
     if (!uploadOk) {
       const errMsg = lastErrLog || 'YouTube upload không thành công';
       const tokenErr = /token|oauth|expired|not authenticated|invalid_grant|401/i.test(errMsg);
-      window._pPubLastError = { error: errMsg, tokenError: tokenErr };
+      _pPubSetError('youtube', { error: errMsg, tokenError: tokenErr });
     }
   } catch (e) {
-    window._pPubLastError = { error: e.message };
+    _pPubSetError('youtube', { error: e.message });
     _appendProcLog?.(' YouTube: ' + e.message, 'error');
   }
 }
 
 async function pPubUploadFacebook(videoPath, scheduledDate) {
-  let pageId = document.getElementById('p-fb-page-select')?.value;
+  let pageId = document.getElementById('p-fb-page-select')?.value || document.getElementById('p-fb-browser-page-id')?.value?.trim();
   if (!pageId) {
     const sel = document.getElementById('p-fb-page-select');
     if (sel && sel.options.length > 0) {
@@ -781,6 +954,7 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
     }
   }
   if (!pageId) {
+    _pPubSetError('facebook', { error: 'Facebook chưa chọn Page' });
     _appendProcLog?.(' Facebook: chưa chọn Page — bỏ qua', 'warning');
     return;
   }
@@ -790,6 +964,25 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
   const desc    = _pBuildCaption(title, tags);
   const postTypeRaw = document.getElementById('p-fb-post-type')?.value || 'auto';
 
+  if (document.getElementById('p-fb-method')?.value === 'browser') {
+    if (scheduledDate) { _pPubSetError('facebook', {error:'Đặt lịch bằng trình duyệt Facebook chưa hỗ trợ; chọn Graph API.'}); return; }
+    try {
+      const response = await fetch('/api/facebook_browser/upload', {method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({page_id:pageId, account_id:document.getElementById('p-fb-account-select')?.value || 'default', video_path:videoPath, caption:desc, auto_publish:true})});
+      const opened = await response.json();
+      if (!opened.ok) throw new Error(opened.error || 'Không mở được trình duyệt Facebook');
+      _appendProcLog?.(' [FB] Đang mở phiên trình duyệt riêng cho video...', 'info');
+      for (let i = 0; i < 300; i++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const state = await fetch('/api/facebook_browser/status?session_id=' + encodeURIComponent(opened.session_id)).then(r => r.json());
+        if (state.status === 'submitted') { _appendProcLog?.(' [FB] Đã bấm đăng trong trình duyệt; kiểm tra Facebook để xác nhận bài hiển thị.', 'success'); return; }
+        if (state.status === 'ready' && state.error) { _pPubSetError('facebook', {error:state.error}); return; }
+        if (state.status === 'error') throw new Error(state.error || 'Lỗi trình duyệt Facebook');
+      }
+      throw new Error('Quá thời gian chờ trình duyệt Facebook');
+    } catch (error) { _pPubSetError('facebook', {error:error.message}); return; }
+  }
+
   let scheduledTime = '';
   if (scheduledDate) {
     const minFuture = new Date(Date.now() + 10 * 60 * 1000);
@@ -797,7 +990,9 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
       scheduledTime = Math.floor(scheduledDate.getTime() / 1000).toString();
       _appendProcLog?.(` Facebook: đặt lịch lúc ${scheduledDate.toLocaleString('vi-VN')}`, 'info');
     } else {
-      _appendProcLog?.(' Facebook: lịch gần quá — đăng ngay', 'warning');
+      _pPubSetError('facebook', { error: 'Lịch Facebook cần cách hiện tại ít nhất 10 phút' });
+      _appendProcLog?.(' Facebook: lịch quá gần, chưa gửi bài để tránh đăng ngay ngoài ý muốn', 'error');
+      return;
     }
   }
 
@@ -845,31 +1040,34 @@ async function pPubUploadFacebook(videoPath, scheduledDate) {
   for (let attempt = 1; attempt <= 5; attempt++) {
     const result = await _pFbUploadOnce(endpoint, buildForm());
 
-    if (result.success) return;
+    if (result.success) {
+      if (typeof _pubRememberResult === 'function') _pubRememberResult('facebook', 'published', {url:result.url || '', title, video_path:videoPath, account:pageId, source:'process'});
+      return;
+    }
     if (result.skip) {
-      window._pPubLastError = { error: 'User skipped Facebook upload' };
+      _pPubSetError('facebook', { error: 'User skipped Facebook upload' });
       return;
     }
 
     if (result.tokenError) {
-      window._pPubLastError = {
+      _pPubSetError('facebook', {
         error: result.errorMsg || 'Token Facebook hết hạn',
         tokenError: true,
-      };
+      });
       return;
     }
 
-    window._pPubLastError = {
+    _pPubSetError('facebook', {
       error: result.errorMsg || 'Facebook upload thất bại',
       tokenError: false,
-    };
+    });
     return;
   }
-  window._pPubLastError = { error: 'Đã thử 5 lần nhưng không thành công' };
+  _pPubSetError('facebook', { error: 'Đã thử 5 lần nhưng không thành công' });
 }
 
 async function _pFbUploadOnce(endpoint, form) {
-  const out = { success: false, tokenError: false, errorMsg: '', skip: false };
+  const out = { success: false, tokenError: false, errorMsg: '', skip: false, url: '' };
   try {
     const res = await fetch(endpoint, { method: 'POST', body: form });
 
@@ -906,7 +1104,7 @@ async function _pFbUploadOnce(endpoint, form) {
         try {
           const d = JSON.parse(t);
           if (d.log) _appendProcLog?.('[FB] ' + d.log, d.level || 'info');
-          if (d.url) _appendProcLog?.(' [FB] ' + d.url, 'success');
+          if (d.url) { out.url = d.url; _appendProcLog?.(' [FB] ' + d.url, 'success'); }
           if (d.ok)  gotOk = true;
           if (d.token_error) {
             out.tokenError = true;
@@ -1086,8 +1284,10 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
   const caption  = document.getElementById('p-tt-title')?.value?.trim() || '';
   const hashtags = _pTtLimitHashtags(_pDedupHashtagString(document.getElementById('p-tt-tags')?.value?.trim() || ''), 5);
   const fullCaption = _pBuildCaption(caption, hashtags);
+  const autoPublish = document.getElementById('p-tt-auto-post')?.checked || false;
 
   if (!videoPath) {
+    _pPubSetError('tiktok', { error: 'TikTok chưa có file video' });
     _appendProcLog?.(' TikTok: chưa có file video để upload', 'warning');
     return;
   }
@@ -1098,6 +1298,10 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
     if (scheduledDate > minFuture) {
       scheduledTime = scheduledDate.toISOString();
       _appendProcLog?.(` TikTok: đặt lịch lúc ${scheduledDate.toLocaleString('vi-VN')}`, 'info');
+    } else {
+      _pPubSetError('tiktok', { error: 'Lịch TikTok cần cách hiện tại ít nhất 15 phút' });
+      _appendProcLog?.(' TikTok: lịch quá gần, chưa mở đăng để tránh đăng ngay ngoài ý muốn', 'error');
+      return;
     }
   }
 
@@ -1110,7 +1314,7 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
   let startResp;
   try {
     const accountId = document.getElementById('p-tt-account-select')?.value || document.getElementById('tt-account-select')?.value || '';
-    const payload = { video_path: videoPath, caption: fullCaption, account_id: accountId };
+    const payload = { video_path: videoPath, caption: fullCaption, account_id: accountId, auto_publish: autoPublish };
     if (scheduledTime) payload.scheduled_time = scheduledTime;
     const r = await fetch('/api/tiktok/prepare_upload', {
       method: 'POST',
@@ -1122,7 +1326,7 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
   } catch (e) {
     const msg = e.message || 'TikTok lỗi';
     const tokenErr = /login|session|expired|not.*logged/i.test(msg);
-    window._pPubLastError = { error: msg, tokenError: tokenErr };
+    _pPubSetError('tiktok', { error: msg, tokenError: tokenErr });
     _appendProcLog?.(' TikTok: ' + msg, 'error');
     return;
   }
@@ -1141,6 +1345,7 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
       data = await r.json();
     } catch (_) { continue; }
     if (!data.ok) {
+      _pPubSetError('tiktok', { error: data.error || 'Không lấy được trạng thái TikTok' });
       _appendProcLog?.(' TikTok: ' + (data.error || 'status lỗi'), 'error');
       return;
     }
@@ -1149,21 +1354,28 @@ async function pPubUploadTikTok(videoPath, scheduledDate) {
     for (const entry of newLogs) {
       _appendProcLog?.(`[TT] ${entry.msg}`, entry.level || 'info');
     }
-    if (!reachedReady && data.status === 'ready') {
+    if (!reachedReady && data.status === 'ready' && !autoPublish) {
       reachedReady = true;
       if (data.copyright_warning) {
         toast(' CẢNH BÁO BẢN QUYỀN: TikTok phát hiện âm thanh có thể dính bản quyền! Hãy kiểm tra kỹ trên cửa sổ TikTok trước khi bấm Post.', 'error', 12000);
         _appendProcLog?.(' [TT] CẢNH BÁO: Âm thanh video có dấu hiệu vi phạm bản quyền trên TikTok Studio! Cân nhắc thay nhạc trước khi Post.', 'error');
       } else {
-        toast(' TikTok đã sẵn sàng — hãy kiểm tra và nhấn Post trong cửa sổ đang mở', 'success', 8000);
+        toast(autoPublish ? 'TikTok đã sẵn sàng — đang tự đăng trong cửa sổ' : 'TikTok đã sẵn sàng — hãy kiểm tra và nhấn Post trong cửa sổ đang mở', 'success', 8000);
       }
       return;
     }
     if (data.done) {
-      if (data.error) _appendProcLog?.(' TikTok: ' + data.error, 'error');
+      if (data.status === 'published') {
+        _appendProcLog?.(' TikTok: đã gửi lệnh đăng thành công', 'success');
+        return;
+      }
+      const error = data.error || (autoPublish ? 'TikTok chưa xác nhận tự đăng; hãy kiểm tra cửa sổ trình duyệt.' : 'Phiên TikTok đã đóng');
+      _pPubSetError('tiktok', { error });
+      _appendProcLog?.(' TikTok: ' + error, 'error');
       return;
     }
   }
+  _pPubSetError('tiktok', { error: 'TikTok quá thời gian chờ (15 phút)' });
   _appendProcLog?.(' TikTok: timeout chờ chuẩn bị (15 phút)', 'warning');
 }
 

@@ -3,6 +3,14 @@
 
   <!-- ── Scoped styles cho editor (light theme, theo biến của app) ──────── -->
   <style>
+    #pe2-panel .pe2-panel-head {flex-wrap:wrap;align-content:center;min-height:54px;box-sizing:border-box;}
+    #pe2-panel .pe2-panel-head>div:first-child {min-width:0;flex:1 1 120px;}
+    #pe2-panel .pe2-panel-title {white-space:normal;overflow-wrap:anywhere;line-height:1.25;}
+    #pe2-panel .pe2-panel-actions {margin-left:auto;max-width:100%;flex-wrap:wrap;justify-content:flex-end;}
+    #pe2-panel #pe2-save-defaults {height:auto;padding:5px 7px;white-space:normal;}
+    #pe2-panel #pe2-save-defaults-label {white-space:normal;overflow-wrap:anywhere;}
+    .pe2-editor .pe2-vtab.active {background:#e8e7ff;border-color:#635bfa;box-shadow:0 0 0 2px rgba(99,91,250,.2),0 3px 8px rgba(99,91,250,.18);}
+    #pe2-panel .pe2-pane.active {min-width:0;}
     @media (max-width: 767px) {
       #pe2-strip-btn, #pe2-queue-select { display: none !important; }
     }
@@ -13,9 +21,10 @@
     #pe2-panel .pe2-export-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;}
     #pe2-panel .pe2-export-row select {width:100%;min-width:0;height:36px;font-size:12px;}
     #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-aspect-btn {min-height:44px;padding:8px;}
-    #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard {min-height:48px;padding:8px 3px;}
+    #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-opts-five {grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;}
+    #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard {position:relative;min-height:48px;padding:16px 2px 4px;min-width:0;}
     #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard-ic {display:none;}
-    #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard-lbl {font-size:11px;line-height:1.35;}
+    #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-optcard-lbl {font-size:10px;line-height:1.3;white-space:normal;overflow-wrap:normal;}
     #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-subs-divider {border-top:0;padding-top:0;margin-top:20px;}
     #pe2-panel .pe2-pane[data-pe2pane="subs"] .pe2-grp:not(:has(label)),
     #pe2-panel .pe2-pane[data-pe2pane="frame"] .pe2-grp {
@@ -46,6 +55,7 @@
     #pe2-panel .pe2-section-body {padding:1px 0 5px;}
     #pe2-panel .pe2-section-body>.toggle-wrap {display:inline-flex;margin:2px 0 10px!important;}
     #pe2-panel .pe2-subs-details > .pe2-export-row,#pe2-panel .pe2-subs-details > .pe2-setting-field,#pe2-panel .pe2-subs-details > .pe2-sample-card {margin-top:10px;}
+    #pe2-panel .pe2-optcard-badge {position:absolute;top:3px;right:3px;width:12px;height:12px;font-size:9px;}
     #pe2-panel .pe2-optcard:focus-within {outline:2px solid var(--accent);outline-offset:2px;}
     #pe2-panel .pe2-pane .pe2-grp:first-child {margin-top:0;}
     #pe2-tl-track {height:220px;}
@@ -128,7 +138,7 @@
                   <path d="M3 3v5h5" />
                 </svg>
               </button>
-              <button type="button" id="pe2-save-defaults" class="btn btn-secondary btn-sm" onclick="procSaveStep(2)"
+              <button type="button" id="pe2-save-defaults" class="btn btn-secondary btn-sm" onclick="pe2SaveNamedProfile(true)"
                 title="Lưu cài đặt Bước 2 vào cấu hình mặc định theo tỷ lệ trong trình duyệt"
                 style="display:inline-flex;align-items:center;gap:4px">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -303,7 +313,7 @@
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                     </svg>
                   </span>
-                  <span class="pe2-optcard-lbl">Ghi sub</span>
+                  <span class="pe2-optcard-lbl">Ghi phụ đề</span>
                   <span class="pe2-optcard-badge">✓</span>
                 </label>
                 <label class="pe2-optcard" title="Che phụ đề gốc">
@@ -314,12 +324,12 @@
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                     </svg>
                   </span>
-                  <span class="pe2-optcard-lbl">Che gốc</span>
+                  <span class="pe2-optcard-lbl">Che phụ đề gốc</span>
                   <span class="pe2-optcard-badge">✓</span>
                 </label>
 
-                <label class="pe2-optcard" title="Chỉ che vùng phụ đề gốc trong các khoảng thời gian có nội dung ASS/SRT; không dùng OCR">
-                  <input type="checkbox" id="proc-blur-by-subtitles" onchange="subPreviewUpdate()">
+                <label class="pe2-optcard" title="Dùng mốc thời gian phiên âm gốc; che sớm 0,2 giây và muộn 1 giây quanh mỗi câu; các khoảng giao nhau được gộp">
+                  <input type="checkbox" id="proc-blur-by-subtitles" checked onchange="subPreviewUpdate()">
                   <span class="pe2-optcard-ic">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                       stroke-linecap="round" stroke-linejoin="round">
@@ -327,7 +337,7 @@
                       <path d="M6 12h5m2 0h5M6 15h12" />
                     </svg>
                   </span>
-                  <span class="pe2-optcard-lbl">Che theo sub</span>
+                  <span class="pe2-optcard-lbl">Theo mốc phiên âm</span>
                   <span class="pe2-optcard-badge">✓</span>
                 </label>
                 <label class="pe2-optcard" title="Lấp vùng ngoài video bằng nền mờ; tắt để dùng nền đen">
@@ -343,7 +353,7 @@
               <div class="pe2-setting-field">
                 <label for="proc-mask-mode">Kiểu che</label>
                 <select id="proc-mask-mode" onchange="framePreviewUpdate()">
-                  <option value="blur">Làm mờ</option><option value="patch">Che bằng vùng chọn</option>
+                  <option value="patch" selected>Che bằng vùng chọn</option><option value="blur">Làm mờ</option>
                 </select>
               </div>
               <div id="proc-mask-source" class="pe2-sample-card">
@@ -391,6 +401,9 @@
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
                 <div class="field"><label>Cỡ chữ (%)</label><input type="number" id="proc-font-size" min="1" max="20"
                     step="0.5" value="4" oninput="subPreviewUpdate()" onchange="subPreviewUpdate()"></div>
+                <div class="field"><label>Rộng tối đa (%)</label><input type="number" id="proc-sub-width" min="40" max="98"
+                    step="1" value="90" title="Giới hạn chiều rộng phụ đề trong video; câu dài tự xuống dòng"
+                    oninput="subPreviewUpdate()" onchange="subPreviewUpdate()"></div>
                 <div class="field"><label>Vị trí</label><select id="proc-sub-pos" onchange="subPreviewUpdate()">
                     <option value="bottom" selected>Dưới</option>
                     <option value="top">Trên</option>
@@ -424,9 +437,9 @@
               <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg3)">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
                   <label for="proc-vol-orig-quick" style="font-size:11px;font-weight:600;color:var(--text2)">Âm thanh gốc</label>
-                  <span id="proc-vol-orig-quick-val" style="font-size:11px;font-weight:700;color:var(--accent)">100%</span>
+                  <span id="proc-vol-orig-quick-val" style="font-size:11px;font-weight:700;color:var(--accent)">50%</span>
                 </div>
-                <input type="range" id="proc-vol-orig-quick" min="0" max="200" step="5" value="100"
+                <input type="range" id="proc-vol-orig-quick" min="0" max="200" step="5" value="50"
                   style="width:100%;cursor:pointer" oninput="_syncProcOriginalVolume(this)">
                 <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:var(--text-muted)">
                   <span>Tắt</span><span>100%</span><span>200%</span>
@@ -436,7 +449,8 @@
 
             <!-- ══ PANE: Phân tích AI ══ -->
             <div class="pe2-pane" data-pe2pane="ai">
-              <div class="pe2-grp">Phân tích AI</div>
+              <div class="pe2-grp">AI chỉnh sửa video</div>
+              <p class="pe2-setting-note">AI đọc khung hình để đề xuất vị trí phụ đề gốc và bố cục. Thời gian che lấy từ phiên âm gốc; vùng che bổ sung dùng làm mờ. Có thể chỉnh lại trước khi xử lý.</p>
               <div class="pe2-ai-box">
                 <div style="margin-bottom:8px">
                   <div class="field" style="margin-bottom:8px">
@@ -472,14 +486,14 @@
                     <input type="checkbox" class="toggle-input" id="proc-use-ai-analysis"
                       onchange="procToggleAiAnalysis(this)">
                     <div class="toggle"></div>
-                    <span class="toggle-label text-sm">Áp dụng kết quả</span>
+                    <span class="toggle-label text-sm">Áp dụng chỉnh sửa</span>
                   </label>
                 </div>
               </div>
               <div id="proc-ai-video-status" class="pe2-ai-status">Chưa phân tích video.</div>
               <div class="pe2-ai-box" style="margin-top:12px">
-                <h4>Rà soát dấu nguồn</h4>
-                <p class="pe2-setting-note">AI tìm logo, watermark, chữ và QR trong các khung hình mẫu để đề xuất vùng che.</p>
+                <h4>1. Phụ đề gốc và vùng che</h4>
+                <p class="pe2-setting-note">AI tìm vị trí phụ đề gốc để đặt vùng che chính. Logo và chữ khác được thêm dưới dạng vùng làm mờ.</p>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="procAnalyzeCopyrightCues()">AI đề xuất vùng xử lý</button>
                 <div id="proc-ai-copyright-result" class="pe2-setting-note" aria-live="polite"></div>
               </div>
@@ -641,8 +655,8 @@
               <div class="pe2-setting-field" style="margin-top:8px">
                 <label for="proc-content-aspect-mode">Chế độ khớp tỉ lệ</label>
                 <select id="proc-content-aspect-mode" onchange="framePreviewUpdate()">
+                  <option value="pad" selected>Giữ toàn bộ (Fit & Pad)</option>
                   <option value="crop">Cắt giữa (Fill & Crop)</option>
-                  <option value="pad">Giữ toàn bộ (Fit & Pad)</option>
                   <option value="stretch">Kéo giãn (Stretch)</option>
                   <option value="original_crop">Chỉ cắt (Không thay đổi kích thước)</option>
                   <option value="keep_width_crop_height">Giữ chiều ngang, cắt chiều dọc</option>
@@ -714,9 +728,9 @@
               <div style="margin-bottom:16px">
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px">
                   <label style="font-size:11px;color:var(--text-muted,#8a8a93)">Âm lượng gốc</label>
-                  <span style="font-size:11px;font-weight:bold;margin-left:auto" id="proc-vol-orig-val">100%</span>
+                  <span style="font-size:11px;font-weight:bold;margin-left:auto" id="proc-vol-orig-val">50%</span>
                 </div>
-                <input type="range" id="proc-vol-orig" min="0" max="200" step="5" value="100" style="width:100%"
+                <input type="range" id="proc-vol-orig" min="0" max="200" step="5" value="50" style="width:100%"
                   oninput="_syncProcOriginalVolume(this)">
               </div>
 
@@ -889,8 +903,8 @@
               </svg>
               <span>Lấy frame</span>
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" id="pe2-strip-btn" onclick="pe2BuildFilmstrip()"
-              style="display:inline-flex;align-items:center;gap:4px">
+            <button type="button" class="btn btn-secondary btn-sm" id="pe2-strip-btn" onclick="pe2BuildFilmstrip()" hidden
+              style="display:none;align-items:center;gap:4px">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
@@ -911,7 +925,7 @@
             </select>
             <button type="button" class="btn btn-secondary btn-sm" id="pe2-btn-pick-video"
               onclick="pe2TriggerVideoUpload()"
-              title="Chọn video từ máy tính để chỉnh sửa và xử lý ở Bước 2"
+              title="Chỉ tải video từ máy lên ứng dụng; muốn xử lý hãy đổi chế độ của video trong hàng chờ"
               style="display:inline-flex;align-items:center;gap:5px;height:32px;white-space:nowrap">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -919,7 +933,7 @@
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
-              <span>Chọn video từ máy</span>
+              <span>Tải video từ máy</span>
             </button>
             <input type="file" id="pe2-file-video-input" accept="video/*" multiple style="display:none"
               onchange="pe2HandleExternalVideoSelect(this)">
@@ -956,7 +970,7 @@
             <div class="pe2-tl-ruler" id="pe2-tl-ruler"></div>
             <div class="pe2-tl-strip" id="pe2-tl-strip"></div>
             <div class="pe2-tl-ranges" id="pe2-tl-ranges"></div>
-            <div class="pe2-tl-empty" id="pe2-tl-empty">Bấm Tạo dải thời gian để xem khung hình chạy theo thời gian
+            <div class="pe2-tl-empty" id="pe2-tl-empty">Chọn video để xem khung hình chạy theo thời gian
               video</div>
             <div class="pe2-tl-playhead" id="pe2-tl-playhead" style="left:0%"></div>
           </div>
@@ -3069,7 +3083,7 @@
           var res = await fetch('/api/video_filmstrip', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ video_path: source.val, count: 14 })
+            body: JSON.stringify({ video_path: source.val, count: 10 })
           });
           data = await res.json();
           if (data.ok) {
@@ -3385,7 +3399,7 @@
       var sel = document.getElementById('pe2-queue-select');
       if (!sel) return;
       var q = window._batchQueue || [];
-      var items = q.filter(function (t) { return t.type === 'file' && t.val && t.status !== 'error'; });
+      var items = q.filter(function (t) { return t.val && t.status !== 'error'; });
       // Preserve current selection
       var cur = sel.value;
       sel.innerHTML = '';
@@ -3393,7 +3407,7 @@
       items.forEach(function (t) {
         var rawLabel = t.desc || t.val || t.id || '';
         var label = rawLabel.split(/[\\/]/).pop() || rawLabel;
-        var badge = t.status === 'done' ? ' +' : '';
+        var badge = t.status === 'done' ? ' · Đã xử lý' : (/^https?:\/\//i.test(t.val) ? ' · Chờ tải' : ' · Đã tải');
         var opt = document.createElement('option');
         opt.value = t.id;
         opt.textContent = label + badge;
@@ -3492,7 +3506,8 @@
               type: 'file',
               val: d.path,
               desc: file.name,
-              status: 'ready'
+              status: 'ready',
+              queue_mode: 'skip'
             };
             window._batchQueue = window._batchQueue || [];
             window._batchQueue.push(newTask);
@@ -3513,7 +3528,7 @@
         if (firstAddedId && typeof window.pe2SelectQueueVideo === 'function') {
           window.pe2SelectQueueVideo(firstAddedId);
         }
-        if (window.toast) toast('Đã thêm thành công ' + successCount + ' video và nạp vào Bước 2!', 'success');
+        if (window.toast) toast('Đã tải lên ' + successCount + ' video. Chọn chế độ xử lý trong hàng chờ nếu cần.', 'success');
       }
     };
 

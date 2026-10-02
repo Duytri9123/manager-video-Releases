@@ -611,27 +611,27 @@ function switchPage(name) {
     if (typeof window._procQueueRefresh === 'function') window._procQueueRefresh();
     loadQueue();
     requestAnimationFrame(() => {
-      if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
-        _refreshTtsEngineSelects();
-        _onTargetLangChange();
-      } else {
+      if (typeof TTS_ENGINE_CATALOG !== 'undefined' && TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
+        if (typeof _refreshTtsEngineSelects === 'function') _refreshTtsEngineSelects();
+        if (typeof _onTargetLangChange === 'function') _onTargetLangChange();
+      } else if (typeof _loadTtsEngineCatalog === 'function') {
         _loadTtsEngineCatalog().then(() => {
-          _refreshTtsEngineSelects();
-          _onTargetLangChange();
+          if (typeof _refreshTtsEngineSelects === 'function') _refreshTtsEngineSelects();
+          if (typeof _onTargetLangChange === 'function') _onTargetLangChange();
         });
       }
     });
   }
   if (name === 'transcribe') {
     requestAnimationFrame(() => {
-      if (TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
-        _refreshTtsEngineSelects();
-        _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+      if (typeof TTS_ENGINE_CATALOG !== 'undefined' && TTS_ENGINE_CATALOG && TTS_ENGINE_CATALOG.length) {
+        if (typeof _refreshTtsEngineSelects === 'function') _refreshTtsEngineSelects();
+        if (typeof _syncVoiceOptions === 'function') _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
         if (typeof renderTranscribeVoiceLibrary === 'function') renderTranscribeVoiceLibrary();
-      } else {
+      } else if (typeof _loadTtsEngineCatalog === 'function') {
         _loadTtsEngineCatalog().then(() => {
-          _refreshTtsEngineSelects();
-          _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
+          if (typeof _refreshTtsEngineSelects === 'function') _refreshTtsEngineSelects();
+          if (typeof _syncVoiceOptions === 'function') _syncVoiceOptions('tr-tts-engine', 'tr-tts-voice');
           if (typeof renderTranscribeVoiceLibrary === 'function') renderTranscribeVoiceLibrary();
         });
       }
@@ -646,7 +646,7 @@ function switchPage(name) {
 }
 
 /* ── Content platform sub-tabs ───────────────────────────────── */
-const _CPT_PANELS = ['files', 'facebook', 'youtube', 'tiktok'];
+const _CPT_PANELS = ['history', 'files', 'facebook', 'youtube', 'tiktok'];
 
 function cptSwitch(tab) {
   _CPT_PANELS.forEach(p => {
@@ -656,6 +656,7 @@ function cptSwitch(tab) {
     if (panel) panel.style.display = (p === tab) ? 'block' : 'none';
   });
   if (tab === 'files')    { if (typeof loadContentList === 'function') loadContentList(); }
+  if (tab === 'history')  { if (typeof loadPublishHistory === 'function') loadPublishHistory(); }
   if (tab === 'facebook') { if (typeof fbMgrInit === 'function') fbMgrInit(); }
   if (tab === 'youtube')  { if (typeof ytMgrInit === 'function') ytMgrInit(); }
 }

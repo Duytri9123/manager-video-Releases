@@ -66,6 +66,21 @@
             <input type="text" id="dl-groq-model" value="whisper-large-v3-turbo" placeholder="whisper-large-v3-turbo">
           </div>
         </div>
+        <div class="field" id="dl-quality-wrap">
+          <label data-i18n="lbl_video_quality">Chất lượng video tải xuống</label>
+          <select id="dl-quality">
+            <option value="best" selected>Tốt nhất có thể (Best)</option>
+            <option value="4k">4K / 2160p</option>
+            <option value="1080p">Full HD 1080p</option>
+            <option value="720p">HD 720p</option>
+            <option value="480p">SD 480p</option>
+            <option value="360p">360p (tiết kiệm dữ liệu)</option>
+            <option value="audio">Chỉ âm thanh (Audio only)</option>
+          </select>
+          <div class="text-[10px] text-slate-400 mt-1 italic" id="dl-quality-note">
+            Áp dụng cho TikTok, YouTube, Facebook và các nền tảng dùng yt-dlp. Douyin sẽ luôn tải chất lượng cao nhất.
+          </div>
+        </div>
         <button class="btn btn-primary" id="btn-dl" onclick="startQueueDownload()" style="width:100%;justify-content:center;margin-bottom:14px" data-i18n="btn_start_dl">
           Bắt đầu tải
         </button>

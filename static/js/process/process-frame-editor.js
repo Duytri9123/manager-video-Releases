@@ -492,7 +492,7 @@ function ovSelectLayer(id, open, skipSubUpdate) {
     const isForced = (aspectValue === '16x9' || aspectValue === '9x16');
     const targetAspect = isForced ? aspectValue : (sourceIsVertical ? '9x16' : '16x9');
     const contentRatio = procParseContentAspect(document.getElementById('proc-content-aspect')?.value);
-    const contentMode = document.getElementById('proc-content-aspect-mode')?.value || 'crop';
+    const contentMode = document.getElementById('proc-content-aspect-mode')?.value || 'pad';
     const targetRatio = targetAspect === '9x16' ? 9 / 16 : 16 / 9;
     const targetW = targetAspect === '9x16' ? 1080 : 1920;
     const targetH = targetAspect === '9x16' ? 1920 : 1080;

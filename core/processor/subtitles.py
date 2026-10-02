@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Optional, List, Tuple, Dict, Any
 
@@ -46,6 +47,54 @@ def _fmt_ass_time(seconds: float) -> str:
 def _sentence_parts(text: str) -> list[str]:
     # Keep punctuation/closing quotes with the sentence they finish.
     return [p.strip() for p in re.split(r"""(?<=[.!?…。！？])\s+|(?<=[.!?…。！？]["»\"''])\s+""", text) if p.strip()]
+
+
+def _subtitle_display_chunks(text: str, width_px: float, font_size: float,
+                             max_lines: int = 3) -> list[str]:
+    """Keep a spoken phrase on screen unless it cannot fit in a few wrapped lines."""
+    text = " ".join(str(text or "").split())
+    if not text:
+        return []
+    # Keep extra room for outlines and libass font metric differences.
+    capacity = max(4.0, float(width_px) * 0.9 / max(1.0, float(font_size)))
+
+    def units(value: str) -> float:
+        return sum(1.0 if unicodedata.east_asian_width(ch) in "WF" else
+                   0.32 if ch.isspace() or unicodedata.category(ch).startswith("P") else
+                   0.62 for ch in value)
+
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        if current:
+            if units(f"{current} {word}") > capacity:
+                lines.append(current)
+                current = ""
+            else:
+                current += " "
+        # Long tokens (URLs, unspaced CJK) must also stay inside the video.
+        for char in word:
+            if current and units(current + char) > capacity:
+                lines.append(current.rstrip())
+                current = ""
+            current += char
+    if current:
+        lines.append(current)
+    if len(lines) <= max_lines:
+        return [r"\N".join(lines)]
+
+    chunks = []
+    while lines:
+        take = min(max_lines, len(lines))
+        if len(lines) - take == 1 and take > 1:
+            take -= 1
+        for index in range(take - 1, 0, -1):
+            if lines[index].rstrip().endswith((",", ";", ":", "—")):
+                take = index + 1
+                break
+        chunks.append(r"\N".join(lines[:take]))
+        lines = lines[take:]
+    return chunks
 
 
 # ── Từ nối / chuyển tiếp tiếng Việt thường đứng đầu mệnh đề mới ──────────
@@ -263,7 +312,8 @@ def write_ass(segments: list[dict], out_path: Path,
               shadow: int = 1, margin_v: int = 20,
               alignment: int = 2, font_name: str = "Arial",
               play_res_x: int = 1280, play_res_y: int = 720,
-              font_bold: bool = True, max_words_per_line: int = 7) -> Path:
+              font_bold: bool = True, max_words_per_line: int = 7,
+              subtitle_width_pct: float = 90.0) -> Path:
     """
     Write ASS subtitle file from segments list.
     alignment: 2=bottom-center, 8=top-center
@@ -272,6 +322,10 @@ def write_ass(segments: list[dict], out_path: Path,
     outline  = f"&H00{_hex_color(outline_color)}"
     shadow_c = "&H80000000"
     bold_val = -1 if font_bold else 0
+    usable_width = max(40.0, min(98.0, float(subtitle_width_pct))) / 100
+    side_margin = max(10, int(play_res_x * (1 - usable_width) / 2))
+    max_display_lines = 4 if play_res_y > play_res_x * 1.3 else 3
+    safe_margin_v = min(max(0, margin_v), max(0, int(play_res_y - font_size * max_display_lines * 1.3)))
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -281,7 +335,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font_name},{font_size},{primary},&H000000FF,{outline},{shadow_c},{bold_val},0,0,0,100,100,0,0,1,{outline_width},{shadow},{alignment},10,10,{margin_v},1
+Style: Default,{font_name},{font_size},{primary},&H000000FF,{outline},{shadow_c},{bold_val},0,0,0,100,100,0,0,1,{outline_width},{shadow},{alignment},{side_margin},{side_margin},{safe_margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -300,23 +354,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = ' '.join(text.split())
         if not text:
             continue
-        split_lines = ([text] if seg.get("voice_aligned") else
-                       _smart_split_display_lines(text, max_words=max_words_per_line))
-        total_len = sum(len(c) for c in split_lines) or 1
+        split_lines = _subtitle_display_chunks(text, play_res_x * usable_width, font_size, max_display_lines)
+        total_len = sum(len(c.replace(r"\N", " ")) for c in split_lines) or 1
         seg_start = float(seg["start"])
         seg_end = float(seg["end"])
         seg_duration = max(0.2, seg_end - seg_start)
         cur_t = seg_start
         for i, line in enumerate(split_lines):
-            chunk_ratio = len(line) / total_len
+            chunk_ratio = len(line.replace(r"\N", " ")) / total_len
             chunk_dur = seg_duration * chunk_ratio
             sub_start = cur_t
             sub_end = cur_t + chunk_dur
             if i == len(split_lines) - 1:
                 sub_end = seg_end
-            else:
-                sub_end = max(sub_start + 0.1, sub_end - 0.01)
-            cur_t = sub_end + 0.01
+            cur_t = sub_end
             s = _fmt_ass_time(sub_start)
             e = _fmt_ass_time(sub_end)
             spk_name = "Nam" if seg.get("speaker") == "male" else ("Nữ" if seg.get("speaker") == "female" else "")
@@ -817,9 +868,38 @@ def _subtitle_blur_enable(segments):
     return f":enable='{expr}'"
 
 
+def _subtitle_blur_enable_groups(segments, group_size: int = 48) -> list[str]:
+    """Bound each FFmpeg expression without turning a long cue list into a full-time mask."""
+    if segments is None:
+        return [""]
+    import math
+    intervals = []
+    for seg in segments:
+        try:
+            start, end = max(0.0, float(seg["start"])), float(seg["end"])
+            if str(seg.get("text", "")).strip() and math.isfinite(start) and math.isfinite(end) and end > start:
+                intervals.append((start, end))
+        except (KeyError, TypeError, ValueError):
+            continue
+    merged = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(end, merged[-1][1])
+        else:
+            merged.append([start, end])
+    if not merged:
+        return [":enable='0'"]
+    expressions = []
+    for offset in range(0, len(merged), group_size):
+        group = merged[offset:offset + group_size]
+        expr = '+'.join(f'gte(t,{start:.3f})*lt(t,{end:.3f})' for start, end in group)
+        expressions.append(f":enable='{expr}'")
+    return expressions
+
+
 def burn_subtitles(
     video_path: Path,
-    srt_path: Path,
+    srt_path: Path | None,
     output_path: Path,
     ffmpeg: str,
     blur_original: bool = True,
@@ -853,7 +933,7 @@ def burn_subtitles(
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
     content_aspect: str = "auto",
-    content_aspect_mode: str = "crop",
+    content_aspect_mode: str = "pad",
     mask_config: dict | None = None,
     output_fps: int = 0,
     encode_device: str = "auto",
@@ -942,7 +1022,7 @@ def burn_subtitles(
 
 def _burn_ass(
     video_path: Path,
-    ass_path: Path,
+    ass_path: Path | None,
     output_path: Path,
     ffmpeg: str,
     font_size: int = 32,
@@ -975,7 +1055,7 @@ def _burn_ass(
     target_aspect: str = "auto",
     aspect_pad_blur: bool = False,
     content_aspect: str = "auto",
-    content_aspect_mode: str = "crop",
+    content_aspect_mode: str = "pad",
     mask_config: dict | None = None,
     output_fps: int = 0,
     encode_device: str = "auto",
@@ -993,13 +1073,14 @@ def _burn_ass(
 
     t0 = _time.time()
     _log(f"📂 Video: {video_path.name} ({video_path.stat().st_size / 1024 / 1024:.1f} MB)")
-    _log(f"📄 Phụ đề: {ass_path.name}")
+    if ass_path is not None:
+        _log(f"📄 Phụ đề: {ass_path.name}")
     _log(f"⚙️ Cài đặt: font={font_size}px, color={font_color}, margin={margin_v}px, pos={subtitle_position}")
     if blur_original:
         _log(f"🌫 Che phụ đề gốc: zone={blur_zone}, height={blur_height_pct*100:.0f}%")
 
     video_path  = Path(video_path)
-    ass_path    = Path(ass_path)
+    ass_path    = Path(ass_path) if ass_path is not None else None
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1019,7 +1100,9 @@ def _burn_ass(
         _log(f"✓ Copy video xong ({_time.time()-t1:.1f}s)")
 
         # If input is SRT, convert to ASS on the fly
-        if ass_path.suffix.lower() == ".srt":
+        if ass_path is None:
+            _log("▣ Xử lý hình ảnh không dùng ASS")
+        elif ass_path.suffix.lower() == ".srt":
             _log("🔄 Chuyển đổi SRT → ASS...")
             segs = _parse_srt(ass_path)
             alignment = 8 if str(subtitle_position).lower() == "top" else 2
@@ -1032,9 +1115,10 @@ def _burn_ass(
             shutil.copy2(str(ass_path), str(tmp_ass))
             _log(f"✓ Copy phụ đề ASS xong")
 
-        ass_esc = str(tmp_ass).replace("\\", "/")
-        if len(ass_esc) >= 2 and ass_esc[1] == ':':
-            ass_esc = ass_esc[0] + "\\:" + ass_esc[2:]
+        if ass_path is not None:
+            ass_esc = str(tmp_ass).replace("\\", "/")
+            if len(ass_esc) >= 2 and ass_esc[1] == ':':
+                ass_esc = ass_esc[0] + "\\:" + ass_esc[2:]
 
         # Fold aspect conversion into this encode when source and target
         # orientations differ.
@@ -1227,18 +1311,23 @@ def _burn_ass(
         else:
             curr_label = source_label
 
-        for idx, (h, w, y, x, _st, _en) in enumerate(active_zones):
+        if blur_original and blur_zone != "none":
+            main_zone, other_zones = active_zones[0], active_zones[1:]
+            active_zones = [(*main_zone, expr, True) for expr in _subtitle_blur_enable_groups(blur_subtitle_segments)]
+            active_zones += [(*zone, None, False) for zone in other_zones]
+        else:
+            active_zones = [(*zone, None, False) for zone in active_zones]
+
+        for idx, (h, w, y, x, _st, _en, _override, _is_main) in enumerate(active_zones):
             next_label = f"b{idx}"
             _left = max(0.0, min(1.0 - w, x - w / 2))
-            _en_expr = ""
-            if idx == 0 and blur_original and blur_zone != "none":
-                _en_expr = _subtitle_blur_enable(blur_subtitle_segments)
+            _en_expr = _override or ""
             if _st is not None or _en is not None:
                 _s0 = float(_st) if _st is not None else 0.0
                 _e0 = float(_en) if _en is not None else 1e9
                 _en_expr = f":enable='between(t,{_s0:.3f},{_e0:.3f})'"
             filter_complex_parts.append(f"[{curr_label}]split[orig_{idx}][copy_{idx}]")
-            _patch = idx == 0 and blur_original and blur_zone != "none" and isinstance(mask_config, dict) and mask_config.get("mode") == "patch"
+            _patch = _is_main and isinstance(mask_config, dict) and mask_config.get("mode") == "patch"
             if _patch:
                 _sx = max(0.0, min(1.0-w, _clamp_float(mask_config.get("source_x", .5), 0, 1)-w/2))
                 _sy = max(0.0, min(1.0-h, _clamp_float(mask_config.get("source_y", .75), 0, 1)-h/2))
@@ -1360,8 +1449,9 @@ def _burn_ass(
             )
 
         # Apply ASS before overlays so custom shapes/text overlays float on top of subtitles
-        filter_complex_parts.append(f"[{curr_label}]ass='{ass_esc}'[subbed]")
-        curr_label = "subbed"
+        if ass_path is not None:
+            filter_complex_parts.append(f"[{curr_label}]ass='{ass_esc}'[subbed]")
+            curr_label = "subbed"
 
         _video_overlays = _normalize_video_overlays(video_overlays)
         if _video_overlays:
@@ -1467,12 +1557,12 @@ def _burn_ass(
                 _logo_enable = f":enable='lt(t,{_logo_end:.3f})'"
 
             filter_complex += (
-                f";{logo_filter};"
+                f"{';' if filter_complex else ''}{logo_filter};"
                 f"[{curr_label}][logo]overlay={logo_x_px}:{logo_y_px}{_logo_enable}[composited]"
             )
             _log(f"🏷 Logo: {_logo_file.name} (h={logo_h_px}px, x={logo_x_px}, y={logo_y_px}, radius={r_pct}%)")
         else:
-            filter_complex += f";[{curr_label}]null[composited]"
+            filter_complex += f"{';' if filter_complex else ''}[{curr_label}]null[composited]"
 
         if _aspect_convert:
             _inner_w, _inner_h = _target_w, _target_h
@@ -1724,12 +1814,17 @@ def _burn_srt(
             # Apply each blur zone in a chain
             curr_label = "0:v"
             filter_complex_parts = []
-            for idx, (h, w, y, x, _st, _en) in enumerate(active_zones):
+            if blur_original and blur_zone != "none":
+                main_zone, other_zones = active_zones[0], active_zones[1:]
+                active_zones = [(*main_zone, expr, True) for expr in _subtitle_blur_enable_groups(blur_subtitle_segments)]
+                active_zones += [(*zone, None, False) for zone in other_zones]
+            else:
+                active_zones = [(*zone, None, False) for zone in active_zones]
+
+            for idx, (h, w, y, x, _st, _en, _override, _is_main) in enumerate(active_zones):
                 next_label = f"b{idx}"
                 _left = max(0.0, min(1.0 - w, x - w / 2))
-                _en_expr = ""
-                if idx == 0 and blur_original and blur_zone != "none":
-                    _en_expr = _subtitle_blur_enable(blur_subtitle_segments)
+                _en_expr = _override or ""
                 if _st is not None or _en is not None:
                     _s0 = float(_st) if _st is not None else 0.0
                     _e0 = float(_en) if _en is not None else 1e9
@@ -2018,6 +2113,7 @@ def write_ass_with_frame(
     alignment: int = 2,
     font_name: str = "Arial",
     max_words_per_line: int = 9,
+    subtitle_width_pct: float = 90.0,
     # Frame: Title bar (overlay on top of video)
     title_text: str = "",
     title_size_pct: float = 7.0,
@@ -2114,6 +2210,12 @@ def write_ass_with_frame(
         out_h = play_res_y
     # Vùng video theo trục dọc (panel blur 2 bên chỉ phủ phần video, không phủ dải tiêu đề)
     vid_bottom = vid_y + vid_h
+    usable_width = max(40.0, min(98.0, float(subtitle_width_pct))) / 100
+    sub_margin_l = max(10, int(vid_x + vid_w * (1 - usable_width) / 2))
+    sub_margin_r = max(10, int(out_w - vid_x - vid_w * (1 + usable_width) / 2))
+    max_display_lines = 4 if vid_h > vid_w * 1.3 else 3
+    safe_margin_v = min(max(0, margin_v), max(0, int(vid_h - font_size * max_display_lines * 1.3)))
+    sub_margin_v = safe_margin_v + (max(vid_y, title_bar_h) if alignment == 8 else out_h - vid_bottom)
 
     # ASS alpha: 0=opaque, FF=transparent (opposite of normal)
     blur_alpha = max(0, min(255, int((1.0 - blur_opacity) * 255)))
@@ -2130,7 +2232,7 @@ def write_ass_with_frame(
     # Default subtitle style
     styles.append(
         f"Style: Default,{font_name},{font_size},{sub_primary},&H000000FF,{sub_outline},{sub_shadow_c},"
-        f"{-1 if font_bold else 0},0,0,0,100,100,0,0,1,{outline_width},{shadow},{alignment},10,10,{margin_v},1"
+        f"{-1 if font_bold else 0},0,0,0,100,100,0,0,1,{outline_width},{shadow},{alignment},{sub_margin_l},{sub_margin_r},{sub_margin_v},1"
     )
     # Title bar background style (drawing)
     styles.append(
@@ -2334,23 +2436,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = ' '.join(text.split())
         if not text:
             continue
-        split_lines = ([text] if seg.get("voice_aligned") else
-                       _smart_split_display_lines(text, max_words=max_words_per_line))
-        total_len = sum(len(c) for c in split_lines) or 1
+        split_lines = _subtitle_display_chunks(text, vid_w * usable_width, font_size, max_display_lines)
+        total_len = sum(len(c.replace(r"\N", " ")) for c in split_lines) or 1
         seg_start = float(seg["start"])
         seg_end = float(seg["end"])
         seg_duration = max(0.2, seg_end - seg_start)
         cur_t = seg_start
         for i, line in enumerate(split_lines):
-            chunk_ratio = len(line) / total_len
+            chunk_ratio = len(line.replace(r"\N", " ")) / total_len
             chunk_dur = seg_duration * chunk_ratio
             sub_start = cur_t
             sub_end = cur_t + chunk_dur
             if i == len(split_lines) - 1:
                 sub_end = seg_end
-            else:
-                sub_end = max(sub_start + 0.1, sub_end - 0.01)
-            cur_t = sub_end + 0.01
+            cur_t = sub_end
             s = _fmt_ass_time(sub_start)
             e = _fmt_ass_time(sub_end)
             spk_name = "Nam" if seg.get("speaker") == "male" else ("Nữ" if seg.get("speaker") == "female" else "")

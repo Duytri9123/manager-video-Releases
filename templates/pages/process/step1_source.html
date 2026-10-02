@@ -1,4 +1,10 @@
 <!-- ═════════════════ STEP 1: Nguồn & cấu hình dùng chung ═════════════════ -->
+<style>
+#page-process [id^="step1-pub-pill-"] {padding:4px 5px;min-width:0;gap:3px;}
+#page-process [id^="step1-pub-pill-"] > span {min-width:0;gap:3px;}
+#page-process [id^="step1-pub-check-"] {flex-shrink:0;}
+#page-process #step1-fb-pub-row {grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
+</style>
 <section class="proc-step" data-proc-step="1">
 
   <style>
@@ -179,23 +185,39 @@
           </div>
 
           <!-- YouTube Account select -->
-          <div id="step1-yt-pub-row" class="field mb-0">
-            <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Tài khoản YouTube</label>
+          <div id="step1-yt-pub-row" class="field mb-0 rounded-xl border border-red-100 dark:border-red-900/30 bg-red-50/30 dark:bg-red-950/10" style="padding:9px">
+            <label class="text-[10px] font-semibold text-red-700 dark:text-red-300 mb-1 block">YouTube · Tài khoản</label>
             <select id="step1-yt-account-select" onchange="_step1SyncAccountToMain('youtube', this.value)"
-              class="w-full text-[10.5px] h-[28px] rounded px-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+              class="w-full text-[10.5px] h-[32px] rounded-lg px-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
               <option value="">Chưa có tài khoản</option>
             </select>
+            <label class="text-[10px] font-medium mt-2 mb-1 block">Cách đăng nhập</label>
+            <select id="step1-yt-login-method" class="w-full text-[10.5px] h-[32px] rounded-lg px-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700" onchange="_step1SyncYouTubeMethod(this.value)">
+              <option value="oauth">Google OAuth / YouTube API</option>
+              <option value="browser">Trình duyệt YouTube Studio</option>
+            </select>
+            <div class="flex flex-wrap items-center gap-2 mt-2">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="pYtStartLogin()">Đăng nhập YouTube</button>
+              <label id="step1-yt-browser-auto-wrap" class="inline-flex items-center gap-1 text-[10px]" style="display:none"><input type="checkbox" id="step1-yt-browser-auto-post" onchange="_step1SyncYouTubeAutoPost(this.checked)">Tự xác nhận đăng</label>
+            </div>
           </div>
 
-          <!-- Facebook Account & Page selects -->
-          <div id="step1-tt-pub-row" class="field mb-0">
-            <label class="text-[10px] font-medium">Tài khoản TikTok</label>
-            <select id="step1-tt-account-select" class="w-full text-[10.5px] h-[28px] rounded px-1.5"
-              onchange="_step1SyncAccountToMain('tiktok', this.value)">
+          <!-- TikTok Account -->
+          <div id="step1-tt-pub-row" class="field mb-0 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/30" style="padding:9px">
+            <label class="text-[10px] font-semibold mb-1 block">TikTok · Tài khoản</label>
+            <select id="step1-tt-account-select" class="w-full text-[10.5px] h-[32px] rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700" style="padding-left:7px;padding-right:7px"
+              onchange="_step1SyncAccountToMain('tiktok', this.value); pTtRefreshLoginState()">
               <option value="">Chọn tài khoản TikTok</option>
             </select>
+            <div class="flex flex-wrap items-center gap-2 mt-2" style="min-height:26px">
+              <button type="button" id="step1-tt-login-btn" class="btn btn-secondary btn-sm" onclick="pTtStartLogin()">Mở phiên TikTok</button>
+              <span id="step1-tt-login-state" class="text-[10px] text-slate-500" aria-live="polite"></span>
+              <input type="checkbox" id="step1-tt-auto-post" hidden>
+              <button type="button" id="step1-tt-auto-post-button" class="text-[10px] rounded-full border px-2" style="min-height:24px" aria-pressed="false" onclick="_step1SetTikTokAutoPost(!document.getElementById('step1-tt-auto-post').checked)">Tự đăng: Tắt</button>
+            </div>
           </div>
-          <div id="step1-fb-pub-row" class="grid grid-cols-2 gap-1.5">
+          <div id="step1-fb-pub-row" class="grid grid-cols-2 gap-2 rounded-xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-950/10" style="padding:9px">
+            <div class="col-span-2 text-[10px] font-semibold text-blue-700 dark:text-blue-300">Facebook · Page đăng</div>
             <div class="field mb-0">
               <label class="text-[8.5px] font-medium text-slate-400 mb-0.5 block">Tài khoản Facebook</label>
               <select id="step1-fb-account-select" onchange="_step1SyncAccountToMain('facebook', this.value)"
@@ -210,6 +232,30 @@
                 <option value="">-- Chọn Page --</option>
               </select>
             </div>
+            <div class="field mb-0 col-span-2">
+              <label class="text-[10px] font-medium">Cách đăng Facebook</label>
+              <select id="step1-fb-method" onchange="document.getElementById('p-fb-method').value=this.value"
+                class="w-full text-[10.5px] h-[28px] rounded px-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <option value="api">Graph API</option><option value="browser">Trình duyệt Playwright</option>
+              </select>
+            </div>
+            <div class="field mb-0 col-span-2">
+              <label class="text-[10px] font-medium">Loại hình đăng Facebook</label>
+              <select id="step1-fb-post-type" onchange="_step1SyncFacebookPostType(this.value)"
+                class="w-full text-[10.5px] h-[28px] rounded px-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                <option value="auto">Tự động (video dọc 9:16 → Reel)</option>
+                <option value="reel">Reel</option>
+                <option value="video">Video thường</option>
+              </select>
+            </div>
+          </div>
+          <div class="border-t border-slate-100 dark:border-slate-700 pt-2 mt-1">
+            <label class="flex items-center gap-1.5 text-[10px] font-semibold"><input type="checkbox" id="step1-schedule-enabled" onchange="_step1SyncSchedule()">Đặt lịch đăng theo lô</label>
+            <div class="grid grid-cols-2 gap-2 mt-2">
+              <label class="text-[10px] text-slate-500">Bắt đầu lúc<input type="datetime-local" id="step1-schedule-start" class="w-full text-[10px] h-[32px] rounded-lg px-2 mt-1" onchange="_step1SyncSchedule()"></label>
+              <label class="text-[10px] text-slate-500">Cách nhau (giờ)<input type="number" id="step1-schedule-interval" value="24" min="0.25" step="0.25" class="w-full text-[10px] h-[32px] rounded-lg px-2 mt-1" onchange="_step1SyncSchedule()"></label>
+            </div>
+            <span class="text-[9px] text-slate-400">Áp dụng cho các nền tảng đã chọn. YouTube dùng trình duyệt chưa hỗ trợ đặt lịch.</span>
           </div>
         </div>
       </div>
@@ -270,7 +316,7 @@
             </div>
 
             <button type="button" class="btn btn-secondary text-[10px] flex items-center gap-1 font-medium"
-              style="height:26px;min-height:26px;padding:0 8px;line-height:26px" onclick="loadDownloadedVideos()">
+              style="height:26px;min-height:26px;padding:0 8px;line-height:26px" onclick="if(typeof window.loadDownloadedVideos==='function')window.loadDownloadedVideos('')">
               <span>↻ Làm mới</span>
             </button>
           </div>
@@ -318,8 +364,10 @@
             <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Hàng chờ tải
               &amp; xử lý (<span id="batch-count" class="text-indigo-500 font-bold">0</span>)</h3>
           </div>
+          <div class="flex items-center gap-1.5">
+          <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2" onclick="procStopStep1Queue()" title="Dừng hàng chờ sau video đang tải hoặc hủy video đang xử lý">Dừng</button>
           <button type="button" class="btn btn-secondary text-[9px] py-0.5 px-2 flex items-center gap-1"
-            onclick="window._batchQueue=[];_renderBatchQueue()">
+            onclick="if ((window._batchQueue||[]).some(t=>t.status==='processing'||t.status==='downloading')) {toast('Không thể xóa hàng chờ khi có video đang chạy','warning');return;} window._batchQueue=[];_renderBatchQueue()">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6" />
@@ -327,30 +375,31 @@
             </svg>
             <span>Xóa tất cả</span>
           </button>
+          </div>
         </div>
 
         <!-- Quick options use an active state while retaining inputs for settings. -->
+        <style>
+          #step1-queue-card .proc-step1-quick-options label{display:flex;align-items:center;justify-content:center;gap:5px;min-height:30px;padding:3px 6px;border:1px solid #dbe3ef;border-radius:8px;cursor:pointer;font-size:10px;line-height:1.2;text-align:center}
+          #step1-queue-card .proc-step1-quick-options label:has(input:checked){border-color:#635bfa;background:#e7e5ff;color:#3730a3;font-weight:700;box-shadow:0 0 0 2px rgba(99,91,250,.18),0 2px 5px rgba(99,91,250,.14)}
+          #step1-queue-card .proc-step1-quick-options input{position:absolute;opacity:0;width:1px;height:1px}
+        </style>
         <div class="proc-step1-quick-options grid grid-cols-4 gap-1 mb-2.5 pb-2 border-b border-slate-100 dark:border-slate-700/60">
-          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
+          <label
             title="Tự động hóa toàn bộ quy trình sau khi tải">
-            <input type="checkbox" id="proc-auto-flow" class="accent-indigo-500">
-            <span class="truncate">Tự động hóa</span>
+            <input type="checkbox" id="proc-auto-flow"><span>Tự động hóa</span>
           </label>
-          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
-            title="Bỏ qua phụ đề ASS">
-            <input type="checkbox" id="step3-skip-ass" onchange="_onStep3SkipChange()" class="accent-indigo-500">
-            <span class="truncate">Bỏ qua ASS</span>
+          <label
+            title="Không tạo, duyệt hoặc ghi ASS trong toàn bộ quy trình; khung dùng ASS cũng sẽ tắt">
+            <input type="checkbox" id="step3-skip-ass" onchange="_onStep3SkipChange()"><span>Bỏ qua ASS</span>
           </label>
-          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
+          <label
             title="Bỏ qua phụ đề">
-            <input type="checkbox" id="proc-skip-transcription" onchange="_onSkipTranscriptionChange()"
-              class="accent-indigo-500">
-            <span class="truncate">Bỏ qua phụ đề</span>
+            <input type="checkbox" id="proc-skip-transcription" onchange="_onSkipTranscriptionChange()"><span>Bỏ qua phụ đề</span>
           </label>
-          <label class="check-item flex items-center gap-1 cursor-pointer text-[10px] sm:text-[11px]"
+          <label
             title="Chỉ tải video gốc về máy">
-            <input type="checkbox" id="proc-download-only" class="accent-indigo-500">
-            <span class="truncate">Chỉ tải video</span>
+            <input type="checkbox" id="proc-download-only"><span>Chỉ tải video</span>
           </label>
         </div>
 
@@ -368,38 +417,37 @@
           <div id="step1-dl-log"
             style="max-height:120px;overflow-y:auto;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:monospace;color:var(--text);display:none;margin-bottom:8px">
           </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+            <label for="step1-dl-quality" class="text-[11px] font-medium text-slate-400">Chất lượng tải:</label>
+            <select id="step1-dl-quality" class="text-[11px] py-1 px-2 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+              <option value="best" selected>Tốt nhất (Best)</option>
+              <option value="4k">4K / 2160p</option>
+              <option value="1080p">Full HD 1080p</option>
+              <option value="720p">HD 720p</option>
+              <option value="480p">SD 480p</option>
+              <option value="360p">360p (tiết kiệm)</option>
+              <option value="audio">Chỉ âm thanh</option>
+            </select>
+          </div>
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
             <button type="button" class="btn btn-secondary text-[11px] py-1 px-2.5 flex items-center gap-1.5 h-[30px]"
-              id="btn-step1-download" onclick="window._step1Downloading=false;_runStep1QueueDownload()">
+              id="btn-step1-download" onclick="window._step1ManualAction='download';window._step1AfterDownloadTarget=null;window._procProcessAll=false;_runStep1QueueDownload()">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>Tải hàng chờ</span>
+              <span>Chỉ tải</span>
             </button>
             <button type="button" class="btn btn-primary text-[11px] py-1 px-2.5 flex items-center gap-1.5 h-[30px]"
-              id="btn-step1-next" onclick="window.procWizStep2Continue && window.procWizStep2Continue(2)">
-              <span>Tiếp tục sang Bước 2</span>
+              id="btn-step1-next" onclick="procStartSingleFromStep1()" title="Chỉ tải và mở video đầu tiên đang chờ xử lý">
+              <span>Xử lý video đầu tiên</span>
             </button>
           </div>
+          <button type="button" class="btn btn-primary w-full mt-2 h-[30px] text-[11px]" onclick="procStartQueueFromStep1()" title="Tải và xử lý các video được đặt chế độ Tải và xử lý; bỏ qua video Chỉ tải hoặc Không tải">Xử lý tất cả</button>
         </div>
 
-        <!-- Next button -->
-        <div class="mt-2" id="step1-next-btn-wrap" style="display:none">
-          <button type="button"
-            class="btn btn-primary w-full py-1.5 font-semibold text-[11px] flex justify-center items-center gap-1.5 h-[34px]"
-            id="btn-step1-process" onclick="procStartQueueFromStep1()"
-            title="Xử lý toàn bộ hàng chờ bằng cấu hình hiện tại ở Bước 2">
-            <span>Xử lý tất cả</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
-          </button>
-        </div>
       </div>
 
       <!-- Card: Lịch sử tải xuống (đã ẩn theo yêu cầu) -->
@@ -434,7 +482,8 @@
       <div
         class="card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-3"
         id="proc-shared-config-card">
-        <div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-100 dark:border-slate-700">
+        <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-100 dark:border-slate-700">
+          <div class="flex items-center gap-2">
           <span class="text-indigo-500 flex items-center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
@@ -445,6 +494,8 @@
           </span>
           <h3 class="text-[10px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">Cấu hình sử dụng
           </h3>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" style="padding:3px 9px;min-height:24px" onclick="pe2SaveNamedProfile(true)" title="Lưu toàn bộ cấu hình hiện tại">Lưu</button>
         </div>
 
         <div class="flex flex-col gap-1.5">
@@ -977,6 +1028,73 @@
     }
     window._step1SyncPageToMain = _step1SyncPageToMain;
 
+    function _step1SyncFacebookPostType(value) {
+      const main = document.getElementById('p-fb-post-type');
+      if (main) main.value = value;
+    }
+    window._step1SyncFacebookPostType = _step1SyncFacebookPostType;
+
+    function _step1SyncTikTokAutoPost(enabled) {
+      const main = document.getElementById('p-tt-auto-post');
+      if (main) main.checked = !!enabled;
+    }
+    window._step1SyncTikTokAutoPost = _step1SyncTikTokAutoPost;
+
+    function _step1SetTikTokAutoPost(enabled) {
+      const input = document.getElementById('step1-tt-auto-post');
+      const button = document.getElementById('step1-tt-auto-post-button');
+      if (input) input.checked = !!enabled;
+      if (button) {
+        button.textContent = enabled ? 'Tự đăng: Bật' : 'Tự đăng: Tắt';
+        button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+        button.className = enabled
+          ? 'text-[10px] rounded-full border border-emerald-300 bg-emerald-50 text-emerald-700 px-2'
+          : 'text-[10px] rounded-full border border-slate-200 text-slate-500 px-2';
+      }
+      _step1SyncTikTokAutoPost(enabled);
+    }
+    window._step1SetTikTokAutoPost = _step1SetTikTokAutoPost;
+
+    function _step1SyncYouTubeMethod(value) {
+      const main = document.getElementById('p-yt-login-method');
+      if (main) {
+        main.value = value;
+        if (typeof pYtLoginMethodChanged === 'function') pYtLoginMethodChanged();
+      }
+      const autoWrap = document.getElementById('step1-yt-browser-auto-wrap');
+      if (autoWrap) autoWrap.style.display = value === 'browser' ? 'inline-flex' : 'none';
+    }
+    window._step1SyncYouTubeMethod = _step1SyncYouTubeMethod;
+
+    function _step1SyncYouTubeAutoPost(enabled) {
+      const main = document.getElementById('p-yt-browser-auto-post');
+      if (main) main.checked = !!enabled;
+    }
+    window._step1SyncYouTubeAutoPost = _step1SyncYouTubeAutoPost;
+
+    function _step1SyncSchedule() {
+      const enabled = document.getElementById('step1-schedule-enabled')?.checked || false;
+      const startStep1 = document.getElementById('step1-schedule-start');
+      if (enabled && startStep1 && !startStep1.value) {
+        const future = new Date(Date.now() + 20 * 60 * 1000);
+        const pad = n => String(n).padStart(2, '0');
+        startStep1.value = `${future.getFullYear()}-${pad(future.getMonth()+1)}-${pad(future.getDate())}T${pad(future.getHours())}:${pad(future.getMinutes())}`;
+      }
+      const toggle = document.getElementById('p-bsched-enabled');
+      if (toggle) {
+        toggle.checked = enabled;
+        if (typeof pBschedToggle === 'function') pBschedToggle();
+      }
+      const start = document.getElementById('p-bsched-start');
+      const interval = document.getElementById('p-bsched-interval');
+      const mode = document.getElementById('p-bsched-mode');
+      if (mode) mode.value = 'interval';
+      if (start) start.value = document.getElementById('step1-schedule-start')?.value || '';
+      if (interval) interval.value = document.getElementById('step1-schedule-interval')?.value || '24';
+      if (typeof pBschedRecalcPreview === 'function') pBschedRecalcPreview();
+    }
+    window._step1SyncSchedule = _step1SyncSchedule;
+
     function _step1SyncSelectorsFromPublish() {
       const mirror = (srcId, dstId) => {
         const src = document.getElementById(srcId);
@@ -994,12 +1112,41 @@
       const ttSource = document.getElementById('tt-account-select');
       const ttTarget = document.getElementById('step1-tt-account-select');
       if (ttSource && ttTarget) ttTarget.value = ttSource.value;
+      if (ttTarget && (ttTarget.dataset.checkedLoginAccount !== ttTarget.value ||
+          Date.now() - Number(ttTarget.dataset.checkedLoginAt || 0) > 30000)) {
+        ttTarget.dataset.checkedLoginAccount = ttTarget.value;
+        ttTarget.dataset.checkedLoginAt = String(Date.now());
+        if (typeof pTtRefreshLoginState === 'function') pTtRefreshLoginState();
+      }
       mirror('p-yt-account-select', 'step1-yt-account-select');
       mirror('yt-account-select', 'step1-yt-account-select');
       mirror('p-fb-account-select', 'step1-fb-account-select');
       mirror('fb-account-select', 'step1-fb-account-select');
       mirror('p-fb-page-select', 'step1-fb-page-select');
       mirror('pub-fb-page-select', 'step1-fb-page-select');
+      const fbType = document.getElementById('p-fb-post-type');
+      const fbTypeStep1 = document.getElementById('step1-fb-post-type');
+      if (fbType && fbTypeStep1 && fbTypeStep1.value !== fbType.value) fbTypeStep1.value = fbType.value;
+      const ttAuto = document.getElementById('p-tt-auto-post');
+      const ttAutoStep1 = document.getElementById('step1-tt-auto-post');
+      if (ttAuto && ttAutoStep1) _step1SetTikTokAutoPost(ttAuto.checked);
+      const ytMethod = document.getElementById('p-yt-login-method');
+      const ytMethodStep1 = document.getElementById('step1-yt-login-method');
+      if (ytMethod && ytMethodStep1 && ytMethodStep1.value !== ytMethod.value) ytMethodStep1.value = ytMethod.value;
+      const ytAutoWrap = document.getElementById('step1-yt-browser-auto-wrap');
+      if (ytAutoWrap && ytMethodStep1) ytAutoWrap.style.display = ytMethodStep1.value === 'browser' ? 'inline-flex' : 'none';
+      const ytAuto = document.getElementById('p-yt-browser-auto-post');
+      const ytAutoStep1 = document.getElementById('step1-yt-browser-auto-post');
+      if (ytAuto && ytAutoStep1) ytAutoStep1.checked = ytAuto.checked;
+      const schedule = document.getElementById('p-bsched-enabled');
+      const scheduleStep1 = document.getElementById('step1-schedule-enabled');
+      if (schedule && scheduleStep1) scheduleStep1.checked = schedule.checked;
+      const scheduleStart = document.getElementById('p-bsched-start');
+      const scheduleStartStep1 = document.getElementById('step1-schedule-start');
+      if (scheduleStart && scheduleStartStep1 && scheduleStartStep1.value !== scheduleStart.value) scheduleStartStep1.value = scheduleStart.value;
+      const scheduleInterval = document.getElementById('p-bsched-interval');
+      const scheduleIntervalStep1 = document.getElementById('step1-schedule-interval');
+      if (scheduleInterval && scheduleIntervalStep1 && scheduleIntervalStep1.value !== scheduleInterval.value) scheduleIntervalStep1.value = scheduleInterval.value;
       _syncStep1PubUI();
     }
     window._step1SyncSelectorsFromPublish = _step1SyncSelectorsFromPublish;

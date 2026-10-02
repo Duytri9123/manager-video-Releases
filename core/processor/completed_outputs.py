@@ -21,14 +21,17 @@ def register_output(path, subtitle=None):
         return
     with closing(_connect()) as conn:
         with conn:
+            subtitle_value = '' if subtitle is False else (str(Path(subtitle).resolve()) if subtitle else None)
             conn.execute('INSERT OR REPLACE INTO outputs (path, completed, subtitle) VALUES (?, ?, ?)',
-                         (str(path), time.time(), str(Path(subtitle).resolve()) if subtitle else None))
+                         (str(path), time.time(), subtitle_value))
 
 
 def subtitles_for_output(path):
     path = Path(path).resolve()
     with closing(_connect()) as conn:
         row = conn.execute('SELECT subtitle FROM outputs WHERE path = ?', (str(path),)).fetchone()
+    if row and row[0] == '':
+        return [], ''
     exact = Path(row[0]) if row and row[0] else None
     candidates = ([exact] if exact and exact.is_file() else [])
     # Older outputs did not record the ASS. Offer local candidates explicitly;

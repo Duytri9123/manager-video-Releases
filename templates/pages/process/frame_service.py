@@ -18,6 +18,7 @@ from core.video_processor import find_ffmpeg
 from utils.ffprobe import probe_video
 
 _PROBE_CACHE: Dict[str, Tuple[int, int, float]] = {}
+_FRAME_CACHE: Dict[Tuple[str, int, float], Tuple[str, float]] = {}
 
 
 def resolve_video_path(video_path_str: str) -> Optional[Path]:
@@ -69,6 +70,10 @@ def extract_single_frame(video_path_str: str, timestamp: float = 0.0) -> Tuple[b
     vp = resolve_video_path(video_path_str)
     if not vp or not vp.exists():
         return False, "", 0.0, f"Video không tồn tại: {video_path_str}"
+    cache_key = (str(vp.resolve()), vp.stat().st_mtime_ns, round(float(timestamp or 0.0), 2))
+    cached = _FRAME_CACHE.get(cache_key)
+    if cached:
+        return True, cached[0], cached[1], ""
 
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
@@ -142,7 +147,11 @@ def extract_single_frame(video_path_str: str, timestamp: float = 0.0) -> Tuple[b
             with open(tmp_jpg, "rb") as f:
                 img_b64 = base64.b64encode(f.read()).decode()
 
-        return True, f"data:image/jpeg;base64,{img_b64}", duration, ""
+        result_url = f"data:image/jpeg;base64,{img_b64}"
+        _FRAME_CACHE[cache_key] = (result_url, duration)
+        if len(_FRAME_CACHE) > 32:
+            _FRAME_CACHE.pop(next(iter(_FRAME_CACHE)))
+        return True, result_url, duration, ""
     except subprocess.TimeoutExpired:
         return False, "", duration, "Timeout khi extract frame (>30s)"
     except Exception as e:

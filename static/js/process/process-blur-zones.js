@@ -2,7 +2,7 @@ function procAiOwnsBlur() {
     return !!(window._procUseAiAnalysis && window._procVideoAiAnalysis?.result);
   }
   function procActiveBlurZones() {
-    return (window._procExtraBlurZones || []).filter(z => !procAiOwnsBlur() || z.source === 'ai' || z.zone === 'ai');
+    return window._procExtraBlurZones || [];
   }
   function procRemoveAiZones() {
     const before = (window._procExtraBlurZones || []).length;
@@ -15,9 +15,29 @@ function procAiOwnsBlur() {
   function procApplyAiAnalysis() {
     const result = window._procVideoAiAnalysis?.result;
     if (!result || !window._procUseAiAnalysis) return;
+    const aspect = document.getElementById('proc-content-aspect-mode');
+    if (aspect) aspect.value = result.editing_plan?.aspect_mode === 'crop' ? 'crop' : 'pad';
+    const target = result.editing_plan?.target_aspect;
+    if (target === 'auto' || target === '16x9' || target === '9x16') {
+      const select = document.getElementById('proc-preview-aspect');
+      if (select) { select.value = target; window._onPreviewAspectChange?.(); window._syncAspectBtns?.(); }
+    }
     const zones = Array.isArray(result.suggested_blur_zones) ? result.suggested_blur_zones : [];
     procRemoveAiZones();
+    const original = zones.find(z => /phụ đề|subtitle|caption|字幕/i.test(String(z.label || '')));
+    if (original) {
+      const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = String(value); };
+      const checked = (id, value) => { const el = document.getElementById(id); if (el) el.checked = value; };
+      set('proc-mask-mode', 'patch');
+      set('proc-blur-x', Math.max(0, Math.min(100, Number(original.x_pct ?? 50))));
+      set('proc-blur-y', Math.max(0, Math.min(100, Number(original.position_pct ?? 80))));
+      set('proc-blur-width', Math.max(1, Math.min(100, Number(original.width_pct ?? 80))));
+      set('proc-blur-height', Math.max(1, Math.min(100, Number(original.height_pct ?? 12))));
+      checked('proc-blur-original', true);
+      checked('proc-blur-by-subtitles', true);
+    }
     zones.forEach(z => {
+      if (z === original) return; // Original subtitles use the STT timing and the main patch mask.
       _blurZoneCounter++;
       window._procExtraBlurZones.push({
         id: _blurZoneCounter,
@@ -39,7 +59,7 @@ function procAiOwnsBlur() {
     if (typeof framePreviewUpdate === 'function') framePreviewUpdate();
   }
   function _drawBlurZonesOnCanvas(ctx, vidX, vidY, vidW, vidH) {
-    const blurOn = !window._procAiAnalyzing && !procAiOwnsBlur() && (document.getElementById('proc-blur-original')?.checked || false);
+    const blurOn = !window._procAiAnalyzing && (document.getElementById('proc-blur-original')?.checked || false);
 
     // ── Draw blur zone (che phụ đề gốc) ──
     if (blurOn) {
@@ -181,7 +201,8 @@ function procAiOwnsBlur() {
       : vidY + vidH - scaledMargin;
 
     // Word wrap within video width
-    const maxW = vidW * 0.9;
+    const widthPct = Math.max(40, Math.min(98, parseFloat(document.getElementById('proc-sub-width')?.value || '90')));
+    const maxW = vidW * widthPct / 100;
     const words = sample.split(' ');
     let lines = [], line = '';
     for (const w of words) {

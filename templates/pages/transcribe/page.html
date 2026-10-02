@@ -313,6 +313,24 @@
   }
 
   document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('#page-transcribe .card').forEach((card, index) => {
+      const header = card.firstElementChild;
+      const title = header?.querySelector('h3')?.textContent?.trim() || 'Mục';
+      if (!header || !header.querySelector('h3')) return;
+      card.classList.add('tr-mobile-collapsible');
+      if (index > 0) card.classList.add('tr-mobile-collapsed');
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'tr-mobile-toggle';
+      toggle.setAttribute('aria-label', `Ẩn hoặc hiện ${title}`);
+      toggle.setAttribute('aria-expanded', index === 0 ? 'true' : 'false');
+      toggle.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+      toggle.addEventListener('click', () => {
+        const collapsed = card.classList.toggle('tr-mobile-collapsed');
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+      });
+      header.appendChild(toggle);
+    });
     if (typeof window.trSyncProviderOptions === 'function') {
       window.trSyncProviderOptions();
     }

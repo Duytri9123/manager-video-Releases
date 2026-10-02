@@ -158,7 +158,7 @@ async def _try_enable_schedule(page, scheduled_time: str, sid: str):
                 dt = dt.astimezone().replace(tzinfo=None)
     except Exception:
         _log(sid, f"⚠ Không parse được thời gian đặt lịch: {scheduled_time}. Hãy đặt lịch tay.", "warning")
-        return
+        return False
 
     friendly = dt.strftime("%d/%m/%Y lúc %H:%M")
     date_str = dt.strftime("%Y-%m-%d")
@@ -187,7 +187,7 @@ async def _try_enable_schedule(page, scheduled_time: str, sid: str):
 
     if not schedule_clicked:
         _log(sid, f"⚠ Không tìm thấy nút Schedule. Hãy bật đặt lịch tay → chọn {friendly}.", "warning")
-        return
+        return False
 
     await asyncio.sleep(1.5)  # wait for date/time pickers to render
 
@@ -207,6 +207,7 @@ async def _try_enable_schedule(page, scheduled_time: str, sid: str):
         _log(sid, f"⚠ Điền được giờ {time_str} nhưng chưa điền được ngày {date_str}. Hãy chọn ngày tay.", "warning")
     else:
         _log(sid, f"⚠ Không điền được ngày giờ tự động. Hãy chọn tay: {friendly}", "warning")
+    return bool(date_set and time_set)
 
 
 async def _tt_set_date(page, dt, sid: str) -> bool:
@@ -964,16 +965,19 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
 
             # ── Schedule: bật toggle đặt lịch nếu có scheduled_time ──
             scheduled_time = _sessions[sid].get("scheduled_time")
+            schedule_ready = True
             if scheduled_time:
                 _log(sid, f"📅 Đặt lịch đăng: {scheduled_time}")
-                await _try_enable_schedule(page, scheduled_time, sid)
+                schedule_ready = await _try_enable_schedule(page, scheduled_time, sid)
 
             # ── Copyright Check: Tự động kích hoạt & kiểm tra bản quyền âm thanh ──
             await _dismiss_popups(page)
             await _check_tiktok_copyright(page, sid)
             await _dismiss_popups(page)
 
-            if _sessions[sid].get("auto_publish"):
+            if scheduled_time and not schedule_ready and _sessions[sid].get("auto_publish"):
+                _log(sid, "⚠ Chưa xác nhận được lịch TikTok; giữ cửa sổ mở để bạn kiểm tra, không tự bấm Đăng ngay.", "warning")
+            if _sessions[sid].get("auto_publish") and schedule_ready:
                 _log(sid, "🚀 Chế độ tự động đăng: Đang chờ tải file hoàn tất và sẵn sàng...")
                 post = page.get_by_role("button", name=re.compile(r"^(Post|Publish|Đăng)$", re.I)).first
                 try:
@@ -995,13 +999,35 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
                 await _dismiss_popups(page)
                 _log(sid, "🚀 Đang tự động nhấn nút Đăng...")
                 try:
+                    async def accept_native_post_dialog(dialog):
+                        if dialog.type in ("confirm", "alert"):
+                            _log(sid, "✅ Đã xác nhận hộp thoại đăng video của trình duyệt.", "info")
+                            await dialog.accept()
+                        else:
+                            await dialog.dismiss()
+
+                    page.on("dialog", accept_native_post_dialog)
                     await post.click(timeout=15000)
                     _log(sid, "⏳ Đã nhấn Đăng, đang chờ TikTok xác nhận...", "info")
                     deadline_conf = time.time() + 60
                     confirmed = False
                     while time.time() < deadline_conf and not stop_event.is_set():
-                        await _dismiss_popups(page)
                         try:
+                            post_now = page.get_by_role("button", name=re.compile(r"^(Post now|Đăng ngay)$", re.I)).last
+                            if not scheduled_time and await post_now.count() > 0 and await post_now.is_visible() and await post_now.is_enabled():
+                                await post_now.click(timeout=5000)
+                                _log(sid, "✅ Đã xác nhận Post now trên TikTok.", "info")
+                            # TikTok may ask for a second confirmation in a modal.
+                            # Only click inside a visible dialog, never another page button.
+                            confirm_name = re.compile(r"^(Post(?: now)?|Publish|Confirm|Continue(?: to post)?|Schedule|Đăng(?: ngay)?|Xác nhận|Tiếp tục|Đặt lịch)$", re.I)
+                            modal = page.locator('[role="dialog"], dialog, [class*="modal"]').filter(
+                                visible=True, has=page.get_by_role("button", name=confirm_name)
+                            ).last
+                            if await modal.count() > 0:
+                                confirm = modal.get_by_role("button", name=confirm_name).last
+                                if await confirm.count() > 0 and await confirm.is_visible() and await confirm.is_enabled():
+                                    await confirm.click(timeout=5000)
+                                    _log(sid, "✅ Đã bấm xác nhận đăng trong hộp thoại TikTok.", "info")
                             if "manage" in (page.url or "") or "content" in (page.url or ""):
                                 confirmed = True
                                 break
@@ -1013,16 +1039,16 @@ async def _run_upload_flow(sid: str, video_path: Path, caption: str, profile_dir
                             pass
                         await asyncio.sleep(1)
 
-                    with _sessions_lock:
-                        _sessions[sid]["published"] = True
-                        _sessions[sid]["published_url"] = page.url
                     if confirmed:
+                        with _sessions_lock:
+                            _sessions[sid]["published"] = True
+                            _sessions[sid]["published_url"] = page.url
                         _log(sid, "🎉 Đã đăng video lên TikTok thành công!", "success")
+                        _set_status(sid, "published", done=True)
+                        await asyncio.sleep(5)
+                        return
                     else:
-                        _log(sid, "✅ Đã gửi lệnh Đăng video lên TikTok.", "success")
-                    _set_status(sid, "published", done=True)
-                    await asyncio.sleep(5)
-                    return
+                        _log(sid, "⚠ Đã bấm Đăng nhưng chưa thấy TikTok xác nhận. Hãy kiểm tra cửa sổ.", "warning")
                 except Exception as exc:
                     _log(sid, f"⚠ Lỗi khi bấm nút Đăng: {exc}. Bạn vui lòng bấm nút Post thủ công trên màn hình.", "warning")
 
@@ -1214,12 +1240,25 @@ def tt_profile_reset():
 
 @bp.route("/api/tiktok/check_login", methods=["GET"])
 def tt_check_login():
-    """Quick check: does the master profile have TikTok login cookies?"""
-    logged_in = _has_login_cookies(_TT_PROFILE_DIR)
+    """Check the selected account's browser profile."""
+    account_id = str(request.args.get("account_id") or "").strip()
+    profile_dir = _profile_dir_for_account(account_id)
+    logged_in = _has_login_cookies(profile_dir)
     return jsonify({"ok": True, "logged_in": logged_in})
 
 
-async def _run_login_flow(sid: str):
+def _profile_dir_for_account(account_id: str) -> Path:
+    try:
+        from auth.account_manager import get_tiktok_account_manager
+        profile_dir = get_tiktok_account_manager().get_profile_dir(account_id or None)
+        if profile_dir:
+            return Path(profile_dir)
+    except Exception:
+        pass
+    return _TT_PROFILE_DIR
+
+
+async def _run_login_flow(sid: str, profile_dir: Path):
     """Open a TikTok Studio browser window for the sole purpose of logging in.
     Once the user reaches the upload page, we sync cookies to the master profile
     and close the browser. Subsequent upload sessions can then run without
@@ -1230,8 +1269,8 @@ async def _run_login_flow(sid: str):
         _set_status(sid, "error", error=f"Playwright không khả dụng: {exc}", done=True)
         return
 
-    _TT_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    _cleanup_profile_locks(_TT_PROFILE_DIR)
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    _cleanup_profile_locks(profile_dir)
 
     _set_status(sid, "launching")
     _log(sid, "🔐 Mở trình duyệt để đăng nhập TikTok...")
@@ -1241,14 +1280,33 @@ async def _run_login_flow(sid: str):
     async with async_playwright() as pw:
         try:
             context = await pw.chromium.launch_persistent_context(
-                user_data_dir=str(_TT_PROFILE_DIR),
+                user_data_dir=str(profile_dir),
                 headless=False,
                 no_viewport=True,
                 args=_BROWSER_ARGS,
             )
         except Exception as exc:
-            _set_status(sid, "error", error=f"Không mở được trình duyệt: {exc}", done=True)
-            return
+            if "executable doesn't exist" not in str(exc).lower():
+                _set_status(sid, "error", error=f"Không mở được trình duyệt: {exc}", done=True)
+                return
+            _log(sid, "Chromium chưa được cài. Đang cài để mở cửa sổ đăng nhập...", "warning")
+            try:
+                from playwright._impl._driver import compute_driver_executable, get_driver_env
+                import subprocess
+                driver_executable, driver_cli = compute_driver_executable()
+                installed = subprocess.run(
+                    [str(driver_executable), str(driver_cli), "install", "chromium"],
+                    env=get_driver_env(), capture_output=True, text=True, timeout=600,
+                )
+                if installed.returncode != 0:
+                    raise RuntimeError(installed.stderr.strip() or f"Mã lỗi {installed.returncode}")
+                context = await pw.chromium.launch_persistent_context(
+                    user_data_dir=str(profile_dir), headless=False,
+                    no_viewport=True, args=_BROWSER_ARGS,
+                )
+            except Exception as install_exc:
+                _set_status(sid, "error", error=f"Không cài/mở được Chromium: {install_exc}", done=True)
+                return
 
         with _sessions_lock:
             _sessions[sid]["_context"] = context
@@ -1256,7 +1314,7 @@ async def _run_login_flow(sid: str):
         try:
             # Try to restore saved state (in case user logged in before but
             # master profile's native cookie DB was wiped/corrupted).
-            await _load_tiktok_state(context, _TT_PROFILE_DIR, sid)
+            await _load_tiktok_state(context, profile_dir, sid)
 
             page = context.pages[0] if context.pages else await context.new_page()
             try:
@@ -1272,7 +1330,7 @@ async def _run_login_flow(sid: str):
             # If redirected to login but we just injected saved cookies, reload
             # once to let TikTok re-check auth state with the new cookies.
             if ("login" in (page.url or "") or "verify" in (page.url or "")) and \
-               (_TT_PROFILE_DIR / ".tiktok_state.json").exists():
+               (profile_dir / ".tiktok_state.json").exists():
                 _log(sid, "🔄 Có cookies cũ — thử reload để TikTok nhận diện phiên...", "info")
                 try:
                     await page.goto(TIKTOK_UPLOAD_URL, wait_until="domcontentloaded", timeout=30_000)
@@ -1283,7 +1341,7 @@ async def _run_login_flow(sid: str):
             if "tiktokstudio/upload" in (page.url or ""):
                 _log(sid, "✅ Đã đăng nhập sẵn rồi.", "success")
                 # Re-save state to refresh any updated session tokens
-                await _save_tiktok_state(context, _TT_PROFILE_DIR, sid)
+                await _save_tiktok_state(context, profile_dir, sid)
                 _set_status(sid, "ready", done=True)
                 return
 
@@ -1309,7 +1367,7 @@ async def _run_login_flow(sid: str):
             _log(sid, "✅ Đăng nhập thành công. Đang lưu phiên...")
             # Give Chromium a moment to settle, then save state via Playwright API
             await asyncio.sleep(2)
-            saved = await _save_tiktok_state(context, _TT_PROFILE_DIR, sid)
+            saved = await _save_tiktok_state(context, profile_dir, sid)
             if saved:
                 _log(sid, "💾 Đã lưu phiên đăng nhập thành công.", "success")
             else:
@@ -1319,7 +1377,7 @@ async def _run_login_flow(sid: str):
         finally:
             # Save once more right before close (in case user did something after login)
             try:
-                await _save_tiktok_state(context, _TT_PROFILE_DIR, sid)
+                await _save_tiktok_state(context, profile_dir, sid)
             except Exception:
                 pass
             try:
@@ -1332,8 +1390,11 @@ async def _run_login_flow(sid: str):
 def tt_open_login():
     """Mở cửa sổ trình duyệt để user đăng nhập TikTok một lần.
     Trả về session_id để UI poll trạng thái."""
-    # If already logged in, short-circuit
-    if _has_login_cookies(_TT_PROFILE_DIR):
+    data = request.get_json(silent=True) or {}
+    account_id = str(data.get("account_id") or "").strip()
+    profile_dir = _profile_dir_for_account(account_id)
+    # Preflight may skip a valid session; an explicit user click can reopen it.
+    if not data.get("force_open") and _has_login_cookies(profile_dir):
         return jsonify({"ok": True, "already_logged_in": True})
 
     try:
@@ -1352,7 +1413,7 @@ def tt_open_login():
 
     def _runner():
         try:
-            asyncio.run(_run_login_flow(sid))
+            asyncio.run(_run_login_flow(sid, profile_dir))
         except Exception as exc:
             _set_status(sid, "error", error=str(exc), done=True)
             _log(sid, f"❌ Lỗi: {exc}", "error")

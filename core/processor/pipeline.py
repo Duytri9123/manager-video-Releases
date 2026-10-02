@@ -125,7 +125,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _content_ratio_requested = _parse_content_aspect(data.get("content_aspect"))
     _requested_ratio = (9 / 16) if _target_aspect == "9x16" else (16 / 9)
     _target_size = (1080, 1920) if _target_aspect == "9x16" else (1920, 1080)
-    _force_pixel_size = str(data.get("content_aspect_mode") or "crop") in ("stretch", "original_crop")
+    _force_pixel_size = str(data.get("content_aspect_mode") or "pad") in ("stretch", "original_crop")
     _aspect_should_convert = _content_ratio_requested is not None or (
         _target_aspect in ("9x16", "16x9")
         and (abs(_vw / _vh - _requested_ratio) > 0.01
@@ -260,6 +260,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                 outline_width=_scaled_outline_width,
                 margin_v=_scaled_margin_v,
                 alignment=alignment,
+                subtitle_width_pct=_as_float(data.get("subtitle_width_pct"), 90.0),
                 title_text=_frame_title if _frame_title_visible else "",
                 title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
                 title_weight=int(_as_float(data.get("frame_title_weight"), 400.0)),
@@ -301,6 +302,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             alignment=alignment,
             play_res_x=_vw,
             play_res_y=_vh,
+            subtitle_width_pct=_as_float(data.get("subtitle_width_pct"), 90.0),
         )
 
     # ── Bước 1/5: Xác nhận video đã tải ──────────────────────────────────────
@@ -347,7 +349,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     tr_cfg = cfg_raw.get("transcript", {}) or {}
 
     # Nếu cả hai tuỳ chọn dịch/ghi phụ đề & giọng đọc đều tắt → Bỏ qua toàn bộ bước transcribe
-    skip_trans = not do_burn and not do_voice
+    skip_trans = not do_burn and not do_voice and not _as_bool(data.get("blur_by_subtitles", False), False)
 
     if skip_trans:
         yield send(log=f"[Bước 2/5] Bỏ qua bước phiên âm ({_pytime.time() - _t_step2_start:.2f}s, không bật Ghi phụ đề & Giọng đọc)", level="info")
@@ -475,7 +477,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                     f_cnt = sum(1 for s in segments if s.get("speaker") == "female")
                     yield send(log=f"[Bước 2/5] Phân vai hoàn tất: {m_cnt} câu giọng Nam, {f_cnt} câu giọng Nữ", level="info")
 
-                write_ass(segments, ass_path, play_res_x=_vw, play_res_y=_vh)
+                write_ass(segments, ass_path, play_res_x=_vw, play_res_y=_vh,
+                          subtitle_width_pct=_as_float(data.get("subtitle_width_pct"), 90.0))
                 yield send(log=f"[Bước 2/5] Phiên âm {len(segments)} đoạn trong {_pytime.time() - _t_step2_start:.1f}s → {ass_path.name}", level="success", subtitle_path=str(ass_path.resolve()))
             yield send(overall=35, overall_lbl=f"Phiên âm xong: {len(segments)} đoạn")
         except (RuntimeError, Exception) as e:
@@ -485,6 +488,10 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             yield send(log="[Bước 2/5] Vui lòng mở Nhà cung cấp để kiểm tra/cập nhật API Key hoặc chọn Engine phiên âm khác.", level="error")
             return
 
+    # Preserve source-language timings before step 3 replaces `segments` with
+    # translated or voice-aligned cues.
+    source_transcript_segments = [dict(seg) for seg in segments
+                                  if str(seg.get("text", "")).strip() != "[Giọng nói tự động]"]
 
     # For translated subtitles, generate the title from the translated text in step 3.
     # Generate early only for jobs that do not run subtitle translation.
@@ -656,6 +663,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                 outline_width=_scaled_outline_width,
                                 margin_v=_scaled_margin_v,
                                 alignment=alignment,
+                                subtitle_width_pct=_as_float(data.get("subtitle_width_pct"), 90.0),
                                 title_text=_frame_title if _frame_title_visible else "",
                                 title_size_pct=_as_float(data.get("frame_title_size_pct"), 7.0),
                                 title_weight=int(_as_float(data.get("frame_title_weight"), 400.0)),
@@ -699,6 +707,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
                                 play_res_x=_vw,
                                 play_res_y=_vh,
                                 font_bold=_font_bold,
+                                subtitle_width_pct=_as_float(data.get("subtitle_width_pct"), 90.0),
                             )
 
                     _write_current_ass(vi_segs)
@@ -872,18 +881,27 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     _blur_original_flag = _as_bool(data.get("blur_original", True), True)
     _blur_by_subtitles = _as_bool(data.get("blur_by_subtitles", False), False)
     _blur_subtitle_segments = None
+    _ocr_y_pct = None
     if _blur_by_subtitles:
         _blur_subtitle_segments = []
-        try:
-            if source_srt_path.exists():
-                _blur_subtitle_segments = _parse_srt(source_srt_path)
-            elif ass_path.exists():
-                _blur_subtitle_segments = _parse_ass_file(ass_path)
-        except Exception as exc:
-            yield send(log=f"Không đọc được thời gian phụ đề gốc: {exc}", level="warning")
+        # Use the first, untranslated transcription. Never infer timing from
+        # rendered frames, because OCR is slow and can mistake other text.
+        import math as _math
+        for source_seg in sorted(source_transcript_segments, key=lambda item: _as_float(item.get("start"), 0.0)):
+            try:
+                start = max(0.0, float(source_seg["start"]) - 0.2)
+                end = float(source_seg["end"]) + 0.2
+                if not (_math.isfinite(start) and _math.isfinite(end)) or end <= start:
+                    continue
+                if _blur_subtitle_segments and start <= _blur_subtitle_segments[-1]["end"]:
+                    _blur_subtitle_segments[-1]["end"] = max(_blur_subtitle_segments[-1]["end"], end)
+                else:
+                    _blur_subtitle_segments.append({"start": start, "end": end, "text": "source transcript"})
+            except (KeyError, TypeError, ValueError):
+                continue
         if _blur_original_flag:
-            yield send(log=(f"Che gốc theo ASS/SRT: {len(_blur_subtitle_segments)} đoạn."
-                            if _blur_subtitle_segments else "Không có thời gian phụ đề gốc: bỏ che gốc theo text."),
+            yield send(log=(f"Che theo thời gian phiên âm gốc (trước/sau 0,2 giây): {len(_blur_subtitle_segments)} khoảng."
+                            if _blur_subtitle_segments else "Phiên âm gốc không có mốc thời gian: không che theo sub."),
                        level="info" if _blur_subtitle_segments else "warning")
     _blur_timing_meta = burned_path_cached.with_suffix('.blur-timing.json')
     _output_fps = _as_int(data.get("output_fps", 0), 0)
@@ -893,6 +911,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
     if _encode_device not in ("auto", "cpu", "nvidia"):
         _encode_device = "auto"
     _blur_timing_signature = {"enabled": _blur_by_subtitles, "segments": _blur_subtitle_segments,
+                              "detected_y_pct": _ocr_y_pct,
                               "output_fps": _output_fps, "encode_device": _encode_device,
                               "visual_config": {key: data.get(key) for key in (
                                   "content_aspect", "content_aspect_mode", "target_aspect", "aspect_pad_blur", "mask_config",
@@ -908,6 +927,8 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             _blur_y_pct = float(_blur_y_raw)
         except Exception:
             pass
+    elif _blur_by_subtitles and _ocr_y_pct is not None:
+        _blur_y_pct = float(_ocr_y_pct)
 
     _blur_x_raw = data.get("blur_x_pct")
     _blur_x_pct = None
@@ -1335,7 +1356,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             target_aspect=_target_aspect,
             aspect_pad_blur=_pad_blur,
             content_aspect=data.get("content_aspect", "auto"),
-            content_aspect_mode=data.get("content_aspect_mode", "crop"),
+            content_aspect_mode=data.get("content_aspect_mode", "pad"),
             mask_config=data.get("mask_config"),
             output_fps=_output_fps,
             encode_device=_encode_device,
@@ -1410,7 +1431,7 @@ def process_video_full(data: dict) -> Generator[str, None, None]:
             if _inner_ratio:
                 _inner_w = max(2, int(min(target_w, target_h * _inner_ratio) // 2 * 2))
                 _inner_h = max(2, int(min(target_h, target_w / _inner_ratio) // 2 * 2))
-            _fit_mode = str(data.get("content_aspect_mode") or "crop")
+            _fit_mode = str(data.get("content_aspect_mode") or "pad")
             if _fit_mode == "pad":
                 _fg_filter = f"scale={_inner_w}:{_inner_h}:force_original_aspect_ratio=decrease"
             elif _fit_mode == "stretch":

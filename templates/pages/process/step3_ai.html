@@ -49,11 +49,15 @@
     }
 
     #step3-config-card {
-      padding: 12px !important;
+      padding: 8px !important;
     }
 
     #step3-config-card [id^="step3-config-"] {
-      font-size: 9.5px !important;
+      font-size: 10px !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere;
+      overflow: visible !important;
+      text-overflow: clip !important;
     }
 
     #step3-config-card .flex.flex-col.gap-1\.5 {
@@ -139,13 +143,12 @@
                     </svg>
                   </span>
                   <div class="flex flex-col min-w-0">
-                    <span class="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">Bỏ qua
-                      kiểm tra ASS</span>
-                    <span class="text-[8.5px] text-slate-400 truncate">Không dừng chờ duyệt phụ đề</span>
+                    <span class="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate leading-tight">Bỏ qua ASS</span>
+                    <span class="text-[8.5px] text-slate-400 truncate">Không tạo, duyệt hoặc ghi ASS</span>
                   </div>
                 </div>
                 <label class="toggle-wrap m-0 scale-90 flex-shrink-0" onclick="event.stopPropagation()">
-                  <input type="checkbox" class="toggle-input" id="step3-skip-ass-step3"
+                  <input type="checkbox" class="toggle-input" id="step3-skip-ass-step3" title="Không tạo, duyệt hoặc ghi ASS trong toàn bộ quy trình"
                     onchange="document.getElementById('step3-skip-ass').checked = this.checked; if (typeof _onStep3SkipChange === 'function') _onStep3SkipChange()">
                   <div class="toggle"></div>
                 </label>
@@ -181,12 +184,13 @@
           <div class="flex flex-col gap-2 mt-3 pt-2 border-t border-slate-100 dark:border-slate-700">
             <button type="button"
               class="btn btn-primary w-full py-2 font-bold text-[11.5px] flex justify-center items-center gap-1.5 h-[36px] shadow-sm"
-              onclick="_step3StartProc()">
+              onclick="_step3StartProc(false)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                 <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
-              <span>Xử lý tất cả</span>
+              <span>Xử lý video</span>
             </button>
+            <button id="step3-start-all" type="button" class="btn btn-primary w-full" onclick="_step3StartProc(true)">Xử lý tất cả video</button>
             <div id="step3-running-actions" class="grid grid-cols-2 gap-2 mt-1" style="display:none">
               <button type="button"
                 class="btn btn-secondary border-red-200 dark:border-red-900/60 bg-red-50/50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100/60 dark:hover:bg-red-900/40 py-1 text-[10.5px] font-semibold flex justify-center items-center gap-1.5 h-[32px] rounded-xl transition"
@@ -198,7 +202,7 @@
               </button>
               <button type="button"
                 class="btn btn-secondary border-red-300 dark:border-red-800 bg-red-100/70 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-200/80 dark:hover:bg-red-900/60 py-1 text-[10.5px] font-semibold flex justify-center items-center gap-1.5 h-[32px] rounded-xl transition"
-                onclick="procCancelAll()" title="Dừng toàn bộ hàng chờ ngay lập tức">
+                id="step3-cancel-all" onclick="procCancelAll()" title="Dừng toàn bộ hàng chờ ngay lập tức">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/>
                 </svg>
@@ -253,6 +257,7 @@
             </div>
 
             <div class="flex flex-col gap-1.5">
+              <div class="p-1.5 px-2 rounded-xl border border-slate-100 text-[11px]">Cấu hình sử dụng: <strong id="step3-config-profile">Tùy chỉnh hiện tại</strong></div>
               <!-- Item 1: Ngôn ngữ -->
               <div
                 class="p-1.5 px-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between">
@@ -326,15 +331,15 @@
               <!-- Item 5: Giọng đọc TTS -->
               <div
                 class="p-1.5 px-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between">
-                <div class="flex items-center gap-1.5 min-w-0">
+                <div class="flex items-center gap-1.5 shrink-0">
                   <span class="text-indigo-500 flex-shrink-0"><svg width="12" height="12" viewBox="0 0 24 24"
                       fill="none" stroke="currentColor" stroke-width="2">
                       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                       <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                     </svg></span>
-                  <span class="text-[9.5px] font-bold uppercase text-slate-500 dark:text-slate-400">Giọng đọc</span>
+                  <span class="text-[9.5px] font-bold uppercase whitespace-nowrap text-slate-500 dark:text-slate-400">Giọng đọc</span>
                 </div>
-                <span class="text-[10.5px] font-semibold text-slate-800 dark:text-slate-200 truncate ml-2"
+                <span class="min-w-0 flex-1 text-right text-[10.5px] font-semibold text-slate-800 dark:text-slate-200 truncate ml-2"
                   id="step3-config-voice">--</span>
               </div>
 
@@ -508,6 +513,17 @@
             <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
               <div class="bg-emerald-500 h-full w-full opacity-60"></div>
             </div>
+          </div>
+        </div>
+
+        <div class="proc-log-guide" aria-label="Các giai đoạn xử lý video">
+          <div class="proc-log-guide-heading">Đang xử lý: <strong id="step3-active-stage">Chưa bắt đầu</strong></div>
+          <div class="proc-log-stage-list">
+            <span data-proc-log-stage="1" title="Kiểm tra tệp video và các cài đặt đầu vào">1. Chuẩn bị</span>
+            <span data-proc-log-stage="2" title="Tách âm thanh và nhận diện lời nói theo từng đoạn">2. Phiên âm</span>
+            <span data-proc-log-stage="3" title="Dịch nội dung, tạo phụ đề và tiêu đề khi bật">3. Dịch phụ đề</span>
+            <span data-proc-log-stage="4" title="Áp dụng vùng che, khung hình và ghi phụ đề vào video">4. Chỉnh hình</span>
+            <span data-proc-log-stage="5" title="Tạo giọng đọc và ghép âm thanh vào video khi bật">5. Ghép giọng</span>
           </div>
         </div>
 

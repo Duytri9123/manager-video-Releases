@@ -424,6 +424,7 @@ def download_video(
     cookiefile: Optional[str] = None,
     proxy: Optional[str] = None,
     progress_hook: Optional[Callable[[Dict[str, Any]], None]] = None,
+    quality: str = "best",
 ) -> Dict[str, Any]:
     """Tải 1 video bất kỳ qua yt-dlp. Trả {ok, file, title} hoặc {ok:False,error}.
 
@@ -432,18 +433,22 @@ def download_video(
     yt_dlp = _import_ytdlp()
     os.makedirs(out_dir, exist_ok=True)
 
+    # ── Map chất lượng → yt-dlp format string ──────────────────────────────
+    _QUALITY_MAP: Dict[str, str] = {
+        "best":   "bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+        "4k":     "bestvideo[height>=2160][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height>=2160]+bestaudio/best[height>=2160]/bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+        "1080p":  "bestvideo[height<=1080][vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+        "720p":   "bestvideo[height<=720][vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+        "480p":   "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=480]+bestaudio/best[height<=480]/best",
+        "360p":   "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=360]+bestaudio/best[height<=360]/best",
+        "audio":  "bestaudio[ext=m4a]/bestaudio/best",
+    }
+    fmt = _QUALITY_MAP.get((quality or "best").lower().strip(), _QUALITY_MAP["best"])
+
     ydl_opts: Dict[str, Any] = {
         "outtmpl": os.path.join(out_dir, filename_tmpl),
-        # YouTube increasingly exposes high quality video and audio as separate
-        # streams.  Do not require a progressive MP4 as the final fallback:
-        # many perfectly public videos (including 1080p60 uploads) do not have
-        # one, which previously caused "Requested format is not available".
-        "format": (
-            "bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/"
-            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
-            "bestvideo+bestaudio/best"
-        ),
-        "merge_output_format": "mp4",
+        "format": fmt,
+        "merge_output_format": "mp4" if quality != "audio" else "m4a",
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,

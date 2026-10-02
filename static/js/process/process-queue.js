@@ -8,6 +8,34 @@ window._moveBatchQueueItem = function (index, delta) {
   if (typeof _step3RenderQueue === 'function') _step3RenderQueue();
   if (typeof window.pe2RefreshQueueSelect === 'function') window.pe2RefreshQueueSelect();
 };
+window._procQueueDragStart = function(event, index) {
+  const item = (window._batchQueue || [])[index];
+  if (!item || item.status === 'processing' || item.status === 'downloading') {
+    event.preventDefault();
+    return;
+  }
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', String(index));
+};
+window._procQueueDragOver = function(event) {
+  if (event.dataTransfer?.types?.includes('text/plain')) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }
+};
+window._procQueueDrop = function(event, targetIndex) {
+  event.preventDefault();
+  const sourceIndex = Number(event.dataTransfer.getData('text/plain'));
+  const queue = window._batchQueue || [];
+  if (!Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex >= queue.length ||
+      targetIndex < 0 || targetIndex >= queue.length || sourceIndex === targetIndex) return;
+  if (queue.slice(Math.min(sourceIndex, targetIndex), Math.max(sourceIndex, targetIndex) + 1)
+      .some(t => t.status === 'processing' || t.status === 'downloading')) return;
+  const [item] = queue.splice(sourceIndex, 1);
+  queue.splice(targetIndex, 0, item);
+  _renderBatchQueue();
+  if (typeof window.pe2RefreshQueueSelect === 'function') window.pe2RefreshQueueSelect();
+};
 
 // Fallback SVG icon helper — the canonical version lives in process/script.js
 // which loads *after* this file.  Provide a minimal fallback so early calls
@@ -48,6 +76,7 @@ if (typeof _processSvgIcon !== 'function') {
       auto_flow: document.getElementById('proc-auto-flow')?.checked ?? true,
       skip_ass: document.getElementById('step3-skip-ass')?.checked ?? false,
       skip_trans: document.getElementById('proc-skip-transcription')?.checked ?? false,
+      queue_mode: 'process',
     };
   }
 
@@ -56,46 +85,55 @@ if (typeof _processSvgIcon !== 'function') {
     if (t.auto_flow) parts.push('1');
     if (t.skip_ass) parts.push('2');
     if (t.skip_trans) parts.push('3');
-    return parts.length > 0 ? parts.join(',') : 'None';
+    const mode = t.queue_mode || 'process';
+    if (mode === 'skip') return 'Không tải';
+    if (mode === 'download') return 'Chỉ tải';
+    return parts.length > 0 ? 'Xử lý · ' + parts.join(',') : 'Xử lý';
   }
 
   window._toggleItemCfgDropdown = function(taskId, event) {
     event.stopPropagation();
-    const panel = document.getElementById(`cfg-drop-${taskId}`);
-    if (!panel) return;
-    const isVisible = panel.style.display === 'block';
-    // close all
-    document.querySelectorAll('.cfg-dropdown-panel').forEach(p => p.style.display = 'none');
-    if (!isVisible) {
-      // Position fixed relative to the button
-      const btn = event.currentTarget || event.target.closest('button[data-cfg-btn]');
-      if (btn) {
-        const rect = btn.getBoundingClientRect();
-        panel.style.position = 'fixed';
-        panel.style.top = (rect.bottom + 4) + 'px';
-        panel.style.left = Math.max(8, rect.right - 200) + 'px';
-        panel.style.zIndex = '99999';
-      }
-      panel.style.display = 'block';
-    }
+    const old = document.getElementById('proc-queue-config-popover');
+    if (old) { const same = old.dataset.taskId === taskId; old.remove(); if (same) return; }
+    const t = (window._batchQueue || []).find(x => x.id === taskId);
+    if (!t || t.status === 'processing' || t.status === 'downloading') return;
+    const btn = event.currentTarget || event.target.closest('button[data-cfg-btn]');
+    if (!btn) return;
+    const panel = document.createElement('div');
+    panel.id = 'proc-queue-config-popover';
+    panel.dataset.taskId = taskId;
+    panel.style.cssText = 'position:fixed;z-index:100000;width:230px;max-width:calc(100vw - 16px);padding:12px;background:var(--bg2,#fff);color:var(--text,#111827);border:1px solid var(--border,#dbe3ef);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.22);font-size:12px';
+    const mode = t.queue_mode || 'process';
+    panel.innerHTML = `<strong>Video này</strong><p style="margin:5px 0 9px;color:var(--text-muted,#64748b)">Chọn thao tác trước khi chạy hàng chờ.</p>
+      <select data-queue-mode style="width:100%;padding:6px;border:1px solid var(--border,#dbe3ef);border-radius:6px;background:var(--bg2,#fff);color:inherit">
+        <option value="process" ${mode === 'process' ? 'selected' : ''}>Tải và xử lý</option>
+        <option value="download" ${mode === 'download' ? 'selected' : ''}>Chỉ tải</option>
+        <option value="skip" ${mode === 'skip' ? 'selected' : ''}>Không tải, bỏ qua</option>
+      </select>
+      <label style="display:flex;gap:7px;margin-top:10px"><input type="checkbox" data-queue-flag="auto_flow" ${t.auto_flow ? 'checked' : ''}>Tự động hóa</label>
+      <label style="display:flex;gap:7px;margin-top:7px"><input type="checkbox" data-queue-flag="skip_ass" ${t.skip_ass ? 'checked' : ''}>Bỏ qua toàn bộ ASS</label>
+      <label style="display:flex;gap:7px;margin-top:7px"><input type="checkbox" data-queue-flag="skip_trans" ${t.skip_trans ? 'checked' : ''}>Bỏ qua phụ đề</label>`;
+    document.body.appendChild(panel);
+    const rect = btn.getBoundingClientRect();
+    panel.style.left = Math.max(8, Math.min(rect.left, innerWidth - panel.offsetWidth - 8)) + 'px';
+    panel.style.top = Math.max(8, Math.min(rect.bottom + 5, innerHeight - panel.offsetHeight - 8)) + 'px';
+    panel.querySelector('[data-queue-mode]').addEventListener('change', e => window._updateTaskConfig(taskId, 'queue_mode', e.target.value));
+    panel.querySelectorAll('[data-queue-flag]').forEach(el => el.addEventListener('change', e => window._updateTaskConfig(taskId, el.dataset.queueFlag, e.target.checked)));
   };
 
   window._updateTaskConfig = function(taskId, key, value) {
     const t = window._batchQueue.find(x => x.id === taskId);
-    if (t) {
+    if (t && t.status !== 'processing' && t.status !== 'downloading') {
       t[key] = value;
       _renderBatchQueue();
       _step3RenderQueue();
+      document.getElementById('proc-queue-config-popover')?.remove();
       if (typeof window._procQueueSaveToLocalStorage === 'function') window._procQueueSaveToLocalStorage();
     }
   };
 
   window.addEventListener('click', function(e) {
-    if (!e.target.closest('.cfg-dropdown-panel') && !e.target.closest('button[data-cfg-btn]')) {
-      document.querySelectorAll('.cfg-dropdown-panel').forEach(panel => {
-        panel.style.display = 'none';
-      });
-    }
+    if (!e.target.closest('#proc-queue-config-popover') && !e.target.closest('button[data-cfg-btn]')) document.getElementById('proc-queue-config-popover')?.remove();
   });
 
   window._procQueueRefresh = function() {
@@ -125,6 +163,7 @@ if (typeof _processSvgIcon !== 'function') {
             auto_flow: localItem.auto_flow !== undefined ? localItem.auto_flow : (document.getElementById('proc-auto-flow')?.checked ?? true),
             skip_ass: localItem.skip_ass !== undefined ? localItem.skip_ass : (document.getElementById('step3-skip-ass')?.checked ?? false),
             skip_trans: localItem.skip_trans !== undefined ? localItem.skip_trans : (document.getElementById('proc-skip-transcription')?.checked ?? false)
+            ,queue_mode: localItem.queue_mode || 'process'
           });
         }
       });
@@ -159,7 +198,8 @@ if (typeof _processSvgIcon !== 'function') {
         added: item.added || Date.now(),
         auto_flow: item.auto_flow,
         skip_ass: item.skip_ass,
-        skip_trans: item.skip_trans
+        skip_trans: item.skip_trans,
+        queue_mode: item.queue_mode || 'process'
       }));
       localStorage.setItem('_proc_batch_queue', JSON.stringify(listToSave));
     } catch (e) {
@@ -256,7 +296,7 @@ if (typeof _processSvgIcon !== 'function') {
       else if (t.status === 'ready') badgeClass = 'badge-accent';
 
       const disableDel = (t.status === 'processing' || t.status === 'downloading') ? 'disabled' : '';
-      const label = statusLabel[t.status] || t.status;
+      const label = t.queue_mode === 'skip' && t.status === 'pending' ? 'Bỏ qua' : (statusLabel[t.status] || t.status);
 
       // Inline config button
       const labelCfg = getTaskConfigLabel(t);
@@ -266,38 +306,23 @@ if (typeof _processSvgIcon !== 'function') {
           <button data-cfg-btn class="btn btn-outline btn-xs" onclick="window._toggleItemCfgDropdown('${t.id}', event)" style="font-size:10px;padding:2px 6px;height:24px;line-height:20px;border-color:var(--border);border-radius:4px;display:flex;align-items:center;gap:3px;white-space:nowrap">
              ${labelCfg}
           </button>
-          <div id="cfg-drop-${t.id}" class="cfg-dropdown-panel" style="display:none;position:fixed;z-index:99999;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);width:200px;text-align:left">
-            <div style="font-weight:600;font-size:10px;margin-bottom:6px;color:var(--text-muted)">Cấu hình video này:</div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px;cursor:pointer;color:var(--text);user-select:none">
-              <input type="checkbox" ${t.auto_flow ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'auto_flow', this.checked)">
-              <span>1. Tự động hóa</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px;cursor:pointer;color:var(--text);user-select:none">
-              <input type="checkbox" ${t.skip_ass ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'skip_ass', this.checked)">
-              <span>2. Bỏ qua check ASS</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--text);user-select:none">
-              <input type="checkbox" ${t.skip_trans ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'skip_trans', this.checked)">
-              <span>3. Bỏ qua tạo phụ đề</span>
-            </label>
-          </div>
+
         </div>
       ` : '';
 
       return `
-      <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
+      <div ondragover="window._procQueueDragOver(event)" ondrop="window._procQueueDrop(event,${i})" style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:${t.id === window._procCurrentTaskId ? 'rgba(99,91,250,.10)' : 'var(--bg3)'};border:1px solid ${t.id === window._procCurrentTaskId ? '#635bfa' : 'var(--border)'};border-radius:6px;font-size:12px;box-shadow:${t.id === window._procCurrentTaskId ? '0 0 0 2px rgba(99,91,250,.12)' : 'none'}">
+        <span draggable="${disableDel ? 'false' : 'true'}" ondragstart="window._procQueueDragStart(event,${i})" title="Kéo để đổi thứ tự" aria-label="Kéo để đổi thứ tự" style="cursor:grab;color:var(--text-muted);font-size:17px;line-height:1;user-select:none;touch-action:none">⠿</span>
         <span style="color:var(--text-muted)">${t.type==='url'?'':''}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
         <span class="badge ${badgeClass}">${label}</span>
         ${cfgBtnHtml}
-        <button type="button" onclick="window._moveBatchQueueItem(${i},-1)" class="btn-icon" title="Lên" ${i === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" onclick="window._moveBatchQueueItem(${i},1)" class="btn-icon" title="Xuống" ${i === window._batchQueue.length - 1 ? 'disabled' : ''}>↓</button>
         <button onclick="window._batchQueue.splice(${i},1);_renderBatchQueue()" class="btn-icon text-red" style="font-size:14px" ${disableDel}>×</button>
       </div>`;
     }).join('');
 
     const hasReady = window._batchQueue.some(t => t.status === 'ready' || t.status === 'done');
-    const hasPending = window._batchQueue.some(t => t.status === 'pending');
+    const hasPending = window._batchQueue.some(t => t.status === 'pending' && (t.queue_mode || 'process') !== 'skip');
     const nextWrap = document.getElementById('step1-next-btn-wrap');
     if (nextWrap) {
       nextWrap.style.display = (hasPending || hasReady) ? 'block' : 'none';
@@ -309,7 +334,7 @@ if (typeof _processSvgIcon !== 'function') {
     if (dlBtn) {
       const isDownloading = window._step1Downloading;
       dlBtn.disabled = isDownloading;
-      dlBtn.textContent = isDownloading ? ' Đang tải...' : ' Tải hàng chờ';
+      dlBtn.textContent = isDownloading ? 'Đang tải...' : 'Chỉ tải';
     }
     if (dlStatus) {
       if (hasReady && !hasPending) {
@@ -360,29 +385,29 @@ if (typeof _processSvgIcon !== 'function') {
         startBtn.classList.remove('opacity-70', 'cursor-not-allowed');
         startBtn.innerHTML = `
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
-          <span>Xử lý tất cả</span>
+          <span>Xử lý video</span>
         `;
       }
     }
 
-    // Toggle disabled state on config card (visible but non-interactive during processing)
+    // Keep settings editable; this video's request already holds its own snapshot.
     const cfgCard = document.getElementById('step3-config-card');
-    if (cfgCard) {
-      if (isRunning) {
-        cfgCard.classList.add('step3-config-disabled');
-      } else {
-        cfgCard.classList.remove('step3-config-disabled');
-      }
-    }
+    if (cfgCard) cfgCard.classList.remove('step3-config-disabled');
 
     // Toggle cancel buttons & running actions visibility
     const runActs = document.getElementById('step3-running-actions');
     if (runActs) runActs.style.display = isRunning ? 'grid' : 'none';
+    const multiple = !!window._procProcessAll && (window._batchQueue || []).filter(t => ['pending', 'ready', 'processing', 'downloading'].includes(t.status) && (t.queue_mode || 'process') === 'process').length > 1;
+    const cancelAll = document.getElementById('step3-cancel-all');
+    if (cancelAll) cancelAll.style.display = multiple ? '' : 'none';
+    if (runActs) runActs.style.gridTemplateColumns = multiple ? 'repeat(2,minmax(0,1fr))' : '1fr';
+    const startAll = document.getElementById('step3-start-all');
+    if (startAll) startAll.style.display = isRunning ? 'none' : '';
   }
 
   window._resetQueueItemStatus = function(taskId) {
     const t = (window._batchQueue || []).find(x => x.id === taskId);
-    if (t) {
+    if (t && t.status !== 'downloading' && !(t.status === 'processing' && window._procRunning)) {
       t.status = 'ready';
       window._procRunning = false;
       window._step3Started = false;
@@ -393,7 +418,7 @@ if (typeof _processSvgIcon !== 'function') {
 
   window._deleteQueueItem = function(taskId) {
     const idx = (window._batchQueue || []).findIndex(x => x.id === taskId);
-    if (idx !== -1) {
+    if (idx !== -1 && !['processing', 'downloading'].includes(window._batchQueue[idx].status)) {
       window._batchQueue.splice(idx, 1);
       _renderBatchQueue();
       if (typeof toast === 'function') toast(' Đã xóa video khỏi hàng chờ', 'info');
@@ -410,6 +435,38 @@ if (typeof _processSvgIcon !== 'function') {
     page?.focus();
     return false;
   };
+  window.procStartSingleFromStep1 = function() {
+    const first = (window._batchQueue || []).find(t => ['downloading', 'pending', 'ready'].includes(t.status) && (t.queue_mode || 'process') === 'process');
+    if (!first) { toast('Không có video chờ xử lý.', 'warning'); return; }
+    window._procProcessAll = false;
+    window._procCurrentTaskId = first.id;
+    window._step1ManualAction = 'single';
+    if (first.status === 'downloading') {
+      window._step1SingleTargetId = first.id;
+      toast('Sẽ mở video đầu tiên sau khi tải xong; các video còn lại giữ trong hàng chờ.', 'info');
+    } else if (first.status === 'pending') {
+      window._step1SingleTargetId = first.id;
+      _runStep1QueueDownload();
+    } else {
+      window.procWizStep2Continue(2);
+    }
+  };
+  window.procStopStep1Queue = function() {
+    if (window._procRunning && typeof window.procCancelCurrentVideo === 'function') {
+      window.procCancelCurrentVideo();
+      return;
+    }
+    if (window._step1Downloading) {
+      window._step1StopRequested = true;
+      toast('Sẽ dừng hàng chờ sau khi video hiện tại tải xong.', 'info');
+    } else {
+      window._step1SingleTargetId = null;
+      window._step1AfterDownloadTarget = null;
+      window._step1ManualAction = null;
+      window._procProcessAll = false;
+      toast('Đã dừng hàng chờ.', 'info');
+    }
+  };
   window.procStartQueueFromStep1 = function() {
     if (!window.procValidatePublishPage()) return;
     if (window._procRunning || window._step1Downloading ||
@@ -417,7 +474,7 @@ if (typeof _processSvgIcon !== 'function') {
       toast('Hàng chờ đang tải hoặc xử lý video, vui lòng đợi hoàn tất.', 'info');
       return;
     }
-    if (!(window._batchQueue || []).some(t => t.status === 'pending' || t.status === 'ready')) {
+    if (!(window._batchQueue || []).some(t => (t.status === 'pending' || t.status === 'ready') && (t.queue_mode || 'process') === 'process')) {
       toast('Vui lòng thêm video vào hàng chờ để xử lý.', 'warning');
       return;
     }
@@ -434,31 +491,9 @@ if (typeof _processSvgIcon !== 'function') {
       toast('Hàng chờ đang tải hoặc xử lý video, vui lòng đợi hoàn tất.', 'info');
       return;
     }
-    const pathEl = document.getElementById('proc-video');
-    const urlEl = document.getElementById('proc-url');
-    const hasPath = pathEl && pathEl.value.trim();
-    const hasUrl = urlEl && urlEl.value.trim();
-
-    if (!(window._batchQueue || []).some(t => t.status === 'pending' || t.status === 'ready')) {
-      if (hasPath || hasUrl) {
-        window._batchQueue = window._batchQueue || [];
-        const val = hasPath ? pathEl.value.trim() : urlEl.value.trim();
-        const type = hasPath ? 'file' : 'url';
-        const desc = val.split(/[\\/]/).pop() || val;
-        const newTask = {
-          id: 'task_' + Date.now(),
-          type: type,
-          val: val,
-          desc: desc,
-          status: 'ready'
-        };
-        window._batchQueue.push(newTask);
-        if (typeof _renderBatchQueue === 'function') _renderBatchQueue();
-        if (typeof window.pe2RefreshQueueSelect === 'function') window.pe2RefreshQueueSelect();
-      } else {
-        toast('Vui lòng thêm hoặc chọn video để xử lý.', 'warning');
-        return;
-      }
+    if (!(window._batchQueue || []).some(t => (t.status === 'pending' || t.status === 'ready') && (t.queue_mode || 'process') === 'process')) {
+      toast('Hãy chọn “Tải và xử lý” cho ít nhất một video trong hàng chờ.', 'warning');
+      return;
     }
     window._procProcessAll = true;
     if (typeof procSaveStep === 'function') procSaveStep(2, true);
@@ -466,16 +501,17 @@ if (typeof _processSvgIcon !== 'function') {
     window._step3StartProc();
   };
 
-  window._step3StartProc = function() {
-    // Process all videos in the queue automatically
-    window._procProcessAll = true;
+  window._step3StartProc = function(all = true) {
+    // Keep the mode explicit for this run.
+    window._procProcessAll = all;
+    if (!all) window._procAutoDrain = false;
 
     // Apply skip flags from checkboxes before starting
     window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
     window._procSkipThumbSession  = false;
 
     // Check if there are tasks in the queue waiting or ready
-    const hasQueueTasks = (window._batchQueue || []).some(t => t.status !== 'done' && t.status !== 'error');
+    const hasQueueTasks = (window._batchQueue || []).some(t => (t.status === 'pending' || t.status === 'ready') && (t.queue_mode || 'process') === 'process');
     if (hasQueueTasks) {
       window._step3Started = true;
       window._procRunning = false; // ensure _runBatchQueueFlow can proceed
@@ -484,41 +520,16 @@ if (typeof _processSvgIcon !== 'function') {
       return;
     }
 
-    // If no pending tasks, ensure active item or first queue item feeds into inputs
-    const activeItem = (typeof window._resolveActiveQueueItem === 'function')
-      ? window._resolveActiveQueueItem()
-      : (window._batchQueue || [])[0];
-
-    if (activeItem && activeItem.val) {
-      activeItem.status = 'processing';
-      window._procCurrentTaskId = activeItem.id;
-      const isHttpUrl = /^https?:\/\//i.test(activeItem.val);
-      const urlEl  = document.getElementById('proc-url');
-      const pathEl = document.getElementById('proc-video');
-      if (isHttpUrl) {
-        if (urlEl) urlEl.value = activeItem.val;
-        if (pathEl) pathEl.value = '';
-      } else {
-        if (pathEl) pathEl.value = activeItem.val;
-        if (urlEl) urlEl.value = '';
-      }
-      _renderBatchQueue();
-    }
-
-    // Mark as started and running
-    window._step3Started = true;
-    window._procRunning = true;
-
-    // Refresh card UI (do not hide options card!)
-    _step3RefreshStartCard();
-
-    // Start backend process!
-    startProcessVideo();
+    window._procProcessAll = false;
+    toast('Không có video nào được chọn “Tải và xử lý”.', 'warning');
   };
 
   /** Sync checkbox state to global flags in real-time */
   window._onStep3SkipChange = function() {
-    window._procSkipReviewSession = document.getElementById('step3-skip-ass')?.checked ?? false;
+    const active = document.getElementById('step3-skip-ass')?.checked ?? false;
+    const step3 = document.getElementById('step3-skip-ass-step3');
+    if (step3) step3.checked = active;
+    window._procSkipReviewSession = active;
     window._procSkipThumbSession  = false;
   };
 
@@ -563,30 +574,17 @@ if (typeof _processSvgIcon !== 'function') {
       ready: 'badge-accent', processing: 'badge-yellow',
       done: 'badge-green', error: 'badge-red',
     };
-    list.innerHTML = q.map(t => {
+    list.innerHTML = q.map((t,i) => {
       const labelCfg = getTaskConfigLabel(t);
       const isRunningNow = t.status === 'processing' && window._procRunning;
-      const isReadyOrPending = t.status === 'ready' || t.status === 'pending' || !window._procRunning;
+      const isLocked = isRunningNow || t.status === 'downloading';
+      const isReadyOrPending = (t.status === 'ready' || t.status === 'pending') && !isRunningNow;
       const cfgBtnHtml = isReadyOrPending ? `
         <div style="position:relative;display:inline-block">
           <button data-cfg-btn class="btn btn-outline btn-xs" onclick="window._toggleItemCfgDropdown('${t.id}', event)" style="font-size:10px;padding:2px 6px;height:24px;line-height:20px;border-color:var(--border);border-radius:4px;display:flex;align-items:center;gap:3px;white-space:nowrap">
             ${_processSvgIcon('settings')} ${labelCfg}
           </button>
-          <div id="cfg-drop-${t.id}" class="cfg-dropdown-panel" style="display:none;position:fixed;z-index:99999;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);width:200px;text-align:left">
-            <div style="font-weight:600;font-size:10px;margin-bottom:6px;color:var(--text-muted)">Cấu hình video này:</div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px;cursor:pointer;color:var(--text);user-select:none">
-              <input type="checkbox" ${t.auto_flow ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'auto_flow', this.checked)">
-              <span>1. Tự động hóa</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:6px;cursor:pointer;color:var(--text);user-select:none">
-              <input type="checkbox" ${t.skip_ass ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'skip_ass', this.checked)">
-              <span>2. Bỏ qua check ASS</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--text);user-select:none">
-              <input type="checkbox" ${t.skip_trans ? 'checked' : ''} onchange="window._updateTaskConfig('${t.id}', 'skip_trans', this.checked)">
-              <span>3. Bỏ qua tạo phụ đề</span>
-            </label>
-          </div>
+
         </div>
       ` : '';
 
@@ -601,15 +599,16 @@ if (typeof _processSvgIcon !== 'function') {
         <button onclick="window._resetQueueItemStatus('${t.id}')" class="btn-icon text-accent" title="Đặt lại trạng thái Sẵn sàng" style="font-size:12px;padding:2px 4px;border:none;background:transparent;cursor:pointer">${_processSvgIcon('refresh')}</button>
       ` : '';
 
-      const deleteBtnHtml = !isRunningNow ? `
+      const deleteBtnHtml = !isLocked ? `
         <button onclick="window._deleteQueueItem('${t.id}')" class="btn-icon text-red" title="Xóa khỏi hàng chờ" style="font-size:14px;padding:2px 4px;border:none;background:transparent;cursor:pointer">${_processSvgIcon('close')}</button>
       ` : '';
 
       return `
-      <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px">
+      <div ondragover="window._procQueueDragOver(event)" ondrop="window._procQueueDrop(event,${i})" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:${t.id === window._procCurrentTaskId ? 'rgba(99,91,250,.10)' : 'var(--bg3)'};border:1px solid ${t.id === window._procCurrentTaskId ? '#635bfa' : 'var(--border)'};border-radius:6px;font-size:12px;box-shadow:${t.id === window._procCurrentTaskId ? '0 0 0 2px rgba(99,91,250,.12)' : 'none'}">
+        <span draggable="${isLocked ? 'false' : 'true'}" ondragstart="window._procQueueDragStart(event,${i})" title="Kéo để đổi thứ tự" aria-label="Kéo để đổi thứ tự" style="cursor:grab;color:var(--text-muted);font-size:17px;line-height:1;user-select:none;touch-action:none">⠿</span>
         <span style="color:var(--text-muted)">${_processSvgIcon('video')}</span>
         <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${t.val}">${t.desc || t.val}</span>
-        <span class="badge ${badgeClass[t.status] || 'badge-gray'}">${statusLabel[t.status] || t.status}</span>
+        <span class="badge ${badgeClass[t.status] || 'badge-gray'}">${t.queue_mode === 'skip' && t.status === 'pending' ? 'Bỏ qua' : (statusLabel[t.status] || t.status)}</span>
         ${cfgBtnHtml}
         ${cancelBtnHtml}
         ${resetBtnHtml}
@@ -618,7 +617,7 @@ if (typeof _processSvgIcon !== 'function') {
     }).join('');
     const done    = q.filter(t => t.status === 'done').length;
     const total   = q.length;
-    const pending = q.filter(t => t.status === 'ready' || t.status === 'pending').length;
+    const pending = q.filter(t => (t.status === 'ready' || t.status === 'pending') && (t.queue_mode || 'process') === 'process').length;
     if (summary) summary.textContent = `${done}/${total} hoàn thành${pending ? ` · ${pending} chờ` : ''}`;
   }
 
@@ -643,7 +642,7 @@ if (typeof _processSvgIcon !== 'function') {
         if (t.status === 'processing') t.status = 'ready';
       });
     }
-    return window._batchQueue.find(t => t.status !== 'done' && t.status !== 'error');
+    return window._batchQueue.find(t => (t.status === 'pending' || t.status === 'ready') && (t.queue_mode || 'process') === 'process');
   }
 
   function _runBatchQueueFlow() {
@@ -705,6 +704,7 @@ if (typeof _processSvgIcon !== 'function') {
     if (next.skip_ass !== undefined) {
       if (globalSkipAss) globalSkipAss.checked = next.skip_ass;
       window._procSkipReviewSession = next.skip_ass;
+      window._onStep3SkipChange?.();
     }
     if (next.skip_trans !== undefined) {
       if (globalSkipTrans) globalSkipTrans.checked = next.skip_trans;
@@ -1079,10 +1079,10 @@ if (typeof _processSvgIcon !== 'function') {
   // Init picker on load
 
   function _getPreviewVideoPath() {
-    // Priority: uploaded file path → first ready/processing item in batch queue → proc-video field
-    if (window._procUploadedPath) {
-      return { type: 'file', val: window._procUploadedPath };
-    }
+    // The explicit queue selection owns the preview, including URLs awaiting download.
+    const selectedId = document.getElementById('pe2-queue-select')?.value;
+    const selected = (window._batchQueue || []).find(t => t.id === selectedId);
+    if (selected?.val) return { type: /^https?:\/\//i.test(selected.val) ? 'url' : 'file', val: selected.val };
     if (window._batchQueue && window._batchQueue.length > 0) {
       // Prefer the task currently being processed / waiting, so the preview
       // matches the file that will actually be processed. Fall back to any
@@ -1104,6 +1104,7 @@ if (typeof _processSvgIcon !== 'function') {
         }
       }
     }
+    if (window._procUploadedPath) return { type: 'file', val: window._procUploadedPath };
     const v = document.getElementById('proc-video')?.value?.trim();
     if (v) return { type: 'file', val: v };
     return null;
@@ -1137,7 +1138,8 @@ if (typeof _processSvgIcon !== 'function') {
     return document.getElementById('proc-download-only')?.checked || false;
   }
   function _step1GoFirstReadyToStep2(targetStep) {
-    const firstReady = (window._batchQueue || []).find(t => t.status === 'ready');
+    const firstReady = (window._batchQueue || []).find(t => t.id === window._procCurrentTaskId && t.status === 'ready')
+      || (window._batchQueue || []).find(t => t.status === 'ready' && (t.queue_mode || 'process') === 'process');
     if (!firstReady) return false;
     const pathEl = document.getElementById('proc-video');
     const urlEl  = document.getElementById('proc-url');
@@ -1159,21 +1161,22 @@ if (typeof _processSvgIcon !== 'function') {
 
 
   window.procWizStep2Continue = function(targetStep) {
-    if (!window.procValidatePublishPage()) return;
+    if (!window.procValidatePublishPage()) { window._step1ManualAction = null; return; }
     const queue = window._batchQueue || [];
     const selectedReady = queue.find(t => t.id === window._procCurrentTaskId && t.status === 'ready');
     const activeReady = (typeof window._resolveActiveQueueItem === 'function')
       ? window._resolveActiveQueueItem()
       : null;
-    const readyTask = selectedReady
-      || (activeReady && activeReady.status === 'ready' ? activeReady : null)
-      || queue.find(t => t.status === 'ready');
+    const readyTask = (selectedReady && (selectedReady.queue_mode || 'process') === 'process' ? selectedReady : null)
+      || (activeReady && activeReady.status === 'ready' && (activeReady.queue_mode || 'process') === 'process' ? activeReady : null)
+      || queue.find(t => t.status === 'ready' && (t.queue_mode || 'process') === 'process');
     if (!readyTask) {
       // Check if all done — suggest going to next step
       const allDone = (window._batchQueue || []).length > 0 &&
         (window._batchQueue || []).every(t => t.status === 'done' || t.status === 'error');
       if (allDone) {
         toast('Tất cả video trong hàng chờ đã xử lý xong!', 'info');
+        window._step1ManualAction = null;
         return;
       }
 
@@ -1190,6 +1193,7 @@ if (typeof _processSvgIcon !== 'function') {
       }
 
       toast('Vui lòng thêm video và đợi tải video gốc hoàn tất ở Bước 1!', 'warning');
+      window._step1ManualAction = null;
       return;
     }
     window._step3Started = false;  // Don't auto-start — wait for user to click "Bắt đầu xử lý" in step 3
@@ -1219,6 +1223,7 @@ if (typeof _processSvgIcon !== 'function') {
     if (typeof procSaveStep === 'function') procSaveStep(2, true);
     // Settings are ready; continue to the confirmation/start step.
     procWizGo(targetStep || 3);
+    window._step1ManualAction = null;
 
     // DO NOT auto-start processing — user must navigate to step 3 and click "Bắt đầu xử lý"
 

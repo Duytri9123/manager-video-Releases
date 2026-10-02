@@ -136,6 +136,9 @@
     }
 
     function refreshSharedConfigSummary() {
+      const profile = document.getElementById("pe2-profile-select");
+      const summary = document.getElementById("step3-config-profile");
+      if (summary) summary.textContent = profile?.value ? profile.options[profile.selectedIndex].text : "Tùy chỉnh hiện tại";
       // 1. Ngôn ngữ
       const elLang = document.getElementById('step3-config-language');
       if (elLang) {

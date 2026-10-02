@@ -161,8 +161,9 @@ function startQueueDownload() {
   window._dlRunning = true;
   const btn = $('btn-dl');
   if (btn) { btn.disabled = true; btn.textContent = typeof t === 'function' ? t('lbl_queue_running') : 'Đang chạy...'; }
+  const quality = $('dl-quality')?.value || 'best';
   if (typeof socket !== 'undefined' && socket.emit) {
-    socket.emit('start_download', { use_queue: true, post_process });
+    socket.emit('start_download', { use_queue: true, post_process, quality });
   }
 }
 

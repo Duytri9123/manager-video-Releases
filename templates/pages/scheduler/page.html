@@ -5,9 +5,9 @@
     .dark .sch-card { background: var(--bg2, #1e293b); border-color: var(--border, #334155); }
     .sch-stat { padding: 12px 14px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; }
     .sch-stat b { font-size: 22px; font-weight: 700; line-height: 1.2; }
-    .sch-grid { display: grid; grid-template-columns: 460px 1fr; gap: 16px; align-items: start; }
-    .sch-form { padding: 16px; position: sticky; top: 10px; }
-    .sch-section-card { background: var(--bg3, #f8fafc); border: 1px solid var(--border, #e2e8f0); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .sch-grid { display: grid; grid-template-columns: minmax(490px, 550px) minmax(0, 1fr); gap: 18px; align-items: start; }
+    .sch-form { padding: 14px; position: static; }
+    .sch-section-card { background: var(--bg3, #f8fafc); border: 1px solid var(--border, #e2e8f0); border-radius: 10px; padding: 10px; margin-bottom: 9px; }
     .dark .sch-section-card { background: #0f172a; border-color: #334155; }
     .sch-sec-title { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
     .dark .sch-sec-title { color: #94a3b8; }
@@ -25,7 +25,11 @@
     .dark .sch-tab-btn.active { background: #1e293b; color: #60a5fa; }
     
     /* Multi-platform selector pills */
-    .sch-plat-card { border: 1px solid var(--border, #e2e8f0); border-radius: 8px; padding: 8px 10px; background: var(--bg2, #ffffff); transition: all 0.15s ease; cursor: pointer; }
+    .sch-plat-card { border: 1px solid var(--border, #e2e8f0); border-radius: 8px; padding: 8px 10px; background: var(--bg2, #ffffff); transition: all 0.15s ease; cursor: pointer; min-width:0; }
+    .sch-platform-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .sch-platform-options .sch-plat-card:last-child { grid-column:1/-1; }
+    .sch-form .sch-plat-card label { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .sch-form .sch-plat-card label svg, .sch-form .sch-plat-card label input { flex-shrink: 0; }
     .dark .sch-plat-card { background: #1e293b; border-color: #334155; }
     .sch-plat-card.selected { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); }
     .dark .sch-plat-card.selected { border-color: #60a5fa; background: rgba(59, 130, 246, 0.12); }
@@ -75,6 +79,7 @@
       .sch-grid { grid-template-columns: 1fr; }
       .sch-form { position: static; }
     }
+    @media (max-width: 600px) { .sch-platform-options { grid-template-columns:1fr; } .sch-platform-options .sch-plat-card:last-child { grid-column:auto; } }
   </style>
 
   <div class="sch-shell space-y-3.5">
@@ -90,6 +95,7 @@
         </p>
       </div>
       <div class="flex items-center gap-2">
+        <button class="btn btn-secondary text-xs" onclick="switchPage('content'); cptSwitch('history')">Video đã đăng</button>
         <button class="btn btn-secondary text-xs flex items-center gap-1.5" onclick="schedulerLoad()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           <span>Đồng bộ dữ liệu</span>
@@ -108,11 +114,11 @@
         <div class="sch-tabs mb-3">
           <button type="button" class="sch-tab-btn active" id="sch-view-schedule-btn" onclick="schedulerSwitchMainTab('schedule')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            <span>Lên lịch &amp; Đăng bài</span>
+            <span class="sch-long-label">Lên lịch &amp; Đăng bài</span><span class="sch-short-label">Lên lịch</span>
           </button>
           <button type="button" class="sch-tab-btn" id="sch-view-trending-btn" onclick="schedulerSwitchMainTab('trending')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-500"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 3.5z"></path></svg>
-            <span>Tìm kiếm Trending AI</span>
+            <span class="sch-long-label">Tìm kiếm Trending AI</span><span class="sch-short-label">Xu hướng AI</span>
           </button>
         </div>
 
@@ -122,7 +128,7 @@
           <div class="sch-section-card">
             <div class="sch-sec-title">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-              <span>Nguồn video đầu vào</span>
+              <span class="sch-long-label">Nguồn video đầu vào</span><span class="sch-short-label">Nguồn video</span>
             </div>
             <div class="sch-tabs">
               <button type="button" class="sch-tab-btn active" id="sch-tab-url-btn" onclick="schedulerSwitchInputTab('url')">Dán link video</button>
@@ -155,7 +161,7 @@
             <div class="flex items-center justify-between mb-2">
               <div class="sch-sec-title !mb-0">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-                <span>Nền tảng đăng &amp; Tài khoản</span>
+                <span class="sch-long-label">Nền tảng đăng &amp; Tài khoản</span><span class="sch-short-label">Nền tảng</span>
               </div>
               <div class="flex items-center gap-2">
                 <button type="button" class="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-medium" onclick="schedulerToggleAllPlatforms(true)">Chọn tất cả</button>
@@ -165,17 +171,19 @@
             </div>
             <div class="text-[11px] text-slate-400 mb-2">Đăng đồng thời lên các nền tảng được chọn cho mỗi video:</div>
 
-            <div class="space-y-2">
+            <div class="sch-platform-pills" id="sch-platform-pills" aria-label="Chọn nền tảng đăng bài"></div>
+            <div class="sch-platform-options">
               <!-- YouTube Option -->
               <div class="sch-plat-card selected" id="sch-plat-row-youtube">
                 <div class="flex items-center justify-between">
                   <label class="flex items-center gap-2 !m-0 cursor-pointer font-semibold text-xs text-red-600 dark:text-red-400">
                     <input type="checkbox" id="sch-cb-youtube" class="!w-auto" checked onchange="schedulerUpdatePlatformRow('youtube')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                    <span>YouTube Shorts</span>
+                    <span>YouTube</span>
                   </label>
                   <span class="text-[10px] text-slate-400">Tự động tải lên</span>
                 </div>
+                <div class="sch-account-title">YouTube · Tài khoản</div>
                 <div class="mt-1.5" id="sch-acc-box-youtube">
                   <select id="sch-acc-youtube" class="!py-1 !text-[11px]">
                     <option value="">Kênh YouTube mặc định (OAuth)</option>
@@ -193,6 +201,7 @@
                   </label>
                   <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Phiên đăng nhập sẵn sàng</span>
                 </div>
+                <div class="sch-account-title">TikTok · Tài khoản</div>
                 <div class="mt-1.5" id="sch-acc-box-tiktok">
                   <select id="sch-acc-tiktok" class="!py-1 !text-[11px]">
                     <option value="default">Hồ sơ TikTok mặc định (Browser Profile)</option>
@@ -206,10 +215,11 @@
                   <label class="flex items-center gap-2 !m-0 cursor-pointer font-semibold text-xs text-blue-600 dark:text-blue-400">
                     <input type="checkbox" id="sch-cb-facebook" class="!w-auto" checked onchange="schedulerUpdatePlatformRow('facebook')">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                    <span>Facebook Reels / Video</span>
+                    <span>Facebook</span>
                   </label>
                   <span class="text-[10px] text-slate-400">Fanpage Facebook</span>
                 </div>
+                <div class="sch-account-title">Facebook · Page đăng</div>
                 <div class="mt-1.5" id="sch-acc-box-facebook">
                   <select id="sch-acc-facebook" class="!py-1 !text-[11px]">
                     <option value="">Chọn Fanpage Facebook</option>
@@ -229,7 +239,7 @@
           <div class="sch-section-card">
             <div class="sch-sec-title">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-              <span>Cấu hình xử lý video tự động</span>
+              <span class="sch-long-label">Cấu hình xử lý video tự động</span><span class="sch-short-label">Xử lý video</span>
             </div>
             <label>Cấu hình bước 2</label>
             <select id="sch-preset" onchange="schedulerPresetChanged()">
@@ -242,7 +252,7 @@
           <div class="sch-section-card">
             <div class="sch-sec-title">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span>Thời gian &amp; Lịch đăng bài</span>
+              <span class="sch-long-label">Thời gian &amp; Lịch đăng bài</span><span class="sch-short-label">Giờ đăng</span>
             </div>
             <div class="sch-tabs">
               <button type="button" class="sch-tab-btn active" id="sch-mode-single-btn" onclick="schedulerSwitchSchedMode('single')">Một mốc giờ</button>
@@ -296,7 +306,7 @@
             </button>
             <button id="sch-ai-btn" class="btn btn-secondary w-full py-2 text-xs font-semibold flex items-center justify-center gap-1.5" onclick="schedulerAIPlan()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500"><path d="M12 3l1.912 5.885L20 10.8l-4.994 3.63 1.91 5.885L12 16.685l-4.916 3.63 1.91-5.885L4 10.8l6.088-1.915L12 3z"></path></svg>
-              <span>Phân tích link &amp; Tối ưu bằng AI</span>
+              <span>AI phân tích &amp; tạo lịch</span>
             </button>
           </div>
         </div>

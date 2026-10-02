@@ -7,6 +7,8 @@ from core_app import _get_youtube_uploader, _reset_youtube_uploader, ROOT
 import os
 
 bp = Blueprint("youtube", __name__)
+from templates.pages.publish.youtube_browser import register as _register_browser_routes
+_register_browser_routes(bp)
 
 
 @bp.route("/api/youtube_auth", methods=["GET", "POST"])

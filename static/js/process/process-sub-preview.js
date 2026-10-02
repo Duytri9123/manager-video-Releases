@@ -470,8 +470,10 @@ if (document.readyState === 'loading') {
       overlay.style.top    = 'auto';
     }
     // Giới hạn bề ngang theo vùng ảnh (letterbox dọc→ngang sẽ có viền 2 bên).
-    overlay.style.left  = imgOffX + 'px';
-    overlay.style.right = imgOffX + 'px';
+    const subWidthPct = Math.max(40, Math.min(98, _parseSafeFloat(document.getElementById('proc-sub-width')?.value, 90)));
+    const subSide = Math.round(dispW * (1 - subWidthPct / 100) / 2);
+    overlay.style.left  = (imgOffX + subSide) + 'px';
+    overlay.style.right = (imgOffX + subSide) + 'px';
     overlay.textContent = sample;
 
     _renderVideoOverlayDom(wrap, imgOffX, imgOffY, dispW, dispH);
@@ -527,7 +529,6 @@ if (document.readyState === 'loading') {
   }
 
   async function subPreviewFetchFrame() {
-    if (window.pe2BuildFilmstrip) window.pe2BuildFilmstrip(true);
     const source = _getPreviewVideoPath();
     if (!source) { toast('Chưa có video trong hàng chờ hoặc chưa chọn file', 'warning'); return; }
 
@@ -562,6 +563,7 @@ if (document.readyState === 'loading') {
       });
       const data = await res.json();
       if (data.ok && data.image) {
+        if (window.pe2BuildFilmstrip) setTimeout(() => window.pe2BuildFilmstrip(true), 0);
         if (img) {
           img.onload = () => {
             try {

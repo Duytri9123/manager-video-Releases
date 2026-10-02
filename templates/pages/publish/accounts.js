@@ -29,6 +29,7 @@ async function loadAccounts() {
       window._activeAccounts.douyin = dyRes.active_id;
     }
     renderAccountSelectors();
+    refreshSavedAccountSessions();
 
     const needsRefresh = (window._accounts.youtube || []).some(
       a => !a.channel_title && !a.thumbnail
@@ -41,6 +42,37 @@ async function loadAccounts() {
   }
 }
 window.loadAccounts = loadAccounts;
+
+async function refreshSavedAccountSessions() {
+  try {
+    const data = await fetch('/api/accounts/saved_sessions').then(r => r.json());
+    if (!data.ok) return;
+    document.querySelectorAll('[data-session-platform][data-session-account]').forEach(el => {
+      const info = data.sessions?.[el.dataset.sessionPlatform]?.[el.dataset.sessionAccount];
+      el.textContent = info?.saved ? `Phiên đã lưu${info.method ? ' · ' + info.method : ''}` : 'Chưa lưu phiên';
+      el.style.color = info?.saved ? '#059669' : '#d97706';
+    });
+  } catch (_) {}
+}
+
+async function loginFacebookBrowserAccount(accountId) {
+  try {
+    const response = await fetch('/api/facebook_browser/login', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({account_id:accountId})});
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || 'Không mở được trình duyệt');
+    toast('Đăng nhập Facebook trong cửa sổ vừa mở.', 'info');
+    const timer = setInterval(async () => {
+      try {
+        const state = await fetch('/api/facebook_browser/status?session_id=' + encodeURIComponent(data.session_id)).then(r => r.json());
+        if (!state.done) return;
+        clearInterval(timer);
+        if (state.status === 'ready') { toast('Đã lưu phiên Facebook', 'success'); refreshSavedAccountSessions(); }
+        else toast(state.error || 'Không lưu được phiên Facebook', 'error');
+      } catch (_) { clearInterval(timer); }
+    }, 2000);
+  } catch (error) { toast(error.message, 'error'); }
+}
 
 /* ── Silently fetch real channel name from YouTube API and update registry ── */
 async function _refreshYouTubeChannelInfo() {
@@ -178,6 +210,7 @@ function renderAccountManagementPanel() {
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acc.channel_title || acc.name || acc.id}</div>
             <div style="font-size:10px;color:var(--text-muted)">${acc.channel_id || ''}</div>
+            <div data-session-platform="youtube" data-session-account="${acc.id}" style="font-size:10px;color:var(--text-muted)">Đang kiểm tra phiên...</div>
           </div>
           ${isActive ? '<span class="badge badge-green" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-weight:600">Active</span>' :
             `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 10px;height:26px;cursor:pointer" onclick="setActiveYouTube('${acc.id}')">Chọn</button>`}
@@ -201,6 +234,7 @@ function renderAccountManagementPanel() {
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acc.name || acc.username || acc.id}</div>
             <div style="font-size:10px;color:var(--text-muted)">${acc.username ? '@' + acc.username : 'Hồ sơ trình duyệt độc lập'}</div>
+            <div data-session-platform="tiktok" data-session-account="${acc.id}" style="font-size:10px;color:var(--text-muted)">Đang kiểm tra phiên...</div>
           </div>
           ${isActive ? '<span class="badge badge-green" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-weight:600">Active</span>' :
             `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 10px;height:26px;cursor:pointer" onclick="setActiveTikTok('${acc.id}')">Chọn</button>`}
@@ -225,9 +259,11 @@ function renderAccountManagementPanel() {
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acc.name || acc.id}</div>
             <div style="font-size:10px;color:var(--text-muted)">${(acc.pages || []).length} trang</div>
+            <div data-session-platform="facebook" data-session-account="${acc.id}" style="font-size:10px;color:var(--text-muted)">Đang kiểm tra phiên...</div>
           </div>
           ${isActive ? '<span class="badge badge-green" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-weight:600">Active</span>' :
             `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 10px;height:26px;cursor:pointer" onclick="setActiveFacebook('${acc.id}')">Chọn</button>`}
+          <button class="btn btn-secondary btn-sm" onclick="loginFacebookBrowserAccount('${acc.id}')">Đăng nhập / Lưu phiên</button>
           <button class="btn-icon text-red cursor-pointer" style="width:24px;height:24px;border:none;background:transparent;color:#ef4444;font-size:12px;display:flex;align-items:center;justify-content:center" onclick="removeFacebookAccount('${acc.id}')" title="Xóa">✕</button>
         </div>`;
     }
@@ -248,6 +284,7 @@ function renderAccountManagementPanel() {
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${acc.name || acc.nickname || acc.id}</div>
             <div style="font-size:10px;color:var(--text-muted)">${acc.cookie_count || 0} cookie lưu trữ ${acc.nickname ? '· ' + acc.nickname : ''}</div>
+            <div data-session-platform="douyin" data-session-account="${acc.id}" style="font-size:10px;color:var(--text-muted)">Đang kiểm tra phiên...</div>
           </div>
           ${isActive ? '<span class="badge badge-green" style="font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-weight:600">Active</span>' :
             `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 10px;height:26px;cursor:pointer" onclick="setActiveDouyin('${acc.id}')">Chọn</button>`}
@@ -259,6 +296,7 @@ function renderAccountManagementPanel() {
   }
 
   panel.innerHTML = html;
+  refreshSavedAccountSessions();
 }
 window.renderAccountManagementPanel = renderAccountManagementPanel;
 

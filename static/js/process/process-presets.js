@@ -27,10 +27,11 @@
     const saveButton = document.getElementById('pe2-save-defaults');
     const aspectLabel = (window._procActiveAspect || '16x9').replace('x', ':');
     if (saveButton) {
-      saveButton.title = `Lưu cài đặt Bước 2 vào mặc định ${aspectLabel} trong trình duyệt`;
+      const profileName = document.getElementById("pe2-profile-select")?.value || "";
+      saveButton.title = profileName ? `Lưu thay đổi vào cấu hình: ${profileName}` : "Đặt tên và lưu cấu hình hiện tại";
       saveButton.setAttribute('aria-label', saveButton.title);
       const label = document.getElementById('pe2-save-defaults-label');
-      if (label) label.textContent = `Lưu mặc định ${aspectLabel}`;
+      if (label) label.textContent = profileName ? `Lưu: ${profileName}` : "Lưu cấu hình";
     }
     const badge = document.getElementById('proc-active-aspect-badge');
     if (!badge) return;
@@ -102,6 +103,7 @@
     { id:'proc-blur-x',         type:'value' },
     { id:'proc-blur-y',         type:'value' },
     { id:'proc-font-size',      type:'value' },
+    { id:'proc-sub-width',      type:'value' },
     { id:'proc-font-color',     type:'value' },
     { id:'proc-font-color-picker', type:'value' },
     { id:'proc-font-color-hex', type:'value' },
@@ -170,7 +172,7 @@
 
   const _STEP_FIELD_IDS = {
     1: ['proc-lang', 'proc-target-lang', 'proc-trans-provider-model', 'proc-ai-video-auto', 'proc-ai-video-samples', 'proc-ai-video-nine-model', 'proc-auto-flow', 'step3-skip-ass', 'proc-skip-transcription', 'batch-auto-drain', 'proc-batch-resolution', 'proc-batch-cookie'],
-    2: ['proc-mask-mode','proc-mask-source-x','proc-mask-source-y','proc-content-aspect', 'proc-content-aspect-mode', 'proc-aspect-blur-bg', 'proc-burn', 'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-blur-height', 'proc-blur-width', 'proc-blur-zone', 'proc-blur-x', 'proc-blur-y', 'proc-font-size', 'proc-font-color', 'proc-font-color-picker', 'proc-font-color-hex', 'proc-margin-v', 'proc-outline-width', 'proc-font-bold', 'proc-font-weight', 'proc-sub-pos', 'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y', 'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex', 'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'frame-logo-start', 'frame-logo-end', 'ov-layers-json', 'sub-preview-sample', 'sub-preview-ts', 'proc-capcut-enabled', 'proc-capcut-auto-open', 'proc-vol-orig', 'proc-ext-audio-enabled', 'proc-ext-audios-json', 'proc-out'],
+    2: ['proc-mask-mode','proc-mask-source-x','proc-mask-source-y','proc-content-aspect', 'proc-content-aspect-mode', 'proc-aspect-blur-bg', 'proc-burn', 'proc-translate-subs', 'proc-burn-vi', 'proc-blur-original', 'proc-blur-height', 'proc-blur-width', 'proc-blur-zone', 'proc-blur-x', 'proc-blur-y', 'proc-font-size', 'proc-sub-width', 'proc-font-color', 'proc-font-color-picker', 'proc-font-color-hex', 'proc-margin-v', 'proc-outline-width', 'proc-font-bold', 'proc-font-weight', 'proc-sub-pos', 'frame-enabled', 'frame-title', 'frame-title-enabled', 'frame-title-size', 'frame-title-weight', 'frame-title-bar-h', 'frame-title-margin-x', 'frame-title-x', 'frame-title-y', 'frame-title-color', 'frame-title-color-hex', 'frame-title-color-2', 'frame-title-color-2-hex', 'frame-title-split-color', 'frame-blur-w', 'frame-blur-top', 'frame-blur-bottom', 'frame-blur-opacity', 'frame-logo-size', 'frame-logo-top', 'frame-logo-left', 'frame-logo-radius', 'frame-logo-start', 'frame-logo-end', 'ov-layers-json', 'sub-preview-sample', 'sub-preview-ts', 'proc-capcut-enabled', 'proc-capcut-auto-open', 'proc-vol-orig', 'proc-ext-audio-enabled', 'proc-ext-audios-json', 'proc-out'],
     3: ['proc-model', 'proc-transcribe-provider-model', 'proc-ai-video-samples', 'proc-voice', 'proc-tts-engine', 'proc-tts-voice', 'proc-tts-pitch', 'proc-tts-rate', 'proc-tts-emotion', 'proc-tts-speed', 'proc-auto-speed', 'proc-keep-bg', 'proc-bg-vol', 'proc-fx-enabled', 'proc-fx-pitch', 'proc-fx-speed', 'proc-fx-bass', 'proc-fx-mid', 'proc-fx-treble', 'proc-fx-comp', 'proc-fx-reverb']
   };
 
@@ -526,6 +528,8 @@
         sel.value = prevVal;
       }
     });
+    _updateAspectBadge();
+    if (typeof refreshSharedConfigSummary === 'function') refreshSharedConfigSummary();
   }
   window.pe2PopulateProfileSelects = pe2PopulateProfileSelects;
 
@@ -560,6 +564,40 @@
         el.dispatchEvent(new Event('change'));
         el.dispatchEvent(new Event('input'));
       });
+    }
+    if (p.step1 && typeof p.step1 === 'object') {
+      const s = p.step1;
+      if (s.platforms && typeof pPubTogglePlatform === 'function') {
+        ['youtube', 'tiktok', 'facebook'].forEach(platform => {
+          if (typeof s.platforms[platform] === 'boolean' &&
+              !!window._pPubEnabled?.[platform] !== s.platforms[platform]) pPubTogglePlatform(platform);
+        });
+        if (typeof _syncStep1PubUI === 'function') _syncStep1PubUI();
+      }
+      if (typeof s.autoPublish === 'boolean') {
+        const toggle = document.getElementById('step1-autopub-toggle');
+        if (toggle) toggle.checked = s.autoPublish;
+        if (typeof _onStep1AutoPubToggle === 'function') _onStep1AutoPubToggle(s.autoPublish);
+      }
+      const step1Fields = {
+        youtubeAccount: 'step1-yt-account-select', youtubeLoginMethod: 'step1-yt-login-method',
+        youtubeBrowserAutoPost: 'step1-yt-browser-auto-post', tiktokAccount: 'step1-tt-account-select',
+        facebookAccount: 'step1-fb-account-select', facebookPage: 'step1-fb-page-select',
+        facebookPostType: 'step1-fb-post-type', tiktokAutoPost: 'step1-tt-auto-post',
+        scheduleEnabled: 'step1-schedule-enabled', scheduleStart: 'step1-schedule-start',
+        scheduleInterval: 'step1-schedule-interval'
+      };
+      Object.entries(step1Fields).forEach(([key, id]) => {
+        if (s[key] === undefined) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = !!s[key];
+        else el.value = s[key];
+        el.dispatchEvent(new Event('change'));
+      });
+      if (typeof s.tiktokAutoPost === 'boolean' && typeof _step1SetTikTokAutoPost === 'function')
+        _step1SetTikTokAutoPost(s.tiktokAutoPost);
+      if (typeof _step1SyncSchedule === 'function') _step1SyncSchedule();
     }
 
     const profileConfig = p.processing || {};
@@ -599,9 +637,11 @@
   }
   window.pe2ApplyNamedProfile = pe2ApplyNamedProfile;
 
-  async function pe2SaveNamedProfile() {
+  async function pe2SaveNamedProfile(direct = false) {
     const nameInput = document.getElementById('pe2-profile-name');
-    let name = nameInput?.value?.trim();
+    let name = direct
+      ? (document.getElementById('pe2-profile-select')?.value || document.getElementById('step1-profile-select')?.value || '')
+      : nameInput?.value?.trim();
     if (!name) {
       name = prompt('Nhập tên cấu hình cần lưu:');
       if (name) name = name.trim();
@@ -609,7 +649,7 @@
     if (!name) return;
 
     const typeSel = document.getElementById('pe2-profile-type');
-    const type = typeSel?.value || 'Tùy chỉnh';
+    const type = (direct && pe2LoadNamedProfiles()[name]?.type) || typeSel?.value || 'Tùy chỉnh';
 
     // Capture settings
     const settings = {};
@@ -638,6 +678,21 @@
       aspect,
       padMode,
       settings,
+      step1: {
+        autoPublish: !!document.getElementById('step1-autopub-toggle')?.checked,
+        platforms: { ...(window._pPubEnabled || {}) },
+        youtubeAccount: document.getElementById('step1-yt-account-select')?.value || '',
+        youtubeLoginMethod: document.getElementById('step1-yt-login-method')?.value || 'oauth',
+        youtubeBrowserAutoPost: !!document.getElementById('step1-yt-browser-auto-post')?.checked,
+        tiktokAccount: document.getElementById('step1-tt-account-select')?.value || '',
+        facebookAccount: document.getElementById('step1-fb-account-select')?.value || '',
+        facebookPage: document.getElementById('step1-fb-page-select')?.value || '',
+        facebookPostType: document.getElementById('step1-fb-post-type')?.value || 'auto',
+        tiktokAutoPost: !!document.getElementById('step1-tt-auto-post')?.checked,
+        scheduleEnabled: !!document.getElementById('step1-schedule-enabled')?.checked,
+        scheduleStart: document.getElementById('step1-schedule-start')?.value || '',
+        scheduleInterval: document.getElementById('step1-schedule-interval')?.value || '24'
+      },
       processing: collectProcessConfig()
     };
 

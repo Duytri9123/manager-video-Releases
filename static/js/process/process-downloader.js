@@ -1,8 +1,16 @@
 async function _runStep1QueueDownload() {
     if (window._step1Downloading) return;
-    const pending = (window._batchQueue || []).find(t => t.status === 'pending');
+    if (window._step1StopRequested) { window._step1StopRequested = false; return; }
+    const pending = window._step1SingleTargetId
+      ? (window._batchQueue || []).find(t => t.id === window._step1SingleTargetId && t.status === 'pending')
+      : (window._batchQueue || []).find(t => t.status === 'pending' && (t.queue_mode || 'process') !== 'skip');
     if (!pending) {
       _renderBatchQueue();
+      if (window._step1ManualAction === 'download') {
+        window._step1ManualAction = null;
+        window._step1AfterDownloadTarget = null;
+        return;
+      }
       const target = window._step1AfterDownloadTarget;
       if (target || _step1DownloadOnlyEnabled()) {
         window._step1AfterDownloadTarget = null;
@@ -23,12 +31,14 @@ async function _runStep1QueueDownload() {
         const dlStatus = document.getElementById('step1-dl-status');
         if (dlStatus) dlStatus.textContent = ' Đang tải video gốc...';
 
+        const qualityVal = document.getElementById('step1-dl-quality')?.value || pending.quality || 'best';
         const res = await fetch('/api/download_original_video', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             url: pending.val,
-            out_dir: document.getElementById('proc-out')?.value?.trim() || ''
+            out_dir: document.getElementById('proc-out')?.value?.trim() || '',
+            quality: qualityVal
           })
         });
         let data;
@@ -49,15 +59,15 @@ async function _runStep1QueueDownload() {
           pending.val = data.path; // update to local path
           pending.type = 'file';
           pending.desc = data.title || data.path.split(/[\\/]/).pop();
-          _step1Log(' Tải xong: ' + (data.title || pending.desc), 'success');
+          _step1Log((data.reused ? ' Dùng lại video gốc đã tải: ' : ' Tải xong: ') + (data.title || pending.desc), 'success');
           if (data.path) _step1Log(' Đường dẫn: ' + data.path, 'info');
-          toast(' Đã tải video gốc: ' + (data.title || ''), 'success');
+          toast((data.reused ? 'Đã dùng lại video gốc: ' : 'Đã tải video gốc: ') + (data.title || ''), 'success');
 
           // Fetch preview frame for Step 2
           setTimeout(() => { if (typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame(); }, 300);
 
           // Auto-flow: skip Step 2, jump directly to Step 3
-          if (document.getElementById('proc-auto-flow')?.checked && !_step1DownloadOnlyEnabled()) {
+          if ((pending.queue_mode || 'process') === 'process' && pending.auto_flow && !_step1DownloadOnlyEnabled() && !window._step1ManualAction) {
             _step1Log(' Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
 
             // Apply task custom configuration to inputs
@@ -99,7 +109,7 @@ async function _runStep1QueueDownload() {
         setTimeout(() => { if (typeof subPreviewFetchFrame === 'function') subPreviewFetchFrame(); }, 300);
 
         // Auto-flow
-        if (document.getElementById('proc-auto-flow')?.checked && !_step1DownloadOnlyEnabled()) {
+        if ((pending.queue_mode || 'process') === 'process' && pending.auto_flow && !_step1DownloadOnlyEnabled() && !window._step1ManualAction) {
           _step1Log(' Tự động hóa: chuyển sang Bước 3 (AI & Dịch)...', 'info');
 
           // Apply task custom configuration to inputs
@@ -154,15 +164,40 @@ async function _runStep1QueueDownload() {
     } finally {
       window._step1Downloading = false;
       _renderBatchQueue();
+      if (window._step1StopRequested) {
+        window._step1StopRequested = false;
+        window._step1SingleTargetId = null;
+        window._step1ManualAction = null;
+        window._step1AfterDownloadTarget = null;
+        _step1Log('Đã dừng hàng chờ sau video hiện tại.', 'warning');
+        return;
+      }
+      if (window._step1SingleTargetId) {
+        const target = (window._batchQueue || []).find(t => t.id === window._step1SingleTargetId);
+        window._step1SingleTargetId = null;
+        window._step1ManualAction = null;
+        window._step1AfterDownloadTarget = null;
+        if (target?.status === 'ready') {
+          window._procCurrentTaskId = target.id;
+          _step1GoFirstReadyToStep2(2);
+        }
+        return;
+      }
       // Process next pending item if not paused
       if (!window._step1DownloadPaused) {
-        const nextPending = (window._batchQueue || []).find(t => t.status === 'pending');
+        const nextPending = (window._batchQueue || []).find(t => t.status === 'pending' && (t.queue_mode || 'process') !== 'skip');
         if (nextPending) {
           setTimeout(() => _runStep1QueueDownload(), 600);
         } else {
+          if (window._step1ManualAction === 'download') {
+            window._step1ManualAction = null;
+            window._step1AfterDownloadTarget = null;
+            return;
+          }
           const target = window._step1AfterDownloadTarget;
           if (target || _step1DownloadOnlyEnabled()) {
             window._step1AfterDownloadTarget = null;
+            window._step1ManualAction = null;
             _step1GoFirstReadyToStep2(target || 2);
           }
         }

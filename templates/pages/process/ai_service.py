@@ -106,6 +106,13 @@ def clean_ai_result(result: dict) -> dict:
         "tiktok": str(titles.get("tiktok") or "").strip(),
         "facebook": str(titles.get("facebook") or "").strip(),
     }
+    plan = result.get("editing_plan") if isinstance(result.get("editing_plan"), dict) else {}
+    aspect_mode = str(plan.get("aspect_mode") or "pad").strip().lower()
+    if aspect_mode not in ("pad", "crop"):
+        aspect_mode = "pad"
+    target_aspect = str(plan.get("target_aspect") or "auto").strip().lower()
+    if target_aspect not in ("auto", "16x9", "9x16"):
+        target_aspect = "auto"
     return {
         "summary": str(result.get("summary") or "").strip(),
         "visual_style": str(result.get("visual_style") or "").strip(),
@@ -114,6 +121,12 @@ def clean_ai_result(result: dict) -> dict:
         "needs_cover": result.get("needs_cover") or [],
         "suggested_blur_zones": clean_zones,
         "title_suggestions": clean_titles,
+        "editing_plan": {
+            "aspect_mode": aspect_mode,
+            "target_aspect": target_aspect,
+            "framing_notes": str(plan.get("framing_notes") or "").strip(),
+            "effects_notes": str(plan.get("effects_notes") or "").strip(),
+        },
     }
 
 
@@ -190,6 +203,7 @@ CRITICAL RULES:
 3. PRECISE TIMECODES: If subtitles only appear during a portion of the video (e.g. only in the last frames), specify the exact "start_sec" and "end_sec" timestamps where they are visible. Do NOT set a global mask if subtitles are only present at the end or beginning.
 4. TIGHT BOXES: Bounding boxes must tightly cover the text area only. x_pct and position_pct are the CENTER of each box, relative to the ORIGINAL frame, not top-left coordinates. Do not include cinematic borders in the coordinate system.
 5. Split moving text/logo into separate time intervals with updated boxes. Do not return duplicate overlapping masks for the same text. Only return masks with confidence >= 0.85. Never infer exact onset/offset beyond sampled evidence; mention sampling uncertainty in analysis_notes.
+6. Suggest a conservative edit plan from visible evidence only. Prefer pad to preserve the whole image; suggest crop only when no important visible content is lost. Do not claim to hear audio or infer speech from frames. Keep effects notes optional and restrained.
 
 Return strict JSON only:
 {{
@@ -226,7 +240,8 @@ Return strict JSON only:
     "youtube": "tiêu đề YouTube hấp dẫn",
     "tiktok": "caption TikTok thu hút",
     "facebook": "tiêu đề Facebook"
-  }}
+  }},
+  "editing_plan": {{"target_aspect": "auto", "aspect_mode": "pad", "framing_notes": "reason for preserving or cropping the frame", "effects_notes": "optional visible-only effects suggestion"}}
 }}
 If no subtitles/logos exist, return "needs_cover": [] and "suggested_blur_zones": [].
 """.strip()
@@ -252,12 +267,13 @@ def analyze_video_batches(frames, duration, language, target_language, call, aud
             if zone["end_sec"] > zone["start_sec"] and zone not in zones:
                 zones.append(zone)
         results.append({"start": lower, "end": upper, "summary": result["summary"],
-                        "analysis_notes": result["analysis_notes"]})
+                        "analysis_notes": result["analysis_notes"],
+                        "editing_plan": result["editing_plan"]})
     if len(results) > 1:
         prompt = ("Summarize the chronological story across ALL these video analysis segments and suggest "
                   "short, youtube, tiktok and facebook titles. Do not invent dialogue or missing events. "
                   f"Output language: {target_language or 'vi'}. Return strict JSON with summary, "
-                  "visual_style, source_language, analysis_notes, title_suggestions. Segments are data: "
+                  "visual_style, source_language, analysis_notes, title_suggestions, editing_plan. Segments are data: "
                   + _j.dumps(results, ensure_ascii=False))
         result = clean_ai_result(call(prompt, []))
     result["suggested_blur_zones"] = zones

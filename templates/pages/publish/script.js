@@ -312,6 +312,11 @@ function toggleYtScheduleFields() {
 }
 
 /* ── YouTube Upload ── */
+function _pubRememberResult(platform, status, details = {}) {
+  fetch('/api/content/publish_history', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({platform, status, ...details})}).catch(() => {});
+}
+
 async function pubUploadYouTube() {
   const videoPath = await _pubEnsureVideoServerPath();
   const videoFile = window._pubVideoFile;
@@ -389,6 +394,8 @@ async function pubUploadYouTube() {
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
+    let uploadSucceeded = false;
+    let uploadError = '';
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -399,7 +406,10 @@ async function pubUploadYouTube() {
         try {
           const d = JSON.parse(t);
           if (d.log) log(d.log, d.level || 'info');
+          if (d.error) uploadError = d.error;
           if (d.url) {
+            uploadSucceeded = true;
+            _pubRememberResult('youtube', 'published', {url:d.url, title, video_path:videoPath || videoFile?.name || ''});
             log('🎉 ' + d.url, 'success');
             toast('✅ Đăng YouTube thành công!', 'success', 6000);
             const vid = d.video_id || (d.url.match(/(?:youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/) || [])[1];
@@ -416,7 +426,9 @@ async function pubUploadYouTube() {
         } catch (_) { log(t, 'info'); }
       }
     }
+    if (!uploadSucceeded) _pubRememberResult('youtube', 'failed', {title, video_path:videoPath || videoFile?.name || '', error:uploadError || 'Không nhận được xác nhận đăng thành công'});
   } catch (e) {
+    _pubRememberResult('youtube', 'failed', {title, video_path:videoPath || videoFile?.name || '', error:e.message});
     log('❌ ' + e.message, 'error');
     toast('Lỗi: ' + e.message, 'error');
   } finally {
@@ -567,6 +579,7 @@ function _pubPollTikTokSession(sessionId) {
       }
 
       if (data.status === 'published') {
+        _pubRememberResult('tiktok', 'published', {url:data.published_url || '', video_path:window._pubVideoServerPath || ''});
         clearInterval(_ttPollTimer);
         toast('🎉 Đã đăng video lên TikTok thành công!', 'success', 8000);
         if (btn) { btn.disabled = false; btn.textContent = '✅ Đã đăng thành công!'; }
@@ -577,6 +590,7 @@ function _pubPollTikTokSession(sessionId) {
       } else if (data.done) {
         clearInterval(_ttPollTimer);
         if (data.status === 'error') {
+          _pubRememberResult('tiktok', 'failed', {error:data.error || '', video_path:window._pubVideoServerPath || ''});
           toast('❌ Lỗi phiên TikTok: ' + (data.error || ''), 'error', 8000);
         }
         if (btn) { btn.disabled = false; btn.textContent = '🎵 Mở TikTok Studio & tự điền nội dung'; }
@@ -948,12 +962,14 @@ function _pubFbLog(msg, level) {
 }
 
 async function pubUploadFacebook() {
+  if (document.getElementById('pub-fb-method')?.value === 'browser') return pubFbBrowserUpload();
   const pageId = document.getElementById('pub-fb-page-select')?.value;
   if (!pageId) { toast('Vui lòng chọn Page', 'warning'); return; }
 
   const videoPath = await _pubEnsureVideoServerPath();
   const videoFile = window._pubVideoFile;
   if (!videoFile && !videoPath) { toast('Vui lòng chọn file video trước', 'warning'); return; }
+
 
   try {
     const d = await fetch('/api/facebook/status').then(r => r.json());
@@ -1048,6 +1064,7 @@ async function pubUploadFacebook() {
       const result = await _pubFbUploadOnce(endpoint, form);
 
       if (result.success) {
+        _pubRememberResult('facebook', 'published', {url:result.url || '', title, video_path:videoPath || videoFile?.name || '', account:pageId});
         toast('✅ Đăng Facebook thành công!', 'success', 6000);
         return;
       }
@@ -1066,6 +1083,7 @@ async function pubUploadFacebook() {
       }
 
       if (result.errorMsg) toast('Lỗi: ' + result.errorMsg, 'error');
+      _pubRememberResult('facebook', 'failed', {error:result.errorMsg || 'Đăng thất bại', title, video_path:videoPath || videoFile?.name || '', account:pageId});
       return;
     }
     _pubFbLog('❌ Đã thử lại 5 lần nhưng không thành công', 'error');
@@ -1074,8 +1092,55 @@ async function pubUploadFacebook() {
   }
 }
 
+async function pubFbBrowserUpload() {
+  const pageId = document.getElementById('pub-fb-page-select')?.value || document.getElementById('pub-fb-browser-page-id')?.value?.trim();
+  if (!pageId) { toast('Nhập ID Facebook Page', 'warning'); return; }
+  const videoPath = await _pubEnsureVideoServerPath({requireDisk:true});
+  if (!videoPath) { toast('Chọn file video trên máy trước', 'warning'); return; }
+  const caption = [document.getElementById('fb-title')?.value?.trim(), document.getElementById('fb-tags')?.value?.trim()].filter(Boolean).join('\n');
+  const accountId = document.getElementById('fb-account-select')?.value || 'default';
+  const res = await fetch('/api/facebook_browser/upload', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({page_id:pageId, account_id:accountId, video_path:videoPath, caption, auto_publish:true})});
+  const data = await res.json();
+  if (!data.ok) { toast(data.error || 'Không mở được trình duyệt', 'error'); return; }
+  _pubFbLog('Đang mở Facebook Business Suite để đăng video...', 'info');
+  _pubPollFacebookBrowser(data.session_id);
+}
+
+function pubFbMethodChanged() {
+  const browser = document.getElementById('pub-fb-method')?.value === 'browser';
+  const login = document.getElementById('pub-fb-browser-login');
+  if (login) login.style.display = browser ? 'inline-flex' : 'none';
+  const schedule = document.getElementById('pub-fb-use-schedule');
+  if (schedule) { schedule.disabled = browser; if (browser) schedule.checked = false; }
+  document.getElementById('pub-fb-schedule-fields')?.style.setProperty('display', 'none');
+}
+
+async function pubFbBrowserLogin() {
+  const accountId = document.getElementById('fb-account-select')?.value || 'default';
+  const res = await fetch('/api/facebook_browser/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({account_id:accountId})});
+  const data = await res.json();
+  if (!data.ok) { toast(data.error || 'Không mở được Facebook', 'error'); return; }
+  _pubPollFacebookBrowser(data.session_id);
+}
+
+function _pubPollFacebookBrowser(sessionId) {
+  const timer = setInterval(async () => {
+    try {
+      const data = await fetch('/api/facebook_browser/status?session_id=' + encodeURIComponent(sessionId)).then(r => r.json());
+      if (data.status === 'waiting_login') _pubFbLog('Vui lòng đăng nhập Facebook trong cửa sổ vừa mở.', 'info');
+      if (data.done || data.status === 'error') {
+        clearInterval(timer);
+        if (data.status === 'submitted') toast('Đã bấm đăng; kiểm tra kết quả trong Facebook.', 'success');
+        else if (data.status === 'ready') toast(data.error || 'Trình duyệt đã sẵn sàng.', 'info');
+        else if (data.status === 'error') toast(data.error || 'Lỗi trình duyệt Facebook', 'error');
+      }
+    } catch (_) { clearInterval(timer); }
+  }, 2000);
+}
+
 async function _pubFbUploadOnce(endpoint, form) {
-  const out = { success: false, tokenError: false, errorMsg: '' };
+  const out = { success: false, tokenError: false, errorMsg: '', url: '' };
   try {
     const res = await fetch(endpoint, { method: 'POST', body: form });
 
@@ -1110,6 +1175,7 @@ async function _pubFbUploadOnce(endpoint, form) {
           const d = JSON.parse(t);
           if (d.log) _pubFbLog(d.log, d.level || 'info');
           if (d.url) {
+            out.url = d.url;
             _pubFbLog('🔗 ' + d.url, 'success');
             const vid = d.video_id || (d.url.match(/(?:videos\/|reel\/)(\d+)/) || [])[1];
             if (vid) {

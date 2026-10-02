@@ -52,7 +52,7 @@
         <!-- ── Batch schedule distribution ── -->
         <div class="alert-info mb-12" style="font-size:12px">
           AI sẽ đọc nội dung từ file phụ đề (ASS) và tự động điền tiêu đề/mô tả/hashtag khi bật tính năng.
-          <br>Khi video xử lý xong, hệ thống tự đăng lên các nền tảng đã bật.
+          <br>Khi video xử lý xong, hệ thống bắt đầu đăng đồng thời lên các nền tảng đã bật.
         </div>
 
         <div class="field">
@@ -119,6 +119,18 @@
               <option value="">Chưa có tài khoản</option>
             </select>
           </div>
+          <div class="field" style="margin-bottom:8px">
+            <label>Cách đăng nhập YouTube</label>
+            <select id="p-yt-login-method" onchange="pYtLoginMethodChanged()">
+              <option value="oauth">Google OAuth / YouTube API</option>
+              <option value="browser">Trình duyệt YouTube Studio</option>
+            </select>
+            <button type="button" class="btn btn-secondary btn-sm mt-8" onclick="pYtStartLogin()">Đăng nhập theo cách đã chọn</button>
+            <span id="p-yt-browser-status" class="text-xs text-muted" style="margin-left:8px"></span>
+          </div>
+          <label class="check-item w-full" id="p-yt-browser-auto-wrap" style="display:none;margin-bottom:10px">
+            <input type="checkbox" id="p-yt-browser-auto-post"><span>Tự động bấm Đăng/Lưu trong trình duyệt sau khi tải xong</span>
+          </label>
 
           <div class="field">
             <label>Tiêu đề YouTube <span class="text-xs text-muted">(tối đa 100 ký tự)</span></label>
@@ -178,13 +190,16 @@
             <div class="text-xs text-muted mt-4"><span id="p-tt-tags-count">0</span>/5 hashtag</div>
           </div>
           <div class="alert-info" style="font-size:11px;margin-top:8px">
-            Hệ thống mở TikTok Studio qua trình duyệt Chromium, tự gắn file và điền caption. Bạn chỉ kiểm tra rồi nhấn
-            Post (hoặc Đặt lịch).
+            Hệ thống mở TikTok Studio qua Chromium, tự gắn file và điền caption. Nếu không bật tự đăng, bạn kiểm tra rồi nhấn Post.
           </div>
+          <label class="check-item w-full" style="margin-top:8px">
+            <input type="checkbox" id="p-tt-auto-post"><span>Tự động bấm Đăng sau khi TikTok tải video xong</span>
+          </label>
         </div>
 
         <!-- ── Facebook Panel ── -->
         <div id="p-panel-facebook" class="platform-panel" style="display:none">
+          <div class="field"><label>Cách đăng</label><select id="p-fb-method"><option value="api">Facebook Graph API</option><option value="browser">Trình duyệt Playwright</option></select></div>
           <div class="field" style="margin-bottom:8px">
             <label style="font-size:11px;color:var(--text-muted)">Tài khoản Facebook</label>
             <select id="p-fb-account-select" class="pub-select-sm" style="width:100%">
@@ -196,6 +211,7 @@
             <select id="p-fb-page-select">
               <option value="">-- Chọn Page --</option>
             </select>
+            <input id="p-fb-browser-page-id" type="text" inputmode="numeric" placeholder="ID Page nếu không dùng Graph API" style="width:100%;margin-top:5px">
           </div>
           <div class="field">
             <label>Tiêu đề video</label>

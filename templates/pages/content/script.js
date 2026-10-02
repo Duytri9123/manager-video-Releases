@@ -7,6 +7,37 @@
 ════════════════════════════════════════════════════════════ */
 let _contentFiles = [];
 
+async function loadPublishHistory() {
+  const box = document.getElementById('content-publish-history');
+  if (!box) return;
+  box.textContent = 'Đang tải lịch sử...';
+  try {
+    const response = await fetch('/api/content/publish_history');
+    const data = await response.json();
+    box.replaceChildren();
+    if (!data.ok || !data.items?.length) { box.textContent = 'Chưa có video được đăng từ hệ thống.'; return; }
+    data.items.forEach(item => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:11px 13px;border:1px solid var(--border);border-radius:9px;background:var(--bg3)';
+      const detail = document.createElement('div');
+      detail.style.minWidth = '0';
+      const heading = document.createElement('div');
+      heading.style.cssText = 'font-size:12px;font-weight:650;overflow-wrap:anywhere';
+      heading.textContent = item.title || item.video_path?.split(/[\\/]/).pop() || 'Video';
+      const meta = document.createElement('div');
+      meta.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:4px';
+      meta.textContent = `${item.platform.toUpperCase()} · ${item.account || 'Tài khoản mặc định'} · ${new Date(item.created_at).toLocaleString('vi-VN')}`;
+      detail.append(heading, meta);
+      if (item.error) { const err = document.createElement('div'); err.style.cssText = 'color:#dc2626;font-size:11px;margin-top:4px'; err.textContent = item.error; detail.append(err); }
+      if (item.url && /^https?:\/\//i.test(item.url)) { const link = document.createElement('a'); link.href = item.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Mở bài đăng ↗'; link.style.cssText = 'font-size:11px;display:inline-block;margin-top:5px'; detail.append(link); }
+      const badge = document.createElement('span');
+      badge.style.cssText = `font-size:11px;white-space:nowrap;font-weight:650;color:${item.status === 'published' ? '#059669' : item.status === 'failed' ? '#dc2626' : '#d97706'}`;
+      badge.textContent = item.status === 'published' ? 'Thành công' : item.status === 'failed' ? 'Thất bại' : 'Đã gửi đăng';
+      row.append(detail, badge); box.append(row);
+    });
+  } catch (err) { box.textContent = 'Không tải được lịch sử: ' + err.message; }
+}
+
 async function loadContentList() {
   const container = document.getElementById('content-list-container');
   if (!container) return;
@@ -669,7 +700,7 @@ async function fbMgrLoadPosts() {
     const res  = await fetch('/api/facebook/page_posts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ page_id: page.id, limit: 5 })
+      body: JSON.stringify({ page_id: page.id, limit: 50 })
     });
     const data = await res.json();
     if (!data.ok) {
@@ -693,6 +724,25 @@ async function fbMgrLoadPosts() {
     }
 
     const posts = data.posts || [];
+    const seenIds = new Set(posts.map(p => p.id));
+    const seenCursors = new Set();
+    let cursor = data.next_cursor;
+    while (cursor && !seenCursors.has(cursor)) {
+      if (window._fbMgrSelectedPage?.id !== page.id) return;
+      seenCursors.add(cursor);
+      list.textContent = `Đang tải bài đăng… ${posts.length} bài`;
+      const nextRes = await fetch('/api/facebook/page_posts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page_id: page.id, limit: 50, after: cursor })
+      });
+      const nextData = await nextRes.json();
+      if (!nextData.ok) throw new Error(nextData.error || 'Không tải được trang bài đăng tiếp theo');
+      for (const post of nextData.posts || []) {
+        if (!seenIds.has(post.id)) { posts.push(post); seenIds.add(post.id); }
+      }
+      cursor = nextData.next_cursor;
+    }
+    if (window._fbMgrSelectedPage?.id !== page.id) return;
     if (!posts.length) { list.innerHTML = '<div class="text-muted text-sm" style="text-align:center;padding:16px">Chưa có bài đăng nào</div>'; return; }
 
     list.innerHTML = posts.map(p => {

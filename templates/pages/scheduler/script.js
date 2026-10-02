@@ -46,7 +46,7 @@ window.schedulerSwitchMainTab = function(tab) {
   } else {
     schedBtn?.classList.add('active');
     trendBtn?.classList.remove('active');
-    if (schedPanel) schedPanel.style.display = 'block';
+    if (schedPanel) schedPanel.style.display = 'flex';
     if (trendPanel) trendPanel.style.display = 'none';
   }
 };
@@ -117,6 +117,7 @@ window.schedulerUpdatePlatformRow = function(plat) {
   const cb = document.getElementById(`sch-cb-${plat}`);
   const card = document.getElementById(`sch-plat-row-${plat}`);
   const box = document.getElementById(`sch-acc-box-${plat}`);
+  document.querySelector(`#sch-platform-pills .sch-platform-toggle[data-platform="${plat}"]`)?.setAttribute('aria-pressed', String(!!cb?.checked));
   if (cb?.checked) {
     card?.classList.add('selected');
     if (box) box.style.opacity = '1';
@@ -679,7 +680,7 @@ window.schedulerAIPlan = async function() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = 'Phân tích link & Tối ưu bằng AI';
+      btn.textContent = 'AI phân tích & tạo lịch';
     }
   }
 };
@@ -868,7 +869,6 @@ function schedulerProcessingConfig(presetName) {
   for (const key of ['video_path', 'video_url', 'ai_video_analysis', 'ai_video_analysis_text']) delete config[key];
   if (config.frame_title_auto) config.frame_title = '';
   config.skip_ass_review = true;
-  config.skip_ass = true;
   config.capcut_auto_open = false;
   return config;
 }

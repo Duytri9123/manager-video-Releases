@@ -207,7 +207,7 @@ class AntigravityTranscriber:
 
             # Long recordings can produce an empty/truncated response even when
             # the same connection answers short text prompts successfully.
-            chunk_seconds = 120
+            chunk_seconds = 180
             audio_duration = _get_media_duration(audio_path, ffmpeg) or video_dur
             audio_chunks = []
             for offset in range(0, max(1, int(audio_duration + 0.999)), chunk_seconds):
@@ -316,7 +316,10 @@ class AntigravityTranscriber:
 
             all_segs = []
             for chunk_index, (offset, chunk_path) in enumerate(audio_chunks, 1):
-                yield ("log", f"[Bước 2/5] Phiên âm đoạn {chunk_index}/{len(audio_chunks)} ({offset}s)...", "info")
+                end = min(offset + chunk_seconds, audio_duration)
+                start_label = f"{int(offset)//60:02d}:{int(offset)%60:02d}"
+                end_label = f"{int(end)//60:02d}:{int(end)%60:02d}"
+                yield ("log", f"[Phiên âm] Phần {chunk_index}/{len(audio_chunks)} · âm thanh {start_label}–{end_label}", "info")
                 b64_audio = base64.b64encode(chunk_path.read_bytes()).decode("ascii")
                 srt_text = ""
                 stt_error = ""
@@ -340,7 +343,7 @@ class AntigravityTranscriber:
                     }
 
                     for model in models_to_try:
-                        yield ("log", f"[Bước 2/5] Đang gửi âm thanh tới Antigravity ({conn_name}, model={model})...", "info")
+                        yield ("log", f"[Phiên âm] Đang nhận diện lời nói · tài khoản: {conn_name} · mô hình: {model}", "info")
 
                         try:
                             is_oauth = key_type in ("oauth_token", "refresh_token") or "cloudcode" in b_url or (c_obj.get("auth_type") == "oauth") or bool(c_obj.get("refresh_token"))

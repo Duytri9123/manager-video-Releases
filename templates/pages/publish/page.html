@@ -67,12 +67,12 @@
                       </svg> File video <span class="text-red">*</span></label>
                     <div class="input-with-button">
                       <input type="text" id="pub-video-path" placeholder="Chọn file video hoặc nhập đường dẫn...">
-                      <button class="btn btn-secondary btn-sm"
+                      <button class="btn btn-secondary btn-sm pub-browse-btn" aria-label="Duyệt file video" title="Duyệt file video"
                         onclick="document.getElementById('pub-video-file').click()"><svg width="13" height="13"
                           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                           stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px">
                           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                        </svg> Duyệt</button>
+                        </svg><span>Duyệt</span></button>
                       <input type="file" id="pub-video-file" accept="video/*" style="display:none"
                         onchange="_pubSetVideoFile(this)">
                     </div>
@@ -95,12 +95,12 @@
                       </svg> File phụ đề (.srt / .ass)</label>
                     <div class="input-with-button">
                       <input type="text" id="pub-sub-path" placeholder="Chọn file phụ đề (tùy chọn)..." readonly>
-                      <button class="btn btn-secondary btn-sm"
+                      <button class="btn btn-secondary btn-sm pub-browse-btn" aria-label="Duyệt file phụ đề" title="Duyệt file phụ đề"
                         onclick="document.getElementById('pub-sub-file').click()"><svg width="13" height="13"
                           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                           stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px">
                           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                        </svg> Duyệt</button>
+                        </svg><span>Duyệt</span></button>
                       <input type="file" id="pub-sub-file" accept=".srt,.ass" style="display:none"
                         onchange="_pubSetSubFile(this)">
                     </div>
@@ -220,6 +220,16 @@
                       onchange="onAccountSelectChange('youtube', this)" style="width:100%">
                       <option value="">Chưa có tài khoản</option>
                     </select>
+                  </div>
+
+                  <div class="field" style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
+                    <label>Đăng bằng trình duyệt Playwright</label>
+                    <div class="text-xs text-muted">Dùng phiên Facebook đã đăng nhập, không cần Graph API. Nhập ID Page nếu chưa kết nối API.</div>
+                    <input id="pub-fb-browser-page-id" type="text" inputmode="numeric" placeholder="ID Facebook Page" style="width:100%;margin:6px 0">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                      <button class="btn btn-sm btn-secondary" onclick="pubFbBrowserLogin()">Đăng nhập</button>
+                      <button class="btn btn-sm btn-fb" onclick="pubFbBrowserUpload()">Mở và đăng video</button>
+                    </div>
                   </div>
 
                   <!-- YouTube Auth Status Bar -->
@@ -543,6 +553,14 @@
                     </div>
 
                     <!-- Chọn Page -->
+                    <div class="field">
+                      <label>Cách đăng Facebook</label>
+                      <select id="pub-fb-method" onchange="pubFbMethodChanged()">
+                        <option value="api">Facebook Graph API</option>
+                        <option value="browser">Trình duyệt Playwright</option>
+                      </select>
+                      <button class="btn btn-sm btn-secondary mt-4" id="pub-fb-browser-login" style="display:none" onclick="pubFbBrowserLogin()">Đăng nhập Facebook trong trình duyệt</button>
+                    </div>
                     <div class="field">
                       <label><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"

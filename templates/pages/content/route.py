@@ -14,6 +14,40 @@ from utils.security import safe_filename, safe_join
 bp = Blueprint("content", __name__)
 
 
+@bp.route('/api/content/publish_history', methods=['GET', 'POST'])
+def publish_history_api():
+    from core.publish_history import list_recent, record
+    if request.method == 'GET':
+        items = list_recent()
+        try:
+            from templates.pages.scheduler.route import _db as schedule_db
+            with schedule_db() as db:
+                older = db.execute("""SELECT id, platform, status, video_path, post_title AS title,
+                    account_name AS account, published_url AS url, error,
+                    COALESCE(NULLIF(published_at, ''), updated_at) AS created_at
+                    FROM schedule_items WHERE status IN ('published', 'failed')
+                    ORDER BY updated_at DESC LIMIT 200""").fetchall()
+                known = {(i['platform'], i['video_path'], i['status'], i['source']) for i in items}
+                for row in older:
+                    entry = dict(row)
+                    if (entry['platform'], entry['video_path'], entry['status'], 'scheduler') not in known:
+                        entry['source'] = 'scheduler'
+                        items.append(entry)
+        except Exception:
+            pass
+        items.sort(key=lambda item: item.get('created_at') or '', reverse=True)
+        return jsonify({'ok': True, 'items': items[:200]})
+    data = request.get_json(silent=True) or {}
+    try:
+        ident = record(data.get('platform'), data.get('status'),
+                       video_path=data.get('video_path') or '', title=data.get('title') or '',
+                       account=data.get('account') or '', url=data.get('url') or '',
+                       error=data.get('error') or '', source=data.get('source') or 'direct')
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+    return jsonify({'ok': True, 'id': ident})
+
+
 def get_download_dir() -> Path:
     cfg = load_cfg()
     dpath = cfg.get("path", "./Downloaded/")

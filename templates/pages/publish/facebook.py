@@ -11,6 +11,8 @@ from utils.ffprobe import probe_video
 from utils.streaming import ndjson_line, ndjson_response
 
 bp = Blueprint("facebook", __name__)
+from templates.pages.publish.facebook_browser import register as _register_browser_routes
+_register_browser_routes(bp)
 
 FB_API_BASE = "https://graph.facebook.com/v25.0"
 FB_TOKEN_FILE = ROOT / ".facebook_token.json"
@@ -700,7 +702,12 @@ def fb_page_posts():
 
     data = request.json or {}
     page_id = str(data.get("page_id") or "").strip()
-    limit = int(data.get("limit") or 10)
+    try:
+        limit = max(1, min(100, int(data.get("limit") or 50)))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Giới hạn không hợp lệ"}), 400
+    after = str(data.get("after") or "").strip()
+    cursor_params = {"after": after} if after else {}
 
     page_token, perr = _resolve_page_token(td, page_id)
     if not page_token:
@@ -712,6 +719,7 @@ def fb_page_posts():
     result = _fb_get(f"{page_id}/published_posts", page_token, {
         "fields": "id,message,story,created_time,permalink_url,likes{id},comments{id}",
         "limit": limit,
+        **cursor_params,
     })
     if "error" in result:
         errors.append(f"published_posts: {result['error']}")
@@ -720,6 +728,7 @@ def fb_page_posts():
         result = _fb_get(f"{page_id}/feed", page_token, {
             "fields": "id,message,story,created_time,permalink_url,likes{id},comments{id}",
             "limit": limit,
+            **cursor_params,
         })
         if "error" in result:
             errors.append(f"feed: {result['error']}")
@@ -728,13 +737,17 @@ def fb_page_posts():
             result = _fb_get(f"{page_id}/posts", page_token, {
                 "fields": "id,message,story,created_time,permalink_url",
                 "limit": limit,
+                **cursor_params,
             })
             if "error" in result:
                 errors.append(f"posts: {result['error']}")
                 err_detail = "; ".join(str(e) for e in errors)
                 return jsonify({"ok": False, "error": err_detail, "debug_errors": errors}), 400
 
-    return jsonify({"ok": True, "posts": result.get("data", []), "endpoint_used": "ok"})
+    paging = result.get("paging") or {}
+    return jsonify({"ok": True, "posts": result.get("data", []),
+                    "next_cursor": (paging.get("cursors") or {}).get("after") if paging.get("next") else None,
+                    "endpoint_used": "ok"})
 
 
 # ── /api/facebook/post_reel ───────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 """Download Blueprint — SocketIO handle_download + /api/history + /api/files routes."""
 import asyncio
+import json
 import threading
 import logging
 import os
@@ -273,11 +274,11 @@ def file_thumbnail():
 
 @bp.route('/api/files/preview-compatible')
 def preview_compatible_file():
-    """Make a browser-compatible preview for codecs unsupported by Qt WebEngine."""
+    """Serve compatible videos immediately; transcode only a short preview when needed."""
     import hashlib
     import subprocess
     import tempfile
-    from utils.ffprobe import find_ffmpeg
+    from utils.ffprobe import find_ffmpeg, find_ffprobe
 
     raw_path = request.args.get('path', '').strip()
     if not raw_path:
@@ -292,6 +293,19 @@ def preview_compatible_file():
     source = source.resolve()
     if not source.is_file() or source.suffix.lower() not in ('.mp4', '.mkv', '.mov', '.webm', '.avi', '.m4v'):
         return jsonify({'error': 'Video not found'}), 404
+    ffprobe = find_ffprobe()
+    if source.suffix.lower() in ('.mp4', '.m4v') and ffprobe:
+        try:
+            probe = subprocess.run([ffprobe, '-v', 'error', '-show_entries',
+                                    'stream=codec_type,codec_name', '-of', 'json', str(source)],
+                                   capture_output=True, text=True, timeout=12, check=True)
+            streams = json.loads(probe.stdout).get('streams') or []
+            video_ok = any(s.get('codec_type') == 'video' and s.get('codec_name') == 'h264' for s in streams)
+            audio_ok = all(s.get('codec_name') in ('aac', 'mp3') for s in streams if s.get('codec_type') == 'audio')
+            if video_ok and audio_ok:
+                return send_file(str(source), mimetype='video/mp4', conditional=True)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
         return jsonify({'error': 'FFmpeg not available'}), 503
@@ -299,20 +313,22 @@ def preview_compatible_file():
     key = hashlib.sha256(f'{source}:{stat.st_size}:{stat.st_mtime_ns}'.encode()).hexdigest()
     cache = Path(tempfile.gettempdir()) / 'DuyTrisDownloader' / 'preview'
     cache.mkdir(parents=True, exist_ok=True)
-    target = cache / f'{key}.mp4'
+    target = cache / f'{key}.short.mp4'
     if not target.is_file():
-        pending = cache / f'{key}.pending.mp4'
+        pending = cache / f'{key}.short.pending.mp4'
         try:
-            subprocess.run([ffmpeg, '-y', '-i', str(source), '-map', '0:v:0', '-map', '0:a:0?',
+            subprocess.run([ffmpeg, '-y', '-i', str(source), '-t', '30', '-map', '0:v:0', '-map', '0:a:0?',
                             '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p',
                             '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', str(pending)],
-                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=1800)
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=120)
             pending.replace(target)
         except (OSError, subprocess.SubprocessError) as exc:
             pending.unlink(missing_ok=True)
             LOGGER.exception('Compatible video preview failed: %s', exc)
             return jsonify({'error': 'Could not prepare video preview'}), 500
-    return send_file(str(target), mimetype='video/mp4', conditional=True)
+    response = send_file(str(target), mimetype='video/mp4', conditional=True)
+    response.headers['X-Preview-Partial'] = '30s'
+    return response
 
 
 @bp.route("/api/files/open", methods=["POST"])
@@ -519,6 +535,7 @@ def register_socketio_handlers():
         use_queue = (data or {}).get("use_queue", False)
         extra_url = (data or {}).get("extra_url", "").strip()
         post_process = (data or {}).get("post_process") or {}
+        video_quality = str((data or {}).get("quality") or "best").strip()
 
         def run():
             try:
@@ -661,6 +678,7 @@ def register_socketio_handlers():
                                         cookiefile=None,
                                         proxy=_resolve_proxy(config),
                                         progress_hook=_yt_hook,
+                                        quality=video_quality,
                                     )
                                     prog.advance_step("记录历史", "")
                                     if dl_res.get("ok"):

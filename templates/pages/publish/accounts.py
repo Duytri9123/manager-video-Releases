@@ -22,6 +22,40 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("accounts", __name__)
 
 
+@bp.route('/api/accounts/saved_sessions', methods=['GET'])
+def saved_sessions():
+    """Report saved credentials per account without exposing cookie or token values."""
+    from templates.pages.publish.tiktok import _has_login_cookies
+    from templates.pages.publish.facebook_browser import _profile as fb_browser_profile
+    result = {'youtube': {}, 'facebook': {}, 'tiktok': {}, 'douyin': {}}
+    yt = get_youtube_account_manager()
+    for account in yt.list_accounts():
+        aid = str(account['id'])
+        oauth_saved = yt.get_token_path(aid).is_file() or yt.get_token_json_path(aid).is_file()
+        result['youtube'][aid] = {'saved': oauth_saved, 'method': 'OAuth'}
+    tt = get_tiktok_account_manager()
+    for account in tt.list_accounts():
+        aid = str(account['id'])
+        result['tiktok'][aid] = {'saved': _has_login_cookies(tt.get_profile_dir(aid)), 'method': 'Trình duyệt'}
+    fb = get_facebook_account_manager()
+    for account in fb.list_accounts():
+        aid = str(account['id'])
+        token_saved = bool(fb.get_token(aid).get('access_token'))
+        browser_saved = (fb_browser_profile(aid) / '.connected').is_file()
+        result['facebook'][aid] = {'saved': token_saved or browser_saved,
+                                   'method': 'Graph API' if token_saved else 'Trình duyệt' if browser_saved else ''}
+    dy = get_douyin_account_manager()
+    for account in dy.list_accounts():
+        aid = str(account['id'])
+        try:
+            cookies = json.loads((dy.accounts_dir / f'{aid}.json').read_text(encoding='utf-8'))
+            saved = bool(cookies)
+        except (OSError, ValueError):
+            saved = False
+        result['douyin'][aid] = {'saved': saved, 'method': 'Cookie'}
+    return jsonify({'ok': True, 'sessions': result})
+
+
 # ── YouTube Accounts ──────────────────────────────────────────────────────────
 
 @bp.route("/api/accounts/youtube", methods=["GET"])

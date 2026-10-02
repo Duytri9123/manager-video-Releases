@@ -15,9 +15,9 @@
       <div>
         <h1 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
           Cấu hình hệ thống
-          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">Settings</span>
+          <span class="cfg-header-badge text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">Settings</span>
         </h1>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+        <p class="cfg-header-description text-xs text-slate-500 dark:text-slate-400 mt-0.5">
           Tùy chỉnh thông số tải video, tài khoản mạng xã hội và cookie phiên làm việc.
         </p>
       </div>
@@ -29,7 +29,7 @@
           <polyline points="17 21 17 13 7 13 7 21"></polyline>
           <polyline points="7 3 7 8 15 8"></polyline>
         </svg>
-        Lưu cấu hình
+        <span class="cfg-save-full">Lưu cấu hình</span><span class="cfg-save-short">Lưu</span>
       </button>
     </div>
   </div>
@@ -39,15 +39,15 @@
     <nav class="config-nav">
       <div class="config-tab active" onclick="switchConfigTab(this,'cfg-sec-general')">
         <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span class="tab-label">Tải xuống</span>
+        <span class="tab-label"><span class="cfg-tab-full">Tải xuống</span><span class="cfg-tab-short">Tải</span></span>
       </div>
       <div class="config-tab" onclick="switchConfigTab(this,'cfg-sec-integration')">
         <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
-        <span class="tab-label">Tài khoản &amp; Đăng tải</span>
+        <span class="tab-label"><span class="cfg-tab-full">Tài khoản &amp; Đăng tải</span><span class="cfg-tab-short">Tài khoản</span></span>
       </div>
       <div class="config-tab" onclick="switchConfigTab(this,'cfg-sec-cookies')">
         <svg class="tab-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM15 14a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>
-        <span class="tab-label">Quản lý Cookie</span>
+        <span class="tab-label"><span class="cfg-tab-full">Quản lý Cookie</span><span class="cfg-tab-short">Cookie</span></span>
       </div>
     </nav>
 
@@ -392,7 +392,9 @@
               <select id="cfg-upload-platform" class="h-[34px] w-full text-xs">
                 <option value="youtube" selected>YouTube</option>
                 <option value="tiktok">TikTok</option>
+                <option value="facebook">Facebook</option>
                 <option value="both">Cả hai nền tảng</option>
+                <option value="all">Cả ba nền tảng</option>
               </select>
             </div>
             <div class="field mb-0 flex items-center pt-5">
@@ -451,6 +453,13 @@
                 </select>
               </div>
             </div>
+            <!-- Facebook Template -->
+            <div class="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 flex flex-col gap-3">
+              <div class="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase">Mẫu mặc định Facebook</div>
+              <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">Template tiêu đề</label><input type="text" id="cfg-fb-title-template" value="{title}" class="h-[34px] w-full text-xs"></div>
+              <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">Template caption / hashtags</label><input type="text" id="cfg-fb-caption-template" value="{title}" class="h-[34px] w-full text-xs"></div>
+              <div class="text-xs text-slate-500">Bài đăng trên Page hiển thị công khai theo quyền của Page.</div>
+            </div>
           </div>
         </div>
 
@@ -491,16 +500,16 @@
           <div class="cfg-card mb-4 flex flex-wrap items-center justify-between gap-4">
             <div>
               <div class="text-xs font-bold text-slate-800 dark:text-slate-200">Chế độ Cookie Douyin</div>
-              <div class="text-[11px] text-slate-400 mt-0.5" id="ck-mode-desc">Sử dụng cookie mặc định tích hợp từ hệ thống.</div>
+              <div class="text-[11px] text-slate-400 mt-0.5" id="cfg-ck-mode-desc">Sử dụng cookie mặc định tích hợp từ hệ thống.</div>
             </div>
             <label class="toggle-wrap m-0">
-              <input type="checkbox" class="toggle-input" id="ck-mode-toggle" onchange="onCookieModeChange()">
+              <input type="checkbox" class="toggle-input" id="cfg-ck-mode-toggle" onchange="onCookieModeChange()">
               <div class="toggle"></div>
               <span class="toggle-label text-xs font-semibold">Tùy chỉnh Cookie</span>
             </label>
           </div>
 
-          <div id="ck-custom-wrap" style="display:none" class="flex flex-col gap-4">
+          <div id="cfg-ck-custom-wrap" style="display:none" class="flex flex-col gap-4">
             <!-- Phân tích Cookie thô Douyin -->
             <div class="cfg-card">
               <div class="cfg-card-header">
@@ -510,17 +519,17 @@
                 </span>
               </div>
               <div class="field">
-                <textarea id="ck-raw" rows="3" placeholder="Dán chuỗi cookie thô hoặc JSON vào đây (ttwid=xxx; odin_tt=xxx; passport_csrf_token=xxx; ...)" class="w-full text-xs font-mono"></textarea>
+                <textarea id="cfg-ck-raw" rows="3" placeholder="Dán chuỗi cookie thô hoặc JSON vào đây (ttwid=xxx; odin_tt=xxx; passport_csrf_token=xxx; ...)" class="w-full text-xs font-mono"></textarea>
               </div>
               <div class="flex flex-wrap items-center gap-2 pt-1">
                 <button type="button" class="btn btn-primary h-[32px] text-xs px-3 flex items-center gap-1.5 cursor-pointer" onclick="parseCookie()">
                   <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   Phân tích tự động
                 </button>
-                <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="document.getElementById('ck-json-file')?.click()">
+                <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="document.getElementById('cfg-ck-json-file')?.click()">
                   Nhập tệp JSON
                 </button>
-                <input id="ck-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importCookieJsonFile(this)">
+                <input id="cfg-ck-json-file" type="file" accept=".json,application/json" style="display:none" onchange="importCookieJsonFile(this)">
                 <button type="button" class="btn btn-secondary h-[32px] text-xs px-3 cursor-pointer" onclick="autoFetchCookie()">
                   Tự động lấy
                 </button>
@@ -534,20 +543,20 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   Các trường tham số Cookie Douyin
                 </span>
-                <div class="status-bar" id="ck-status">
+                <div class="status-bar" id="cfg-ck-status">
                   <span class="dot dot-gray"></span>
                   <span class="text-xs text-muted">Chưa kiểm tra</span>
                 </div>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">ttwid</label><input type="text" id="ck-ttwid" placeholder="ttwid..." class="h-[34px] w-full text-xs"></div>
-                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">odin_tt</label><input type="text" id="ck-odin_tt" placeholder="odin_tt..." class="h-[34px] w-full text-xs"></div>
-                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">passport_csrf_token</label><input type="text" id="ck-passport_csrf_token" placeholder="csrf token..." class="h-[34px] w-full text-xs"></div>
-                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">s_v_web_id</label><input type="text" id="ck-s_v_web_id" placeholder="s_v_web_id..." class="h-[34px] w-full text-xs"></div>
-                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">__ac_nonce</label><input type="text" id="ck-__ac_nonce" placeholder="__ac_nonce..." class="h-[34px] w-full text-xs"></div>
-                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">__ac_signature</label><input type="text" id="ck-__ac_signature" placeholder="__ac_signature..." class="h-[34px] w-full text-xs"></div>
-                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">UIFID</label><input type="text" id="ck-UIFID" placeholder="UIFID..." class="h-[34px] w-full text-xs"></div>
-                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">bd_ticket_guard_client_web_domain</label><input type="text" id="ck-bd_ticket_guard_client_web_domain" placeholder="domain..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">ttwid</label><input type="text" id="cfg-ck-ttwid" placeholder="ttwid..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">odin_tt</label><input type="text" id="cfg-ck-odin_tt" placeholder="odin_tt..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">passport_csrf_token</label><input type="text" id="cfg-ck-passport_csrf_token" placeholder="csrf token..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">s_v_web_id</label><input type="text" id="cfg-ck-s_v_web_id" placeholder="s_v_web_id..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">__ac_nonce</label><input type="text" id="cfg-ck-__ac_nonce" placeholder="__ac_nonce..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">__ac_signature</label><input type="text" id="cfg-ck-__ac_signature" placeholder="__ac_signature..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">UIFID</label><input type="text" id="cfg-ck-UIFID" placeholder="UIFID..." class="h-[34px] w-full text-xs"></div>
+                <div class="field mb-0"><label class="text-xs font-semibold mb-1 block">bd_ticket_guard_client_web_domain</label><input type="text" id="cfg-ck-bd_ticket_guard_client_web_domain" placeholder="domain..." class="h-[34px] w-full text-xs"></div>
               </div>
               <div class="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button type="button" class="btn btn-primary h-[34px] text-xs px-4 cursor-pointer" onclick="saveCookies()">Lưu Cookie Douyin</button>
@@ -648,7 +657,7 @@
                 <div>
                   <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Đọc từ trình duyệt cục bộ</h4>
                   <div class="field mb-0">
-                    <select id="ck-yt-browser" class="h-[34px] w-full text-xs">
+                    <select id="cfg-ck-yt-browser" class="h-[34px] w-full text-xs">
                       <option value="">-- Không sử dụng --</option>
                       <option value="chrome">Google Chrome</option>
                       <option value="edge">Microsoft Edge</option>
@@ -667,7 +676,7 @@
                 <div>
                   <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Đường dẫn tệp Cookie (Netscape .txt)</h4>
                   <div class="field mb-0">
-                    <input type="text" id="ck-yt-file" placeholder="VD: C:\cookies\youtube-cookies.txt" class="h-[34px] w-full text-xs">
+                    <input type="text" id="cfg-ck-yt-file" placeholder="VD: C:\cookies\youtube-cookies.txt" class="h-[34px] w-full text-xs">
                   </div>
                 </div>
                 <p class="text-[11px] text-slate-400 mt-2">Xuất file từ extension "Get cookies.txt LOCALLY".</p>
@@ -676,7 +685,7 @@
 
             <div class="field mb-3">
               <label class="text-xs font-semibold mb-1.5 block">Dán nội dung Cookie YouTube thô</label>
-              <textarea id="ck-yt-content" rows="4" placeholder="Dán nội dung file .txt hoặc chuỗi header raw tại đây..." class="w-full text-xs font-mono"></textarea>
+              <textarea id="cfg-ck-yt-content" rows="4" placeholder="Dán nội dung file .txt hoặc chuỗi header raw tại đây..." class="w-full text-xs font-mono"></textarea>
             </div>
 
             <div class="flex flex-wrap items-center gap-2 mb-4">
@@ -689,7 +698,7 @@
             <div class="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button type="button" class="btn btn-primary h-[34px] text-xs px-4 cursor-pointer" onclick="saveConfig()">Lưu cấu hình</button>
               <button type="button" class="btn btn-secondary h-[34px] text-xs px-4 cursor-pointer" onclick="validateYoutubeCookie(this)">Kiểm tra hợp lệ</button>
-              <span id="ck-yt-status" class="text-xs font-semibold"></span>
+              <span id="cfg-ck-yt-status" class="text-xs font-semibold"></span>
             </div>
           </div>
         </div>
@@ -710,7 +719,7 @@
                 <div>
                   <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Thư mục hồ sơ Playwright</h4>
                   <div class="field mb-0">
-                    <input type="text" id="ck-fb-profile" placeholder="Mặc định: .facebook_profile" class="h-[34px] w-full text-xs">
+                    <input type="text" id="cfg-ck-fb-profile" placeholder="Mặc định: .facebook_profile" class="h-[34px] w-full text-xs">
                   </div>
                 </div>
                 <p class="text-[11px] text-slate-400 mt-2">Dùng để lưu phiên đăng nhập Chrome tự động khi chạy Playwright.</p>
@@ -721,7 +730,7 @@
                 <div>
                   <h4 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-2">Đường dẫn tệp Cookie (.txt)</h4>
                   <div class="field mb-0">
-                    <input type="text" id="ck-fb-file" placeholder="VD: C:\cookies\facebook-cookies.txt" class="h-[34px] w-full text-xs">
+                    <input type="text" id="cfg-ck-fb-file" placeholder="VD: C:\cookies\facebook-cookies.txt" class="h-[34px] w-full text-xs">
                   </div>
                 </div>
                 <p class="text-[11px] text-slate-400 mt-2">Cho phép yt-dlp tải các video Facebook ở độ phân giải HD hoặc riêng tư.</p>
@@ -730,7 +739,7 @@
 
             <div class="field mb-3">
               <label class="text-xs font-semibold mb-1.5 block">Dán nội dung Cookie Facebook thô</label>
-              <textarea id="ck-fb-content" rows="4" placeholder="Dán nội dung file cookie Netscape hoặc chuỗi raw tại đây..." class="w-full text-xs font-mono"></textarea>
+              <textarea id="cfg-ck-fb-content" rows="4" placeholder="Dán nội dung file cookie Netscape hoặc chuỗi raw tại đây..." class="w-full text-xs font-mono"></textarea>
             </div>
 
             <div class="flex flex-wrap items-center gap-2 mb-4">
@@ -743,7 +752,7 @@
             <div class="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button type="button" class="btn btn-primary h-[34px] text-xs px-4 cursor-pointer" onclick="saveConfig()">Lưu cấu hình</button>
               <button type="button" class="btn btn-secondary h-[34px] text-xs px-4 cursor-pointer" onclick="validateFacebookCookie(this)">Kiểm tra hợp lệ</button>
-              <span id="ck-fb-status" class="text-xs font-semibold"></span>
+              <span id="cfg-ck-fb-status" class="text-xs font-semibold"></span>
             </div>
           </div>
         </div>

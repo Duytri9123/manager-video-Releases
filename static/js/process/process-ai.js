@@ -194,6 +194,7 @@
     const cover = Array.isArray(result.needs_cover) ? result.needs_cover : [];
     const zones = Array.isArray(result.suggested_blur_zones) ? result.suggested_blur_zones : [];
     const titles = result.title_suggestions || {};
+    const plan = result.editing_plan || {};
     return [
       result.summary ? `Tóm tắt video: ${result.summary}` : '',
       result.visual_style ? `Đặc điểm hình ảnh: ${result.visual_style}` : '',
@@ -202,6 +203,8 @@
       zones.length ? `Vùng che AI đề xuất: ${zones.map(x => x.label || x.reason || '').filter(Boolean).join('; ')}` : '',
       titles.youtube ? `Gợi ý tiêu đề YouTube: ${titles.youtube}` : (titles.short ? `Gợi ý tiêu đề: ${titles.short}` : ''),
       result.analysis_notes ? `Ghi chú AI: ${result.analysis_notes}` : '',
+      plan.framing_notes ? `Bố cục: ${plan.framing_notes}` : '',
+      plan.effects_notes ? `Hiệu ứng đề xuất: ${plan.effects_notes}` : '',
     ].filter(Boolean).join('\n');
   }
   function procRenderAiAnalysis() {
@@ -222,6 +225,7 @@
       ? `Phát hiện ${cover.length} dấu nguồn/chữ, đề xuất ${zones.length} vùng xử lý. Kiểm tra từng vùng trước khi xuất.`
       : 'Chưa thấy dấu nguồn hoặc chữ rõ trong các khung hình đã lấy mẫu.';
     const titles = result.title_suggestions || {};
+    const plan = result.editing_plan || {};
     const titleInput = document.getElementById('frame-title');
     if (document.getElementById('frame-title-enabled')?.checked && titleInput) {
       const suggestion = titles.short || titles.tiktok || titles.youtube || titles.facebook;
@@ -254,6 +258,11 @@
       <div class="pe2-ai-box">
         <h4>Vùng che AI đề xuất</h4>
         ${zoneHtml}
+      </div>
+      <div class="pe2-ai-box"><h4>2. Tỷ lệ, khung và âm thanh</h4>
+        <div>Tỷ lệ: ${plan.target_aspect === '16x9' ? '16:9' : (plan.target_aspect === '9x16' ? '9:16' : 'Tự động')}; khớp khung: ${plan.aspect_mode === 'crop' ? 'Cắt giữa' : 'Giữ toàn bộ'}. ${_procAiEsc(plan.framing_notes || '')}</div>
+        <div>Khung và chữ khối dùng cấu hình đã lưu. Âm gốc mặc định 50%, có thể chỉnh theo giọng đọc.</div>
+        ${plan.effects_notes ? `<div>Hiệu ứng gợi ý: ${_procAiEsc(plan.effects_notes)}</div>` : ''}
       </div>
       ${titleBits.length ? `<div class="pe2-ai-box"><h4>Gợi ý tiêu đề</h4>${titleBits.map(t => `<span class="pe2-ai-pill">${_procAiEsc(t)}</span>`).join('')}</div>` : ''}
       ${result.analysis_notes ? `<div class="pe2-ai-box"><h4>Ghi chú</h4><div>${_procAiEsc(result.analysis_notes)}</div></div>` : ''}

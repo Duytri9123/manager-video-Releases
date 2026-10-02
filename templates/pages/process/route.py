@@ -1,5 +1,6 @@
 """Process Blueprint — /api/process_video, /api/upload_anti_fp_image, /api/make_vertical_video."""
 import asyncio
+import hashlib
 import logging
 import tempfile
 import time
@@ -438,14 +439,52 @@ def analyze_video_ai():
 
 @bp.route("/api/video_frame_from_url", methods=["POST"])
 def video_frame_from_url():
-    """Fetch thumbnail/cover from video URL via Douyin API."""
+    """Preview a timestamp from an undownloaded URL, with cover fallback."""
     data = request.json or {}
     url = str(data.get("url") or "").strip()
     if not url:
         return jsonify({"ok": False, "error": "Chưa nhập URL video"}), 400
 
+    try:
+        import base64
+        import subprocess
+        import tempfile
+        import yt_dlp
+        from core.video_processor import find_ffmpeg
+
+        timestamp = min(7200.0, max(0.0, float(data.get("timestamp") or 0)))
+        ffmpeg = find_ffmpeg()
+        if ffmpeg:
+            with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True,
+                                   "skip_download": True, "socket_timeout": 15,
+                                   "format": "best[ext=mp4]/best"}) as ydl:
+                info = ydl.extract_info(url, download=False) or {}
+            media = str(info.get("url") or "")
+            if not media:
+                for fmt in reversed(info.get("formats") or []):
+                    if fmt.get("url") and fmt.get("vcodec") != "none":
+                        media = str(fmt["url"])
+                        break
+            if media.startswith(("https://", "http://")):
+                headers = info.get("http_headers") or {}
+                with tempfile.TemporaryDirectory(prefix="proc_url_frame_") as tmp:
+                    frame = Path(tmp) / "frame.jpg"
+                    cmd = [str(ffmpeg), "-nostdin", "-ss", str(timestamp)]
+                    if headers:
+                        header_text = "".join(f"{k}: {v}\r\n" for k, v in headers.items())
+                        cmd += ["-headers", header_text]
+                    cmd += ["-i", media, "-frames:v", "1", "-vf", "scale=960:-2",
+                            "-q:v", "5", str(frame), "-y", "-loglevel", "error"]
+                    subprocess.run(cmd, capture_output=True, timeout=35, check=False)
+                    if frame.exists() and frame.stat().st_size:
+                        image = "data:image/jpeg;base64," + base64.b64encode(frame.read_bytes()).decode("ascii")
+                        return jsonify({"ok": True, "image": image, "duration": info.get("duration") or 0,
+                                        "source": "url_frame"})
+    except Exception as exc:
+        LOGGER.info("URL frame fallback to thumbnail: %s", exc)
+
     thumb_result = fetch_thumbnail_from_url(url)
-    if thumb_result and thumb_result.get("cover_url"):
+    if thumb_result and thumb_result.get("image"):
         return jsonify({"ok": True, **thumb_result})
 
     return jsonify({"ok": False, "error": "Không lấy được thumbnail từ URL"}), 404
@@ -1059,18 +1098,25 @@ def download_original_video():
     data = request.json or {}
     video_url = str(data.get("url") or "").strip()
     out_dir = str(data.get("out_dir") or "").strip()
+    quality = str(data.get("quality") or "best").strip()
 
     if not video_url:
         return jsonify({"ok": False, "error": "Chưa nhập URL video"}), 400
 
+    from core.download_reuse import find as find_original
+    output_dir = out_dir or str(load_cfg().get('path') or './Downloaded')
+    reused = find_original(video_url, output_dir)
+    if reused:
+        return jsonify({'ok': True, 'path': str(reused[0]), 'title': reused[1], 'reused': True})
+
     try:
-        downloaded_path, downloaded_title = download_original_source(video_url, out_dir)
+        downloaded_path, downloaded_title = download_original_source(video_url, out_dir, quality=quality)
         return jsonify({"ok": True, "path": str(downloaded_path), "title": downloaded_title})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-def download_original_source(video_url: str, out_dir: str = ""):
+def download_original_source(video_url: str, out_dir: str = "", quality: str = "best"):
     """Shared original-video downloader for Step 1 and the publishing queue."""
     from config import ConfigLoader
     from auth import CookieManager
@@ -1080,6 +1126,12 @@ def download_original_source(video_url: str, out_dir: str = ""):
     from storage import FileManager
     import re
     from urllib.parse import urlparse, parse_qs
+    from core.download_reuse import find as find_original, remember as remember_original
+
+    output_dir = out_dir or str(load_cfg().get('path') or './Downloaded')
+    reused = find_original(video_url, output_dir)
+    if reused:
+        return reused
 
     def _pick_url(raw: str) -> str:
         text = (raw or "").strip()
@@ -1141,6 +1193,7 @@ def download_original_source(video_url: str, out_dir: str = ""):
                     str(out_path / "Process_video" / "_tmp_dl"),
                     cookiefile=fb_cookie,
                     proxy=_resolve_proxy(cfg),
+                    quality=quality,
                 )
 
             res = await asyncio.to_thread(_do_generic)
@@ -1169,11 +1222,10 @@ def download_original_source(video_url: str, out_dir: str = ""):
                 )
             resolved_title = res.get("title") or _safe_stem(src.stem)
             base_name = _safe_stem(resolved_title) or f"video_{int(time.time())}"
-            save_dir = out_path / "Process_video"
+            source_key = hashlib.sha256(normalized_url0.encode('utf-8')).hexdigest()[:10]
+            save_dir = out_path / "Process_video" / f"{base_name}_{source_key}"
             save_dir.mkdir(parents=True, exist_ok=True)
             save_path = save_dir / f"{base_name}.mp4"
-            if save_path.exists():
-                save_path = save_dir / f"{base_name}_{int(time.time())}.mp4"
             try:
                 src.replace(save_path)
             except Exception:
@@ -1190,6 +1242,7 @@ def download_original_source(video_url: str, out_dir: str = ""):
                     "config": _j.dumps(safe, ensure_ascii=False),
                 })
 
+            remember_original(video_url, output_dir, save_path, resolved_title)
             return save_path.resolve(), resolved_title
 
         cm = CookieManager()
@@ -1259,8 +1312,9 @@ def download_original_source(video_url: str, out_dir: str = ""):
             save_dir.mkdir(parents=True, exist_ok=True)
             save_path = save_dir / f"{base_name}.mp4"
 
-            if save_path.exists():
-                save_path = save_dir / f"{base_name}_{int(time.time())}.mp4"
+            if save_path.is_file() and save_path.stat().st_size > 0:
+                remember_original(video_url, output_dir, save_path, resolved_title)
+                return save_path.resolve(), resolved_title
 
             session = await api.get_session()
             ok = await file_manager.download_file(
@@ -1293,6 +1347,7 @@ def download_original_source(video_url: str, out_dir: str = ""):
                 except Exception:
                     pass
 
+            remember_original(video_url, output_dir, save_path, resolved_title)
             return save_path.resolve(), resolved_title
 
     return asyncio.run(_do_download())

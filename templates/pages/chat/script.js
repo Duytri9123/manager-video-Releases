@@ -196,6 +196,7 @@
 
   async function chatSelectSession(sid) {
     if (!sid) return;
+    document.getElementById('page-chat')?.classList.remove('chat-sessions-open');
     state.activeSessionId = sid;
     localStorage.setItem('chatLastSessionId', sid);
     renderSessionList();
@@ -229,6 +230,7 @@
   }
 
   function chatNewSession(notify = true) {
+    document.getElementById('page-chat')?.classList.remove('chat-sessions-open');
     state.activeSessionId = 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     state.history = [];
     localStorage.removeItem('chatLastSessionId');
@@ -352,6 +354,11 @@
   function chatToggleSidebar() {
     const sidebar = document.getElementById('chat-sidebar');
     if (!sidebar) return;
+    if (window.matchMedia('(max-width: 768px)').matches) {
+      sidebar.classList.remove('w-0', 'p-0', 'overflow-hidden', 'border-r-0');
+      document.getElementById('page-chat')?.classList.toggle('chat-sessions-open');
+      return;
+    }
     state.sidebarCollapsed = !state.sidebarCollapsed;
     if (state.sidebarCollapsed) {
       sidebar.classList.add('w-0', 'p-0', 'overflow-hidden', 'border-r-0');

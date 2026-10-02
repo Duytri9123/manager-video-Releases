@@ -48,7 +48,7 @@ if (-not (Test-Path -LiteralPath $GeneratedOutput)) {
 
 if ($GeneratedOutput -ne $OutputExe) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputExe) | Out-Null
-    Copy-Item -LiteralPath $GeneratedOutput -Destination $OutputExe -Force
+    Move-Item -LiteralPath $GeneratedOutput -Destination $OutputExe -Force
 }
 
 $output = Get-Item -LiteralPath $OutputExe

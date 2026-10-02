@@ -818,7 +818,8 @@ async function openDownloadedPreviewModal(item) {
 
   if (ftype === 'video') {
     bodyHtml = `
-      <div class="proc-preview-modal-body" style="display:flex;align-items:center;justify-content:center;background:#000;min-height:300px;max-height:calc(90vh - 60px);overflow:hidden">
+      <div class="proc-preview-modal-body" style="display:flex;align-items:center;justify-content:center;background:#000;min-height:300px;max-height:calc(90vh - 60px);overflow:hidden;position:relative">
+        <div id="proc-video-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e2e8f0;font-size:12px;pointer-events:none">Đang mở video...</div>
         <video src="${previewUrl}" controls autoplay playsinline preload="metadata" style="max-width:100%;max-height:calc(90vh - 60px);width:auto;height:auto;display:block;outline:none;margin:auto"></video>
       </div>`;
   } else if (ftype === 'audio') {
@@ -875,6 +876,12 @@ async function openDownloadedPreviewModal(item) {
   });
   modal.querySelector('.proc-preview-modal-close')?.addEventListener('click', closeDownloadedPreviewModal);
   document.body.appendChild(modal);
+  const previewVideo = modal.querySelector('video');
+  if (previewVideo) {
+    const loading = modal.querySelector('#proc-video-loading');
+    previewVideo.addEventListener('loadedmetadata', () => { if (loading) loading.style.display = 'none'; });
+    previewVideo.addEventListener('error', () => { if (loading) loading.textContent = 'Không mở được video. Hãy mở file gốc để xem.'; });
+  }
   document.addEventListener('keydown', _downloadedPreviewEscHandler);
   modal.querySelector('.proc-preview-modal-close')?.focus();
 
@@ -1144,6 +1151,7 @@ function _renderDownloadedItems(data) {
   const list = document.getElementById('proc-downloaded-list');
   if (!list) return;
   window._procCurrentFilesData = data;
+  document.querySelectorAll(".proc-dropdown-menu[data-portal="true"]").forEach(menu => menu.remove());
   _updateViewModeButtons();
 
   const items = Array.isArray(data.items) ? data.items : [];
@@ -1314,13 +1322,14 @@ function _renderDownloadedItems(data) {
     trigger.addEventListener('click', e => {
       e.stopPropagation();
       const idx = trigger.dataset.index;
-      const menu = document.getElementById(`proc-dropdown-${idx}`);
+      const menu = trigger.parentElement.querySelector(".proc-dropdown-menu") || document.getElementById(`proc-dropdown-${idx}`);
       document.querySelectorAll('.proc-dropdown-menu').forEach(m => {
         if (m !== menu) m.style.display = 'none';
       });
       if (menu) {
         const isOpening = menu.style.display !== 'block';
         if (isOpening) {
+          if (menu.parentElement !== document.body) { document.body.appendChild(menu); menu.dataset.portal = 'true'; }
           const btnRect = trigger.getBoundingClientRect();
           const spaceBelow = window.innerHeight - btnRect.bottom;
           const menuHeight = 150;
@@ -1515,7 +1524,7 @@ window.deleteStep3DownloadedVideo = deleteStep3DownloadedVideo;
 
 // Global click handler to close open dropdown menus when clicking outside
 document.addEventListener('click', e => {
-  if (!e.target.closest('.proc-dropdown-wrapper')) {
+  if (!e.target.closest('.proc-dropdown-wrapper, .proc-dropdown-menu')) {
     document.querySelectorAll('.proc-dropdown-menu').forEach(m => m.style.display = 'none');
   }
 });
@@ -1614,6 +1623,9 @@ function _getProcessModel(kind) {
 }
 
 function startProcessVideo() {
+  window._procPublishFrameTitle = '';
+  window._pPubAIResult = null;
+  window._pPubSourceKey = '';
   let videoPath = document.getElementById('proc-video')?.value?.trim();
   let videoUrl = document.getElementById('proc-url')?.value?.trim();
   let selectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
@@ -1660,6 +1672,9 @@ function startProcessVideo() {
     }
     return;
   }
+  // Freeze Step 2 for this video before asynchronous provider/publishing checks.
+  // Edits made while it runs remain in the form and are read for the next video.
+  const thisVideoConfig = JSON.parse(JSON.stringify(collectProcessConfig(videoPath, videoUrl)));
 
   // Preflight: nếu user bật tự-động-đăng, check trạng thái các nền tảng trước khi
   // bắt đầu pipeline xử lý dài. Người dùng có thể tắt nền tảng lỗi hoặc hủy.
@@ -1767,14 +1782,14 @@ function startProcessVideo() {
         return;
       }
     }
-    let latestVideoPath = document.getElementById('proc-video')?.value?.trim() || videoPath;
-    let latestVideoUrl = document.getElementById('proc-url')?.value?.trim() || videoUrl;
+    let latestVideoPath = videoPath || document.getElementById('proc-video')?.value?.trim() || '';
+    let latestVideoUrl = videoUrl || (!latestVideoPath ? document.getElementById('proc-url')?.value?.trim() : '') || '';
     if (latestVideoUrl && !/^https?:\/\//i.test(latestVideoUrl)) {
       if (!latestVideoPath) latestVideoPath = latestVideoUrl;
       latestVideoUrl = '';
     }
     const latestSelectedFile = window._procSelectedFile || document.getElementById('proc-file')?.files?.[0] || null;
-    _startProcessVideoInternal(latestVideoPath, latestVideoUrl, latestSelectedFile);
+    _startProcessVideoInternal(latestVideoPath, latestVideoUrl, latestSelectedFile, thisVideoConfig);
   })();
 }
 
@@ -1791,10 +1806,10 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     transcribe_model:    _getProcessModel('transcribe'),
     translate_provider:  _getProcessProvider('translate'),
     translate_model:     _getProcessModel('translate'),
-    skip_ass_review:  (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
-    skip_ass:         (document.getElementById('step3-skip-ass-step3')?.checked || document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
+    skip_ass_review:  (document.getElementById('step3-skip-ass')?.checked || window._procSkipReviewSession) ?? false,
+    skip_ass:         document.getElementById('step3-skip-ass')?.checked ?? false,
     burn_subs:        (document.getElementById('proc-skip-transcription')?.checked ?? false) ? false : (document.getElementById('proc-burn')?.checked ?? true),
-    blur_original:    (window._procUseAiAnalysis && window._procVideoAiAnalysis?.video_path === videoPath && window._procVideoAiAnalysis?.result) ? false : (document.getElementById('proc-blur-original')?.checked ?? true),
+    blur_original:    document.getElementById('proc-blur-original')?.checked ?? true,
     blur_by_subtitles: document.getElementById('proc-blur-by-subtitles')?.checked ?? false,
     blur_height_pct:  parseFloat(document.getElementById('proc-blur-height')?.value || '15') / 100,
     blur_width_pct:   parseFloat(document.getElementById('proc-blur-width')?.value || '80') / 100,
@@ -1807,7 +1822,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
       return (v !== '' && v !== undefined) ? parseFloat(v) / 100 : null;  // null = 50%
     })(),
     blur_zone:        'bottom',  // legacy compat
-    blur_extra_zones: (window._procExtraBlurZones || []).filter(z => !(window._procUseAiAnalysis && window._procVideoAiAnalysis?.video_path === videoPath && window._procVideoAiAnalysis?.result) || z.source === 'ai' || z.zone === 'ai').map(z => ({
+    blur_extra_zones: (window._procExtraBlurZones || []).map(z => ({
       height_pct: (z.height || 12) / 100,
       position_pct: (z.position || 50) / 100,
       width_pct: (z.width || 80) / 100,
@@ -1842,6 +1857,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
       return sel?.value || 'white';
     })(),
     subtitle_position: document.getElementById('proc-sub-pos')?.value || 'bottom',
+    subtitle_width_pct: Math.max(40, Math.min(98, parseFloat(document.getElementById('proc-sub-width')?.value || '90'))),
     margin_v:         (() => {
       // UI value is % of video height. Convert to px for FFmpeg (reference: 720px height).
       const pct = parseFloat(document.getElementById('proc-margin-v')?.value || '3');
@@ -1881,7 +1897,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
     capcut_auto_open: document.getElementById('proc-capcut-auto-open')?.checked ?? false,
     // Video mode: only convert when the source orientation differs from the selected mode.
     content_aspect: document.getElementById('proc-content-aspect')?.value || 'auto',
-    content_aspect_mode: document.getElementById('proc-content-aspect-mode')?.value || 'crop',
+    content_aspect_mode: document.getElementById('proc-content-aspect-mode')?.value || 'pad',
     mask_config: {mode: document.getElementById('proc-mask-mode')?.value || 'blur', source_x: Number(document.getElementById('proc-mask-source-x')?.value ?? 50)/100, source_y: Number(document.getElementById('proc-mask-source-y')?.value ?? 75)/100},
     target_aspect: document.getElementById('proc-preview-aspect')?.value || 'auto',
     output_fps: Number(document.getElementById('proc-output-fps')?.value || 0),
@@ -1935,7 +1951,7 @@ function collectProcessConfig(videoPath = "", videoUrl = "") {
 }
 window.collectProcessConfig = collectProcessConfig;
 
-function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
+function _startProcessVideoInternal(videoPath, videoUrl, selectedFile, configSnapshot) {
   window._publishLastOutputPath = '';
   window._publishLastSubtitlePath = '';
   window._procReusePrepared = null;
@@ -1949,7 +1965,9 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
     _appendProcLog(' Đang gửi request xử lý video tới server backend...', 'info');
   }
 
-  const baseFields = collectProcessConfig(videoPath, videoUrl);
+  const baseFields = configSnapshot || collectProcessConfig(videoPath, videoUrl);
+  baseFields.video_path = videoPath;
+  baseFields.video_url = videoUrl || '';
 
   // Keep an inspectable snapshot of the exact Step 2 values used by this run.
   window._procLastSubmittedConfig = JSON.parse(JSON.stringify(baseFields));
@@ -2082,6 +2100,7 @@ function _startProcessVideoInternal(videoPath, videoUrl, selectedFile) {
                 }
               }
             }
+            if (d.frame_title) window._procPublishFrameTitle = d.frame_title;
             if (d.frame_title && document.getElementById('frame-title-enabled')?.checked) {
               const input = document.getElementById('frame-title');
               if (input && (!input.value.trim() || input.value === input.dataset.aiTitle)) {
@@ -2212,8 +2231,7 @@ function sendLastProcessedToPublish() {
 }
 
 /**
- * Reads ASS subtitle → calls AI to generate caption → navigates to step 5.
- * Shows a loading indicator while AI is running.
+ * Reuses the frame title or analyzes ASS when needed, then opens publishing.
  */
 async function _procImportAndAICaption() {
   if (!window._publishLastOutputPath) {
@@ -2222,7 +2240,7 @@ async function _procImportAndAICaption() {
   }
 
   const btn = event?.currentTarget;
-  if (btn) { btn.disabled = true; btn.textContent = ' AI đang viết caption...'; }
+  if (btn) { btn.disabled = true; btn.textContent = ' Đang tạo thông tin đăng...'; }
 
   try {
     // Read ASS content if available
@@ -2244,7 +2262,7 @@ async function _procImportAndAICaption() {
     const autopubChk = document.getElementById('p-autopub-enabled');
     if (autopubChk && !autopubChk.checked) autopubChk.checked = true;
 
-    // Run AI analysis
+    // Reuse the frame title; call AI only when no title was generated.
     const hasVideoAi = !!(window._procUseAiAnalysis && window._procVideoAiAnalysis?.result);
     if ((assContent || hasVideoAi) && typeof pPubAnalyzeFromAss === 'function') {
       await pPubAnalyzeFromAss(assContent);
@@ -2254,7 +2272,7 @@ async function _procImportAndAICaption() {
   } catch (e) {
     _appendProcLog(' AI caption thất bại: ' + e.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = ' Import & AI viết Caption → Đăng (Bước 4)'; }
+    if (btn) { btn.disabled = false; btn.textContent = ' Tạo thông tin → Đăng (Bước 4)'; }
   }
 
   // Navigate to step 4
@@ -2316,8 +2334,35 @@ async function autoDetectSubtitles(videoPath) {
   }
 }
 
+const _procStageNames = {
+  1: 'Chuẩn bị video',
+  2: 'Nhận diện lời nói',
+  3: 'Dịch và tạo phụ đề',
+  4: 'Chỉnh sửa hình ảnh',
+  5: 'Tạo và ghép giọng đọc'
+};
+function _formatProcLogMessage(message) {
+  let result = String(message ?? '').replace(/[\u{1F300}-\u{1FAFF}\u2300-\u23FF\u2600-\u27BF\uFE0F\u200D]/gu, '').trim();
+  const match = result.match(/^\[Bước ([1-5])\/5\]\s*/);
+  if (match) {
+    const stage = Number(match[1]);
+    result = `Giai đoạn ${stage}/5 · ${_procStageNames[stage]} — ${result.slice(match[0].length)}`;
+    const active = document.getElementById('step3-active-stage');
+    if (active) active.textContent = `${stage}/5 · ${_procStageNames[stage]}`;
+    document.querySelectorAll('[data-proc-log-stage]').forEach(el => {
+      const n = Number(el.dataset.procLogStage);
+      el.classList.toggle('proc-log-stage-active', n === stage);
+      el.classList.toggle('proc-log-stage-done', n < stage);
+    });
+  }
+  return result.replace(/\bASS\b/g, 'tệp phụ đề ASS')
+    .replace(/\bburn\b/gi, 'ghi vào video')
+    .replace(/\bTTS\b/g, 'giọng đọc')
+    .replace(/\bbatch\b/gi, 'lượt')
+    .replace(/\boutput\b/gi, 'đầu ra');
+}
 function _appendProcLog(msg, level) {
-  msg = String(msg ?? '').replace(/[\u{1F300}-\u{1FAFF}\u2300-\u23FF\u2600-\u27BF\uFE0F\u200D]/gu, '').trim();
+  msg = _formatProcLogMessage(msg);
   const box = document.getElementById('proc-log');
   const box3 = document.getElementById('step3-log');
   if (!box && !box3) return;
@@ -2599,6 +2644,8 @@ async function procPrepareReusableVideo() {
   window._procReusePrepared = null;
   status.textContent = 'AI đang tạo thông tin từ ASS...';
   try {
+    window._procPublishFrameTitle = '';
+    window._pPubSourceKey = '';
     window._publishLastOutputPath = video;
     window._publishLastSubtitlePath = ass;
     document.getElementById('p-autopub-enabled').checked = true;

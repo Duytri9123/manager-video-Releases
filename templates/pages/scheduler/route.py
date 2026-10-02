@@ -317,7 +317,6 @@ def _run_processing_job(item_id: str):
         if not req_settings or any(key.startswith("proc-") for key in req_settings) or "subtitles" in req_settings:
             raise ValueError("Hãy chọn lại cấu hình bước 2 và lưu lịch để đồng bộ đầy đủ thông số")
         req_settings["skip_ass_review"] = True
-        req_settings["skip_ass"] = True
 
         if not video_path or not Path(video_path).exists():
             if not source_url.startswith("http://") and not source_url.startswith("https://"):
@@ -514,6 +513,12 @@ def _run_publishing_job(item_id: str):
         conn.commit()
         conn.close()
         LOGGER.info("Scheduler item %s published successfully to %s: %s", item_id, platform, published_url)
+        try:
+            from core.publish_history import record
+            record(platform, 'published', video_path=video_path, title=item.get('post_title') or item.get('caption') or '',
+                   account=item.get('account_name') or item.get('account_id') or '', url=published_url, source='scheduler')
+        except Exception:
+            LOGGER.exception('Could not save published result')
 
     except Exception as exc:
         LOGGER.exception("Publishing failed for item %s: %s", item_id, exc)
@@ -523,6 +528,13 @@ def _run_publishing_job(item_id: str):
                      (str(exc), now, item_id))
         conn.commit()
         conn.close()
+        try:
+            from core.publish_history import record
+            record(platform, 'failed', video_path=item.get('video_path') or '',
+                   title=item.get('post_title') or '', account=item.get('account_name') or '',
+                   error=str(exc), source='scheduler')
+        except Exception:
+            LOGGER.exception('Could not save failed publish result')
 
 
 @bp.route("/api/scheduler/items/<item_id>/publish", methods=["POST"])

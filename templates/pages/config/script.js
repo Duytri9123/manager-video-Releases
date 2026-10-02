@@ -127,6 +127,8 @@ async function loadConfig() {
   set('cfg-tt-title-template', upload.tiktok?.title_template || '{title}');
   set('cfg-tt-caption-template', upload.tiktok?.caption_template || '{title}');
   set('cfg-tt-privacy', upload.tiktok?.privacy_status || 'private');
+  set('cfg-fb-title-template', upload.facebook?.title_template || '{title}');
+  set('cfg-fb-caption-template', upload.facebook?.caption_template || '{title}');
 
   // Video processing
   setChk('vp-enabled', cfg.video_process?.enabled !== false);
@@ -292,6 +294,10 @@ async function saveConfig() {
         caption_template: get('cfg-tt-caption-template') || '{title}',
         privacy_status: get('cfg-tt-privacy') || 'private',
       },
+      facebook: {
+        title_template: get('cfg-fb-title-template') || '{title}',
+        caption_template: get('cfg-fb-caption-template') || '{title}',
+      },
     },
     huggingface: {
       tts_model: get('vp-hf-model') || 'facebook/mms-tts-vie',
@@ -360,22 +366,22 @@ async function saveConfig() {
   data.video_process.fish_api_key = get('cfg-fish-key');
 
   // TikTok, YouTube & Facebook cookie settings
-  data.facebook_profile = get('ck-fb-profile') || '.facebook_profile';
+  data.facebook_profile = get('cfg-ck-fb-profile') || '.facebook_profile';
   data.ytdlp = {
     youtube_cookie_mode: 'custom',
     facebook_cookie_mode: 'custom',
     tiktok_cookie_mode: 'custom',
-    cookies_from_browser: get('ck-yt-browser'),
+    cookies_from_browser: get('cfg-ck-yt-browser'),
     cookies_from_browser_tiktok: get('ck-tiktok-browser'),
     cookie_files: {
       tiktok: get('ck-tiktok-file'),
-      youtube: get('ck-yt-file'),
-      facebook: get('ck-fb-file')
+      youtube: get('cfg-ck-yt-file'),
+      facebook: get('cfg-ck-fb-file')
     },
     cookie_contents: {
       tiktok: get('ck-tiktok-content'),
-      youtube: get('ck-yt-content'),
-      facebook: get('ck-fb-content')
+      youtube: get('cfg-ck-yt-content'),
+      facebook: get('cfg-ck-fb-content')
     }
   };
 
@@ -640,7 +646,7 @@ async function loadCookieMode() {
   try {
     const res = await fetch('/api/cookie_mode');
     const data = await res.json();
-    const toggle = document.getElementById('ck-mode-toggle');
+    const toggle = document.getElementById('cfg-ck-mode-toggle');
     if (toggle) {
       toggle.checked = data.mode === 'custom';
       onCookieModeChange();
@@ -656,14 +662,14 @@ async function loadCookieFields() {
     if (!cfg) return;
     const cookies = cfg.cookies || {};
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
-    set('ck-ttwid', cookies.ttwid || '');
-    set('ck-odin_tt', cookies.odin_tt || '');
-    set('ck-passport_csrf_token', cookies.passport_csrf_token || '');
-    set('ck-s_v_web_id', cookies.s_v_web_id || '');
-    set('ck-__ac_nonce', cookies.__ac_nonce || '');
-    set('ck-__ac_signature', cookies.__ac_signature || '');
-    set('ck-UIFID', cookies.UIFID || '');
-    set('ck-bd_ticket_guard_client_web_domain', cookies.bd_ticket_guard_client_web_domain || '');
+    set('cfg-ck-ttwid', cookies.ttwid || '');
+    set('cfg-ck-odin_tt', cookies.odin_tt || '');
+    set('cfg-ck-passport_csrf_token', cookies.passport_csrf_token || '');
+    set('cfg-ck-s_v_web_id', cookies.s_v_web_id || '');
+    set('cfg-ck-__ac_nonce', cookies.__ac_nonce || '');
+    set('cfg-ck-__ac_signature', cookies.__ac_signature || '');
+    set('cfg-ck-UIFID', cookies.UIFID || '');
+    set('cfg-ck-bd_ticket_guard_client_web_domain', cookies.bd_ticket_guard_client_web_domain || '');
 
     // Load TikTok, YouTube & Facebook cookie settings
     const ytdlp = cfg.ytdlp || {};
@@ -673,12 +679,12 @@ async function loadCookieFields() {
     set('ck-tiktok-file', cookieFiles.tiktok || '');
     set('ck-tiktok-content', cookieContents.tiktok || '');
 
-    set('ck-yt-browser', ytdlp.cookies_from_browser || '');
-    set('ck-yt-file', cookieFiles.youtube || '');
-    set('ck-yt-content', cookieContents.youtube || '');
-    set('ck-fb-file', cookieFiles.facebook || '');
-    set('ck-fb-content', cookieContents.facebook || '');
-    set('ck-fb-profile', cfg.facebook_profile || '.facebook_profile');
+    set('cfg-ck-yt-browser', ytdlp.cookies_from_browser || '');
+    set('cfg-ck-yt-file', cookieFiles.youtube || '');
+    set('cfg-ck-yt-content', cookieContents.youtube || '');
+    set('cfg-ck-fb-file', cookieFiles.facebook || '');
+    set('cfg-ck-fb-content', cookieContents.facebook || '');
+    set('cfg-ck-fb-profile', cfg.facebook_profile || '.facebook_profile');
   } catch (e) {
     console.error('loadCookieFields error:', e);
   }
@@ -723,9 +729,9 @@ async function savePlatformConfig(platform) {
       }
     };
   } else if (platform === 'youtube') {
-    const browser = document.getElementById('ck-yt-browser')?.value || '';
-    const filepath = document.getElementById('ck-yt-file')?.value?.trim() || '';
-    const content = document.getElementById('ck-yt-content')?.value || '';
+    const browser = document.getElementById('cfg-ck-yt-browser')?.value || '';
+    const filepath = document.getElementById('cfg-ck-yt-file')?.value?.trim() || '';
+    const content = document.getElementById('cfg-ck-yt-content')?.value || '';
     payload.ytdlp = {
       cookies_from_browser: browser,
       cookie_files: {
@@ -736,9 +742,9 @@ async function savePlatformConfig(platform) {
       }
     };
   } else if (platform === 'facebook') {
-    const filepath = document.getElementById('ck-fb-file')?.value?.trim() || '';
-    const profile = document.getElementById('ck-fb-profile')?.value?.trim() || '.facebook_profile';
-    const content = document.getElementById('ck-fb-content')?.value || '';
+    const filepath = document.getElementById('cfg-ck-fb-file')?.value?.trim() || '';
+    const profile = document.getElementById('cfg-ck-fb-profile')?.value?.trim() || '.facebook_profile';
+    const content = document.getElementById('cfg-ck-fb-content')?.value || '';
     payload.ytdlp = {
       cookie_files: {
         facebook: filepath
@@ -766,9 +772,9 @@ async function savePlatformConfig(platform) {
 window.savePlatformConfig = savePlatformConfig;
 
 function onCookieModeChange() {
-  const toggle = document.getElementById('ck-mode-toggle');
-  const wrap = document.getElementById('ck-custom-wrap');
-  const desc = document.getElementById('ck-mode-desc');
+  const toggle = document.getElementById('cfg-ck-mode-toggle');
+  const wrap = document.getElementById('cfg-ck-custom-wrap');
+  const desc = document.getElementById('cfg-ck-mode-desc');
   if (!toggle || !wrap || !desc) return;
   if (toggle.checked) {
     wrap.style.display = 'block';
@@ -786,7 +792,7 @@ function onCookieModeChange() {
 }
 
 async function parseCookie() {
-  const raw = document.getElementById('ck-raw')?.value?.trim();
+  const raw = document.getElementById('cfg-ck-raw')?.value?.trim();
   if (!raw) { toast('Vui lòng dán chuỗi cookie trước!', 'warning'); return; }
   try {
     const res = await fetch('/api/parse_cookie', {
@@ -808,7 +814,7 @@ async function parseCookie() {
 }
 
 async function parseCookie() {
-  const raw = document.getElementById('ck-raw')?.value?.trim();
+  const raw = document.getElementById('cfg-ck-raw')?.value?.trim();
   if (!raw) { toast('Vui long dan chuoi cookie truoc!', 'warning'); return; }
   try {
     let data = _parseCookieText(raw);
@@ -822,7 +828,7 @@ async function parseCookie() {
     }
 
     const filled = data && typeof data === 'object' ? _fillCookieFields(data) : 0;
-    const statusEl = document.getElementById('ck-status');
+    const statusEl = document.getElementById('cfg-ck-status');
     if (filled > 0) {
       if (statusEl) {
         statusEl.innerHTML = `<span class="dot dot-green"></span><span class="text-xs text-green">Da phan tich ${filled} truong</span>`;
@@ -844,7 +850,7 @@ async function importCookieJsonFile(input) {
   if (!file) return;
   try {
     const raw = await file.text();
-    const rawEl = document.getElementById('ck-raw');
+    const rawEl = document.getElementById('cfg-ck-raw');
     if (rawEl) rawEl.value = raw;
     await parseCookie();
   } catch (e) {
@@ -857,14 +863,14 @@ async function importCookieJsonFile(input) {
 async function saveCookies() {
   const get = id => document.getElementById(id)?.value?.trim() || '';
   const cookies = {
-    ttwid: get('ck-ttwid'),
-    odin_tt: get('ck-odin_tt'),
-    passport_csrf_token: get('ck-passport_csrf_token'),
-    s_v_web_id: get('ck-s_v_web_id'),
-    __ac_nonce: get('ck-__ac_nonce'),
-    __ac_signature: get('ck-__ac_signature'),
-    UIFID: get('ck-UIFID'),
-    bd_ticket_guard_client_web_domain: get('ck-bd_ticket_guard_client_web_domain'),
+    ttwid: get('cfg-ck-ttwid'),
+    odin_tt: get('cfg-ck-odin_tt'),
+    passport_csrf_token: get('cfg-ck-passport_csrf_token'),
+    s_v_web_id: get('cfg-ck-s_v_web_id'),
+    __ac_nonce: get('cfg-ck-__ac_nonce'),
+    __ac_signature: get('cfg-ck-__ac_signature'),
+    UIFID: get('cfg-ck-UIFID'),
+    bd_ticket_guard_client_web_domain: get('cfg-ck-bd_ticket_guard_client_web_domain'),
   };
   try {
     const res = await fetch('/api/cookies', {
@@ -883,16 +889,16 @@ async function saveCookies() {
 async function validateCookie() {
   const get = id => document.getElementById(id)?.value?.trim() || '';
   const cookies = {
-    ttwid: get('ck-ttwid'),
-    odin_tt: get('ck-odin_tt'),
-    passport_csrf_token: get('ck-passport_csrf_token'),
-    s_v_web_id: get('ck-s_v_web_id'),
-    __ac_nonce: get('ck-__ac_nonce'),
-    __ac_signature: get('ck-__ac_signature'),
-    UIFID: get('ck-UIFID'),
-    bd_ticket_guard_client_web_domain: get('ck-bd_ticket_guard_client_web_domain'),
+    ttwid: get('cfg-ck-ttwid'),
+    odin_tt: get('cfg-ck-odin_tt'),
+    passport_csrf_token: get('cfg-ck-passport_csrf_token'),
+    s_v_web_id: get('cfg-ck-s_v_web_id'),
+    __ac_nonce: get('cfg-ck-__ac_nonce'),
+    __ac_signature: get('cfg-ck-__ac_signature'),
+    UIFID: get('cfg-ck-UIFID'),
+    bd_ticket_guard_client_web_domain: get('cfg-ck-bd_ticket_guard_client_web_domain'),
   };
-  const statusEl = document.getElementById('ck-status');
+  const statusEl = document.getElementById('cfg-ck-status');
   if (statusEl) {
     statusEl.innerHTML = '<span class="dot dot-yellow"></span><span class="text-xs">Đang kiểm tra...</span>';
   }
@@ -1340,7 +1346,7 @@ async function openYoutubeLoginCookie(btn) {
     const data = await res.json();
     if (data.ok) {
       toast('Đã lấy và lưu Cookie YouTube thành công!', 'success');
-      const contentEl = document.getElementById('ck-yt-content');
+      const contentEl = document.getElementById('cfg-ck-yt-content');
       if (contentEl) {
         contentEl.value = data.cookie;
       }
@@ -1367,7 +1373,7 @@ async function openFacebookLoginProfile(btn) {
     const data = await res.json();
     if (data.ok) {
       toast('Đã lưu phiên đăng nhập Facebook và lấy Cookie thành công!', 'success');
-      const contentEl = document.getElementById('ck-fb-content');
+      const contentEl = document.getElementById('cfg-ck-fb-content');
       if (contentEl) {
         contentEl.value = data.cookie;
       }
@@ -1387,7 +1393,7 @@ async function validateYoutubeCookie(btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ Đang kiểm tra...';
-  const statusEl = document.getElementById('ck-yt-status');
+  const statusEl = document.getElementById('cfg-ck-yt-status');
   if (statusEl) {
     statusEl.textContent = '⏳ Đang kết nối xác thực...';
     statusEl.style.color = '#888';
@@ -1395,9 +1401,9 @@ async function validateYoutubeCookie(btn) {
   
   try {
     const payload = {
-      content: document.getElementById('ck-yt-content')?.value || '',
-      filepath: document.getElementById('ck-yt-file')?.value?.trim() || '',
-      browser: document.getElementById('ck-yt-browser')?.value || ''
+      content: document.getElementById('cfg-ck-yt-content')?.value || '',
+      filepath: document.getElementById('cfg-ck-yt-file')?.value?.trim() || '',
+      browser: document.getElementById('cfg-ck-yt-browser')?.value || ''
     };
     
     const res = await fetch('/api/youtube/validate_cookie', {
@@ -1436,7 +1442,7 @@ async function validateFacebookCookie(btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = '⏳ Đang kiểm tra...';
-  const statusEl = document.getElementById('ck-fb-status');
+  const statusEl = document.getElementById('cfg-ck-fb-status');
   if (statusEl) {
     statusEl.textContent = '⏳ Đang kết nối xác thực...';
     statusEl.style.color = '#888';
@@ -1444,9 +1450,9 @@ async function validateFacebookCookie(btn) {
   
   try {
     const payload = {
-      content: document.getElementById('ck-fb-content')?.value || '',
-      filepath: document.getElementById('ck-fb-file')?.value?.trim() || '',
-      profile: document.getElementById('ck-fb-profile')?.value?.trim() || '.facebook_profile'
+      content: document.getElementById('cfg-ck-fb-content')?.value || '',
+      filepath: document.getElementById('cfg-ck-fb-file')?.value?.trim() || '',
+      profile: document.getElementById('cfg-ck-fb-profile')?.value?.trim() || '.facebook_profile'
     };
     
     const res = await fetch('/api/facebook/validate_cookie', {
@@ -1527,7 +1533,7 @@ function convertJsonToNetscape(jsonText) {
 window.convertJsonToNetscape = convertJsonToNetscape;
 
 async function parseYoutubeCookie() {
-  const raw = document.getElementById('ck-yt-content')?.value?.trim();
+  const raw = document.getElementById('cfg-ck-yt-content')?.value?.trim();
   if (!raw) { toast('Vui lòng dán chuỗi cookie YouTube trước!', 'warning'); return; }
   
   let count = 0;
@@ -1552,7 +1558,7 @@ async function importYoutubeJsonFile(input) {
     const raw = await file.text();
     const netscape = convertJsonToNetscape(raw);
     if (netscape) {
-      const el = document.getElementById('ck-yt-content');
+      const el = document.getElementById('cfg-ck-yt-content');
       if (el) el.value = netscape;
       toast('Đã nhập cookie YouTube từ JSON và chuyển đổi sang Netscape thành công!', 'success');
       parseYoutubeCookie();
@@ -1568,7 +1574,7 @@ async function importYoutubeJsonFile(input) {
 window.importYoutubeJsonFile = importYoutubeJsonFile;
 
 async function parseFacebookCookie() {
-  const raw = document.getElementById('ck-fb-content')?.value?.trim();
+  const raw = document.getElementById('cfg-ck-fb-content')?.value?.trim();
   if (!raw) { toast('Vui lòng dán chuỗi cookie Facebook trước!', 'warning'); return; }
   
   let count = 0;
@@ -1593,7 +1599,7 @@ async function importFacebookJsonFile(input) {
     const raw = await file.text();
     const netscape = convertJsonToNetscape(raw);
     if (netscape) {
-      const el = document.getElementById('ck-fb-content');
+      const el = document.getElementById('cfg-ck-fb-content');
       if (el) el.value = netscape;
       toast('Đã nhập cookie Facebook từ JSON và chuyển đổi sang Netscape thành công!', 'success');
       parseFacebookCookie();
