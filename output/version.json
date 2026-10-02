@@ -1,7 +1,9 @@
 {
-  "version": "2.0.5",
-  "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/download/v2.0.5/DuyTrisDownloader_Setup.exe",
-  "message": "Sửa lỗi không hiển thị danh sách gói bản quyền khi khởi chạy EXE (đồng bộ hóa luồng lấy cài đặt đầu tiên và thêm tự động reload dự phòng).",
-  "release_date": "2026-07-15",
-  "minimum_version": "1.5.0"
+  "version": "2.0.7",
+  "download_url": "https://github.com/Duytri9123/manager-video-Releases/releases/download/v2.0.7/DuyTrisDownloader_Setup.exe",
+  "message": "Cập nhật phân tích video Antigravity theo đoạn; giữ link tải lỗi và cho thử lại; hiển thị tiến độ giọng đọc, video hoàn tất và bước đăng tải; cải thiện chọn file TikTok.",
+  "release_date": "2026-10-03",
+  "minimum_version": "1.5.0",
+  "updated_at": "2026-10-03 01:11:27",
+  "file_size_mb": 526.1
 }
